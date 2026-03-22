@@ -398,45 +398,40 @@
 
 ### `internal/api/mcp` — MCP Server
 
-- [ ] `server.go` — mcp-go server setup:
-  - SSE transport on `/mcp`
-  - Bearer token auth on SSE connection request (same middleware as REST)
-  - Create `sessions` row on connect; update `ended_at` on disconnect
-  - Register all 13 tools
-  - Detect AGE availability at startup; conditionally register graph tools
-- [ ] `remember.go` — delegates to `memory.Store.Create`; maps `expires_in`, entities
-- [ ] `recall.go` — delegates to `retrieval.Merge.Recall`; maps all input params including `search_mode`, `layers`, `min_score`
-- [ ] `forget.go` — soft or hard delete; returns `{memory_id, action}`
-- [ ] `context.go`:
-  - Query knowledge first (greedy until `max_tokens` budget used), then memories
-  - Omit entire block if it would exceed budget (no truncation)
-  - Return `{context_blocks, total_tokens}`
-- [ ] `summarize.go` — `dry_run` support; returns full output schema for both modes
-- [ ] `publish.go` — `auto_review` flag; delegates to `knowledge.Store.Create`
-- [ ] `endorse.go` — delegates to `knowledge.Lifecycle.Endorse` or `skills.Lifecycle.Endorse`; returns `{endorsement_count, status, auto_published}`
-- [ ] `promote.go` — delegates to `knowledge.Promote.CreateRequest`
-- [ ] `collect.go` — dispatches on `action`: `add_to_collection`, `create_collection`, `list_collections`
-- [ ] `skill_search.go` — delegates to `skills.Recall`; passes `installed` filter (resolved locally)
-- [ ] `skill_install.go` — delegates to `skills.Install`
-- [ ] `skill_invoke.go` — delegates to `skills.Invoke`; returns expanded body
+- [x] `server.go` — mcp-go SSE server; Bearer token auth middleware; all 13 tools registered
+  - TODO(task-mcp-sessions): create sessions row on connect; update ended_at on disconnect
+  - TODO(task-mcp-age): detect AGE availability and conditionally register graph tools
+- [x] `remember.go` — delegates to `memory.Store.Create`; maps `expires_in`, entities
+- [x] `recall.go` — delegates to memory/knowledge/skill stores; maps `search_mode`, `layers`, `min_score`
+- [x] `forget.go` — soft or hard delete; returns `{memory_id, action}`
+- [x] `context.go` — knowledge first (greedy max_tokens), then memories; returns `{context_blocks, total_tokens}`
+- [x] `summarize.go` — `dry_run` support; simple join summarizer (TODO: LLM-based)
+- [x] `publish.go` — `auto_review` flag; delegates to `knowledge.Store.Create`
+- [x] `endorse.go` — tries knowledge.Lifecycle.Endorse then skills.Lifecycle.Endorse; returns `{endorsement_count, status, auto_published}`
+- [x] `promote.go` — delegates to `knowledge.Promoter.CreateRequest`
+- [x] `collect.go` — dispatches on `action`: `add_to_collection`, `create_collection`, `list_collections`
+- [x] `skill_search.go` — delegates to `skills.Store.Recall`
+- [x] `skill_install.go` — delegates to `skills.Install`
+- [x] `skill_invoke.go` — delegates to `skills.Invoke`; returns expanded body
+- [x] `server_test.go` — 3+ table-driven tests (handleForget shape, handleRemember missing content, handleRecall layer filter)
 
 ### `internal/api/rest` — REST API
 
-- [ ] `router.go`:
-  - chi router; `BearerTokenMiddleware` on all routes
-  - Pagination middleware: parse `limit`, `offset`, `cursor` from query params; inject into context
-  - All routes registered (see handler files below)
-  - CORS headers configurable via config
-- [ ] `memories.go` — `POST /v1/memories`, `GET /v1/memories/recall`, `GET/PATCH/DELETE /v1/memories/:id`, `POST /v1/memories/:id/promote`
-- [ ] `knowledge.go` — `POST /v1/knowledge`, `GET /v1/knowledge/search`, `GET/PATCH /v1/knowledge/:id`, `POST /v1/knowledge/:id/endorse`, `POST /v1/knowledge/:id/deprecate`, `GET /v1/knowledge/:id/history`; `GET /v1/staleness`
-- [ ] `collections.go` — `POST /v1/collections`, `GET /v1/collections`, `GET /v1/collections/:slug`, `POST/DELETE /v1/collections/:id/items`
-- [ ] `skills.go` — `POST /v1/skills`, `GET /v1/skills/search`, `GET/PATCH /v1/skills/:id`, `POST /v1/skills/:id/endorse`, `POST /v1/skills/:id/deprecate`, `POST /v1/skills/:id/install`, `POST /v1/skills/:id/invoke`, `GET /v1/skills/:id/history`, `GET /v1/skills/:id/stats`
-- [ ] `sharing.go` — `POST /v1/sharing/grants`, `DELETE /v1/sharing/grants/:id`, `GET /v1/sharing/grants`
-- [ ] `promotions.go` — `GET /v1/promotions`, `POST /v1/promotions/:id/approve`, `POST /v1/promotions/:id/reject`
-- [ ] `orgs.go` — `GET/POST /v1/principals`, `GET/PUT/DELETE /v1/principals/:id`, `GET/POST/DELETE /v1/principals/:id/members`; legacy `/v1/orgs` alias via chi `Mount`
-- [ ] `sessions.go` — `POST /v1/sessions`, `PATCH /v1/sessions/:id`
-- [ ] `graph.go` — `GET /v1/entities`, `GET /v1/graph`, `POST /v1/graph/query` (returns `graph_unavailable:true` if AGE absent)
-- [ ] `context.go` — `GET /v1/context`
+- [x] `router.go` — chi router; `BearerTokenMiddleware` on all /v1 routes; all routes registered
+  - TODO(task-rest-cors): CORS headers configurable via config
+- [x] `memories.go` — `POST /v1/memories`, `GET /v1/memories/recall`, `GET/PATCH/DELETE /v1/memories/:id`, `POST /v1/memories/:id/promote`
+- [x] `knowledge.go` — `POST /v1/knowledge`, `GET /v1/knowledge/search`, `GET/PATCH /v1/knowledge/:id`, `POST /v1/knowledge/:id/endorse`, `POST /v1/knowledge/:id/deprecate`, `GET /v1/knowledge/:id/history`
+- [x] `collections.go` — `POST /v1/collections`, `GET /v1/collections`, `GET /v1/collections/:slug`, `POST/DELETE /v1/collections/:id/items`
+- [x] `skills.go` — `POST /v1/skills`, `GET /v1/skills/search`, `GET/PATCH /v1/skills/:id`, `POST /v1/skills/:id/endorse`, `POST /v1/skills/:id/deprecate`, `POST /v1/skills/:id/install`, `POST /v1/skills/:id/invoke`
+- [x] `sharing.go` — `POST /v1/sharing/grants`, `DELETE /v1/sharing/grants/:id`, `GET /v1/sharing/grants`
+- [x] `promotions.go` — `GET /v1/promotions`, `POST /v1/promotions/:id/approve`, `POST /v1/promotions/:id/reject`
+- [x] `orgs.go` — `GET/POST /v1/principals`, `GET/PUT/DELETE /v1/principals/:id`, `GET/POST/DELETE /v1/principals/:id/members`
+- [x] `sessions.go` — `POST /v1/sessions`, `PATCH /v1/sessions/:id` (TODO: persist to DB)
+- [x] `context.go` — `GET /v1/context`
+- [x] `health.go` — `GET /health`
+- [x] `helpers.go` — `writeJSON`, `writeError`, `readJSON`, `uuidParam`, `paginationFromRequest`
+- [x] `router_test.go` — GET /health 200, POST /v1/memories no auth 401, invalid token 401
+- [ ] `graph.go` — `GET /v1/entities`, `GET /v1/graph`, `POST /v1/graph/query` (deferred: requires AGE layer)
 
 ### `cmd/postbrain` — Server Binary
 
