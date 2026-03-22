@@ -1701,7 +1701,7 @@ def remember(content: str, scope: str, memory_type: str = "semantic", **kwargs):
 | HTTP framework | `net/http` + `chi` router | Lightweight, no magic |
 | MCP server | `github.com/mark3labs/mcp-go` | MCP 2024-11 compliant |
 | Database driver | `pgx/v5` | Native PostgreSQL protocol, prepared statements, pgvector support |
-| Migrations | `golang-migrate` | Version-controlled schema evolution |
+| Migrations | `golang-migrate` + `iofs` source | SQL files embedded in binary via `//go:embed`; auto-migrate on startup with advisory lock; `postbrain migrate` subcommand for manual control |
 | Embedding (local) | Ollama HTTP API (`nomic-embed-text`) | No external dependency, 768-dim |
 | Embedding (remote) | OpenAI `text-embedding-3-small` | 1536-dim, higher quality |
 | Job scheduler | `robfig/cron` | In-process cron for housekeeping jobs |
@@ -1746,6 +1746,8 @@ postbrain/
 │   │       └── graph.go
 │   ├── db/
 │   │   ├── conn.go             # pgx pool setup
+│   │   ├── migrate.go          # CheckAndMigrate(), ExpectedVersion const,
+│   │   │                       # //go:embed migrations/*.sql
 │   │   ├── queries/            # sqlc-generated query code
 │   │   │   ├── memories.sql
 │   │   │   ├── knowledge.sql
@@ -1753,7 +1755,7 @@ postbrain/
 │   │   │   ├── principals.sql
 │   │   │   ├── scopes.sql
 │   │   │   └── sharing.sql
-│   │   └── migrations/
+│   │   └── migrations/         # embedded SQL — do NOT import directly, use migrate.go
 │   ├── embedding/
 │   │   ├── interface.go        # Embedder interface
 │   │   ├── classifier.go       # content_kind heuristic (text vs code)
@@ -1796,17 +1798,17 @@ postbrain/
 │   │   └── promotion_notify.go # notify reviewers of pending promotions
 │   └── config/
 │       └── config.go
-├── migrations/
-│   ├── 001_initial_schema.up.sql
-│   ├── 001_initial_schema.down.sql
-│   ├── 002_knowledge_layer.up.sql
-│   ├── 002_knowledge_layer.down.sql
-│   ├── 003_age_graph.up.sql
-│   ├── 003_age_graph.down.sql
-│   ├── 004_multi_model_embeddings.up.sql
-│   ├── 004_multi_model_embeddings.down.sql
-│   ├── 005_skills.up.sql
-│   └── 005_skills.down.sql
+├── internal/db/migrations/     # embedded via //go:embed in migrate.go
+│   ├── 000001_initial_schema.up.sql
+│   ├── 000001_initial_schema.down.sql
+│   ├── 000002_knowledge_layer.up.sql
+│   ├── 000002_knowledge_layer.down.sql
+│   ├── 000003_age_graph.up.sql
+│   ├── 000003_age_graph.down.sql
+│   ├── 000004_multi_model_embeddings.up.sql
+│   ├── 000004_multi_model_embeddings.down.sql
+│   ├── 000005_skills.up.sql
+│   └── 000005_skills.down.sql
 ├── config.example.yaml
 ├── docker-compose.yml
 ├── Makefile
@@ -1970,6 +1972,193 @@ New REST endpoints:
 | `GET` | `/v1/knowledge/stale` | Open flags, sorted by confidence desc |
 | `POST` | `/v1/knowledge/stale/:id/dismiss` | Mark as still valid (with note) |
 | `POST` | `/v1/knowledge/stale/:id/resolve` | Mark as fixed (artifact deprecated or updated) |
+
+#### Schema migrations
+
+Postbrain uses `golang-migrate` with SQL migration files embedded directly in the binary via `//go:embed`. There are no external file dependencies at runtime — the binary carries everything it needs to bring any database up to the current schema version.
+
+**Migration files** follow the `golang-migrate` naming convention:
+
+```
+migrations/
+  000001_initial_schema.up.sql
+  000001_initial_schema.down.sql
+  000002_knowledge_layer.up.sql
+  000002_knowledge_layer.down.sql
+  000003_age_graph.up.sql
+  000003_age_graph.down.sql
+  000004_multi_model_embeddings.up.sql
+  000004_multi_model_embeddings.down.sql
+  000005_skills.up.sql
+  000005_skills.down.sql
+```
+
+`golang-migrate` maintains a `schema_migrations` table with a single row: `(version BIGINT, dirty BOOLEAN)`. `dirty = true` means the last migration attempt failed mid-way and left the schema in an unknown state.
+
+**Embedded source:**
+
+```go
+// internal/db/migrate.go
+
+//go:embed migrations/*.sql
+var migrationsFS embed.FS
+
+// ExpectedVersion is baked into the binary at compile time.
+// It must equal the highest migration number in migrations/.
+const ExpectedVersion = 5
+```
+
+**Startup flow:**
+
+```
+server start
+    │
+    ▼
+connect to DB (pgx pool)
+    │
+    ▼
+db.CheckAndMigrate(cfg)
+    │
+    ├─ schema_migrations missing? ──► run all migrations from 001 (fresh install)
+    │
+    ├─ dirty = true? ──────────────► FATAL: "schema dirty at version N,
+    │                                         run: postbrain migrate force N"
+    │
+    ├─ current > ExpectedVersion? ─► FATAL: "DB schema version N is ahead of
+    │                                         binary version M — refusing to start.
+    │                                         Deploy the correct binary version."
+    │
+    ├─ current = ExpectedVersion? ─► proceed (no migrations needed)
+    │
+    └─ current < ExpectedVersion?
+           │
+           ├─ auto_migrate = false? ► FATAL: "DB schema version N, binary expects M.
+           │                                   Run: postbrain migrate up
+           │                                   Or set database.auto_migrate: true"
+           │
+           └─ auto_migrate = true?
+                  │
+                  ▼
+           acquire advisory lock
+           (golang-migrate's postgres driver does this automatically;
+            concurrent instances block here, then find ErrNoChange)
+                  │
+                  ▼
+           apply pending migrations N+1 … ExpectedVersion in order
+                  │
+                  ├─ success ──────► proceed
+                  └─ failure ──────► set dirty=true, FATAL with migration number
+```
+
+**Implementation:**
+
+```go
+// internal/db/migrate.go
+
+func CheckAndMigrate(ctx context.Context, databaseURL string, autoMigrate bool) error {
+    src, err := iofs.New(migrationsFS, "migrations")
+    if err != nil {
+        return fmt.Errorf("loading embedded migrations: %w", err)
+    }
+
+    m, err := migrate.NewWithSourceInstance("iofs", src, databaseURL)
+    if err != nil {
+        return fmt.Errorf("initialising migrator: %w", err)
+    }
+    defer m.Close()
+
+    current, dirty, err := m.Version()
+    if err != nil && !errors.Is(err, migrate.ErrNilVersion) {
+        return fmt.Errorf("reading schema version: %w", err)
+    }
+
+    if dirty {
+        return fmt.Errorf(
+            "schema is dirty at version %d — a previous migration failed. "+
+                "Inspect the database, then run: postbrain migrate force %d",
+            current, current,
+        )
+    }
+
+    if current > ExpectedVersion {
+        return fmt.Errorf(
+            "database schema version %d is ahead of binary version %d — "+
+                "refusing to start. Deploy the correct binary.",
+            current, ExpectedVersion,
+        )
+    }
+
+    if current == ExpectedVersion {
+        slog.Info("schema up to date", "version", current)
+        return nil
+    }
+
+    // current < ExpectedVersion: migration needed
+    if !autoMigrate {
+        return fmt.Errorf(
+            "database schema version %d, binary expects %d — "+
+                "run: postbrain migrate up  (or set database.auto_migrate: true)",
+            current, ExpectedVersion,
+        )
+    }
+
+    slog.Info("applying migrations", "from", current, "to", ExpectedVersion)
+    if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+        return fmt.Errorf("migration failed: %w", err)
+    }
+
+    slog.Info("migrations complete", "version", ExpectedVersion)
+    return nil
+}
+```
+
+**`postbrain migrate` subcommand** (`cmd/postbrain/main.go`):
+
+```
+postbrain migrate up            # apply all pending migrations
+postbrain migrate up N          # apply next N steps
+postbrain migrate down 1        # roll back 1 step (dev/recovery only)
+postbrain migrate version       # print current DB schema version
+postbrain migrate status        # list all migrations with applied/pending status
+postbrain migrate force N       # reset dirty flag to version N (after manual fix)
+```
+
+Down migrations are **never run automatically** — they are manual-only tools for development and disaster recovery. The server only ever calls `Up()`.
+
+**Configuration:**
+
+```yaml
+# config.example.yaml
+database:
+  url:            "postgres://postbrain:postbrain@localhost:5432/postbrain"
+  auto_migrate:   true   # apply pending migrations on startup (default: true)
+  migration_lock_timeout: 60s  # how long to wait for the advisory lock
+```
+
+**Zero-downtime deployments:**
+
+`golang-migrate`'s PostgreSQL driver acquires advisory lock key `5239895959347` (derived from the `schema_migrations` table name hash) before applying any migration. This means:
+
+- When multiple replicas start simultaneously after a rolling deploy, one acquires the lock and migrates; the rest block at `m.Up()`, then proceed after acquiring the lock and finding `ErrNoChange`.
+- For zero-downtime to be safe, migrations must be **backward-compatible**: the old binary must be able to run against the new schema until all replicas have been upgraded. This means:
+  - Add new columns as `NULL`-able or with defaults.
+  - Never drop or rename columns in the same migration that adds replacement ones (split into two: add in migration N, drop in migration N+1 deployed in the next release).
+  - New constraints must be created with `NOT VALID`, validated in a separate subsequent migration.
+
+**Health check exposure:**
+
+The `/health` endpoint reports the current schema version so deployment systems can verify migrations completed:
+
+```jsonc
+{
+  "status":         "ok",
+  "schema_version": 5,
+  "expected_version": 5,
+  "schema_dirty":   false
+}
+```
+
+A schema version mismatch here (e.g. during a rolling deploy window) returns `200` with `"status": "degraded"` rather than `503`, since the server is still functional against the current schema.
 
 #### Authentication & multi-tenancy
 
