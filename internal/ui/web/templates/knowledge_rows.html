@@ -1,0 +1,20 @@
+{{define "knowledge_rows"}}
+<table>
+  <thead><tr><th>Title</th><th>Status</th><th>Endorsements</th><th>Updated</th><th>Actions</th></tr></thead>
+  <tbody>
+  {{range .Artifacts}}
+  <tr>
+    <td><a href="/ui/knowledge/{{.ID}}">{{.Title}}</a></td>
+    <td><span class="badge {{statusBadge .Status}}">{{.Status}}</span></td>
+    <td>{{.EndorsementCount}}</td>
+    <td>{{timeAgo .UpdatedAt}}</td>
+    <td>
+      {{if eq .Status "in_review"}}<button hx-post="/v1/knowledge/{{.ID}}/endorse" hx-swap="none">Endorse</button>{{end}}
+    </td>
+  </tr>
+  {{else}}
+  <tr><td colspan="5">No artifacts found.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}

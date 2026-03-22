@@ -619,6 +619,22 @@ func scanMemoryRows(rows pgx.Rows) ([]*Memory, error) {
 	return results, rows.Err()
 }
 
+// ListMemoriesByScope returns active memories for a scope, ordered by created_at DESC.
+func ListMemoriesByScope(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, limit, offset int) ([]*Memory, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT `+memoryColumns+`
+		 FROM memories WHERE scope_id=$1 AND is_active=true
+		 ORDER BY created_at DESC
+		 LIMIT $2 OFFSET $3`,
+		scopeID, limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("db: list memories by scope: %w", err)
+	}
+	defer rows.Close()
+	return scanMemoryRows(rows)
+}
+
 // GetMemory retrieves a memory by ID. Returns nil, nil if not found.
 func GetMemory(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*Memory, error) {
 	row := pool.QueryRow(ctx,
@@ -1555,6 +1571,125 @@ func ListPendingPromotions(ctx context.Context, pool *pgxpool.Pool, targetScopeI
 			&p.ID, &p.MemoryID, &p.RequestedBy, &p.TargetScopeID, &p.TargetVisibility,
 			&p.ProposedTitle, &p.ProposedCollectionID, &p.Status, &p.ReviewerID, &p.ReviewNote,
 			&p.ReviewedAt, &p.ResultArtifactID, &p.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		results = append(results, &p)
+	}
+	return results, rows.Err()
+}
+
+// ── Entity/Relation scope queries ─────────────────────────────────────────────
+
+// ListEntitiesByScope returns entities in a scope, optionally filtered by type.
+func ListEntitiesByScope(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, entityType string, limit, offset int) ([]*Entity, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT id, scope_id, entity_type, name, canonical, meta,
+		        embedding::text, embedding_model_id, created_at, updated_at
+		 FROM entities
+		 WHERE scope_id=$1 AND ($2='' OR entity_type=$2)
+		 ORDER BY name
+		 LIMIT $3 OFFSET $4`,
+		scopeID, entityType, limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("db: list entities by scope: %w", err)
+	}
+	defer rows.Close()
+
+	var results []*Entity
+	for rows.Next() {
+		var e Entity
+		var embText *string
+		if err := rows.Scan(
+			&e.ID, &e.ScopeID, &e.EntityType, &e.Name, &e.Canonical, &e.Meta,
+			&embText, &e.EmbeddingModelID, &e.CreatedAt, &e.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		results = append(results, &e)
+	}
+	return results, rows.Err()
+}
+
+// ListRelationsByScope returns all relations in a scope.
+func ListRelationsByScope(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, limit, offset int) ([]*Relation, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, created_at
+		 FROM relations
+		 WHERE scope_id=$1
+		 ORDER BY created_at
+		 LIMIT $2 OFFSET $3`,
+		scopeID, limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("db: list relations by scope: %w", err)
+	}
+	defer rows.Close()
+
+	var results []*Relation
+	for rows.Next() {
+		var r Relation
+		if err := rows.Scan(
+			&r.ID, &r.ScopeID, &r.SubjectID, &r.Predicate,
+			&r.ObjectID, &r.Confidence, &r.SourceMemory, &r.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		results = append(results, &r)
+	}
+	return results, rows.Err()
+}
+
+// ListStalenessFlags returns staleness flags optionally filtered by status.
+func ListStalenessFlags(ctx context.Context, pool *pgxpool.Pool, status string, limit, offset int) ([]*StalenessFlag, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT id, artifact_id, signal, confidence, evidence, status, flagged_at,
+		        reviewed_by, reviewed_at, review_note
+		 FROM staleness_flags
+		 WHERE ($1='' OR status=$1)
+		 ORDER BY flagged_at DESC
+		 LIMIT $2 OFFSET $3`,
+		status, limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("db: list staleness flags: %w", err)
+	}
+	defer rows.Close()
+
+	var results []*StalenessFlag
+	for rows.Next() {
+		var f StalenessFlag
+		if err := rows.Scan(
+			&f.ID, &f.ArtifactID, &f.Signal, &f.Confidence, &f.Evidence,
+			&f.Status, &f.FlaggedAt, &f.ReviewedBy, &f.ReviewedAt, &f.ReviewNote,
+		); err != nil {
+			return nil, err
+		}
+		results = append(results, &f)
+	}
+	return results, rows.Err()
+}
+
+// ListPrincipals returns principals ordered by creation time.
+func ListPrincipals(ctx context.Context, pool *pgxpool.Pool, limit, offset int) ([]*Principal, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT id, kind, slug, display_name, meta, created_at, updated_at
+		 FROM principals
+		 ORDER BY created_at DESC
+		 LIMIT $1 OFFSET $2`,
+		limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("db: list principals: %w", err)
+	}
+	defer rows.Close()
+
+	var results []*Principal
+	for rows.Next() {
+		var p Principal
+		if err := rows.Scan(
+			&p.ID, &p.Kind, &p.Slug, &p.DisplayName, &p.Meta, &p.CreatedAt, &p.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}

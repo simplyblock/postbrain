@@ -1,0 +1,19 @@
+{{define "principals"}}
+<h1>Principals &amp; Scopes</h1>
+<h2>Principals</h2>
+<table>
+  <thead><tr><th>Kind</th><th>Slug</th><th>Display Name</th><th>Created</th></tr></thead>
+  <tbody>
+  {{range .Principals}}
+  <tr>
+    <td>{{.Kind}}</td>
+    <td>{{.Slug}}</td>
+    <td>{{.DisplayName}}</td>
+    <td>{{timeAgo .CreatedAt}}</td>
+  </tr>
+  {{else}}
+  <tr><td colspan="4">No principals.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}

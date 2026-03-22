@@ -1,0 +1,34 @@
+{{define "graph"}}
+<h1>Entity Graph</h1>
+<p>Showing {{len .Entities}} entities and {{len .Relations}} relations for scope <code>{{.ScopeID}}</code>.</p>
+<table>
+  <thead><tr><th>Entity</th><th>Type</th><th>Relations</th></tr></thead>
+  <tbody>
+  {{range .Entities}}
+  <tr>
+    <td>{{.Name}}</td>
+    <td>{{.EntityType}}</td>
+    <td>{{index $.RelationCounts .ID}}</td>
+  </tr>
+  {{else}}
+  <tr><td colspan="3">No entities in this scope.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+<h2>Relations</h2>
+<table>
+  <thead><tr><th>Subject</th><th>Predicate</th><th>Object</th><th>Confidence</th></tr></thead>
+  <tbody>
+  {{range .Relations}}
+  <tr>
+    <td>{{index $.EntityNames .SubjectID}}</td>
+    <td>{{.Predicate}}</td>
+    <td>{{index $.EntityNames .ObjectID}}</td>
+    <td>{{printf "%.2f" .Confidence}}</td>
+  </tr>
+  {{else}}
+  <tr><td colspan="4">No relations.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}

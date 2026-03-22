@@ -1,0 +1,9 @@
+{{define "knowledge"}}
+<h1>Knowledge</h1>
+<form hx-get="/ui/knowledge" hx-target="#results" hx-push-url="true">
+  <input type="text" name="q" placeholder="Search…" value="{{.Query}}">
+  <select name="status"><option value="">All statuses</option><option>draft</option><option>in_review</option><option>published</option><option>deprecated</option></select>
+  <button type="submit">Search</button>
+</form>
+<div id="results">{{template "knowledge_rows" .}}</div>
+{{end}}

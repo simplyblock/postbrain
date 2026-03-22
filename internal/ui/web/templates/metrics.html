@@ -1,0 +1,12 @@
+{{define "metrics"}}
+<h1>Metrics</h1>
+<p>Raw Prometheus metrics are available at <a href="/metrics">/metrics</a>.</p>
+<p>Key metrics recorded by Postbrain:</p>
+<ul>
+  <li><code>postbrain_tool_duration_seconds{tool}</code> — MCP tool call duration</li>
+  <li><code>postbrain_embedding_duration_seconds{backend,model}</code> — embedding latency</li>
+  <li><code>postbrain_job_duration_seconds{job}</code> — background job duration</li>
+  <li><code>postbrain_active_memories_total{scope}</code> — active memories per scope</li>
+  <li><code>postbrain_recall_results_total{layer}</code> — recall results returned per layer</li>
+</ul>
+{{end}}

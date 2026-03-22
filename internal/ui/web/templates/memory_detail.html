@@ -1,0 +1,13 @@
+{{define "memory_detail"}}
+<h1>Memory</h1>
+<a href="/ui/memories">← Back</a>
+<table>
+  <tr><th>ID</th><td>{{.Memory.ID}}</td></tr>
+  <tr><th>Type</th><td>{{.Memory.MemoryType}}</td></tr>
+  <tr><th>Importance</th><td>{{printf "%.2f" .Memory.Importance}}</td></tr>
+  <tr><th>Source</th><td>{{deref .Memory.SourceRef}}</td></tr>
+  <tr><th>Created</th><td>{{.Memory.CreatedAt}}</td></tr>
+</table>
+<h2>Content</h2>
+<pre>{{.Memory.Content}}</pre>
+{{end}}

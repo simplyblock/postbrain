@@ -1,0 +1,9 @@
+{{define "health"}}
+<h1>Overview</h1>
+<table>
+  <tr><th>Status</th><td><span class="badge {{if eq .Status "ok"}}badge-ok{{else}}badge-err{{end}}">{{.Status}}</span></td></tr>
+  <tr><th>Schema version</th><td>{{.SchemaVersion}}</td></tr>
+  <tr><th>Expected version</th><td>{{.ExpectedVersion}}</td></tr>
+  <tr><th>Schema dirty</th><td>{{.SchemaDirty}}</td></tr>
+</table>
+{{end}}

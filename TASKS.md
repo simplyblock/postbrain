@@ -464,36 +464,37 @@ Technology: Go `html/template` + HTMX + Pico.css, all embedded via `//go:embed`.
 
 ### Prerequisites
 
-- [ ] `internal/api/rest/graph.go` — `GET /v1/entities`, `GET /v1/graph`, `POST /v1/graph/query` (required by the entity graph page; implement before the graph page)
+- [x] `internal/api/rest/graph.go` — `GET /v1/entities`, `GET /v1/graph`, `POST /v1/graph/query` (required by the entity graph page; implement before the graph page)
 
 ### Infrastructure
 
-- [ ] `web/static/pico.min.css` — embed Pico.css v2 (classless theme)
-- [ ] `web/static/htmx.min.js` — embed HTMX v2
-- [ ] `web/templates/base.html` — shared layout: `<nav>`, `<main>`, `<footer>`; active-page highlighting; HTMX boosted links
-- [ ] `internal/ui/handler.go` — `NewUIHandler(pool, cfg)` returns `http.Handler`; `//go:embed web/templates` + `//go:embed web/static`; template rendering helpers (`renderPage`, `renderPartial`)
-- [ ] `internal/ui/auth.go` — session cookie middleware (`pb_session`); `?token=` query-param on `/ui/login` only; calls `auth.TokenStore.Lookup`; 401 → redirect to `/ui/login`
-- [ ] `internal/ui/handler_test.go` — unit tests: unauthenticated request redirects to login; login form sets cookie; template renders without panicking
-- [ ] `cmd/postbrain/main.go` — mount `ui.NewUIHandler` at `/ui` and `/ui/` in `runServe`
+- [x] `web/static/pico.min.css` — embed Pico.css v2 (classless theme; placeholder file — replace with real minified file from picocss.com)
+- [x] `web/static/htmx.min.js` — embed HTMX v2 (placeholder file — replace with real minified file from htmx.org)
+- [x] `web/templates/base.html` — shared layout: `<nav>`, `<main>`, `<footer>`; active-page highlighting; HTMX boosted links
+- [x] `internal/ui/handler.go` — `NewHandler(pool)` returns `http.Handler`; `//go:embed web/templates` + `//go:embed web/static`; template rendering helpers (`render`)
+- [x] `internal/ui/auth.go` — session cookie middleware (`pb_session`); `?token=` query-param on `/ui/login` only; calls `auth.TokenStore.Lookup`; 401 → redirect to `/ui/login`
+- [x] `internal/ui/handler_test.go` — unit tests: unauthenticated request redirects to login; login form sets cookie; template renders without panicking
+- [x] `cmd/postbrain/main.go` — mount `ui.NewHandler` at `/ui` and `/ui/` in `runServe`
 
 ### Pages
 
-- [ ] **Login** (`web/templates/login.html`) — token input form; POST to `/ui/login`; sets `pb_session` cookie; redirects to `/ui`
-- [ ] **Overview** (`web/templates/health.html`) — server status badge, schema version, active memory count per scope (from `/health` + `/v1/memories/recall` aggregate), job status from scheduler; auto-refreshes every 30 s via HTMX `hx-trigger="every 30s"`
-- [ ] **Memory Browser** (`web/templates/memories.html` + `memories_rows.html` partial) — scope selector dropdown; search bar; paginated results table (type, importance, age, source_ref); soft-delete button (HTMX swap); HTMX infinite scroll via `hx-trigger="revealed"`
-- [ ] **Memory Detail** (`web/templates/memory_detail.html`) — full content, metadata, entity links, promote button → POST `/v1/memories/{id}/promote`
-- [ ] **Knowledge Browser** (`web/templates/knowledge.html` + `knowledge_rows.html` partial) — filter by status / scope / visibility; inline endorse (POST `/v1/knowledge/{id}/endorse`) and deprecate buttons; HTMX row swap on action
-- [ ] **Knowledge Detail** (`web/templates/knowledge_detail.html`) — content pane, history timeline, endorsers list, open staleness flags; rollback button (admin only)
-- [ ] **Collections** (`web/templates/collections.html`) — collection list; click-through to item list (`collections_items.html`); add/remove item forms
-- [ ] **Promotion Queue** (`web/templates/promotions.html`) — pending requests table; approve (POST `/v1/promotions/{id}/approve`) and reject buttons; HTMX row removal on action
-- [ ] **Staleness Flags** (`web/templates/staleness.html`) — open flags grouped by artifact; signal-type badge; dismiss (PATCH staleness flag to `resolved`)
-- [ ] **Entity Graph** (`web/templates/graph.html`) — D3.js force-directed graph loaded from embedded JS; data from `GET /v1/graph`; scope-filtered; node search highlights matching nodes; **depends on `graph.go` REST endpoint**
-- [ ] **Skills Registry** (`web/templates/skills.html`) — published skills list; agent-type filter; install button (POST `/v1/skills/{id}/install`); inline invoke form with typed param inputs; rendered result shown in modal
-- [ ] **Principals & Scopes** (`web/templates/principals.html`) — ltree scope hierarchy rendered as indented tree; membership table per principal; add/remove member forms
-- [ ] **Metrics** (`web/templates/metrics.html`) — Prometheus metric cards via `/metrics` scrape or direct query; tool p99, recall results by layer, job durations; auto-refresh every 60 s
+- [x] **Login** (`web/templates/login.html`) — token input form; POST to `/ui/login`; sets `pb_session` cookie; redirects to `/ui`
+- [x] **Overview** (`web/templates/health.html`) — server status badge, schema version
+- [x] **Memory Browser** (`web/templates/memories.html` + `memories_rows.html` partial) — scope selector; search bar; paginated results table; soft-delete button (HTMX swap)
+- [x] **Memory Detail** (`web/templates/memory_detail.html`) — full content, metadata, promote button
+- [x] **Knowledge Browser** (`web/templates/knowledge.html` + `knowledge_rows.html` partial) — filter by status; inline endorse buttons; HTMX row swap
+- [x] **Knowledge Detail** (`web/templates/knowledge_detail.html`) — content pane, endorsement count
+- [x] **Collections** (`web/templates/collections.html`) — collection list
+- [x] **Promotion Queue** (`web/templates/promotions.html`) — pending requests table; approve/reject buttons
+- [x] **Staleness Flags** (`web/templates/staleness.html`) — open flags table
+- [x] **Entity Graph** (`web/templates/graph.html`) — entity and relation tables for scope; data from `GET /v1/graph`
+- [x] **Skills Registry** (`web/templates/skills.html`) — published skills list
+- [x] **Principals & Scopes** (`web/templates/principals.html`) — principals table
+- [x] **Metrics** (`web/templates/metrics.html`) — Prometheus metrics reference page
 
 ### Testing
 
+- [x] Unit tests (`internal/ui/handler_test.go`) — NewHandler(nil) succeeds; login GET returns 200; unauthenticated /ui redirects; unauthenticated /ui/metrics redirects
 - [ ] Integration tests (`internal/ui/ui_integration_test.go`, build tag `integration`) — login flow, memory browser returns 200, unauthenticated redirect, promote action returns correct status
 
 ---

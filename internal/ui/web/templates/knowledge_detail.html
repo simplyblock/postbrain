@@ -1,0 +1,12 @@
+{{define "knowledge_detail"}}
+<h1>{{.Artifact.Title}}</h1>
+<a href="/ui/knowledge">← Back</a>
+<table>
+  <tr><th>Status</th><td><span class="badge {{statusBadge .Artifact.Status}}">{{.Artifact.Status}}</span></td></tr>
+  <tr><th>Type</th><td>{{.Artifact.KnowledgeType}}</td></tr>
+  <tr><th>Endorsements</th><td>{{.Artifact.EndorsementCount}}</td></tr>
+  <tr><th>Published</th><td>{{derefTime .Artifact.PublishedAt}}</td></tr>
+</table>
+<h2>Content</h2>
+<pre>{{.Artifact.Content}}</pre>
+{{end}}

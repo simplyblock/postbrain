@@ -1,0 +1,19 @@
+{{define "skills"}}
+<h1>Skills</h1>
+<table>
+  <thead><tr><th>Name</th><th>Slug</th><th>Agent Types</th><th>Version</th><th>Invocations</th></tr></thead>
+  <tbody>
+  {{range .Skills}}
+  <tr>
+    <td>{{.Name}}</td>
+    <td><code>{{.Slug}}</code></td>
+    <td>{{join .AgentTypes ", "}}</td>
+    <td>{{.Version}}</td>
+    <td>{{.InvocationCount}}</td>
+  </tr>
+  {{else}}
+  <tr><td colspan="5">No published skills.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}

@@ -1,0 +1,24 @@
+{{define "promotions"}}
+<h1>Promotion Queue</h1>
+<table>
+  <thead><tr><th>Memory ID</th><th>Proposed Title</th><th>Status</th><th>Requested</th><th>Actions</th></tr></thead>
+  <tbody>
+  {{range .Promotions}}
+  <tr>
+    <td><a href="/ui/memories/{{.MemoryID}}">{{.MemoryID}}</a></td>
+    <td>{{deref .ProposedTitle}}</td>
+    <td>{{.Status}}</td>
+    <td>{{timeAgo .CreatedAt}}</td>
+    <td>
+      {{if eq .Status "pending"}}
+      <button hx-post="/v1/promotions/{{.ID}}/approve" hx-confirm="Approve this promotion?" hx-swap="none">Approve</button>
+      <button hx-post="/v1/promotions/{{.ID}}/reject" hx-confirm="Reject this promotion?" hx-swap="none">Reject</button>
+      {{end}}
+    </td>
+  </tr>
+  {{else}}
+  <tr><td colspan="5">No pending promotions.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}

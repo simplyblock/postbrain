@@ -1,0 +1,8 @@
+{{define "login"}}
+<h1>Sign in to Postbrain</h1>
+<form method="POST" action="/ui/login">
+  <label>Bearer Token<input type="password" name="token" required autofocus></label>
+  <button type="submit">Sign in</button>
+  {{if .Error}}<p style="color:red">{{.Error}}</p>{{end}}
+</form>
+{{end}}

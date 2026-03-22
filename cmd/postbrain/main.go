@@ -22,6 +22,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/embedding"
 	"github.com/simplyblock/postbrain/internal/jobs"
+	uiapi "github.com/simplyblock/postbrain/internal/ui"
 )
 
 var cfgPath string
@@ -84,6 +85,14 @@ func runServe(cmd *cobra.Command, args []string) error {
 	// REST API.
 	restSrv := restapi.NewRouter(pool, svc, cfg)
 	mux.Handle("/", restSrv.Handler())
+
+	// Web UI.
+	uiHandler, err := uiapi.NewHandler(pool)
+	if err != nil {
+		return fmt.Errorf("ui handler: %w", err)
+	}
+	mux.Handle("/ui", uiHandler)
+	mux.Handle("/ui/", uiHandler)
 
 	// Prometheus metrics.
 	mux.Handle("/metrics", promhttp.Handler())

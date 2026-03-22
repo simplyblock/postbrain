@@ -1,0 +1,14 @@
+/* Pico.css v2 classless — placeholder; replace with minified pico.classless.min.css from picocss.com */
+:root { --font-size: 16px; --spacing: 1rem; color-scheme: light dark; }
+*, *::before, *::after { box-sizing: border-box; }
+body { font-family: system-ui, sans-serif; margin: 0; padding: var(--spacing); max-width: 1200px; margin-inline: auto; }
+nav { display: flex; gap: 1rem; padding: 0.5rem 0; border-bottom: 1px solid #ccc; margin-bottom: 1rem; }
+nav a { text-decoration: none; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #eee; }
+button, input, select, textarea { font: inherit; padding: 0.4rem 0.8rem; }
+button { cursor: pointer; }
+.badge { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
+.badge-ok { background: #d4edda; color: #155724; }
+.badge-warn { background: #fff3cd; color: #856404; }
+.badge-err { background: #f8d7da; color: #721c24; }

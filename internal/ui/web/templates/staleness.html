@@ -1,0 +1,18 @@
+{{define "staleness"}}
+<h1>Staleness Flags</h1>
+<table>
+  <thead><tr><th>Artifact ID</th><th>Signal</th><th>Status</th><th>Detected</th></tr></thead>
+  <tbody>
+  {{range .Flags}}
+  <tr>
+    <td><a href="/ui/knowledge/{{.ArtifactID}}">{{.ArtifactID}}</a></td>
+    <td>{{.Signal}}</td>
+    <td>{{.Status}}</td>
+    <td>{{timeAgo .FlaggedAt}}</td>
+  </tr>
+  {{else}}
+  <tr><td colspan="4">No open staleness flags.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}

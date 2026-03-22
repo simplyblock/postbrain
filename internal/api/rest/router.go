@@ -11,6 +11,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/graph"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 	"github.com/simplyblock/postbrain/internal/memory"
 	"github.com/simplyblock/postbrain/internal/principals"
@@ -33,6 +34,7 @@ type Router struct {
 	membership *principals.MembershipStore
 	principals *principals.Store
 	sharing    *sharing.Store
+	graphStore *graph.Store
 }
 
 // NewRouter creates a Router with all stores initialised.
@@ -53,6 +55,7 @@ func NewRouter(pool *pgxpool.Pool, svc *embedding.EmbeddingService, cfg *config.
 		r.knwProm = knowledge.NewPromoter(pool, svc)
 		r.principals = principals.NewStore(pool)
 		r.sharing = sharing.NewStore(pool)
+		r.graphStore = graph.NewStore(pool)
 	}
 	return r
 }
@@ -153,6 +156,11 @@ func (ro *Router) Handler() http.Handler {
 
 		// Context bundle.
 		r.Get("/context", ro.getContext)
+
+		// Graph endpoints.
+		r.Get("/entities", ro.listEntities)
+		r.Get("/graph", ro.getGraph)
+		r.Post("/graph/query", ro.queryCypher)
 	})
 
 	return r
