@@ -211,6 +211,28 @@ Principals form a hierarchy via `principal_memberships`:
 
 The membership graph determines scope access: a user's effective read scopes are the union of their personal scope, all their teams' scopes, their department's scope, and the company scope.
 
+```sql
+-- Effective scope access for a principal
+-- Returns all scope IDs the principal can read from (own + via memberships).
+WITH RECURSIVE member_tree AS (
+    -- Seed: the principal itself
+    SELECT :principal_id AS id
+    UNION ALL
+    -- Walk up through memberships
+    SELECT pm.parent_id
+    FROM   principal_memberships pm
+    JOIN   member_tree mt ON pm.member_id = mt.id
+)
+SELECT s.id AS scope_id
+FROM   scopes s
+JOIN   member_tree mt ON s.principal_id = mt.id;
+```
+
+Cycle prevention: The CHECK (member_id <> parent_id) constraint prevents direct self-loops.
+Multi-hop cycles (A → B → A) are prevented at the application layer: the Go server MUST
+run a cycle check before inserting any membership (using the recursive CTE above with an
+additional cycle-detection guard). The database does not enforce this independently.
+
 ---
 
 ## Scope Model
@@ -243,6 +265,43 @@ When an agent queries scope `project:acme/api`:
 5. Results from `user:<current-user>` (personal memories, always included)
 
 The fan-out is configurable: agents can pass `max_scope_depth: 2` to limit the walk to project + team, or `strict_scope: true` to disable fan-out entirely.
+
+```sql
+-- Memory read fan-out query
+-- Returns memories visible from a given scope (fan-up + personal + shared grants).
+-- :scope_id      — the scope the agent is operating in
+-- :principal_id  — the authenticated principal
+-- :query_vec     — the query embedding (vector)
+-- :limit         — max results
+
+WITH ancestor_scopes AS (
+    SELECT s2.id
+    FROM   scopes s1
+    JOIN   scopes s2 ON s2.path @> s1.path   -- s2 is ancestor of (or equal to) s1
+    WHERE  s1.id = :scope_id
+),
+personal_scope AS (
+    SELECT id FROM scopes WHERE kind = 'user' AND principal_id = :principal_id
+),
+granted_memories AS (
+    SELECT sg.memory_id AS id
+    FROM   sharing_grants sg
+    JOIN   ancestor_scopes acs ON sg.grantee_scope_id = acs.id
+    WHERE  sg.memory_id IS NOT NULL
+    AND    (sg.expires_at IS NULL OR sg.expires_at > now())
+)
+SELECT   m.id, m.content, m.memory_type, m.importance, m.score,
+         1 - (m.embedding <=> :query_vec) AS score
+FROM     memories m
+WHERE    m.is_active = true
+AND      (
+             m.scope_id IN (SELECT id FROM ancestor_scopes)
+          OR m.scope_id IN (SELECT id FROM personal_scope)
+          OR m.id       IN (SELECT id FROM granted_memories)
+         )
+ORDER BY score DESC
+LIMIT    :limit;
+```
 
 ### Memory write target
 
@@ -295,7 +354,10 @@ CREATE TABLE embedding_models (
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Enforce at most one active model per content_type
+-- Each content_type has at most one active model at a time.
+-- These two partial unique indexes enforce that invariant independently per type:
+-- switching models requires setting is_active = false on the old row before
+-- (or in the same transaction as) setting is_active = true on the new one.
 CREATE UNIQUE INDEX embedding_models_active_text_idx
     ON embedding_models (is_active) WHERE is_active = true AND content_type = 'text';
 CREATE UNIQUE INDEX embedding_models_active_code_idx
@@ -316,6 +378,34 @@ CREATE TABLE principals (
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ─────────────────────────────────────────
+-- API tokens (Bearer token authentication)
+-- ─────────────────────────────────────────
+--
+-- Raw token strings are NEVER stored. Only the SHA-256 hex digest is persisted.
+-- The Go server computes hex(sha256(raw_token)) before lookup and before insert.
+-- Token generation: crypto/rand 32 bytes → hex-encode → prepend "pb_" prefix.
+--
+-- scope_ids: NULL means token has access to all scopes; non-null limits to listed scopes.
+-- permissions: subset of {"read","write","admin"}. Must be validated at the handler level.
+
+CREATE TABLE tokens (
+    id            UUID PRIMARY KEY DEFAULT uuidv7(),
+    principal_id  UUID NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+    token_hash    TEXT NOT NULL UNIQUE,   -- hex(sha256(raw_token)); never the raw value
+    name          TEXT NOT NULL,          -- human label, e.g. "claude-code dev machine"
+    scope_ids     UUID[],                 -- NULL = all scopes; non-null = allowed scope list
+    permissions   TEXT[] NOT NULL DEFAULT '{"read"}',  -- "read" | "write" | "admin"
+    expires_at    TIMESTAMPTZ,            -- NULL = non-expiring
+    last_used_at  TIMESTAMPTZ,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    revoked_at    TIMESTAMPTZ            -- soft-revoke; hard delete also acceptable
+);
+
+CREATE INDEX tokens_principal_idx ON tokens (principal_id);
+CREATE INDEX tokens_hash_idx      ON tokens (token_hash);
+CREATE INDEX tokens_scope_ids_idx ON tokens USING GIN (scope_ids) WHERE scope_ids IS NOT NULL;
 
 -- Hierarchical membership: user → team → department → company
 -- Also: agent → user (owner) or agent → team (shared agent)
@@ -391,9 +481,32 @@ CREATE TRIGGER scopes_path_trigger
     BEFORE INSERT OR UPDATE OF parent_id, external_id ON scopes
     FOR EACH ROW EXECUTE FUNCTION scopes_compute_path();
 
+-- IMPORTANT: This trigger only recomputes the path for the updated row.
+-- If a scope's parent_id or external_id changes, all descendant paths become stale.
+-- The Go server MUST cascade path recomputation to all descendants after any
+-- scope update that changes the path. Use the following query:
+--
+-- UPDATE scopes child
+--    SET path = parent.path || regexp_replace(child.external_id::text, '[^a-zA-Z0-9_]', '_', 'g')::ltree
+--   FROM scopes parent
+--  WHERE parent.id = child.parent_id
+--    AND child.path <@ OLD.path;   -- all descendants of the old path
+--
+-- This must be run recursively (bottom-up or via recursive CTE) when the tree is deep.
+-- For simplicity, the Go server uses a recursive CTE loop after any scope update.
+
 -- ─────────────────────────────────────────
 -- Memory store (primary table)
 -- ─────────────────────────────────────────
+
+-- IMPORTANT: Vector column dimensions
+-- The dimension values used below (1536 for text, 1024 for code) are DEFAULTS
+-- matching OpenAI text-embedding-3-small (1536) and nomic-embed-code (1024).
+-- When deploying with different models, migrations MUST ALTER these columns to
+-- match the configured model's dimensions BEFORE enabling the corresponding
+-- embedding_models row (is_active = true).
+-- The Go server reads active model dimensions from embedding_models at startup
+-- and MUST refuse to start if the column dimension does not match.
 
 CREATE TABLE memories (
     id              UUID PRIMARY KEY DEFAULT uuidv7(),
@@ -498,7 +611,7 @@ CREATE INDEX entities_embedding_hnsw_idx
 CREATE TABLE memory_entities (
     memory_id   UUID NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
     entity_id   UUID NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
-    role        TEXT,   -- "subject", "object", "context", …
+    role        TEXT CHECK (role IN ('subject', 'object', 'context', 'related')),
     PRIMARY KEY (memory_id, entity_id)
 );
 
@@ -528,7 +641,10 @@ CREATE INDEX relations_object_idx  ON relations (object_id, predicate);
 CREATE TABLE sessions (
     id           UUID PRIMARY KEY DEFAULT uuidv7(),
     scope_id     UUID NOT NULL REFERENCES scopes(id) ON DELETE CASCADE,
-    principal_id UUID REFERENCES principals(id),  -- the agent or user running this session
+    -- principal_id: NULL is valid for unauthenticated/anonymous sessions (e.g., a public
+    -- webhook receiver or a batch job with no user context). Authenticated sessions MUST
+    -- always set this field.
+    principal_id UUID REFERENCES principals(id) ON DELETE SET NULL,
     started_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     ended_at     TIMESTAMPTZ,
     meta         JSONB NOT NULL DEFAULT '{}'
@@ -623,6 +739,12 @@ CREATE TABLE knowledge_artifacts (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Knowledge artifacts are assumed to be natural-language content (text).
+-- They do not have a code embedding column. If a knowledge artifact describes
+-- code (e.g., an API contract), its body is still embedded with the text model.
+-- Code-specific retrieval for knowledge is handled via the full-text search
+-- index on content, not via a separate code embedding.
+
 CREATE INDEX knowledge_embedding_hnsw_idx
     ON knowledge_artifacts USING hnsw (embedding vector_cosine_ops)
     WITH (m = 16, ef_construction = 64);
@@ -636,7 +758,14 @@ CREATE INDEX knowledge_content_fts_idx
 CREATE INDEX knowledge_content_trgm_idx
     ON knowledge_artifacts USING GIN (content gin_trgm_ops);
 
+CREATE INDEX knowledge_status_idx ON knowledge_artifacts (status, owner_scope_id)
+    WHERE status IN ('draft', 'in_review');
+
 -- Who has endorsed this knowledge artifact
+-- Self-endorsement is forbidden: endorser_id MUST NOT equal the artifact's author_id.
+-- Enforced at the application layer. A CHECK constraint cannot reference knowledge_artifacts
+-- directly from this table without a function. The Go handler MUST reject endorsements
+-- where endorser_id = (SELECT author_id FROM knowledge_artifacts WHERE id = artifact_id).
 CREATE TABLE knowledge_endorsements (
     id              UUID PRIMARY KEY DEFAULT uuidv7(),
     artifact_id     UUID NOT NULL REFERENCES knowledge_artifacts(id) ON DELETE CASCADE,
@@ -647,6 +776,9 @@ CREATE TABLE knowledge_endorsements (
 );
 
 -- Version history (full content snapshots on each publish)
+-- ON DELETE CASCADE: when the parent artifact is deleted, all history rows are deleted too.
+-- This is intentional — history has no meaning without its parent artifact.
+-- Hard-deleting a published artifact requires scope admin permission (see Authorization Rules).
 CREATE TABLE knowledge_history (
     id              UUID PRIMARY KEY DEFAULT uuidv7(),
     artifact_id     UUID NOT NULL REFERENCES knowledge_artifacts(id) ON DELETE CASCADE,
@@ -834,6 +966,9 @@ BEGIN
 END;
 $$;
 
+-- NOTE: This trigger is defined on the parent partitioned table.
+-- PostgreSQL 13+ propagates AFTER INSERT row-level triggers to partitions.
+-- Verify this behavior when upgrading PostgreSQL major versions.
 CREATE TRIGGER events_skill_stats
     AFTER INSERT ON events
     FOR EACH ROW EXECUTE FUNCTION skills_update_invocation_stats();
@@ -841,6 +976,10 @@ CREATE TRIGGER events_skill_stats
 -- ─────────────────────────────────────────
 -- Skill endorsements (same model as knowledge)
 -- ─────────────────────────────────────────
+-- Self-endorsement is forbidden: endorser_id MUST NOT equal the skill's author_id.
+-- Enforced at the application layer. A CHECK constraint cannot reference skills
+-- directly from this table without a function. The Go handler MUST reject endorsements
+-- where endorser_id = (SELECT author_id FROM skills WHERE id = skill_id).
 
 CREATE TABLE skill_endorsements (
     id          UUID PRIMARY KEY DEFAULT uuidv7(),
@@ -879,6 +1018,10 @@ CREATE TABLE skill_history (
 -- Flags do NOT automatically change the artifact's status or score.
 -- They annotate recall/context responses and populate the review queue.
 -- A reviewer dismisses (still valid) or resolves (deprecated or updated) each flag.
+
+-- Skills do not have staleness flags. Skills are deprecated explicitly by scope admins.
+-- If staleness detection for skills is added in the future, extend this table with
+-- a skill_id column (mutually exclusive with artifact_id, same pattern as sharing_grants).
 
 CREATE TABLE staleness_flags (
     id          UUID PRIMARY KEY DEFAULT uuidv7(),
@@ -1073,6 +1216,10 @@ Store a new memory or update an existing one.
 }
 ```
 
+`expires_in` (seconds): if provided, `expires_at` is set to `now() + expires_in seconds`.
+Only valid for `memory_type = "working"`. Ignored for other types.
+If `memory_type = "working"` and `expires_in` is omitted, a default TTL of 3600 seconds (1 hour) is applied.
+
 #### `recall`
 Retrieve memories **and** published knowledge semantically relevant to a query. Results from both layers are ranked together; each result carries a `layer` field so agents can distinguish them.
 
@@ -1085,7 +1232,10 @@ Retrieve memories **and** published knowledge semantically relevant to a query. 
   "layers":       ["memory", "knowledge", "skills"],      // default: all three
   "agent_type":   "claude-code",                          // filters skill compatibility
   "limit":        10,
-  "min_score":    0.70
+  "min_score":    0.70,
+  "search_mode":  "hybrid"   // text | code | hybrid (default: hybrid)
+                             // "text"  → uses embedding only; "code" → uses embedding_code only;
+                             // "hybrid" → uses text embedding + FTS BM25 fusion
 }
 
 // Output
@@ -1129,6 +1279,14 @@ Retrieve memories **and** published knowledge semantically relevant to a query. 
 }
 ```
 
+`min_score` (float, 0–1, default 0.0): minimum combined relevance score for a result
+to be included. The score is the weighted sum described in the Hybrid Retrieval section.
+A value of 0.70 eliminates most noise. For exploratory queries, lower to 0.50.
+
+`layers` (array, default `["memory","knowledge","skills"]`): controls which stores are
+queried. Pass `["memory"]` to skip knowledge and skills entirely. Pass `["knowledge"]`
+for a knowledge-only lookup. Reducing layers improves latency.
+
 #### `forget`
 Deactivate or permanently delete a memory.
 
@@ -1137,6 +1295,12 @@ Deactivate or permanently delete a memory.
 {
   "memory_id": "018e4f2a-...",
   "hard":      false   // false = soft-delete (is_active=false), true = permanent
+}
+
+// Output
+{
+  "memory_id": "018e4f2a-...",
+  "action":    "deactivated"  // or "deleted" if hard=true
 }
 ```
 
@@ -1177,6 +1341,11 @@ Retrieve a structured context bundle for a new session — a curated set of the 
 }
 ```
 
+Ordering: knowledge blocks always appear before memory blocks in `context_blocks`.
+Within each layer, blocks are ordered by decreasing combined relevance score.
+The `max_tokens` budget is consumed greedily: knowledge first, then memories.
+If `max_tokens` is exceeded mid-item, that item is omitted entirely (no truncation).
+
 #### `summarize`
 Ask Postbrain to consolidate a set of memories into a higher-level semantic memory (calls the embedding service + an LLM summarizer).
 
@@ -1186,6 +1355,25 @@ Ask Postbrain to consolidate a set of memories into a higher-level semantic memo
   "scope":  "project:acme/api",
   "topic":  "payment architecture",
   "dry_run": false
+}
+```
+
+`dry_run` (boolean, default false): if true, returns the proposed consolidation plan
+(which memories would be merged, proposed summary text) without writing any changes.
+Useful for agents to preview before committing.
+
+```jsonc
+// Output (dry_run = false)
+{
+  "consolidated_count": 5,
+  "result_memory_id":   "018e4f2a-...",
+  "summary":            "The payment service owns all Stripe webhook processing ..."
+}
+
+// Output (dry_run = true)
+{
+  "would_consolidate": ["018e4f2a-...", "018e4f2b-...", "018e4f2c-..."],
+  "proposed_summary":  "..."
 }
 ```
 
@@ -1212,89 +1400,95 @@ Create or update a knowledge artifact. Developers and agents with write access t
 }
 ```
 
+`auto_review` (boolean, default false): if true, the artifact is immediately submitted
+for review (status = "in_review") on creation, bypassing the "draft" state. Useful
+when the author is confident the artifact is ready and wants to skip the draft step.
+Does NOT bypass the endorsement requirement.
+
 #### `endorse` _(knowledge tool)_
 Endorse a knowledge artifact. When endorsement count reaches `review_required`, the artifact is automatically promoted to `published`.
 
 ```jsonc
 // Input
 {
-  "artifact_id": "0194ab3c-...",
-  "note":        "Verified against current codebase on 2026-03-22"
+  "artifact_id": "0194ab3c-...",   // knowledge artifact OR skill ID
+  "note":        "Verified against current production config"  // optional
+}
+
+// Output
+{
+  "artifact_id":       "0194ab3c-...",
+  "endorsement_count": 3,
+  "status":            "published",     // "in_review" or "published" (if threshold met)
+  "auto_published":    true             // true if endorsement triggered auto-publish
 }
 ```
 
 #### `promote` _(knowledge tool)_
-Nominate a memory for elevation to a knowledge artifact. Creates a `promotion_request` that can be reviewed by appropriate principals.
+Nominate a memory for elevation into a knowledge artifact (or a knowledge artifact into a skill).
 
 ```jsonc
-// Input
+// Input (memory → knowledge)
 {
-  "memory_id":    "018e4f2a-...",
-  "title":        "Stripe Idempotency Key Convention",
-  "visibility":   "team",
-  "collection":   "payments-architecture",
-  "note":         "This pattern should be documented for all payment engineers"
+  "memory_id":       "018e4f2a-...",
+  "target_scope":    "team:platform",
+  "target_visibility": "team",
+  "proposed_title":  "Payment Service Architecture",
+  "collection_slug": "payments-architecture"   // optional
 }
 
 // Output
 {
-  "promotion_id": "019c00aa-...",
-  "status":       "pending",
-  "review_required_from": ["team:platform"]
+  "promotion_request_id": "019abc1d-...",
+  "status":               "pending"
 }
 ```
 
 #### `collect` _(knowledge tool)_
-Create or manage a knowledge collection.
-
-```jsonc
-// Input — create
-{
-  "action":      "create",
-  "slug":        "security-policies",
-  "name":        "Security Policies",
-  "description": "Mandatory reading for all engineers",
-  "scope":       "department:engineering",
-  "visibility":  "company"
-}
-
-// Input — add artifact
-{
-  "action":      "add",
-  "collection":  "security-policies",
-  "artifact_id": "0194ab3c-..."
-}
-```
-
-#### `skill_search` _(skill tool)_
-Find skills relevant to the current task by semantic similarity. Called automatically at session start to populate the agent's available command set; also callable on demand.
+Add a knowledge artifact to a collection, or create a new collection.
 
 ```jsonc
 // Input
 {
-  "query":       "deploy to production",
-  "scope":       "project:acme/api",
-  "agent_type":  "claude-code",    // filter to compatible skills only
-  "limit":       5
+  "action":        "add_to_collection",  // "add_to_collection" | "create_collection" | "list_collections"
+  "artifact_id":   "0194ab3c-...",       // required for add_to_collection
+  "collection_id": "019abc1d-...",       // required for add_to_collection (or use slug)
+  "collection_slug": "payments-architecture",  // alternative to collection_id
+  "scope":         "team:platform",      // required for create_collection
+  "name":          "Payments Architecture",  // required for create_collection
+  "description":   "..."                 // optional for create_collection
 }
 
-// Output
+// Output (add_to_collection)
 {
-  "skills": [
-    {
-      "id":          "0197cc1a-...",
-      "slug":        "deploy",
-      "name":        "Deploy to Production",
-      "description": "Runs the full deploy pipeline with smoke tests",
-      "score":       0.96,
-      "visibility":  "team",
-      "parameters":  [{"name": "env", "type": "enum", "values": ["staging","prod"], "default": "staging"}],
-      "invocation_count": 214,
-      "installed":   false    // whether already in the agent's command directory
-    }
-  ]
+  "collection_id": "019abc1d-...",
+  "artifact_id":   "0194ab3c-...",
+  "position":      5
 }
 ```
+
+#### `skill_search` _(skill tool)_
+Search for skills by semantic similarity to a description. Equivalent to `recall` with
+`layers: ["skills"]` but with additional skill-specific filters.
+
+```jsonc
+// Input
+{
+  "query":       "review pull request for security issues",
+  "scope":       "team:platform",
+  "agent_type":  "claude-code",    // filters to compatible skills
+  "limit":       5,
+  "installed":   null              // null=all, true=installed, false=not-yet-installed
+}
+
+// Output: same schema as recall results, layer="skill" items only
+```
+
+Installed skill tracking: there is no server-side record of which skills are installed on
+which machine. The `installed` field in `recall` / `skill_search` results is computed by
+the `postbrain-hook` CLI, which reads the local `.claude/commands/` directory and checks
+for the presence of a file named `<slug>.md`. The server is stateless with respect to
+installation.
 
 #### `skill_install` _(skill tool)_
 Materialise a skill into the agent's local command directory. For Claude Code, writes a `.md` file to `.claude/commands/<slug>.md` (project-level) or `~/.claude/commands/<slug>.md` (user-level).
@@ -1314,18 +1508,82 @@ Materialise a skill into the agent's local command directory. For Claude Code, w
 }
 ```
 
+File materialization:
+- For `claude-code`: writes to `.claude/commands/<slug>.md` relative to the current working directory.
+- For `codex`: writes to `.codex/skills/<slug>.md` (reserved path; adapt per agent convention).
+- For `any`: installs to the claude-code path by default; pass `agent_type` to override.
+
+The file format matches the Claude Code custom command format:
+  - YAML frontmatter with `name`, `description`, `agent_types`, `parameters`
+  - Body below the frontmatter
+
+Existing files at the target path are OVERWRITTEN without warning. Agents should check
+if the skill is already installed (`installed: true` in `recall` / `skill_search` output)
+before calling `skill_install` again.
+
 #### `skill_invoke` _(skill tool)_
-Record a skill invocation event (telemetry). Called by the agent after executing a skill so Postbrain can track usage. Does not execute the skill — the agent does that locally after installation.
+Look up a skill by slug, substitute parameters, and return the expanded prompt body.
+Does NOT execute the prompt — returns it for the agent to use as a sub-prompt.
 
 ```jsonc
 // Input
 {
-  "skill_id":   "0197cc1a-...",
-  "parameters": {"env": "prod"},
-  "scope":      "project:acme/api"
+  "slug":       "review-pr",
+  "scope":      "team:platform",
+  "agent_type": "claude-code",
+  "params": {
+    "pr_number": 42,
+    "focus":     "security"
+  }
 }
-// Records a skill_invoked event; updates invocation_count + last_invoked_at.
+
+// Output
+{
+  "skill_id": "0197cc1a-...",
+  "slug":     "review-pr",
+  "body":     "Review PR #42 with focus on security issues.\n\nUse the `gh pr diff 42` command..."
+}
 ```
+
+Parameter validation: at `skill_invoke` time, the server validates:
+- All `required: true` parameters are present in `params`.
+- Each parameter value matches its declared type.
+- `enum` parameters have a value in the `values` list.
+
+Validation errors return HTTP 422 / MCP error with a structured error body listing each
+invalid parameter by name.
+
+---
+
+### postbrain-hook Reference
+
+The `postbrain-hook` CLI is a thin REST client used for agent lifecycle hooks. It reads
+`POSTBRAIN_URL` and `POSTBRAIN_TOKEN` from environment variables (or the config file at
+`$POSTBRAIN_CONFIG` / `~/.config/postbrain/config.yaml`).
+
+```
+postbrain-hook snapshot   --scope <scope>                    # capture a memory snapshot after a tool call
+postbrain-hook summarize-session --scope <scope>             # summarize the session and write episodic memory
+postbrain-hook skill sync --scope <scope> --agent <agent>    # install all published skills for agent
+postbrain-hook skill install --slug <slug> --agent <agent>   # install one skill by slug
+postbrain-hook skill list   --scope <scope>                  # list installed skills
+```
+
+**`snapshot`** captures the current session's recent tool outputs as an episodic memory.
+It is designed to run after Edit, Write, or Bash tool calls (via PostToolUse hook).
+The snapshot reads the last tool output from stdin (Claude Code passes it as JSON on stdin).
+It extracts: modified file paths, tool name, a brief description.
+It calls `remember` with memory_type="episodic", content=<description>, source_ref=<file_path>.
+Snapshots are de-duplicated: if a memory for the same source_ref was created in the last
+60 seconds, the snapshot is skipped.
+
+**`summarize-session`** runs at session end (Stop hook). It:
+1. Fetches all episodic memories created in the current session (by session_id from env).
+2. If count < 3: skips (not enough signal for a useful summary).
+3. Calls the Postbrain `summarize` MCP tool / REST endpoint with those memory IDs.
+4. The resulting consolidated memory has memory_type="episodic" and contains a
+   human-readable summary of what was accomplished in the session.
+5. Individual snapshot memories are NOT deleted; the summary supplements them.
 
 ---
 
@@ -1367,15 +1625,20 @@ For agents or scripts that cannot use MCP:
 | `POST` | `/v1/collections/:slug/items` | Add artifact |
 | `DELETE` | `/v1/collections/:slug/items/:id` | Remove artifact |
 
-**Org / Principal management:**
+**Principal management:**
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/v1/orgs` | Register a company |
-| `POST` | `/v1/orgs/:id/departments` | Create department |
-| `POST` | `/v1/departments/:id/teams` | Create team |
-| `POST` | `/v1/teams/:id/members` | Add user or agent to team |
-| `GET` | `/v1/principals/:id/memberships` | Resolve membership chain |
+| `GET` | `/v1/principals` | List principals |
+| `POST` | `/v1/principals` | Create a principal |
+| `GET` | `/v1/principals/:id` | Fetch a principal |
+| `PUT` | `/v1/principals/:id` | Update a principal |
+| `DELETE` | `/v1/principals/:id` | Delete a principal |
+| `GET` | `/v1/principals/:id/members` | List memberships |
+| `POST` | `/v1/principals/:id/members` | Add member |
+| `DELETE` | `/v1/principals/:id/members` | Remove member |
+
+> **Note:** The `/v1/orgs` path shown in the architecture diagram is an alias for `/v1/principals?kind=company,department,team` for legacy compatibility.
 
 **Sharing:**
 
@@ -1419,6 +1682,25 @@ For agents or scripts that cannot use MCP:
 
 All endpoints accept and return `application/json`. Authentication is via a Bearer token issued per principal.
 
+### Pagination
+
+All list endpoints accept:
+- `limit` (integer, default 20, max 100)
+- `offset` (integer, default 0, 0-based)
+- `cursor` (opaque string, returned as `next_cursor` in responses; preferred over offset for large sets)
+
+Responses include:
+```json
+{
+  "data": [],
+  "total":       142,
+  "limit":        20,
+  "offset":        0,
+  "next_cursor": "018f..."
+}
+```
+Cursor-based pagination uses the UUIDv7 `id` of the last item. Pass `cursor=<last_id>` to get the next page.
+
 ---
 
 ## Retrieval Strategy
@@ -1447,7 +1729,7 @@ memory_score = (0.70 × cosine_similarity)
              + (0.05 × recency_decay)
 ```
 
-`recency_decay = exp(-0.010 × days_since_created)`. Episodic and working memories decay faster (λ = 0.015); semantic and procedural decay slower (λ = 0.005).
+`recency_decay = exp(-λ × days_since_last_access)` where `days_since_last_access` = `(now - COALESCE(last_accessed, created_at))` in days. λ per type: working = 0.015, episodic = 0.010, semantic/procedural = 0.005.
 
 **Knowledge score:**
 ```
@@ -1482,6 +1764,38 @@ skill_score = (0.65 × cosine_similarity)
 ### Step 3 — Cross-layer merge and re-rank
 
 Memory, knowledge, and skill candidates are merged into a single list and sorted by their respective scores. Each result carries a `layer` field. Scores are normalised to `[0, 1]` and directly comparable across layers.
+
+#### Cross-layer merge
+
+After scoring within each layer (memory, knowledge, skill), results are merged into a
+single ranked list using the same combined score formula. The `layer` field on each
+result allows callers to filter or weight layers post-retrieval.
+
+Knowledge artifacts receive a fixed `importance` boost of +0.1 over the raw formula to
+reflect their higher institutional trust. This boost is not configurable in MVP.
+
+Combined score formula:
+
+```
+score = w_vec  * vector_score
+      + w_bm25 * bm25_score
+      + w_imp  * importance
+      + w_rec  * recency_decay
+
+Default weights:
+  w_vec  = 0.50
+  w_bm25 = 0.20
+  w_imp  = 0.20
+  w_rec  = 0.10
+```
+
+These weights are configurable per-query via the `weights` parameter (not exposed in MVP;
+hardcoded defaults apply). Results are sorted by `score DESC`.
+
+`vector_score` = 1 - cosine_distance (range 0–1; 1 = identical)
+`bm25_score`   = normalized ts_rank_cd score (range 0–1)
+`importance`   = memories.importance or knowledge_artifacts.endorsement_count / max_endorsements (normalized 0–1)
+`recency_decay` = exp(-λ * days_since_last_access)  where λ = 0.005 for knowledge (no decay) effectively 1.0 fixed
 
 ### Step 4 — Deduplication
 
@@ -1573,6 +1887,14 @@ The promotion pathway is the bridge between the two layers. It allows agent-obse
 3. **Review** — a reviewer approves (creating the artifact as `in_review`) or rejects (with an explanatory note, memory is unchanged).
 4. **Endorsement** — once in review, the artifact collects endorsements from any principal who can read it. When `endorsement_count >= review_required`, it auto-publishes. Alternatively a reviewer can manually publish.
 5. **Link-back** — `memories.promoted_to` is set to the artifact ID, and `memories.promotion_status` becomes `promoted`. The memory is now suppressed in retrieval in favour of the artifact.
+
+**Promotion approval transaction:** When a promotion_request is approved:
+1. A new `knowledge_artifacts` row is created (status = 'draft').
+2. `promotion_requests.result_artifact_id` is set to the new artifact's ID.
+3. `promotion_requests.status` is set to 'approved'.
+4. `memories.promoted_to` is set to the new artifact's ID.
+5. `memories.promotion_status` is set to 'promoted'.
+Steps 1–5 execute in a single transaction.
 
 ### Who can review
 
@@ -1833,6 +2155,8 @@ The consolidation job runs every 6 hours from the Go server (requires LLM calls,
 1. For each scope, find embedding clusters: pairs of memories whose cosine distance is ≤ 0.05 (pure SQL against the HNSW index).
 2. Within each cluster, if all members have `importance < 0.7` and `access_count < 3`, submit content to the LLM summarizer, write the synthesized memory, soft-delete the originals, and record the merge in `consolidations`.
 
+> **Consolidation vs. pruning pipeline:** Consolidation candidates (importance < 0.7, access_count < 3) are eligible for LLM-assisted merging; pruning (importance < 0.05, access_count < 2) permanently soft-deletes memories that were never consolidated. The two steps form a pipeline: consolidation runs first (every 6 hours via the Go server), pruning runs after (weekly via pg_cron `prune-low-value-memories`). Soft-deleted memories (is_active = false) are retained in the database indefinitely for audit purposes — they are excluded from all recall and context queries by the `WHERE is_active = true` clause. A future migration may add a hard-delete job for very old soft-deleted rows, but this is not implemented in the initial version.
+
 **Entity deduplication** runs as part of the same job using `fuzzystrmatch`. After memory consolidation, the job scans the entity registry for near-duplicate names within the same scope:
 
 ```sql
@@ -1889,6 +2213,21 @@ In `auto` mode, the same heuristic used at write time is applied to the query st
 3. Writes are dual — the old embedding stays in place until the batch for that row completes, so queries during migration still return results (with slightly degraded cross-batch similarity, acceptable for ANN).
 4. Text and code reembed jobs run independently; upgrading the code model doesn't touch text embeddings.
 
+#### Background Job: Embedding Re-sync
+
+When an embedding model's `is_active` flag changes (new model activated), the Go server:
+1. Detects the change at startup by comparing the active model ID against the model ID
+   stored on existing rows.
+2. Enqueues a reembed job for each affected content_type.
+3. The reembed job fetches rows in batches (configurable `batch_size`, default 64) where
+   `embedding_model_id != <new_active_model_id>` (for the relevant content_type).
+4. For each batch: calls the embedding backend, updates the `embedding` (or `embedding_code`)
+   column and `embedding_model_id`.
+5. The HNSW index is automatically updated by pg_vector on each UPDATE.
+6. Progress is logged to the `events` table with `event_type = 'reembed_batch'`.
+7. Old embeddings remain queryable during re-sync; results may be mixed-model until the
+   job completes. The job runs in the background and does not block serving.
+
 #### Staleness detection
 
 Three signals, each with distinct triggering, confidence, and cost profile.
@@ -1909,7 +2248,28 @@ No embeddings, no LLM. Direct causal evidence: the exact file a knowledge artifa
 
 **Signal 2 — `contradiction_detected` (confidence: 0.8, cost: LLM calls)**
 
-Weekly Go job. Two-phase to minimise LLM spend:
+#### Signal 2: Contradiction Detection (weekly Go job)
+
+The job runs weekly and processes all published knowledge artifacts in batches:
+
+1. For each artifact, fetch recent memories (last 7 days) from the same or ancestor scopes.
+2. Pre-filter: compute cosine similarity between the artifact embedding and each memory embedding.
+   Only memories with similarity > 0.6 (topic overlap) proceed to step 3.
+3. Apply the negation-embedding pre-filter: compute cosine similarity between the memory and
+   a "negation template" embedding (`"[artifact title] is false/wrong/outdated"`).
+   Only memories with negation similarity > 0.5 proceed to step 4.
+4. For surviving candidates: call the LLM with the artifact content and memory content,
+   asking it to classify as CONTRADICTS / CONSISTENT / UNRELATED with a brief reasoning string.
+5. If the LLM returns CONTRADICTS: insert a `staleness_flags` row with:
+   - `signal = 'contradiction_detected'`
+   - `confidence` = min(0.9, negation_similarity * 1.5)   -- scaled, capped at 0.9
+   - `evidence.memory_ids` = list of contradicting memory IDs
+   - `evidence.classifier_verdict` = "CONTRADICTS"
+   - `evidence.classifier_reasoning` = LLM reasoning string
+6. Deduplication: do not insert a new flag if an open `contradiction_detected` flag already
+   exists for the same artifact.
+
+Weekly Go job (detailed pre-filter implementation):
 
 *Phase 1 — cheap pre-filter using negation embeddings:*
 ```sql
@@ -2125,14 +2485,50 @@ postbrain migrate force N       # reset dirty flag to version N (after manual fi
 
 Down migrations are **never run automatically** — they are manual-only tools for development and disaster recovery. The server only ever calls `Up()`.
 
+**`postbrain migrate force N`** — sets the golang-migrate schema_migrations.version to N and
+clears the dirty flag. Use ONLY after manually fixing a failed migration's partial state.
+Never run in production without first verifying the database is in the expected state for
+version N.
+
+**Version-ahead guard:** if current_db_version > ExpectedVersion, the server MUST
+refuse to start and log: "database schema version N is ahead of binary version M —
+downgrade the database or upgrade the binary". This prevents an older binary from
+silently operating against a newer schema.
+
 **Configuration:**
 
 ```yaml
 # config.example.yaml
 database:
-  url:            "postgres://postbrain:postbrain@localhost:5432/postbrain"
-  auto_migrate:   true   # apply pending migrations on startup (default: true)
-  migration_lock_timeout: 60s  # how long to wait for the advisory lock
+  url:          "postgres://postbrain:postbrain@localhost:5432/postbrain"
+  auto_migrate: true          # apply pending migrations on startup; set false in prod if using external migration tooling
+  max_open:     25            # pgx pool max open connections
+  max_idle:     5             # pgx pool max idle connections
+  connect_timeout: 10s        # connection attempt timeout
+
+embedding:
+  backend:      ollama        # ollama | openai
+  ollama_url:   "http://localhost:11434"
+  text_model:   "nomic-embed-text"        # active model for content_type=text; must match a row in embedding_models
+  code_model:   "nomic-embed-code"        # active model for content_type=code; omit to reuse text_model
+  openai_api_key: ""                      # required when backend=openai; ignored otherwise
+  request_timeout: 30s                    # per-embedding request timeout
+  batch_size:   64                        # items per embedding batch request
+
+server:
+  addr:     ":7433"
+  token:    "changeme"        # Bearer token for all API calls; MUST be changed in production
+  tls_cert: ""                # path to TLS certificate; empty = plain HTTP
+  tls_key:  ""                # path to TLS private key
+
+migrations:
+  expected_version: 0         # overridden at build time; 0 = accept any version (dev only)
+
+jobs:
+  consolidation_enabled: true       # run LLM-assisted consolidation job
+  contradiction_enabled: true       # run weekly contradiction-detection job
+  reembed_enabled:       true       # run background re-embedding when model changes
+  age_check_enabled:     true       # run monthly low_access_age staleness job (supplement to pg_cron)
 ```
 
 **Zero-downtime deployments:**
@@ -2163,6 +2559,26 @@ A schema version mismatch here (e.g. during a rolling deploy window) returns `20
 #### Authentication & multi-tenancy
 
 Each token is scoped to a `(principal_id, allowed_scope_ids[])` pair stored in a `tokens` table. Middleware validates the token and injects the resolved scope IDs into the request context. Cross-scope reads are only allowed within the scope hierarchy owned by the token.
+
+**Token lookup at request time:**
+1. Extract raw token from `Authorization: Bearer <token>` header.
+2. Compute `hex(sha256(raw_token))`.
+3. SELECT from tokens WHERE token_hash = $1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now()).
+4. If no row: return 401.
+5. If row found: update `last_used_at = now()` (async write; do not block the request).
+6. Attach `principal_id` and `permissions` to the request context.
+7. Enforce scope restrictions: if `scope_ids IS NOT NULL`, reject requests targeting scopes not in the list.
+
+**MCP authentication:**
+MCP connections authenticate with the same Bearer token mechanism. The MCP server reads
+the `Authorization` header from the SSE connection request. All tool calls within the
+session inherit the token's principal and permissions. There is no per-tool-call
+re-authentication.
+
+**MCP server concurrency:**
+The MCP server is stateless per tool call. Each SSE connection maps to one
+session row. Concurrent tool calls within the same session are serialized by the pgx
+connection pool. The pool size is configured via `database.max_open` (default 25).
 
 ---
 
@@ -2299,6 +2715,51 @@ The auth middleware enforces that the `scope` field in a `remember` or `publish`
 ### Knowledge artifact versioning
 
 When a published artifact is edited, the current version is snapshotted into `knowledge_history` before the update is applied. The `version` counter increments. The HNSW index is updated with the new embedding asynchronously (via an in-process job queue) to avoid write latency on the critical path.
+
+### Versioning
+
+Each edit to a published knowledge artifact:
+1. Copies the current `content`, `summary`, `version`, and `changed_by` to `knowledge_history`.
+2. Increments `knowledge_artifacts.version`.
+3. Sets `previous_version` to the ID of the row that held the prior version.
+
+Only published artifacts are versioned. Draft and in_review edits do not create history rows.
+Version history is append-only; rows in `knowledge_history` are never modified.
+
+### Knowledge Artifact State Machine
+
+States: draft → in_review → published → deprecated
+
+Allowed transitions and who can trigger them:
+
+| From       | To          | Who                                        | Condition                                             |
+|------------|-------------|--------------------------------------------|---------------------------------------------------------|
+| draft      | in_review   | author or scope admin                      | none                                                  |
+| in_review  | published   | system (auto) or scope admin               | auto: endorsement_count >= review_required AND endorser != author |
+| in_review  | draft       | author or scope admin                      | retract for rework                                    |
+| published  | deprecated  | scope admin only                           | none                                                  |
+| deprecated | published   | scope admin only                           | re-activate if deprecation was in error               |
+| any        | draft       | scope admin only                           | emergency rollback                                    |
+
+The `published_at` timestamp is set when status transitions to `published`.
+The `deprecated_at` timestamp is set when status transitions to `deprecated`.
+Both are cleared if the artifact is rolled back to `draft`.
+
+Self-endorsement is forbidden: endorser_id MUST NOT equal the artifact's author_id.
+Enforced at the application layer (see `knowledge_endorsements` table comment).
+
+### Knowledge Artifact Write Authorization
+
+| Operation              | Required permission                                          |
+|------------------------|--------------------------------------------------------------|
+| Create artifact (draft)| write access to the target scope                            |
+| Submit for review      | author of the artifact OR scope admin                       |
+| Endorse                | any principal with read access to the artifact; NOT the author |
+| Deprecate              | scope admin only                                            |
+| Delete (hard)          | scope admin only                                            |
+| Promote to skill       | author OR scope admin; artifact must be `procedural` type AND `published` status |
+
+"Scope admin" means a principal with `role = 'admin'` in `principal_memberships` for the artifact's `owner_scope_id` or any ancestor scope.
 
 ---
 
@@ -2475,6 +2936,16 @@ The primary agent-facing use case for multi-hop traversal is **change impact ana
 This is the kind of query that takes one Cypher `MATCH` clause but would require a complex, depth-limited recursive CTE without AGE.
 
 #### When to enable AGE
+
+Apache AGE is OPTIONAL. The Go server detects AGE availability at startup by executing
+`SELECT * FROM ag_catalog.ag_graph LIMIT 1`. If the query fails (AGE not installed),
+the server disables all graph traversal features and logs a warning. No configuration
+flag is needed — AGE is used if present and silently skipped if absent.
+
+If AGE is installed, the sync job runs weekly. If AGE is not installed:
+- `recall` still works using the relational entities/relations tables.
+- Multi-hop traversal queries return an empty result set with a
+  `"graph_unavailable": true` flag in the response.
 
 AGE adds operational complexity (an additional shared library, a sync job, a larger `shared_preload_libraries`). The recommended rollout:
 
