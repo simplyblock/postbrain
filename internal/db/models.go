@@ -6,6 +6,64 @@ import (
 	"github.com/google/uuid"
 )
 
+// Skill represents a versioned, parameterised prompt template stored in the registry.
+type Skill struct {
+	ID               uuid.UUID
+	ScopeID          uuid.UUID
+	AuthorID         uuid.UUID
+	SourceArtifactID *uuid.UUID
+	Slug             string
+	Name             string
+	Description      string
+	AgentTypes       []string
+	Body             string
+	Parameters       []byte // JSONB: [{name,type,required,default,description,values?}]
+	Visibility       string
+	Status           string
+	PublishedAt      *time.Time
+	DeprecatedAt     *time.Time
+	ReviewRequired   int
+	Version          int
+	PreviousVersion  *uuid.UUID
+	Embedding        []float32
+	EmbeddingModelID *uuid.UUID
+	InvocationCount  int
+	LastInvokedAt    *time.Time
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+// SkillEndorsement records a single endorsement of a skill by a principal.
+type SkillEndorsement struct {
+	ID         uuid.UUID
+	SkillID    uuid.UUID
+	EndorserID uuid.UUID
+	Note       *string
+	CreatedAt  time.Time
+}
+
+// SkillHistory captures a point-in-time snapshot of a skill's body and parameters.
+type SkillHistory struct {
+	ID         uuid.UUID
+	SkillID    uuid.UUID
+	Version    int
+	Body       string
+	Parameters []byte
+	ChangedBy  uuid.UUID
+	ChangeNote *string
+	CreatedAt  time.Time
+}
+
+// SkillParameter is the in-memory representation of one parameter descriptor.
+type SkillParameter struct {
+	Name        string   `json:"name"`
+	Type        string   `json:"type"` // string | integer | boolean | enum
+	Required    bool     `json:"required"`
+	Default     any      `json:"default,omitempty"`
+	Description string   `json:"description"`
+	Values      []string `json:"values,omitempty"` // for enum type
+}
+
 // Principal represents an actor in the system (agent, user, team, department, or company).
 type Principal struct {
 	ID          uuid.UUID

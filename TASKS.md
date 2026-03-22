@@ -83,8 +83,8 @@
 - [x] `migrations/000005_age_graph.up.sql` — AGE graph setup wrapped in DO/EXCEPTION (no-op if absent)
 - [x] `migrations/000005_age_graph.down.sql`
 
-- [x] `models.go` — shared DB model types: `Principal`, `Membership`, `Scope`, `Token`
-- [x] `queries.go` — thin pgx query layer: `CreatePrincipal`, `GetPrincipalByID`, `GetPrincipalBySlug`, `CreateMembership`, `DeleteMembership`, `GetMemberships`, `GetAllParentIDs`, `CreateScope`, `GetScopeByID`, `GetScopeByExternalID`, `GetAncestorScopeIDs`, `CreateToken`, `LookupToken`, `RevokeToken`, `UpdateTokenLastUsed`
+- [x] `models.go` — shared DB model types: `Principal`, `Membership`, `Scope`, `Token`, `Skill`, `SkillEndorsement`, `SkillHistory`, `SkillParameter`
+- [x] `queries.go` — thin pgx query layer: `CreatePrincipal`, `GetPrincipalByID`, `GetPrincipalBySlug`, `CreateMembership`, `DeleteMembership`, `GetMemberships`, `GetAllParentIDs`, `CreateScope`, `GetScopeByID`, `GetScopeByExternalID`, `GetAncestorScopeIDs`, `CreateToken`, `LookupToken`, `RevokeToken`, `UpdateTokenLastUsed`; skill queries: `CreateSkill`, `GetSkill`, `GetSkillBySlug`, `UpdateSkillContent`, `UpdateSkillStatus`, `SnapshotSkillVersion`, `CreateSkillEndorsement`, `GetSkillEndorsementByEndorser`, `CountSkillEndorsements`, `RecallSkillsByVector`, `RecallSkillsByFTS`, `ListPublishedSkillsForAgent`
 
 - [ ] `db/queries/memories.sql` — sqlc queries:
   - `CreateMemory`, `GetMemory`, `UpdateMemory`, `SoftDeleteMemory`, `HardDeleteMemory`
@@ -326,19 +326,19 @@
 
 ### `internal/skills` — Skills Registry
 
-- [ ] `store.go`:
+- [x] `store.go`:
   - `Create(ctx, input) (*Skill, error)` — embed `description + " " + body`; default `status = "draft"`
   - `Update(ctx, id, body, params) (*Skill, error)` — re-embed; snapshot to `skill_history`
   - `GetBySlug(ctx, scopeID, slug)`, `GetByID(ctx, id)`
-- [ ] `lifecycle.go` — identical state machine to knowledge:
+- [x] `lifecycle.go` — identical state machine to knowledge:
   - `SubmitForReview`, `RetractToDraft`, `Endorse`, `AutoPublish`, `Deprecate`, `Republish`, `EmergencyRollback`
   - `Endorse`: reject if `endorserID == skill.author_id` → `ErrSelfEndorsement`
-- [ ] `recall.go`:
+- [x] `recall.go`:
   - Hybrid retrieval on `description || ' ' || body` embedding + FTS
   - Filter: `status = "published"`, visibility resolved same as knowledge
   - Filter by `agent_types @> ARRAY[:agent_type] OR 'any' = ANY(agent_types)` if `agent_type` provided
   - Append `{layer:"skill"}` to each result
-- [ ] `install.go`:
+- [x] `install.go`:
   - `Install(ctx, skill *Skill, agentType, workdir string) (path string, error)`:
     - For `claude-code` or `any`: write to `{workdir}/.claude/commands/{slug}.md`
     - For `codex`: write to `{workdir}/.codex/skills/{slug}.md`
@@ -346,13 +346,13 @@
     - Overwrite existing file silently
     - Return absolute path of written file
   - `IsInstalled(slug, agentType, workdir string) bool` — checks file presence
-- [ ] `sync.go`:
+- [x] `sync.go`:
   - `Sync(ctx, pool, scopeID, agentType, workdir string) (*SyncResult, error)`:
     - List all published skills for agent from DB
     - For each: check `IsInstalled`; if not or outdated (version mismatch in frontmatter): install
     - For installed files not in registry (or deprecated): report as `orphaned`
     - Return `{installed, updated, orphaned []string}`
-- [ ] `invoke.go`:
+- [x] `invoke.go`:
   - `Invoke(ctx, skillID, params map[string]any) (string, error)`:
     - Validate all `required: true` params present
     - Validate types: `string`, `integer`, `boolean`, `enum` (check values list)

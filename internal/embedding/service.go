@@ -59,3 +59,10 @@ func (s *EmbeddingService) TextEmbedder() Embedder { return s.text }
 
 // CodeEmbedder returns the underlying code Embedder, or nil if none is configured.
 func (s *EmbeddingService) CodeEmbedder() Embedder { return s.code }
+
+// NewServiceFromEmbedders constructs an EmbeddingService directly from Embedder instances.
+// code may be nil; in that case EmbedCode falls back to the text embedder.
+// This constructor is primarily intended for testing.
+func NewServiceFromEmbedders(text Embedder, code Embedder) *EmbeddingService {
+	return &EmbeddingService{text: text, code: code}
+}
