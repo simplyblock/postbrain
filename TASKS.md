@@ -86,65 +86,13 @@
 - [x] `models.go` — shared DB model types: `Memory`, `Principal`, `Membership`, `Scope`, `Token`, `Skill`, `SkillEndorsement`, `SkillHistory`, `SkillParameter`, `KnowledgeArtifact`, `KnowledgeEndorsement`, `KnowledgeHistory`, `KnowledgeCollection`, `KnowledgeCollectionItem`, `StalenessFlag`, `PromotionRequest`
 - [x] `queries.go` — thin pgx query layer: `CreatePrincipal`, `GetPrincipalByID`, `GetPrincipalBySlug`, `CreateMembership`, `DeleteMembership`, `GetMemberships`, `GetAllParentIDs`, `CreateScope`, `GetScopeByID`, `GetScopeByExternalID`, `GetAncestorScopeIDs`, `CreateToken`, `LookupToken`, `RevokeToken`, `UpdateTokenLastUsed`; skill queries: `CreateSkill`, `GetSkill`, `GetSkillBySlug`, `UpdateSkillContent`, `UpdateSkillStatus`, `SnapshotSkillVersion`, `CreateSkillEndorsement`, `GetSkillEndorsementByEndorser`, `CountSkillEndorsements`, `RecallSkillsByVector`, `RecallSkillsByFTS`, `ListPublishedSkillsForAgent`; knowledge queries: `GetMemory`, `CreateArtifact`, `GetArtifact`, `UpdateArtifact`, `UpdateArtifactStatus`, `IncrementArtifactEndorsementCount`, `IncrementArtifactAccess`, `SnapshotArtifactVersion`, `CreateEndorsement`, `GetEndorsementByEndorser`, `ListVisibleArtifacts`, `RecallArtifactsByVector`, `RecallArtifactsByFTS`, `CreateCollection`, `GetCollection`, `GetCollectionBySlug`, `ListCollections`, `AddCollectionItem`, `RemoveCollectionItem`, `ListCollectionItems`, `InsertStalenessFlag`, `HasOpenStalenessFlag`, `UpdateStalenessFlag`, `CreatePromotionRequest`, `GetPromotionRequest`, `ListPendingPromotions`
 
-- [ ] `db/queries/memories.sql` — sqlc queries:
-  - `CreateMemory`, `GetMemory`, `UpdateMemory`, `SoftDeleteMemory`, `HardDeleteMemory`
-  - `IncrementAccessCount` (also sets `last_accessed = now()`)
-  - `RecallByVector` (HNSW ANN, scope-filtered, `is_active = true`)
-  - `RecallByFTS` (BM25 via `ts_rank_cd`, scope-filtered)
-  - `RecallByCodeVector` (uses `embedding_code`, `WHERE embedding_code IS NOT NULL`)
-  - `FanOutScopes` (ancestor CTE using ltree `@>`)
-  - `ListExpiredWorkingMemories`, `DecayImportance`, `PruneMemories`
-  - `ListConsolidationCandidates` (importance < 0.7, access_count < 3, is_active = true)
-
-- [ ] `db/queries/knowledge.sql` — sqlc queries:
-  - `CreateArtifact`, `GetArtifact`, `UpdateArtifact`
-  - `TransitionStatus` (takes from_status, to_status, principal_id for auth check)
-  - `AddEndorsement`, `GetEndorsementCount`, `CheckSelfEndorsement`
-  - `SnapshotVersion` (insert into knowledge_history)
-  - `ListByVisibility` (ltree visibility query from DESIGN.md)
-  - `IncrementArtifactAccess`
-  - `ListPendingReview`, `ListOpenStalenessFlags`
-  - `InsertStalenessFlag`, `UpdateStalenessFlag`
-
-- [ ] `db/queries/collections.sql` — sqlc queries:
-  - `CreateCollection`, `GetCollection`, `ListCollections`
-  - `AddItemToCollection`, `RemoveItemFromCollection`, `ListCollectionItems`
-
-- [ ] `db/queries/principals.sql` — sqlc queries:
-  - `CreatePrincipal`, `GetPrincipalByID`, `GetPrincipalBySlug`
-  - `CreateMembership`, `DeleteMembership`, `GetMemberships`
-  - `EffectiveScopeIDs` (recursive CTE from DESIGN.md)
-  - `CreateToken`, `LookupToken` (by token_hash), `RevokeToken`, `UpdateTokenLastUsed`
-  - `GetScopeByKindAndExternalID`, `CreateScope`
-
-- [ ] `db/queries/scopes.sql` — sqlc queries:
-  - `GetScopeByID`, `GetScopeByPath`, `CreateScope`, `UpdateScope`
-  - `AncestorScopeIDs` (ltree `@>` CTE)
-  - `DescendantScopeIDs` (ltree `<@` for cascade recompute)
-
-- [ ] `db/queries/sharing.sql` — sqlc queries:
-  - `CreateGrant`, `RevokeGrant`, `ListGrantsForScope`
-  - `IsMemoryGrantedToScope`, `IsArtifactGrantedToScope`
-
-- [ ] `db/queries/skills.sql` — sqlc queries:
-  - `CreateSkill`, `GetSkill`, `GetSkillBySlug`, `UpdateSkill`
-  - `AddSkillEndorsement`, `CheckSkillSelfEndorsement`, `GetSkillEndorsementCount`
-  - `SnapshotSkillVersion`
-  - `RecallSkillsByVector`, `RecallSkillsByFTS`
-  - `ListPublishedSkillsForAgent` (filters by agent_types contains agent OR 'any')
-
-- [ ] `db/queries/promotions.sql` — sqlc queries:
-  - `CreatePromotionRequest`, `GetPromotionRequest`
-  - `ApprovePromotion` (sets status='approved', result_artifact_id)
-  - `RejectPromotion`
-  - `ListPendingPromotions`
-
-- [ ] `db/queries/graph.sql` — sqlc queries:
-  - `UpsertEntity`, `GetEntityByCanonical`, `ListEntitiesByScope`
-  - `UpsertRelation`, `ListRelationsForEntity`
-  - `LinkMemoryToEntity`, `ListEntitiesForMemory`
-
-- [ ] `sqlc.yaml` — sqlc config pointing to all query files and the migration schema files
+- [~] sqlc layer (DEFERRED) — all queries are implemented as direct pgx calls in `internal/db/queries.go`
+  instead of generated sqlc code. The sqlc `.sql` definition files and `sqlc.yaml` were skipped in
+  favour of hand-written pgx queries which work correctly today. sqlc migration is a future
+  refactoring task if type-safety or codegen becomes a priority.
+  - `db/queries/memories.sql`, `db/queries/knowledge.sql`, `db/queries/collections.sql`,
+    `db/queries/principals.sql`, `db/queries/scopes.sql`, `db/queries/sharing.sql`,
+    `db/queries/skills.sql`, `db/queries/promotions.sql`, `db/queries/graph.sql`, `sqlc.yaml`
 
 ### `internal/embedding` — Embedding Service
 
@@ -469,14 +417,14 @@ All tests follow TDD: test file written before implementation file.
 
 ### Unit Tests
 
-- [ ] `internal/config` — valid config loads; missing required fields return error; `"changeme"` token logs warning; env var overlay overrides YAML values
-- [ ] `internal/auth/tokens.go` — `HashToken` is deterministic; `GenerateToken` produces `"pb_"` prefix; scope enforcement rejects out-of-scope requests; expired token rejected
-- [ ] `internal/embedding/classifier.go` — Go source file classified as `"code"`; prose text classified as `"text"`; file with unknown extension falls back to content heuristic
-- [ ] `internal/memory/recall.go` — combined score formula produces correct values for known inputs; `min_score` filter excludes low-scoring results; `strict_scope=true` returns only the target scope
-- [ ] `internal/retrieval/merge.go` — promoted memory is deduplicated when knowledge artifact is also present; knowledge boost of +0.1 applied; results sorted DESC by score
-- [ ] `internal/skills/invoke.go` — `$PARAM_NAME` substituted correctly; `{{param_name}}` substituted correctly; missing required param returns `ErrValidation`; wrong enum value returns `ErrValidation`; integer type validation rejects string value
-- [ ] `internal/knowledge/lifecycle.go` — self-endorsement returns `ErrSelfEndorsement`; auto-publish fires when `endorsement_count >= review_required`; `Deprecate` rejects non-admin caller; `EmergencyRollback` clears `published_at` and `deprecated_at`
-- [ ] `internal/principals/membership.go` — cycle detection rejects A→B→A; direct self-loop rejected by DB constraint; `IsScopeAdmin` returns true for ancestor-scope admin
+- [x] `internal/config` — valid config loads; missing required fields return error; `"changeme"` token logs warning; env var overlay overrides YAML values (6 tests in `config_test.go`)
+- [x] `internal/auth/tokens.go` — `HashToken` is deterministic; `GenerateToken` produces `"pb_"` prefix; scope enforcement rejects out-of-scope requests; expired token rejected (8 tests in `tokens_test.go` + `middleware_test.go`)
+- [x] `internal/embedding/classifier.go` — Go source file classified as `"code"`; prose text classified as `"text"`; file with unknown extension falls back to content heuristic (`classifier_test.go`)
+- [x] `internal/memory/recall.go` — combined score formula produces correct values for known inputs; `min_score` filter excludes low-scoring results; `strict_scope=true` returns only the target scope (10 tests in `recall_test.go`)
+- [x] `internal/retrieval/merge.go` — promoted memory is deduplicated when knowledge artifact is also present; knowledge boost of +0.1 applied; results sorted DESC by score (5 tests in `merge_test.go`)
+- [x] `internal/skills/invoke.go` — `$PARAM_NAME` substituted correctly; `{{param_name}}` substituted correctly; missing required param returns `ErrValidation`; wrong enum value returns `ErrValidation`; integer type validation rejects string value (7 tests in `invoke_test.go`)
+- [x] `internal/knowledge/lifecycle.go` — self-endorsement returns `ErrSelfEndorsement`; auto-publish fires when `endorsement_count >= review_required`; `Deprecate` rejects non-admin caller; `EmergencyRollback` clears `published_at` and `deprecated_at` (7 tests in `lifecycle_test.go`)
+- [x] `internal/principals/membership.go` — cycle detection rejects A→B→A; direct self-loop rejected by DB constraint; `IsScopeAdmin` returns true for ancestor-scope admin (5 tests in `membership_test.go`)
 
 ### Integration Tests (require real PostgreSQL via testcontainers)
 
