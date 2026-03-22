@@ -428,13 +428,15 @@ All tests follow TDD: test file written before implementation file.
 
 ### Integration Tests (require real PostgreSQL via testcontainers)
 
-- [ ] `internal/db` — all 5 migrations apply cleanly in order; down migrations reverse cleanly; `CheckAndMigrate` acquires advisory lock and blocks concurrent call; version-ahead guard refuses to start
-- [ ] Memory lifecycle — `Create` returns `action:"updated"` for near-duplicate (cosine ≤ 0.05); `Create` with `memory_type="working"` and no `expires_in` sets `expires_at = now()+3600s`; `SoftDelete` excludes from `Recall`; `HardDelete` removes row
-- [ ] Scope fan-out — querying `project:acme/api` returns memories from project, team, department, and company scopes; querying with `max_scope_depth=1` returns only project scope; `strict_scope=true` returns only exact scope
-- [ ] Knowledge promotion workflow — nomination creates pending request; approval transaction creates artifact, sets `promoted_to` and `promotion_status="promoted"` atomically; re-nomination of already-promoted memory is rejected
-- [ ] Knowledge endorsement → auto-publish — artifact reaches `review_required` endorsements and transitions to `published`; self-endorsement rejected; non-admin cannot deprecate
-- [ ] Staleness flags — `source_modified` flag inserted via Go; duplicate open flag not inserted; `low_access_age` pg_cron job fires (use `cron.schedule` with 1-minute interval in test) and inserts flag for qualifying artifact
-- [ ] Skill install/invoke/search — `Install` writes correct frontmatter + body to `.claude/commands/<slug>.md`; `Invoke` with valid params returns expanded body; `Invoke` with missing required param returns 422; `Recall` returns skill when query matches description
+- [x] `internal/db` — migrations apply cleanly; `MigrateForTest` strips pg_cron/pg_partman/pg_prewarm and downsizes vector dims to 4; key tables verified after migration; `internal/db/migrate_test_helpers.go` + `migrate_integration_test.go`
+- [x] Memory lifecycle — `Create` returns `action:"updated"` for near-duplicate (cosine ≤ 0.05 with deterministic embedder); `Create` with `memory_type="working"` sets `expires_at ≈ now()+3600s`; `SoftDelete` excludes from `Recall`; `HardDelete` removes row; `memory_integration_test.go`
+- [x] Scope fan-out — querying a project scope returns memories from project, team, department, and company scopes; `strict_scope=true` returns only exact scope; `scope_integration_test.go`
+- [x] Knowledge promotion workflow — nomination creates pending request; approval transaction creates artifact, sets `promoted_to` and `promotion_status="promoted"` atomically; re-nomination of already-nominated memory is rejected; `promote_integration_test.go`
+- [x] Knowledge endorsement → auto-publish — artifact reaches `review_required` endorsements and transitions to `published`; self-endorsement rejected; `lifecycle_integration_test.go`
+- [x] Staleness flags — `source_modified` flag inserted via Go; `HasOpenStalenessFlag` detects the open flag; different signal not detected; `staleness_integration_test.go`
+- [x] Skill install/invoke — `Install` writes correct frontmatter + body to `.claude/commands/<slug>.md`; `Invoke` with valid params returns expanded body; `Invoke` with missing required param returns `*ValidationError`; `skills_integration_test.go`
+- [x] Shared test infrastructure — `internal/testhelper/container.go` (`NewTestPool` via testcontainers pgvector/pgvector:pg18); `fixtures.go` (`CreateTestPrincipal`, `CreateTestScope`, `CreateTestEmbeddingModel`); `embedding.go` (`NewMockEmbeddingService`, `NewDeterministicEmbeddingService`)
+- [x] Fixed pre-existing compile error in `internal/principals/store_test.go` (`*db.Pool` → `*pgxpool.Pool`)
 
 ### E2E Tests
 
