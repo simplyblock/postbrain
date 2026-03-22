@@ -27,39 +27,40 @@
 
 ### Infrastructure & Bootstrap
 
-- [ ] `go.mod` — initialize module `github.com/noctarius/postbrain` with approved dependencies:
+- [x] `go.mod` — module `github.com/simplyblock/postbrain` with approved dependencies:
   - `github.com/jackc/pgx/v5` — PostgreSQL driver
   - `github.com/golang-migrate/migrate/v4` — schema migrations
   - `github.com/go-chi/chi/v5` — HTTP router
-  - `github.com/mark3labs/mcp-go` — MCP server
-  - `github.com/robfig/cron/v3` — in-process job scheduler
-  - `gopkg.in/yaml.v3` + `github.com/spf13/viper` — config
+  - `github.com/spf13/viper` — config
   - `github.com/spf13/cobra` — CLI subcommands
   - `github.com/prometheus/client_golang` — metrics
   - `github.com/google/uuid` — UUID utilities
-  - `log/slog` (stdlib, Go 1.21+) — structured logging
-- [ ] `docker-compose.yml` — services: `postgres` (pgvector image with pg_cron + pg_partman), `ollama`; volumes for data persistence; health checks
-- [ ] `Makefile` — targets: `build`, `test`, `lint` (golangci-lint), `fmt` (gofmt), `migrate-up`, `migrate-down`, `docker-up`, `docker-down`, `generate` (sqlc)
-- [ ] `config.example.yaml` — complete reference file matching all keys in DESIGN.md Configuration section
+  - `log/slog` (stdlib) — structured logging
+- [x] `scripts/postgres-init.sql` — installs pg_cron, pg_partman, vector as superuser
+- [x] `docker-compose.yml` — services: `postgres` (pgvector/pgvector:pg18 with pg_cron + pg_partman), `ollama` (profile), `postbrain` (profile); volumes; health checks
+- [x] `Makefile` — targets: `build`, `test`, `lint`, `fmt`, `migrate-up`, `migrate-down`, `docker-up`, `docker-down`, `generate`
+- [x] `config.example.yaml` — complete reference file matching all keys in DESIGN.md Configuration section
 
 ### `internal/config` — Configuration
 
-- [ ] `config.go` — viper-based loader:
-  - Load from file path (flag `--config`), then `~/.config/postbrain/config.yaml`, then env vars (`POSTBRAIN_DATABASE_URL`, etc.)
+- [x] `config.go` — viper-based loader (TDD: test written first):
+  - Load from file path, env vars (`POSTBRAIN_*`)
   - Validate required fields: `database.url`, `server.token`
-  - Warn if `server.token == "changeme"`
-  - Expose typed `Config` struct matching all YAML keys: `Database`, `Embedding`, `Server`, `Migrations`, `Jobs`
-  - `Jobs` sub-struct: `ConsolidationEnabled`, `ContradictionEnabled`, `ReembedEnabled`, `AgeCheckEnabled`
+  - Warn (slog) if `server.token == "changeme"`
+  - Typed `Config` struct with all YAML keys; mapstructure tags
+  - Tests: all fields, missing url, missing token, changeme warning, env override, defaults
+- [x] `config_test.go` — 6 test cases, all passing
 
 ### `internal/db` — Database Layer
 
-- [ ] `conn.go` — pgx/v5 pool setup:
+- [x] `conn.go` — pgx/v5 pool setup (TDD: test written first):
   - `MaxConns` from `database.max_open`, `MinConns` from `database.max_idle`
   - `ConnectTimeout` from `database.connect_timeout`
-  - `AfterConnect` hook: `SET search_path = public, ag_catalog` (supports AGE if present)
-  - Expose `Pool` and `Close()`
+  - `AfterConnect` hook: `SET search_path = public`
+  - `NewPool(ctx, cfg)` returns `*pgxpool.Pool`
+- [x] `conn_test.go` — unit tests for invalid/empty URL
 
-- [ ] `migrate.go` — migration runner:
+- [x] `migrate.go` — migration runner:
   - `//go:embed migrations/*.sql` to embed all SQL files
   - `ExpectedVersion` package-level const (set at build time via `-ldflags`)
   - `CheckAndMigrate(ctx, pool, cfg)`:
@@ -71,66 +72,16 @@
     6. Release advisory lock
   - Expose `MigrateCmd` for the `postbrain migrate` subcommands (status, up, down N, version, force N)
 
-- [ ] `migrations/000001_initial_schema.up.sql` — in this exact order:
-  1. `CREATE EXTENSION` for all 10 extensions (vector, pg_trgm, btree_gin, ltree, citext, unaccent, fuzzystrmatch, pg_prewarm, pg_cron, pg_partman)
-  2. `CREATE TEXT SEARCH CONFIGURATION postbrain_fts`
-  3. `CREATE TABLE embedding_models` + both partial unique indexes
-  4. `CREATE TABLE principals` + `touch_updated_at` trigger for principals
-  5. `CREATE TABLE tokens` + all 3 indexes (including GIN on scope_ids)
-  6. `CREATE TABLE principal_memberships` + parent index
-  7. `CREATE TABLE scopes` + all 3 indexes + `scopes_compute_path` trigger
-  8. `CREATE OR REPLACE FUNCTION touch_updated_at()`
-  9. `CREATE TABLE sessions`
-  10. `CREATE TABLE events` (partitioned) + both indexes + `partman.create_parent` call + retention config
-  11. `events_skill_stats` trigger function + trigger (even though skills table comes later — function body references skills table by name only, so it compiles; the trigger itself is added in migration 000005)
-
-- [ ] `migrations/000001_initial_schema.down.sql` — drop all objects from 000001 in reverse order
-
-- [ ] `migrations/000002_memory_graph.up.sql` — in this exact order:
-  1. `CREATE TABLE memories` + all 5 indexes
-  2. `CREATE TABLE entities` + HNSW index
-  3. `CREATE TABLE memory_entities` — note: `role CHECK (role IN ('subject','object','context','related'))`
-  4. `CREATE TABLE relations` + subject/object indexes
-  5. `touch_updated_at` triggers for memories, entities
-  6. `ALTER TABLE memories ADD CONSTRAINT memories_promoted_to_fk` — forward FK placeholder (references knowledge_artifacts; knowledge_artifacts does NOT exist yet — add the FK in migration 000003 instead, not here)
-  7. pg_cron jobs: `expire-working-memory` (*/5), `decay-memory-importance` (nightly 03:00), `prune-low-value-memories` (Sunday 04:00)
-
-- [ ] `migrations/000002_memory_graph.down.sql`
-
-- [ ] `migrations/000003_knowledge_layer.up.sql` — in this exact order:
-  1. `CREATE TABLE knowledge_artifacts` + all 4 indexes
-  2. `CREATE TABLE knowledge_endorsements`
-  3. `CREATE TABLE knowledge_history`
-  4. `CREATE TABLE knowledge_collections` + `touch_updated_at` trigger
-  5. `CREATE TABLE knowledge_collection_items`
-  6. `CREATE TABLE sharing_grants` + all 3 indexes
-  7. `CREATE TABLE promotion_requests` + both indexes
-  8. `CREATE TABLE staleness_flags` + both indexes
-  9. `CREATE TABLE consolidations`
-  10. `touch_updated_at` trigger for knowledge_artifacts
-  11. `ALTER TABLE memories ADD CONSTRAINT memories_promoted_to_fk FOREIGN KEY (promoted_to) REFERENCES knowledge_artifacts(id) ON DELETE SET NULL` — forward FK now possible
-  12. pg_cron job: `detect-stale-knowledge-age` (monthly 1st 06:00)
-  13. `CREATE INDEX knowledge_status_idx` (draft/in_review filter index)
-
-- [ ] `migrations/000003_knowledge_layer.down.sql`
-
-- [ ] `migrations/000004_skills.up.sql` — in this exact order:
-  1. `CREATE TABLE skills` + all 3 indexes
-  2. `CREATE TABLE skill_endorsements`
-  3. `CREATE TABLE skill_history`
-  4. `touch_updated_at` trigger for skills
-  5. `CREATE OR REPLACE FUNCTION skills_update_invocation_stats()` + `CREATE TRIGGER events_skill_stats` on events table
-  6. Note in migration comment: trigger on parent partitioned table; requires PG13+
-
-- [ ] `migrations/000004_skills.down.sql`
-
-- [ ] `migrations/000005_age_graph.up.sql` — wrapped entirely in `DO $$ BEGIN ... EXCEPTION WHEN ... END $$` so it is a no-op if AGE is not installed:
-  - `CREATE EXTENSION IF NOT EXISTS age`
-  - `SELECT create_graph('postbrain')`
-  - `CREATE VLABEL entity`, `CREATE ELABEL relation`
-  - Note: migration is idempotent; skips silently if AGE absent
-
-- [ ] `migrations/000005_age_graph.down.sql`
+- [x] `migrations/000001_initial_schema.up.sql` — 10 extensions, FTS config, embedding_models, touch_updated_at(), principals, tokens, principal_memberships, scopes, sessions, events (partitioned)
+- [x] `migrations/000001_initial_schema.down.sql`
+- [x] `migrations/000002_memory_graph.up.sql` — memories (6 indexes), entities, memory_entities, relations, triggers, pg_cron jobs (expire/decay/prune)
+- [x] `migrations/000002_memory_graph.down.sql`
+- [x] `migrations/000003_knowledge_layer.up.sql` — knowledge_artifacts, endorsements, history, collections, collection_items, sharing_grants, promotion_requests, staleness_flags, consolidations, forward FK memories.promoted_to, pg_cron stale-knowledge job, knowledge_status_idx
+- [x] `migrations/000003_knowledge_layer.down.sql`
+- [x] `migrations/000004_skills.up.sql` — skills, skill_endorsements, skill_history, triggers, events_skill_stats trigger
+- [x] `migrations/000004_skills.down.sql`
+- [x] `migrations/000005_age_graph.up.sql` — AGE graph setup wrapped in DO/EXCEPTION (no-op if absent)
+- [x] `migrations/000005_age_graph.down.sql`
 
 - [ ] `db/queries/memories.sql` — sqlc queries:
   - `CreateMemory`, `GetMemory`, `UpdateMemory`, `SoftDeleteMemory`, `HardDeleteMemory`

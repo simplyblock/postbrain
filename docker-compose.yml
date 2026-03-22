@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_USER: postbrain
+      POSTGRES_PASSWORD: postbrain
+      POSTGRES_DB: postbrain
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/postgres-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postbrain", "-d", "postbrain"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_preload_libraries=pg_cron,pg_partman_bgw"
+      - "-c"
+      - "cron.database_name=postbrain"
+      - "-c"
+      - "pg_partman_bgw.dbname=postbrain"
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    profiles:
+      - ollama
+
+  postbrain:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTBRAIN_DATABASE_URL: "postgres://postbrain:postbrain@postgres:5432/postbrain"
+      POSTBRAIN_SERVER_TOKEN: ""
+    ports:
+      - "7433:7433"
+    profiles:
+      - app
+
+volumes:
+  postgres_data:
+  ollama_data:

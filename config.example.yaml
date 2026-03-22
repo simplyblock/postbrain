@@ -1,0 +1,30 @@
+database:
+  url:             "postgres://postbrain:postbrain@localhost:5432/postbrain"
+  auto_migrate:    true
+  max_open:        25
+  max_idle:        5
+  connect_timeout: 10s
+
+embedding:
+  backend:         ollama
+  ollama_url:      "http://localhost:11434"
+  text_model:      "nomic-embed-text"
+  code_model:      "nomic-embed-code"
+  openai_api_key:  ""
+  request_timeout: 30s
+  batch_size:      64
+
+server:
+  addr:     ":7433"
+  token:    "changeme"
+  tls_cert: ""
+  tls_key:  ""
+
+migrations:
+  expected_version: 0
+
+jobs:
+  consolidation_enabled: true
+  contradiction_enabled: true
+  reembed_enabled:       true
+  age_check_enabled:     true

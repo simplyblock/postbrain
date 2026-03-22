@@ -1,0 +1,129 @@
+// Package config provides viper-based configuration loading for Postbrain.
+package config
+
+import (
+	"errors"
+	"fmt"
+	"log/slog"
+	"strings"
+	"time"
+
+	"github.com/spf13/viper"
+)
+
+// Config holds the complete Postbrain runtime configuration.
+type Config struct {
+	Database   DatabaseConfig   `mapstructure:"database"`
+	Embedding  EmbeddingConfig  `mapstructure:"embedding"`
+	Server     ServerConfig     `mapstructure:"server"`
+	Migrations MigrationsConfig `mapstructure:"migrations"`
+	Jobs       JobsConfig       `mapstructure:"jobs"`
+}
+
+// DatabaseConfig holds PostgreSQL connection parameters.
+type DatabaseConfig struct {
+	URL            string        `mapstructure:"url"`
+	AutoMigrate    bool          `mapstructure:"auto_migrate"`
+	MaxOpen        int           `mapstructure:"max_open"`
+	MaxIdle        int           `mapstructure:"max_idle"`
+	ConnectTimeout time.Duration `mapstructure:"connect_timeout"`
+}
+
+// EmbeddingConfig holds embedding service parameters.
+type EmbeddingConfig struct {
+	Backend        string        `mapstructure:"backend"`
+	OllamaURL      string        `mapstructure:"ollama_url"`
+	TextModel      string        `mapstructure:"text_model"`
+	CodeModel      string        `mapstructure:"code_model"`
+	OpenAIAPIKey   string        `mapstructure:"openai_api_key"`
+	RequestTimeout time.Duration `mapstructure:"request_timeout"`
+	BatchSize      int           `mapstructure:"batch_size"`
+}
+
+// ServerConfig holds HTTP/MCP server parameters.
+type ServerConfig struct {
+	Addr    string `mapstructure:"addr"`
+	Token   string `mapstructure:"token"`
+	TLSCert string `mapstructure:"tls_cert"`
+	TLSKey  string `mapstructure:"tls_key"`
+}
+
+// MigrationsConfig holds schema migration parameters.
+type MigrationsConfig struct {
+	ExpectedVersion int `mapstructure:"expected_version"`
+}
+
+// JobsConfig controls which background jobs are enabled at startup.
+type JobsConfig struct {
+	ConsolidationEnabled bool `mapstructure:"consolidation_enabled"`
+	ContradictionEnabled bool `mapstructure:"contradiction_enabled"`
+	ReembedEnabled       bool `mapstructure:"reembed_enabled"`
+	AgeCheckEnabled      bool `mapstructure:"age_check_enabled"`
+}
+
+// Load reads configuration from the YAML file at path, applies defaults,
+// overlays environment variables (prefix POSTBRAIN_), and validates required
+// fields. It returns an error if database.url or server.token is empty.
+func Load(path string) (*Config, error) {
+	v := viper.New()
+
+	// File source
+	v.SetConfigFile(path)
+
+	// Environment overrides: POSTBRAIN_DATABASE_URL → database.url
+	v.SetEnvPrefix("POSTBRAIN")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AutomaticEnv()
+
+	// Defaults matching config.example.yaml
+	v.SetDefault("database.auto_migrate", true)
+	v.SetDefault("database.max_open", 25)
+	v.SetDefault("database.max_idle", 5)
+	v.SetDefault("database.connect_timeout", "10s")
+
+	v.SetDefault("embedding.backend", "ollama")
+	v.SetDefault("embedding.ollama_url", "http://localhost:11434")
+	v.SetDefault("embedding.text_model", "nomic-embed-text")
+	v.SetDefault("embedding.code_model", "nomic-embed-code")
+	v.SetDefault("embedding.openai_api_key", "")
+	v.SetDefault("embedding.request_timeout", "30s")
+	v.SetDefault("embedding.batch_size", 64)
+
+	v.SetDefault("server.addr", ":7433")
+	v.SetDefault("server.tls_cert", "")
+	v.SetDefault("server.tls_key", "")
+
+	v.SetDefault("migrations.expected_version", 0)
+
+	v.SetDefault("jobs.consolidation_enabled", true)
+	v.SetDefault("jobs.contradiction_enabled", true)
+	v.SetDefault("jobs.reembed_enabled", true)
+	v.SetDefault("jobs.age_check_enabled", true)
+
+	if err := v.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("config: read %q: %w", path, err)
+	}
+
+	var cfg Config
+	if err := v.Unmarshal(&cfg); err != nil {
+		return nil, fmt.Errorf("config: unmarshal: %w", err)
+	}
+
+	// Validate required fields
+	var errs []error
+	if cfg.Database.URL == "" {
+		errs = append(errs, errors.New("database.url is required"))
+	}
+	if cfg.Server.Token == "" {
+		errs = append(errs, errors.New("server.token is required"))
+	}
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
+	}
+
+	if cfg.Server.Token == "changeme" {
+		slog.Warn("server.token is set to the default value 'changeme'; change it before production use")
+	}
+
+	return &cfg, nil
+}
