@@ -175,14 +175,14 @@ CREATE TABLE events (
 CREATE INDEX events_session_idx ON events (session_id, created_at DESC);
 CREATE INDEX events_scope_idx   ON events (scope_id, event_type, created_at DESC);
 
-SELECT partman.create_parent(
+SELECT create_partition(
     p_parent_table => 'public.events',
     p_control      => 'created_at',
-    p_interval     => 'monthly',
+    p_interval     => '1 month',
     p_premake      => 3
 );
 
-UPDATE partman.part_config
-    SET retention            = '24 months',
+UPDATE part_config
+    SET retention            = interval '24 months',
         retention_keep_table = true
     WHERE parent_table = 'public.events';
