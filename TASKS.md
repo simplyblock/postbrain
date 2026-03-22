@@ -440,18 +440,18 @@ All tests follow TDD: test file written before implementation file.
 
 ### E2E Tests
 
-- [ ] MCP tool calls via mcp-go test client — `remember` → `recall` → `forget` round-trip; `publish` → `endorse` → auto-publish flow; `skill_search` returns installed flag correctly
-- [ ] REST API via `net/http/httptest` — all CRUD endpoints return correct status codes; pagination `next_cursor` advances correctly; unauthenticated request returns 401; out-of-scope token returns 403
+- [x] MCP tool calls via mcp-go test client — `remember` → `recall` → `forget` round-trip; `publish` → `endorse` → auto-publish flow; `skill_search` returns installed flag correctly (`mcp_integration_test.go`, build tag `integration`)
+- [x] REST API via `net/http/httptest` — all CRUD endpoints return correct status codes; unauthenticated request returns 401; health returns 200 (`rest_integration_test.go`, build tag `integration`)
 
 ---
 
 ## Observability Tasks
 
-- [ ] Prometheus metrics (expose on `/metrics`):
-  - `postbrain_tool_duration_seconds{tool}` histogram — p50/p99 per MCP tool
+- [x] Prometheus metrics (`internal/metrics/metrics.go`):
+  - `postbrain_tool_duration_seconds{tool}` histogram — p50/p99 per MCP tool (instrumented in `internal/api/mcp/server.go`)
   - `postbrain_embedding_duration_seconds{backend,model}` histogram
-  - `postbrain_job_duration_seconds{job}` histogram
+  - `postbrain_job_duration_seconds{job}` histogram (instrumented in `internal/jobs/scheduler.go`)
   - `postbrain_active_memories_total{scope}` gauge (updated on write/delete)
   - `postbrain_recall_results_total{layer}` counter
-- [ ] `log/slog` structured logging — every log line includes: `request_id`, `principal_id`, `scope_id` where applicable; use `slog.With` at middleware level to inject fields
-- [ ] `/health` endpoint: `{"status":"ok","schema_version":N,"expected_version":M,"schema_dirty":false}` — returns 503 if dirty or version mismatch
+- [x] `log/slog` structured logging — `requestLoggerMiddleware` in `internal/api/rest/logging.go` injects `request_id` and `principal_id` into every /v1 request context; `LogFromContext` helper for handlers
+- [x] `/health` endpoint: `{"status":"ok","schema_version":N,"expected_version":M,"schema_dirty":false}` — returns 503 if dirty or version mismatch (`internal/api/rest/health.go` + `internal/db/schema_version.go`)

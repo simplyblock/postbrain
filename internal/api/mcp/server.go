@@ -2,8 +2,10 @@
 package mcp
 
 import (
+	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -14,6 +16,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/embedding"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 	"github.com/simplyblock/postbrain/internal/memory"
+	"github.com/simplyblock/postbrain/internal/metrics"
 	"github.com/simplyblock/postbrain/internal/principals"
 	"github.com/simplyblock/postbrain/internal/skills"
 )
@@ -61,6 +64,23 @@ func NewServer(pool *pgxpool.Pool, svc *embedding.EmbeddingService, cfg *config.
 	return s
 }
 
+// MCPServer returns the underlying mcp-go server, for use in tests.
+func (s *Server) MCPServer() *mcpserver.MCPServer {
+	return s.mcpServer
+}
+
+// withToolMetrics wraps a ToolHandlerFunc to record the call duration in the
+// postbrain_tool_duration_seconds histogram.
+func withToolMetrics(toolName string, fn mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		start := time.Now()
+		defer func() {
+			metrics.ToolDuration.WithLabelValues(toolName).Observe(time.Since(start).Seconds())
+		}()
+		return fn(ctx, req)
+	}
+}
+
 // registerTools registers all 13 MCP tools.
 func (s *Server) registerTools() {
 	// remember
@@ -73,7 +93,7 @@ func (s *Server) registerTools() {
 		mcpgo.WithString("source_ref", mcpgo.Description("Provenance reference, e.g. file:src/main.go:42")),
 		mcpgo.WithArray("entities", mcpgo.Description("Named entity canonical names to link")),
 		mcpgo.WithNumber("expires_in", mcpgo.Description("TTL in seconds; only for memory_type=working")),
-	), s.handleRemember)
+	), withToolMetrics("remember", s.handleRemember))
 
 	// recall
 	s.mcpServer.AddTool(mcpgo.NewTool("recall",
@@ -86,14 +106,14 @@ func (s *Server) registerTools() {
 		mcpgo.WithNumber("limit", mcpgo.Description("Max results (default: 10)")),
 		mcpgo.WithNumber("min_score", mcpgo.Description("Min combined score 0–1 (default: 0.0)")),
 		mcpgo.WithString("search_mode", mcpgo.Description("text|code|hybrid (default: hybrid)")),
-	), s.handleRecall)
+	), withToolMetrics("recall", s.handleRecall))
 
 	// forget
 	s.mcpServer.AddTool(mcpgo.NewTool("forget",
 		mcpgo.WithDescription("Deactivate or permanently delete a memory"),
 		mcpgo.WithString("memory_id", mcpgo.Required(), mcpgo.Description("UUID of the memory to delete")),
 		mcpgo.WithBoolean("hard", mcpgo.Description("true = permanent delete, false = soft-delete (default: false)")),
-	), s.handleForget)
+	), withToolMetrics("forget", s.handleForget))
 
 	// context
 	s.mcpServer.AddTool(mcpgo.NewTool("context",
@@ -101,7 +121,7 @@ func (s *Server) registerTools() {
 		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
 		mcpgo.WithString("query", mcpgo.Description("What you are about to work on")),
 		mcpgo.WithNumber("max_tokens", mcpgo.Description("Token budget for context (default: 4000)")),
-	), s.handleContext)
+	), withToolMetrics("context", s.handleContext))
 
 	// summarize
 	s.mcpServer.AddTool(mcpgo.NewTool("summarize",
@@ -109,7 +129,7 @@ func (s *Server) registerTools() {
 		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
 		mcpgo.WithString("topic", mcpgo.Description("Topic to cluster and summarize")),
 		mcpgo.WithBoolean("dry_run", mcpgo.Description("If true, preview without writing (default: false)")),
-	), s.handleSummarize)
+	), withToolMetrics("summarize", s.handleSummarize))
 
 	// publish
 	s.mcpServer.AddTool(mcpgo.NewTool("publish",
@@ -122,14 +142,14 @@ func (s *Server) registerTools() {
 		mcpgo.WithString("summary", mcpgo.Description("Short summary")),
 		mcpgo.WithBoolean("auto_review", mcpgo.Description("Move directly to in_review (default: false)")),
 		mcpgo.WithString("collection_slug", mcpgo.Description("Add to this collection slug after creation")),
-	), s.handlePublish)
+	), withToolMetrics("publish", s.handlePublish))
 
 	// endorse
 	s.mcpServer.AddTool(mcpgo.NewTool("endorse",
 		mcpgo.WithDescription("Endorse a knowledge artifact or skill"),
 		mcpgo.WithString("artifact_id", mcpgo.Required(), mcpgo.Description("UUID of the artifact or skill to endorse")),
 		mcpgo.WithString("note", mcpgo.Description("Optional endorsement note")),
-	), s.handleEndorse)
+	), withToolMetrics("endorse", s.handleEndorse))
 
 	// promote
 	s.mcpServer.AddTool(mcpgo.NewTool("promote",
@@ -139,7 +159,7 @@ func (s *Server) registerTools() {
 		mcpgo.WithString("target_visibility", mcpgo.Required(), mcpgo.Description("Visibility level")),
 		mcpgo.WithString("proposed_title", mcpgo.Description("Proposed title for the knowledge artifact")),
 		mcpgo.WithString("collection_slug", mcpgo.Description("Optionally add to this collection slug")),
-	), s.handlePromote)
+	), withToolMetrics("promote", s.handlePromote))
 
 	// collect
 	s.mcpServer.AddTool(mcpgo.NewTool("collect",
@@ -151,7 +171,7 @@ func (s *Server) registerTools() {
 		mcpgo.WithString("scope", mcpgo.Description("Scope as kind:external_id (required for create_collection)")),
 		mcpgo.WithString("name", mcpgo.Description("Collection name (required for create_collection)")),
 		mcpgo.WithString("description", mcpgo.Description("Collection description (optional)")),
-	), s.handleCollect)
+	), withToolMetrics("collect", s.handleCollect))
 
 	// skill_search
 	s.mcpServer.AddTool(mcpgo.NewTool("skill_search",
@@ -161,7 +181,7 @@ func (s *Server) registerTools() {
 		mcpgo.WithString("agent_type", mcpgo.Description("Filter by agent compatibility")),
 		mcpgo.WithNumber("limit", mcpgo.Description("Max results (default: 10)")),
 		mcpgo.WithBoolean("installed", mcpgo.Description("Filter by installed status")),
-	), s.handleSkillSearch)
+	), withToolMetrics("skill_search", s.handleSkillSearch))
 
 	// skill_install
 	s.mcpServer.AddTool(mcpgo.NewTool("skill_install",
@@ -171,7 +191,7 @@ func (s *Server) registerTools() {
 		mcpgo.WithString("scope", mcpgo.Description("Scope as kind:external_id")),
 		mcpgo.WithString("agent_type", mcpgo.Description("Target agent type")),
 		mcpgo.WithString("workdir", mcpgo.Description("Working directory for installation")),
-	), s.handleSkillInstall)
+	), withToolMetrics("skill_install", s.handleSkillInstall))
 
 	// skill_invoke
 	s.mcpServer.AddTool(mcpgo.NewTool("skill_invoke",
@@ -180,7 +200,7 @@ func (s *Server) registerTools() {
 		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
 		mcpgo.WithString("agent_type", mcpgo.Description("Agent type for filtering")),
 		mcpgo.WithObject("params", mcpgo.Description("Parameter map for substitution")),
-	), s.handleSkillInvoke)
+	), withToolMetrics("skill_invoke", s.handleSkillInvoke))
 }
 
 // Handler returns an http.Handler for the MCP SSE endpoint.

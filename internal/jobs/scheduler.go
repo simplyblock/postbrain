@@ -13,6 +13,7 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/metrics"
 )
 
 // Scheduler manages the lifecycle of all background jobs.
@@ -107,6 +108,9 @@ func safeRun(name string, fn func()) func() {
 		}()
 		slog.Info("job started", "job", name)
 		start := time.Now()
+		defer func() {
+			metrics.JobDuration.WithLabelValues(name).Observe(time.Since(start).Seconds())
+		}()
 		fn()
 		slog.Info("job finished", "job", name, "duration", time.Since(start))
 	}
