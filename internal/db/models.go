@@ -98,19 +98,75 @@ type Scope struct {
 }
 
 // Memory represents a single captured memory record.
-// TODO(task-memory): expand this struct when the memory package is implemented.
 type Memory struct {
-	ID              uuid.UUID
-	MemoryType      string
-	ScopeID         uuid.UUID
-	AuthorID        uuid.UUID
-	Content         string
-	Summary         *string
-	PromotionStatus string
-	PromotedTo      *uuid.UUID
-	SourceRef       *string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID                   uuid.UUID
+	MemoryType           string // semantic|episodic|procedural|working
+	ScopeID              uuid.UUID
+	AuthorID             uuid.UUID
+	Content              string
+	Summary              *string
+	Embedding            []float32
+	EmbeddingModelID     *uuid.UUID
+	EmbeddingCode        []float32
+	EmbeddingCodeModelID *uuid.UUID
+	ContentKind          string // text|code
+	Meta                 []byte
+	Version              int
+	IsActive             bool
+	Confidence           float64
+	Importance           float64
+	AccessCount          int
+	LastAccessed         *time.Time
+	ExpiresAt            *time.Time
+	PromotionStatus      string // none|nominated|promoted
+	PromotedTo           *uuid.UUID
+	SourceRef            *string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+}
+
+// Entity represents a named entity in the knowledge graph.
+type Entity struct {
+	ID               uuid.UUID
+	ScopeID          uuid.UUID
+	EntityType       string
+	Name             string
+	Canonical        string
+	Meta             []byte
+	Embedding        []float32
+	EmbeddingModelID *uuid.UUID
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+// Relation represents a directed relationship between two entities.
+type Relation struct {
+	ID           uuid.UUID
+	ScopeID      uuid.UUID
+	SubjectID    uuid.UUID
+	Predicate    string
+	ObjectID     uuid.UUID
+	Confidence   float64
+	SourceMemory *uuid.UUID
+	CreatedAt    time.Time
+}
+
+// MemoryEntity links a memory to an entity with a role.
+type MemoryEntity struct {
+	MemoryID uuid.UUID
+	EntityID uuid.UUID
+	Role     string // subject|object|context|related
+}
+
+// Consolidation records a consolidation operation that merged multiple memories.
+type Consolidation struct {
+	ID        uuid.UUID
+	ScopeID   uuid.UUID
+	SourceIDs []uuid.UUID
+	ResultID  *uuid.UUID
+	Strategy  string // merge|supersede|prune
+	Reason    *string
+	CreatedAt time.Time
 }
 
 // KnowledgeArtifact represents a curated, versioned knowledge artifact.

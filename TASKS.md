@@ -206,7 +206,7 @@
 
 ### `internal/memory` — Memory Store
 
-- [ ] `store.go`:
+- [x] `store.go`:
   - `Create(ctx, input) (*Memory, error)`:
     1. Classify content_kind via `embedding.ClassifyContent(content, sourceRef)`
     2. Embed content with text model → set `embedding`, `embedding_model_id`
@@ -215,44 +215,46 @@
     5. If `memory_type = "working"` and `expires_in` provided but type is not `"working"`: ignore `expires_in`
     6. Near-duplicate check: ANN query with cosine distance ≤ 0.05 in same scope; if match found: update existing row, return `action:"updated"`
     7. Insert memory row; insert `memory_entities` links if `entities` provided (upsert entity by canonical name)
-    8. Insert `events` row `{event_type:"memory_write", payload:{memory_id}}`
     9. Return `{memory_id, action:"created"|"updated"}`
   - `Update(ctx, id, content, importance) (*Memory, error)` — re-embed on content change; bump version
   - `SoftDelete(ctx, id)` — set `is_active = false`
-  - `HardDelete(ctx, id)` — DELETE row; only if caller has write permission on owning scope
+  - `HardDelete(ctx, id)` — DELETE row
+  - Uses `memoryDB` interface for testability without a real DB
 
-- [ ] `recall.go`:
+- [x] `recall.go`:
   - `Recall(ctx, input) ([]*MemoryResult, error)`:
-    1. Resolve fan-out scopes via `FanOutScopes` CTE (ancestor scopes + personal scope + sharing grants)
+    1. Resolve fan-out scopes via `FanOutScopeIDs`
     2. Based on `search_mode`:
-       - `"text"` or `"hybrid"`: ANN query on `embedding` column
-       - `"code"` or `"hybrid"`: ANN query on `embedding_code` column (skip if no code embedding for query)
-    3. FTS BM25 query (always, combined in hybrid)
-    4. Apply combined score formula: `0.50*vec + 0.20*bm25 + 0.20*importance + 0.10*recency_decay`
-       - `recency_decay = exp(-λ * days_since_last_access)` where λ from memory_type
-    5. Deduplicate by `id`; apply `min_score` filter; sort DESC; truncate to `limit`
-    6. Increment `access_count` + set `last_accessed` for returned rows (async, non-blocking)
-    7. Append `{layer:"memory"}` to each result
+       - `"text"`: ANN query on `embedding` column only
+       - `"code"`: ANN query on `embedding_code` column
+       - `"hybrid"` (default): both vector AND FTS; merge by ID
+    3. Apply combined score formula: `0.50*vec + 0.20*bm25 + 0.20*importance + 0.10*recency_decay`
+       - `recency_decay = exp(-λ * days_since_last_access)` where λ from memory_type (exported as `DecayLambda`)
+    4. Deduplicate by `id`; apply `min_score` filter; sort DESC; truncate to `limit`
+    5. Increment `access_count` + set `last_accessed` for returned rows (async, non-blocking goroutines)
+    6. Append `{layer:"memory"}` to each result
+  - Uses `recallDB` and `fanOutFunc` interfaces for testability
 
-- [ ] `scope.go`:
-  - `FanOutScopeIDs(ctx, scopeID, principalID, maxDepth int) ([]uuid.UUID, error)`:
+- [x] `scope.go`:
+  - `FanOutScopeIDs(ctx, scopeID, principalID, maxDepth int, strictScope bool) ([]uuid.UUID, error)`:
     - Run ancestor CTE on ltree path
     - Add personal scope for principalID
-    - Optionally cap depth via `max_scope_depth` param
+    - TODO(task-scope-depth): implement maxDepth filtering using ltree path label counts
     - If `strict_scope = true`: return `[scopeID]` only (no fan-out)
   - `ResolveScopeByExternalID(ctx, kind, externalID) (*Scope, error)`
 
-- [ ] `consolidate.go`:
+- [x] `consolidate.go`:
   - `FindClusters(ctx, scopeID) ([][]*Memory, error)`:
     - Fetch candidates: `is_active=true, importance < 0.7, access_count < 3`
-    - Build similarity graph: cosine distance ≤ 0.05 between embeddings
+    - Build similarity graph: cosine distance ≤ 0.05 between embeddings (union-find O(n²))
     - Return connected components as clusters (min cluster size: 2)
-  - `MergeCluster(ctx, cluster []*Memory) (*Memory, error)`:
-    1. Call LLM summarizer with all cluster contents
+  - `MergeCluster(ctx, cluster []*Memory, summarizer func) (*Memory, error)`:
+    1. Call injected summarizer with all cluster contents
     2. Create new memory with `memory_type = "semantic"`, merged content, `importance = max(cluster importances)`
     3. Soft-delete all source memories (`is_active = false`)
     4. Insert `consolidations` row with `strategy="merge"`, `source_ids`, `result_id`
     5. Return new memory
+  - Uses `consolidatorDB` interface for testability
 
 ### `internal/knowledge` — Knowledge Layer
 
@@ -281,6 +283,11 @@
 - [x] `promote.go`:
   - `Promoter`: `CreateRequest` (with `ErrAlreadyPromoted` guard + mark nominated), `Approve` (5-step serializable tx), `Reject`
   - `PromoteInput` struct
+- [x] `recall.go`:
+  - `Recall(ctx, pool, input) ([]*ArtifactResult, error)`:
+    - Hybrid: `RecallArtifactsByVector` + `RecallArtifactsByFTS`, merged by artifact ID
+    - Score: `0.50*vec + 0.20*bm25 + 0.20*normalizeEndorsements(count) + 0.10*recency + 0.10 boost`
+    - `RecallInput`, `ArtifactResult` types
 
 ### `internal/skills` — Skills Registry
 
@@ -320,31 +327,32 @@
 
 ### `internal/retrieval` — Cross-layer Retrieval
 
-- [ ] `merge.go` — `Recall(ctx, input) ([]*Result, error)`:
-  1. Concurrently query memory, knowledge, skills layers (goroutines + `errgroup`)
-  2. Apply per-layer scores (memory: raw formula; knowledge: raw + 0.1 boost; skill: raw formula)
-  3. Deduplicate: if a memory has `promoted_to` pointing to a knowledge artifact that is also in results, keep the knowledge artifact and drop the memory
-  4. Merge all results into single slice; sort by `score DESC`
-  5. Apply `limit` and `min_score` cutoffs
-  6. Each result carries `layer` field: `"memory"`, `"knowledge"`, or `"skill"`
+- [x] `merge.go`:
+  - `CombineScores(vecScore, bm25Score, importance, recencyDecay float64, layer Layer) float64`
+    - w_vec=0.50, w_bm25=0.20, w_imp=0.20, w_rec=0.10; LayerKnowledge adds +0.1 boost
+  - `Merge(results []*Result, limit int, minScore float64) []*Result`
+    - Deduplication: drops memory results whose PromotedTo is in the knowledge result set
+    - Filters by minScore, sorts by score DESC, truncates to limit
+  - `RecallInput` and `Result` unified type for cross-layer retrieval
+  - TODO: full concurrent multi-layer Recall function using errgroup
 
 ### `internal/sharing` — Sharing Grants
 
-- [ ] `grants.go`:
-  - `CreateGrant(ctx, input) (*Grant, error)` — exactly one of `memory_id` or `artifact_id` must be set; enforce CHECK at app layer too
-  - `RevokeGrant(ctx, grantID, callerID)` — only grantor or scope admin can revoke
-  - `ListGrantsForScope(ctx, granteeScoped, limit, offset)`
-  - `IsAccessible(ctx, memoryID *uuid.UUID, artifactID *uuid.UUID, requesterScopeID uuid.UUID) (bool, error)`:
-    - Check direct scope ownership, visibility level, or active unexpired grant
+- [x] `grants.go`:
+  - `Create(ctx, g) (*Grant, error)` — exactly one of `memory_id` or `artifact_id` must be set (ErrInvalidGrant)
+  - `Revoke(ctx, grantID)` — deletes grant by ID
+  - `List(ctx, granteeScopeID, limit, offset)` — paginated listing
+  - `IsMemoryAccessible(ctx, memoryID, requesterScopeID) (bool, error)`
+  - `IsArtifactAccessible(ctx, artifactID, requesterScopeID) (bool, error)`
 
 ### `internal/graph` — Entity & Relation Graph
 
-- [ ] `relations.go`:
+- [x] `relations.go`:
   - `UpsertEntity(ctx, scopeID, entityType, name, canonical, meta) (*Entity, error)`
   - `UpsertRelation(ctx, scopeID, subjectID, predicate, objectID, confidence, sourceMemoryID) (*Relation, error)`
-  - `LinkMemoryToEntity(ctx, memoryID, entityID, role string)` — role must be one of `subject`, `object`, `context`, `related`
+  - `LinkMemoryToEntity(ctx, memoryID, entityID, role string)` — validates role; ErrInvalidRole for invalid values
   - `ListRelationsForEntity(ctx, entityID, predicate string)` — predicate="" means all
-  - `ExtractEntitiesFromMemory(ctx, content, sourceRef string) ([]*Entity, error)` — heuristic: extract file paths from `source_ref`, named tokens from content using simple NER
+  - `ExtractEntitiesFromMemory(content string, sourceRef *string) []*Entity` — file: paths, pr:NNN, PascalCase concepts
 - [ ] `age_sync.go` — (optional, skipped if AGE unavailable):
   - `SyncEntityToAGE(ctx, pool, entity *Entity) error` — MERGE vertex by id property
   - `SyncRelationToAGE(ctx, pool, rel *Relation) error` — MERGE edge by (subject, predicate, object)

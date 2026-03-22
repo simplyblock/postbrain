@@ -572,28 +572,431 @@ func scanSkillScoreRows(rows pgx.Rows) ([]SkillScore, error) {
 	return results, rows.Err()
 }
 
-// ── Memories (minimal — promote path only) ────────────────────────────────────
+// ── Memories ──────────────────────────────────────────────────────────────────
+
+// memoryColumns is the canonical SELECT column list for memories.
+const memoryColumns = `id, memory_type, scope_id, author_id,
+	content, summary, embedding::text, embedding_model_id,
+	embedding_code::text, embedding_code_model_id, content_kind, meta,
+	version, is_active, confidence, importance, access_count, last_accessed,
+	expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at`
+
+// scanMemory scans one memories row into a Memory struct.
+// The embedding columns are returned as text and are not parsed back.
+func scanMemory(row pgx.Row) (*Memory, error) {
+	var m Memory
+	var embText, embCodeText *string
+	err := row.Scan(
+		&m.ID, &m.MemoryType, &m.ScopeID, &m.AuthorID,
+		&m.Content, &m.Summary, &embText, &m.EmbeddingModelID,
+		&embCodeText, &m.EmbeddingCodeModelID, &m.ContentKind, &m.Meta,
+		&m.Version, &m.IsActive, &m.Confidence, &m.Importance, &m.AccessCount, &m.LastAccessed,
+		&m.ExpiresAt, &m.PromotionStatus, &m.PromotedTo, &m.SourceRef, &m.CreatedAt, &m.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+// scanMemoryRows scans multiple memories rows.
+func scanMemoryRows(rows pgx.Rows) ([]*Memory, error) {
+	var results []*Memory
+	for rows.Next() {
+		var m Memory
+		var embText, embCodeText *string
+		if err := rows.Scan(
+			&m.ID, &m.MemoryType, &m.ScopeID, &m.AuthorID,
+			&m.Content, &m.Summary, &embText, &m.EmbeddingModelID,
+			&embCodeText, &m.EmbeddingCodeModelID, &m.ContentKind, &m.Meta,
+			&m.Version, &m.IsActive, &m.Confidence, &m.Importance, &m.AccessCount, &m.LastAccessed,
+			&m.ExpiresAt, &m.PromotionStatus, &m.PromotedTo, &m.SourceRef, &m.CreatedAt, &m.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		results = append(results, &m)
+	}
+	return results, rows.Err()
+}
 
 // GetMemory retrieves a memory by ID. Returns nil, nil if not found.
-// TODO(task-memory): expand scan fields when the full memory package is implemented.
 func GetMemory(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*Memory, error) {
-	var m Memory
-	err := pool.QueryRow(ctx,
-		`SELECT id, memory_type, scope_id, author_id, content, summary,
-		        promotion_status, promoted_to, source_ref, created_at, updated_at
-		 FROM memories WHERE id = $1`,
-		id,
-	).Scan(
-		&m.ID, &m.MemoryType, &m.ScopeID, &m.AuthorID, &m.Content, &m.Summary,
-		&m.PromotionStatus, &m.PromotedTo, &m.SourceRef, &m.CreatedAt, &m.UpdatedAt,
+	row := pool.QueryRow(ctx,
+		`SELECT `+memoryColumns+` FROM memories WHERE id = $1`, id,
 	)
+	m, err := scanMemory(row)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("db: get memory: %w", err)
 	}
-	return &m, nil
+	return m, nil
+}
+
+// CreateMemory inserts a new memory record and returns the created record.
+func CreateMemory(ctx context.Context, pool *pgxpool.Pool, m *Memory) (*Memory, error) {
+	if m.Meta == nil {
+		m.Meta = []byte("{}")
+	}
+	if m.ContentKind == "" {
+		m.ContentKind = "text"
+	}
+	if m.PromotionStatus == "" {
+		m.PromotionStatus = "none"
+	}
+
+	var embVal, embCodeVal interface{}
+	if len(m.Embedding) > 0 {
+		embVal = float32SliceToVector(m.Embedding)
+	}
+	if len(m.EmbeddingCode) > 0 {
+		embCodeVal = float32SliceToVector(m.EmbeddingCode)
+	}
+
+	row := pool.QueryRow(ctx,
+		`INSERT INTO memories
+		 (memory_type, scope_id, author_id, content, summary,
+		  embedding, embedding_model_id, embedding_code, embedding_code_model_id,
+		  content_kind, meta, version, is_active, confidence, importance,
+		  access_count, expires_at, promotion_status, promoted_to, source_ref)
+		 VALUES ($1,$2,$3,$4,$5,$6::vector,$7,$8::vector,$9,$10,$11,
+		         COALESCE($12,1),true,COALESCE($13,1.0),COALESCE($14,0.5),
+		         0,$15,$16,$17,$18)
+		 RETURNING `+memoryColumns,
+		m.MemoryType, m.ScopeID, m.AuthorID, m.Content, m.Summary,
+		embVal, m.EmbeddingModelID, embCodeVal, m.EmbeddingCodeModelID,
+		m.ContentKind, m.Meta, m.Version, m.Confidence, m.Importance,
+		m.ExpiresAt, m.PromotionStatus, m.PromotedTo, m.SourceRef,
+	)
+	created, err := scanMemory(row)
+	if err != nil {
+		return nil, fmt.Errorf("db: create memory: %w", err)
+	}
+	return created, nil
+}
+
+// UpdateMemoryContent updates content, embeddings, and bumps version.
+func UpdateMemoryContent(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, content string, embedding, embeddingCode []float32, textModelID, codeModelID *uuid.UUID, contentKind string) (*Memory, error) {
+	var embVal, embCodeVal interface{}
+	if len(embedding) > 0 {
+		embVal = float32SliceToVector(embedding)
+	}
+	if len(embeddingCode) > 0 {
+		embCodeVal = float32SliceToVector(embeddingCode)
+	}
+	row := pool.QueryRow(ctx,
+		`UPDATE memories
+		 SET content=$2, embedding=$3::vector, embedding_model_id=$4,
+		     embedding_code=$5::vector, embedding_code_model_id=$6,
+		     content_kind=$7, version=version+1, updated_at=now()
+		 WHERE id=$1
+		 RETURNING `+memoryColumns,
+		id, content, embVal, textModelID, embCodeVal, codeModelID, contentKind,
+	)
+	m, err := scanMemory(row)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("db: update memory content: %w", err)
+	}
+	return m, nil
+}
+
+// SoftDeleteMemory marks a memory as inactive.
+func SoftDeleteMemory(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error {
+	_, err := pool.Exec(ctx,
+		`UPDATE memories SET is_active=false, updated_at=now() WHERE id=$1`, id,
+	)
+	return err
+}
+
+// HardDeleteMemory permanently deletes a memory row.
+func HardDeleteMemory(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error {
+	_, err := pool.Exec(ctx, `DELETE FROM memories WHERE id=$1`, id)
+	return err
+}
+
+// IncrementMemoryAccess increments access_count and sets last_accessed = now().
+func IncrementMemoryAccess(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error {
+	_, err := pool.Exec(ctx,
+		`UPDATE memories SET access_count=access_count+1, last_accessed=now(), updated_at=now() WHERE id=$1`,
+		id,
+	)
+	return err
+}
+
+// FindNearDuplicates finds active memories in the same scope with cosine distance <= threshold.
+func FindNearDuplicates(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, embedding []float32, threshold float64, excludeID *uuid.UUID) ([]*Memory, error) {
+	vecStr := float32SliceToVector(embedding)
+	rows, err := pool.Query(ctx,
+		`SELECT `+memoryColumns+`
+		 FROM memories
+		 WHERE scope_id = $1
+		   AND is_active = true
+		   AND (embedding <=> $2::vector) <= $3
+		   AND ($4::uuid IS NULL OR id != $4)
+		 LIMIT 5`,
+		scopeID, vecStr, threshold, excludeID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("db: find near duplicates: %w", err)
+	}
+	defer rows.Close()
+	return scanMemoryRows(rows)
+}
+
+// MemoryScore pairs a memory with its retrieval scores.
+type MemoryScore struct {
+	Memory    *Memory
+	VecScore  float64
+	BM25Score float64
+}
+
+// RecallMemoriesByVector performs ANN search with scope filter.
+func RecallMemoriesByVector(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, queryVec []float32, limit int) ([]MemoryScore, error) {
+	vecStr := float32SliceToVector(queryVec)
+	rows, err := pool.Query(ctx,
+		`SELECT `+memoryColumns+`, 1 - (embedding <=> $3::vector) AS vec_score
+		 FROM memories
+		 WHERE is_active = true AND scope_id = ANY($1)
+		 ORDER BY embedding <=> $3::vector
+		 LIMIT $2`,
+		scopeIDs, limit, vecStr,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("db: recall memories by vector: %w", err)
+	}
+	defer rows.Close()
+	return scanMemoryScoreRows(rows, false)
+}
+
+// RecallMemoriesByCodeVector performs ANN on embedding_code.
+func RecallMemoriesByCodeVector(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, queryVec []float32, limit int) ([]MemoryScore, error) {
+	vecStr := float32SliceToVector(queryVec)
+	rows, err := pool.Query(ctx,
+		`SELECT `+memoryColumns+`, 1 - (embedding_code <=> $3::vector) AS vec_score
+		 FROM memories
+		 WHERE is_active = true AND scope_id = ANY($1) AND embedding_code IS NOT NULL
+		 ORDER BY embedding_code <=> $3::vector
+		 LIMIT $2`,
+		scopeIDs, limit, vecStr,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("db: recall memories by code vector: %w", err)
+	}
+	defer rows.Close()
+	return scanMemoryScoreRows(rows, false)
+}
+
+// RecallMemoriesByFTS performs BM25 full-text search via ts_rank_cd.
+func RecallMemoriesByFTS(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, query string, limit int) ([]MemoryScore, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT `+memoryColumns+`,
+		        ts_rank_cd(to_tsvector('postbrain_fts', content), plainto_tsquery('postbrain_fts', $3)) AS bm25_score
+		 FROM memories
+		 WHERE is_active = true AND scope_id = ANY($1)
+		   AND to_tsvector('postbrain_fts', content) @@ plainto_tsquery('postbrain_fts', $3)
+		 ORDER BY bm25_score DESC
+		 LIMIT $2`,
+		scopeIDs, limit, query,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("db: recall memories by fts: %w", err)
+	}
+	defer rows.Close()
+	return scanMemoryScoreRows(rows, true)
+}
+
+// scanMemoryScoreRows scans rows that include a trailing score column.
+// isBM25 determines whether to populate VecScore or BM25Score.
+func scanMemoryScoreRows(rows pgx.Rows, isBM25 bool) ([]MemoryScore, error) {
+	var results []MemoryScore
+	for rows.Next() {
+		var m Memory
+		var embText, embCodeText *string
+		var score float64
+		if err := rows.Scan(
+			&m.ID, &m.MemoryType, &m.ScopeID, &m.AuthorID,
+			&m.Content, &m.Summary, &embText, &m.EmbeddingModelID,
+			&embCodeText, &m.EmbeddingCodeModelID, &m.ContentKind, &m.Meta,
+			&m.Version, &m.IsActive, &m.Confidence, &m.Importance, &m.AccessCount, &m.LastAccessed,
+			&m.ExpiresAt, &m.PromotionStatus, &m.PromotedTo, &m.SourceRef, &m.CreatedAt, &m.UpdatedAt,
+			&score,
+		); err != nil {
+			return nil, err
+		}
+		ms := MemoryScore{Memory: &m}
+		if isBM25 {
+			ms.BM25Score = score
+		} else {
+			ms.VecScore = score
+		}
+		results = append(results, ms)
+	}
+	return results, rows.Err()
+}
+
+// CreateConsolidation inserts a consolidation record.
+func CreateConsolidation(ctx context.Context, pool *pgxpool.Pool, c *Consolidation) (*Consolidation, error) {
+	var result Consolidation
+	err := pool.QueryRow(ctx,
+		`INSERT INTO consolidations (scope_id, source_ids, result_id, strategy, reason)
+		 VALUES ($1,$2,$3,$4,$5)
+		 RETURNING id, scope_id, source_ids, result_id, strategy, reason, created_at`,
+		c.ScopeID, c.SourceIDs, c.ResultID, c.Strategy, c.Reason,
+	).Scan(
+		&result.ID, &result.ScopeID, &result.SourceIDs, &result.ResultID,
+		&result.Strategy, &result.Reason, &result.CreatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("db: create consolidation: %w", err)
+	}
+	return &result, nil
+}
+
+// ListConsolidationCandidates returns low-importance, low-access memories for a scope.
+func ListConsolidationCandidates(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID) ([]*Memory, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT `+memoryColumns+`
+		 FROM memories
+		 WHERE is_active = true AND scope_id = $1 AND importance < 0.7 AND access_count < 3`,
+		scopeID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("db: list consolidation candidates: %w", err)
+	}
+	defer rows.Close()
+	return scanMemoryRows(rows)
+}
+
+// ── Entities ──────────────────────────────────────────────────────────────────
+
+// UpsertEntity inserts or updates an entity by (scope_id, entity_type, canonical).
+func UpsertEntity(ctx context.Context, pool *pgxpool.Pool, e *Entity) (*Entity, error) {
+	if e.Meta == nil {
+		e.Meta = []byte("{}")
+	}
+	var embVal interface{}
+	if len(e.Embedding) > 0 {
+		embVal = float32SliceToVector(e.Embedding)
+	}
+	var result Entity
+	var embText *string
+	err := pool.QueryRow(ctx,
+		`INSERT INTO entities (scope_id, entity_type, name, canonical, meta, embedding, embedding_model_id)
+		 VALUES ($1,$2,$3,$4,$5,$6::vector,$7)
+		 ON CONFLICT (scope_id, entity_type, canonical)
+		 DO UPDATE SET name=EXCLUDED.name, meta=EXCLUDED.meta,
+		               embedding=EXCLUDED.embedding, embedding_model_id=EXCLUDED.embedding_model_id,
+		               updated_at=now()
+		 RETURNING id, scope_id, entity_type, name, canonical, meta,
+		           embedding::text, embedding_model_id, created_at, updated_at`,
+		e.ScopeID, e.EntityType, e.Name, e.Canonical, e.Meta, embVal, e.EmbeddingModelID,
+	).Scan(
+		&result.ID, &result.ScopeID, &result.EntityType, &result.Name, &result.Canonical, &result.Meta,
+		&embText, &result.EmbeddingModelID, &result.CreatedAt, &result.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("db: upsert entity: %w", err)
+	}
+	return &result, nil
+}
+
+// GetEntityByCanonical looks up an entity by scope, type, and canonical name.
+func GetEntityByCanonical(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, entityType, canonical string) (*Entity, error) {
+	var result Entity
+	var embText *string
+	err := pool.QueryRow(ctx,
+		`SELECT id, scope_id, entity_type, name, canonical, meta,
+		        embedding::text, embedding_model_id, created_at, updated_at
+		 FROM entities WHERE scope_id=$1 AND entity_type=$2 AND canonical=$3`,
+		scopeID, entityType, canonical,
+	).Scan(
+		&result.ID, &result.ScopeID, &result.EntityType, &result.Name, &result.Canonical, &result.Meta,
+		&embText, &result.EmbeddingModelID, &result.CreatedAt, &result.UpdatedAt,
+	)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("db: get entity by canonical: %w", err)
+	}
+	return &result, nil
+}
+
+// LinkMemoryToEntity inserts a memory_entities row.
+func LinkMemoryToEntity(ctx context.Context, pool *pgxpool.Pool, memoryID, entityID uuid.UUID, role string) error {
+	_, err := pool.Exec(ctx,
+		`INSERT INTO memory_entities (memory_id, entity_id, role) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+		memoryID, entityID, role,
+	)
+	if err != nil {
+		return fmt.Errorf("db: link memory to entity: %w", err)
+	}
+	return nil
+}
+
+// ── Relations ─────────────────────────────────────────────────────────────────
+
+// UpsertRelation inserts or updates a relation between two entities.
+func UpsertRelation(ctx context.Context, pool *pgxpool.Pool, r *Relation) (*Relation, error) {
+	var result Relation
+	err := pool.QueryRow(ctx,
+		`INSERT INTO relations (scope_id, subject_id, predicate, object_id, confidence, source_memory)
+		 VALUES ($1,$2,$3,$4,$5,$6)
+		 ON CONFLICT (scope_id, subject_id, predicate, object_id)
+		 DO UPDATE SET confidence=EXCLUDED.confidence, source_memory=EXCLUDED.source_memory
+		 RETURNING id, scope_id, subject_id, predicate, object_id, confidence, source_memory, created_at`,
+		r.ScopeID, r.SubjectID, r.Predicate, r.ObjectID, r.Confidence, r.SourceMemory,
+	).Scan(
+		&result.ID, &result.ScopeID, &result.SubjectID, &result.Predicate,
+		&result.ObjectID, &result.Confidence, &result.SourceMemory, &result.CreatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("db: upsert relation: %w", err)
+	}
+	return &result, nil
+}
+
+// ListRelationsForEntity returns all relations where the entity is subject or object.
+// If predicate is non-empty, it filters by that predicate.
+func ListRelationsForEntity(ctx context.Context, pool *pgxpool.Pool, entityID uuid.UUID, predicate string) ([]*Relation, error) {
+	var rows pgx.Rows
+	var err error
+	if predicate != "" {
+		rows, err = pool.Query(ctx,
+			`SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, created_at
+			 FROM relations WHERE (subject_id=$1 OR object_id=$1) AND predicate=$2
+			 ORDER BY created_at`,
+			entityID, predicate,
+		)
+	} else {
+		rows, err = pool.Query(ctx,
+			`SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, created_at
+			 FROM relations WHERE subject_id=$1 OR object_id=$1
+			 ORDER BY created_at`,
+			entityID,
+		)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("db: list relations for entity: %w", err)
+	}
+	defer rows.Close()
+
+	var results []*Relation
+	for rows.Next() {
+		var rel Relation
+		if err := rows.Scan(
+			&rel.ID, &rel.ScopeID, &rel.SubjectID, &rel.Predicate,
+			&rel.ObjectID, &rel.Confidence, &rel.SourceMemory, &rel.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		results = append(results, &rel)
+	}
+	return results, rows.Err()
 }
 
 // ── Knowledge artifacts ───────────────────────────────────────────────────────
