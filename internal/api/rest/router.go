@@ -93,6 +93,7 @@ func (ro *Router) Handler() http.Handler {
 
 		// Memory endpoints.
 		r.Post("/memories", ro.createMemory)
+		r.Post("/memories/summarize", ro.handleSummarizeMemories)
 		r.Get("/memories/recall", ro.recallMemories)
 		r.Get("/memories/{id}", ro.getMemory)
 		r.Patch("/memories/{id}", ro.updateMemory)

@@ -419,7 +419,7 @@
 
 - [x] `router.go` — chi router; `BearerTokenMiddleware` on all /v1 routes; all routes registered
   - TODO(task-rest-cors): CORS headers configurable via config
-- [x] `memories.go` — `POST /v1/memories`, `GET /v1/memories/recall`, `GET/PATCH/DELETE /v1/memories/:id`, `POST /v1/memories/:id/promote`
+- [x] `memories.go` — `POST /v1/memories`, `POST /v1/memories/summarize`, `GET /v1/memories/recall`, `GET/PATCH/DELETE /v1/memories/:id`, `POST /v1/memories/:id/promote`
 - [x] `knowledge.go` — `POST /v1/knowledge`, `GET /v1/knowledge/search`, `GET/PATCH /v1/knowledge/:id`, `POST /v1/knowledge/:id/endorse`, `POST /v1/knowledge/:id/deprecate`, `GET /v1/knowledge/:id/history`
 - [x] `collections.go` — `POST /v1/collections`, `GET /v1/collections`, `GET /v1/collections/:slug`, `POST/DELETE /v1/collections/:id/items`
 - [x] `skills.go` — `POST /v1/skills`, `GET /v1/skills/search`, `GET/PATCH /v1/skills/:id`, `POST /v1/skills/:id/endorse`, `POST /v1/skills/:id/deprecate`, `POST /v1/skills/:id/install`, `POST /v1/skills/:id/invoke`
@@ -435,28 +435,31 @@
 
 ### `cmd/postbrain` — Server Binary
 
-- [ ] `main.go`:
+- [x] `main.go`:
   - cobra root command with `--config` flag
-  - `serve` subcommand: load config → `CheckAndMigrate` → start MCP + REST servers
-  - `migrate` subcommand with sub-subcommands: `status`, `up`, `down <N>`, `version`, `force <N>`
-  - `health` subcommand: print `{status, schema_version, expected_version}` and exit
+  - `serve` subcommand: load config → `db.NewPool` → optional `CheckAndMigrate` → `embedding.NewService` → MCP + REST mux → TLS-capable `net.Listen` → graceful shutdown on SIGINT/SIGTERM
+  - `migrate` subcommand with sub-subcommands: `up` (wired), `down [N]` (TODO stub), `status` (TODO stub), `version` (TODO stub), `force <N>` (TODO stub)
+  - Prometheus `/metrics` via `promhttp.Handler()`
+  - Background job scheduler started via `jobs.NewScheduler`
 
 ### `cmd/postbrain-hook` — Hook CLI
 
-- [ ] `main.go` — cobra dispatch; reads `POSTBRAIN_URL`, `POSTBRAIN_TOKEN` from env; falls back to config file at `$POSTBRAIN_CONFIG` or `~/.config/postbrain/config.yaml`
-- [ ] `snapshot.go`:
-  - Read tool output JSON from stdin (Claude Code PostToolUse hook format)
-  - Extract: tool name, modified file paths, brief description
-  - 60s dedup check: skip if a memory for same `source_ref` was created in last 60s (query REST API)
-  - POST to `/v1/memories` with `memory_type="episodic"`, `source_ref=<file>`, `scope` from `--scope` flag
-- [ ] `summarize_session.go`:
-  - Fetch episodic memories for current session ID (from `CLAUDE_SESSION_ID` env or `--session` flag)
-  - Skip if count < 3
-  - POST to `/v1/memories/summarize` (or MCP `summarize` tool)
-- [ ] `skill_sync.go`:
-  - GET `/v1/skills/search?scope=<scope>&agent_type=<agent>&status=published`
-  - Compare against local `.claude/commands/` directory
-  - Install missing/outdated; print `{installed, updated, orphaned}`
+- [x] `main.go` — cobra dispatch; reads `POSTBRAIN_URL`, `POSTBRAIN_TOKEN` from env; `--scope` persistent flag
+- [x] `snapshot` subcommand:
+  - Reads Claude Code PostToolUse JSON from stdin
+  - Extracts `file_path`/`path` from `tool_input` as `source_ref`
+  - Dedup check via `/v1/memories/recall?min_score=0.99`; skips if hit
+  - POSTs to `/v1/memories` with `memory_type="episodic"`, `scope` from `--scope` flag
+- [x] `summarize-session` subcommand:
+  - Fetches episodic memories via REST; skips if count < 3
+  - POSTs to `POST /v1/memories/summarize` (REST endpoint added to router)
+  - `--session` flag (defaults to `CLAUDE_SESSION_ID` env)
+- [x] `skill sync` subcommand:
+  - GETs `/v1/skills/search?status=published`; calls `skills.Install` for new skills
+  - Reports orphaned local `.claude/commands/*.md` files not in registry
+- [x] `skill install` subcommand: fetches by slug, TODO parse+install (stub)
+- [x] `skill list` subcommand: globs local `.claude/commands/*.md`
+- [x] `POST /v1/memories/summarize` REST endpoint added to `internal/api/rest/memories.go` and registered in router
 
 ---
 

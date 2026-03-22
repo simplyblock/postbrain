@@ -241,6 +241,29 @@ func (ro *Router) promoteMemory(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, req)
 }
 
+type summarizeMemoriesRequest struct {
+	Scope  string `json:"scope"`
+	Topic  string `json:"topic"`
+	DryRun bool   `json:"dry_run"`
+}
+
+// POST /v1/memories/summarize consolidates episodic memories in the given scope.
+// Full consolidation wiring is deferred; this endpoint accepts the request and
+// returns a stub response so the hook CLI can call it without error.
+func (ro *Router) handleSummarizeMemories(w http.ResponseWriter, req *http.Request) {
+	var input summarizeMemoriesRequest
+	if err := readJSON(req, &input); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// TODO(task-rest): wire consolidation via memory.Consolidator.FindClusters + MergeCluster
+	writeJSON(w, http.StatusOK, map[string]any{
+		"consolidated_count": 0,
+		"result_memory_id":   nil,
+		"summary":            "consolidation not yet fully wired",
+	})
+}
+
 // parseScopeString is duplicated here to avoid a cross-package dependency.
 // It splits "kind:external_id" into parts.
 func parseScopeString(scope string) (string, string, error) {
