@@ -3,6 +3,7 @@
 package retrieval
 
 import (
+	"math"
 	"sort"
 	"time"
 
@@ -76,6 +77,29 @@ func CombineScores(vecScore, bm25Score, importance, recencyDecay float64, layer 
 		score += 0.10
 	}
 	return score
+}
+
+// CosineSimilarity computes the cosine similarity between two float32 vectors.
+// Returns 0.0 if either vector is nil or empty.
+func CosineSimilarity(a, b []float32) float64 {
+	if len(a) == 0 || len(b) == 0 {
+		return 0.0
+	}
+	var dot, normA, normB float64
+	for i := range a {
+		if i >= len(b) {
+			break
+		}
+		fa, fb := float64(a[i]), float64(b[i])
+		dot += fa * fb
+		normA += fa * fa
+		normB += fb * fb
+	}
+	if normA == 0 || normB == 0 {
+		return 0.0
+	}
+	denom := math.Sqrt(normA) * math.Sqrt(normB)
+	return dot / denom
 }
 
 // Merge deduplicates and re-ranks results from multiple layers.

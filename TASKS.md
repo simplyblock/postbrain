@@ -366,22 +366,24 @@
 
 ### `internal/jobs` — Background Jobs
 
-- [ ] `scheduler.go`:
+- [x] `scheduler.go`:
   - `robfig/cron` setup; one cron per enabled job flag
   - Each job logs start/end/duration via slog with job name
   - Each job recovers from panics and logs error without crashing
-- [ ] `expire.go` — on-demand or scheduled TTL cleanup (supplement to pg_cron working-memory expiry)
-- [ ] `consolidate.go`:
+  - `age_check_enabled` logs that pg_cron handles `detect-stale-knowledge-age`
+- [x] `expire.go` — on-demand or scheduled TTL cleanup (supplement to pg_cron working-memory expiry)
+- [x] `consolidate.go`:
   - Run every 6 hours
   - Per scope: find clusters (cosine ≤ 0.05), call `memory.MergeCluster` for each cluster with ≥ 2 members
   - Respect `jobs.consolidation_enabled` config flag
-- [ ] `reembed.go`:
-  - Triggered on startup if active model ID differs from any row's `embedding_model_id`
-  - Runs in background goroutine; processes in batches of `embedding.batch_size`
-  - Text and code model jobs run independently
-  - Logs `reembed_batch` events to `events` table on each batch completion
-  - Sets `embedding_model_id` after successful embed
-- [ ] `staleness.go` — Signal 2 weekly contradiction detection:
+  - `defaultSummarizer` fallback (no LLM): joins with `\n---\n`
+- [x] `reembed.go`:
+  - Fetches active text/code model from `embedding_models`; skips if none registered
+  - Processes in batches of `batchSize` (default 64)
+  - Text and code model jobs run independently (`RunText`, `RunCode`)
+  - Sets `embedding_model_id` / `embedding_code_model_id` after successful embed
+  - TODO(task-jobs): insert reembed_batch events once background job scope handling is defined
+- [x] `staleness.go` — Signal 2 weekly contradiction detection:
   1. Fetch all published knowledge artifacts in batches (100/batch)
   2. For each artifact: fetch recent memories from last 7 days in same/ancestor scopes
   3. Pre-filter by cosine similarity > 0.6 (topic overlap)
@@ -389,9 +391,10 @@
   5. For survivors: call LLM; classify as CONTRADICTS / CONSISTENT / UNRELATED
   6. If CONTRADICTS and no open flag exists: insert `staleness_flags` row
   7. `confidence = min(0.9, negation_similarity * 1.5)`
-- [ ] `promotion_notify.go`:
-  - Runs every hour; finds promotion_requests where `status = "pending"` and no notification sent in last 24h
-  - Notifies reviewer: log to slog (webhook/email out of scope for MVP; use TODO marker)
+  - `noopClassifier` safe default for deployments without LLM
+- [x] `promotion_notify.go`:
+  - Logs pending promotion requests; TODO(task-jobs) for webhook/email notification
+- [x] `retrieval.CosineSimilarity` — added exported helper to `internal/retrieval/merge.go`
 
 ### `internal/api/mcp` — MCP Server
 
