@@ -83,6 +83,9 @@
 - [x] `migrations/000005_age_graph.up.sql` — AGE graph setup wrapped in DO/EXCEPTION (no-op if absent)
 - [x] `migrations/000005_age_graph.down.sql`
 
+- [x] `models.go` — shared DB model types: `Principal`, `Membership`, `Scope`, `Token`
+- [x] `queries.go` — thin pgx query layer: `CreatePrincipal`, `GetPrincipalByID`, `GetPrincipalBySlug`, `CreateMembership`, `DeleteMembership`, `GetMemberships`, `GetAllParentIDs`, `CreateScope`, `GetScopeByID`, `GetScopeByExternalID`, `GetAncestorScopeIDs`, `CreateToken`, `LookupToken`, `RevokeToken`, `UpdateTokenLastUsed`
+
 - [ ] `db/queries/memories.sql` — sqlc queries:
   - `CreateMemory`, `GetMemory`, `UpdateMemory`, `SoftDeleteMemory`, `HardDeleteMemory`
   - `IncrementAccessCount` (also sets `last_accessed = now()`)
@@ -170,30 +173,36 @@
 
 ### `internal/principals` — Principal Management
 
-- [ ] `store.go`:
+- [x] `store.go`:
   - `Create(ctx, kind, slug, displayName, meta)` → Principal
   - `GetByID(ctx, id)`, `GetBySlug(ctx, slug)` → Principal
   - `Update(ctx, id, displayName, meta)`, `Delete(ctx, id)`
-- [ ] `membership.go`:
+- [x] `store_test.go` — integration tests (build tag `integration`; skip if `TEST_DATABASE_URL` not set)
+- [x] `membership.go`:
   - `AddMembership(ctx, memberID, parentID, role, grantedBy)`:
     - Before insert: run cycle check CTE; return `ErrCycleDetected` if a path from `parentID` back to `memberID` exists
     - Validate `role` is one of `"member"`, `"owner"`, `"admin"`
   - `RemoveMembership(ctx, memberID, parentID)`
   - `EffectiveScopeIDs(ctx, principalID) ([]uuid.UUID, error)` — recursive CTE from DESIGN.md
   - `IsScopeAdmin(ctx, principalID, scopeID) (bool, error)` — checks for `role='admin'` in own or ancestor scope
+  - Sentinel errors: `ErrCycleDetected`, `ErrInvalidRole`
+- [x] `membership_test.go` — unit tests for `ErrInvalidRole` and `ErrCycleDetected` logic (no DB required)
 
 ### `internal/auth` — Authentication Middleware
 
-- [ ] `tokens.go`:
+- [x] `tokens.go`:
   - `HashToken(raw string) string` — `hex(sha256([]byte(raw)))`
   - `GenerateToken() (raw, hash string, error)` — `crypto/rand` 32 bytes → hex → prepend `"pb_"` prefix
-  - `LookupToken(ctx, pool, hash) (*Token, error)` — enforces `revoked_at IS NULL`, `expires_at` check
-  - `UpdateLastUsed(pool, tokenID)` — fire-and-forget goroutine; do not block request path
+  - `TokenStore.Lookup` — enforces `revoked_at IS NULL`, `expires_at` check
+  - `TokenStore.UpdateLastUsed` — fire-and-forget goroutine; do not block request path; nil pool = no-op
   - `EnforceScopeAccess(token *Token, requestedScopeID uuid.UUID) error` — if `token.ScopeIDs != nil`, reject if not in list
-- [ ] `middleware.go`:
-  - `BearerTokenMiddleware(pool)` — extract `Authorization: Bearer <token>`, hash, lookup, attach `*Token` to context
+- [x] `tokens_test.go` — 7 unit tests (no DB required)
+- [x] `middleware.go`:
+  - `BearerTokenMiddleware(store, pool)` — extract `Authorization: Bearer <token>`, hash, lookup, attach `*Token` to context
+  - Internal `tokenLookup` interface enables testing without a real DB
   - Return 401 JSON `{"error":"unauthorized"}` on missing/invalid/revoked token
-  - Inject `ContextKeyPrincipalID`, `ContextKeyPermissions` into request context
+  - Inject `ContextKeyToken`, `ContextKeyPrincipalID`, `ContextKeyPermissions` into request context
+- [x] `middleware_test.go` — 4 httptest-based unit tests (no DB required)
 
 ### `internal/memory` — Memory Store
 
