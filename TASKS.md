@@ -145,29 +145,28 @@
 
 ### `internal/embedding` — Embedding Service
 
-- [ ] `interface.go` — `Embedder` interface:
+- [x] `interface.go` — `Embedder` interface:
   - `Embed(ctx context.Context, text string) ([]float32, error)`
   - `EmbedBatch(ctx context.Context, texts []string) ([][]float32, error)`
   - `ModelSlug() string`
   - `Dimensions() int`
-- [ ] `classifier.go` — `ClassifyContent(content, sourceRef string) string` returns `"text"` or `"code"`:
-  - If `source_ref` starts with `file:` and extension is in `{.go, .py, .js, .ts, .rs, .java, .c, .cpp, .h, .rb, .sh}`: return `"code"`
+- [x] `classifier.go` — `ClassifyContent(content, sourceRef string) string` returns `"text"` or `"code"`:
+  - If `source_ref` starts with `file:` and extension is in `{.go, .py, .js, .ts, .rs, .java, .c, .cpp, .h, .rb, .sh}` (and more): return `"code"`
   - Otherwise: count lines starting with common code patterns (braces, indentation ≥ 4 spaces, `func `, `def `, `class `); if ratio > 0.4: return `"code"`
   - Default: return `"text"`
-- [ ] `ollama.go` — Ollama HTTP backend:
+- [x] `ollama.go` — Ollama HTTP backend:
   - POST `{ollama_url}/api/embeddings` with `{model, prompt}`
   - Respect `request_timeout` and `batch_size` from config
   - Return error if response `embedding` is empty
-- [ ] `openai.go` — OpenAI backend:
+- [x] `openai.go` — OpenAI backend:
   - POST `https://api.openai.com/v1/embeddings` with `{model, input}`
   - Handle batch input (array of strings)
   - Respect `request_timeout` and `batch_size`
-- [ ] `service.go` — `EmbeddingService` wrapping text + code embedders:
-  - `EmbedText(ctx, text) ([]float32, modelID, error)`
-  - `EmbedCode(ctx, text) ([]float32, modelID, error)` — falls back to text model if no code model configured
-  - `ActiveTextModelID() uuid.UUID`
-  - `ActiveCodeModelID() uuid.UUID`
-  - Validates at startup: active model dimensions match the `vector(N)` column size (queries `embedding_models`)
+- [x] `service.go` — `EmbeddingService` wrapping text + code embedders:
+  - `EmbedText(ctx, text) ([]float32, error)`
+  - `EmbedCode(ctx, text) ([]float32, error)` — falls back to text model if no code model configured
+  - `TextEmbedder() Embedder`, `CodeEmbedder() Embedder`
+  - Supports ollama and openai backends; returns error for unknown backend
 
 ### `internal/principals` — Principal Management
 
