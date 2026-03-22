@@ -2,12 +2,13 @@
 
 ## Overview
 
-Postbrain is a persistent, queryable memory backend for AI coding agents (Claude Code, OpenAI Codex, GitHub Copilot, and similar tools) and the human developers who work alongside them. It provides two complementary stores:
+Postbrain is a persistent, queryable memory backend for AI coding agents (Claude Code, OpenAI Codex, GitHub Copilot, and similar tools) and the human developers who work alongside them. It provides three complementary stores:
 
 1. **Memory** — automatically captured observations from agent sessions and developer interactions. Personal by default, scoped to a project or team, subject to decay and consolidation.
 2. **Knowledge** — intentionally curated artifacts that are reviewed, versioned, and explicitly published to a chosen audience: a project, a team, a department, or the whole company.
+3. **Skills** — versioned, parameterised prompt templates that agents can discover, install, and invoke. A centralised registry for reusable agent behaviours — the `/deploy`, `/review-pr`, and `/write-tests` commands that live in `.claude/commands/` today, stored and shared through Postbrain instead of scattered across machines and repos.
 
-Both layers are queryable together in a single call. The separation is not cosmetic — it reflects a real difference in provenance, trust, lifecycle, and sharing semantics.
+All three layers are queryable together in a single call. The separations are not cosmetic — each reflects a real difference in provenance, trust, lifecycle, executability, and sharing semantics.
 
 The system is built on PostgreSQL with the `pg_vector` extension, chosen for its ability to store both structured relational data (facts, relationships, metadata) and dense vector embeddings (semantic similarity search) in a single, ACID-compliant database.
 
@@ -18,8 +19,9 @@ The system is built on PostgreSQL with the `pg_vector` extension, chosen for its
 - **Persistence** — memories and knowledge survive session termination, context window resets, and agent upgrades.
 - **Semantic recall** — agents and developers retrieve content by meaning, not just exact keyword match.
 - **Multi-principal** — agents, individual developers, teams, departments, and whole companies are all first-class actors.
-- **Intentional sharing** — knowledge is explicitly published at a chosen visibility level; it is never accidentally leaked by scope inheritance.
-- **Promotion pathway** — any memory can be nominated and reviewed for elevation into a persistent, shared knowledge artifact.
+- **Intentional sharing** — knowledge and skills are explicitly published at a chosen visibility level; never accidentally leaked by scope inheritance.
+- **Promotion pathway** — any memory can be nominated and reviewed for elevation into a persistent, shared knowledge artifact; any procedural knowledge artifact can be promoted into an executable skill.
+- **Skill registry** — a centralised store for versioned, parameterised agent skills, discoverable by meaning and auto-installable into agent command directories.
 - **Auditability** — every write is attributed, timestamped, and versioned.
 - **Low latency** — p99 retrieval under 50 ms for typical workloads.
 - **Composability** — language-agnostic HTTP/JSON API and MCP server; no language-specific SDK required.
@@ -61,15 +63,20 @@ The system is built on PostgreSQL with the `pg_vector` extension, chosen for its
 │  │  · endorse       │  │  Service        │                               │
 │  │  · promote       │  │  (local/ext)    │                               │
 │  │  · collect       │  └─────────────────┘                               │
+│  │                  │                                                      │
+│  │  Skill tools:    │                                                      │
+│  │  · skill_search  │                                                      │
+│  │  · skill_install │                                                      │
+│  │  · skill_invoke  │                                                      │
 │  └──────────────────┘                                                     │
 └────────────────────────────────────┬─────────────────────────────────────┘
                                      │
 ┌────────────────────────────────────▼─────────────────────────────────────┐
 │                         PostgreSQL + pg_vector                            │
 │                                                                            │
-│  principals  │  scopes  │  memories  │  knowledge_artifacts               │
+│  principals  │  scopes  │  memories  │  knowledge_artifacts  │  skills    │
 │  entities    │  relations            │  collections                        │
-│  sharing_grants          │  sessions │  events  │  consolidations          │
+│  sharing_grants  │  staleness_flags  │  sessions  │  events                │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -85,26 +92,32 @@ The system is built on PostgreSQL with the `pg_vector` extension, chosen for its
 
 ---
 
-## Two-Layer Model: Memory vs Knowledge
+## Three-Layer Model: Memory, Knowledge, and Skills
 
 ### Design Decision
 
-The core architectural decision is to **separate** memories and knowledge into distinct tables rather than marking a single record type with a visibility flag. This is not just cosmetic — the two concepts differ across every dimension that matters for implementation:
+The three stores are separated into distinct tables. Each differs across every dimension that matters for implementation:
 
-| Dimension | Memory | Knowledge |
-|-----------|--------|-----------|
-| **Authored by** | Agent or developer, automatically | Human developer, intentionally |
-| **Default visibility** | Private to owner/scope | Chosen explicitly at publish time |
-| **Trust level** | Observed, potentially noisy | Reviewed, institutionally endorsed |
-| **Lifecycle** | Written → decays → consolidated/pruned | Draft → Review → Published → Deprecated |
-| **Decay** | Yes — importance degrades over time | No — knowledge is stable until deprecated |
-| **Write frequency** | Very high (100s/session) | Low (deliberate authoring) |
-| **Versioning** | Implicit (new write supersedes) | Explicit (full version history) |
-| **Sharing** | Via scope hierarchy or grant | Via explicit visibility level |
+| Dimension | Memory | Knowledge | Skill |
+|-----------|--------|-----------|-------|
+| **Authored by** | Agent or developer, automatically | Human developer, intentionally | Human developer, intentionally |
+| **Default visibility** | Private to owner/scope | Chosen explicitly at publish time | Chosen explicitly at publish time |
+| **Trust level** | Observed, potentially noisy | Reviewed, institutionally endorsed | Reviewed, tested, institutionally endorsed |
+| **Lifecycle** | Written → decays → consolidated/pruned | Draft → Review → Published → Deprecated | Draft → Review → Published → Deprecated |
+| **Decay** | Yes — importance degrades over time | No | No |
+| **Write frequency** | Very high (100s/session) | Low (deliberate authoring) | Very low (intentional publishing) |
+| **Versioning** | Implicit (new write supersedes) | Explicit (full version history) | Explicit (full version history) |
+| **Sharing** | Via scope hierarchy or grant | Via explicit visibility level | Via explicit visibility level |
+| **Executable** | No | No | Yes — invoked by agents with typed parameters |
+| **Agent-specific** | No | No | Yes — compatibility declared per agent type |
+| **Installation** | N/A | N/A | Materialised as a file (e.g. `.claude/commands/*.md`) |
+| **Telemetry** | Access count | Access count | Invocation count, last invoked |
 
-Combining them into one table would pollute every query with trust/authority discriminators and make the lifecycle machinery unmanageably complex.
+Combining them into one table would pollute every query with executability and compatibility discriminators and make the lifecycle machinery unmanageably complex.
 
-Memories and knowledge are linked by a **promotion pathway**: any memory can be nominated for elevation into a knowledge artifact, optionally requiring review endorsements before publishing.
+The three layers are linked by **promotion pathways**:
+- Any memory can be nominated for elevation into a knowledge artifact.
+- Any `procedural` knowledge artifact can be promoted into an executable skill (parameterised and made agent-compatible).
 
 ---
 
@@ -131,6 +144,46 @@ Knowledge artifacts use the same four types but carry additional classification:
 | **Reference** | Stable pointers: API contracts, schema definitions, external docs. | "Stripe webhook event catalog", "internal service mesh port assignments" |
 
 Knowledge artifacts belong to **collections** (curated bundles) and carry an explicit **visibility level** that determines who can read them.
+
+## Skills Taxonomy
+
+Skills are reusable, parameterised prompt templates that agents can invoke. They are the executable counterpart to procedural knowledge artifacts.
+
+| Attribute | Description |
+|-----------|-------------|
+| **slug** | The command name: `deploy`, `review-pr`, `write-tests` |
+| **body** | The prompt template, written in the agent's native format (Claude Code markdown, Codex system prompt fragment, etc.) |
+| **parameters** | Typed parameter schema: `[{name, type, required, default, description}]`. Types: `string`, `integer`, `boolean`, `enum`. |
+| **agent_types** | Which agents can execute this skill: `["claude-code"]`, `["codex"]`, `["any"]` |
+| **visibility** | Same levels as knowledge artifacts: `private`, `project`, `team`, `department`, `company` |
+
+**Parameter substitution** follows the same convention Claude Code uses today — `$PARAM_NAME` or `{{param_name}}` in the body is replaced at invocation time. The skill body is otherwise a standard agent prompt.
+
+**Example skill — `review-pr`:**
+```markdown
+---
+name: Review Pull Request
+description: Review a pull request for correctness, security, and style
+agent_types: [claude-code]
+parameters:
+  - name: pr_number
+    type: integer
+    required: true
+  - name: focus
+    type: enum
+    values: [security, performance, style, all]
+    default: all
+---
+
+Review PR #$pr_number with focus on $focus issues.
+
+Use the `gh pr diff $pr_number` command to fetch the diff, then:
+1. Identify any $focus problems with specific file:line references
+2. Suggest concrete fixes, not just observations
+3. Note anything that looks like a security concern regardless of focus
+```
+
+This skill lives in Postbrain rather than in a local `.claude/commands/` file. Any developer in the owning scope can install it with one command; updates propagate automatically.
 
 ---
 
@@ -694,6 +747,127 @@ CREATE INDEX promotion_requests_memory_idx ON promotion_requests (memory_id);
 CREATE INDEX promotion_requests_status_idx ON promotion_requests (status, target_scope_id);
 
 -- ─────────────────────────────────────────
+-- Skills registry
+-- ─────────────────────────────────────────
+--
+-- Skills are versioned, parameterised prompt templates that agents
+-- can discover, install, and invoke. They use the same visibility
+-- and lifecycle model as knowledge_artifacts.
+--
+-- agent_types: {"claude-code","codex","any"} — controls which
+--              agents the install command materialises this for.
+--
+-- parameters: JSON array of parameter descriptors:
+--   [{name, type, required, default, description, values?}]
+--   type ∈ {string, integer, boolean, enum}
+--
+-- body: the raw prompt template. Parameter substitution uses
+--   $PARAM_NAME (Claude Code convention) or {{param_name}}.
+
+CREATE TABLE skills (
+    id                 UUID PRIMARY KEY DEFAULT uuidv7(),
+    scope_id           UUID NOT NULL REFERENCES scopes(id) ON DELETE CASCADE,
+    author_id          UUID NOT NULL REFERENCES principals(id),
+    -- Optional: promoted from a procedural knowledge artifact
+    source_artifact_id UUID REFERENCES knowledge_artifacts(id) ON DELETE SET NULL,
+
+    -- Identity
+    slug               citext NOT NULL,   -- "deploy", "review-pr", "write-tests"
+    name               TEXT NOT NULL,
+    description        TEXT NOT NULL,     -- used for embedding-based discovery
+
+    -- Compatibility
+    agent_types        TEXT[] NOT NULL DEFAULT '{"any"}',
+
+    -- Content
+    body               TEXT NOT NULL,     -- the prompt template
+    parameters         JSONB NOT NULL DEFAULT '[]',
+
+    -- Sharing + lifecycle (mirrors knowledge_artifacts)
+    visibility         TEXT NOT NULL DEFAULT 'team'
+                       CHECK (visibility IN ('private','project','team','department','company')),
+    status             TEXT NOT NULL DEFAULT 'draft'
+                       CHECK (status IN ('draft','in_review','published','deprecated')),
+    published_at       TIMESTAMPTZ,
+    deprecated_at      TIMESTAMPTZ,
+    review_required    INT NOT NULL DEFAULT 1,
+
+    -- Versioning
+    version            INT NOT NULL DEFAULT 1,
+    previous_version   UUID REFERENCES skills(id),
+
+    -- Embeddings (on description + body; for discovery via recall)
+    embedding          vector(1536),
+    embedding_model_id UUID REFERENCES embedding_models(id),
+
+    -- Telemetry (denormalised from events for fast query)
+    invocation_count   INT NOT NULL DEFAULT 0,
+    last_invoked_at    TIMESTAMPTZ,
+
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (scope_id, slug)
+);
+
+CREATE INDEX skills_embedding_hnsw_idx
+    ON skills USING hnsw (embedding vector_cosine_ops)
+    WITH (m = 16, ef_construction = 64);
+
+CREATE INDEX skills_scope_status_idx
+    ON skills (scope_id, status, visibility);
+
+CREATE INDEX skills_content_fts_idx
+    ON skills USING GIN (to_tsvector('postbrain_fts', description || ' ' || body));
+
+-- Trigger: denormalise invocation stats from the events table
+-- Called by the Go server after recording a skill_invoked event.
+CREATE OR REPLACE FUNCTION skills_update_invocation_stats()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.event_type = 'skill_invoked' THEN
+        UPDATE skills
+        SET invocation_count  = invocation_count + 1,
+            last_invoked_at   = NEW.created_at
+        WHERE id = (NEW.payload->>'skill_id')::uuid;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER events_skill_stats
+    AFTER INSERT ON events
+    FOR EACH ROW EXECUTE FUNCTION skills_update_invocation_stats();
+
+-- ─────────────────────────────────────────
+-- Skill endorsements (same model as knowledge)
+-- ─────────────────────────────────────────
+
+CREATE TABLE skill_endorsements (
+    id          UUID PRIMARY KEY DEFAULT uuidv7(),
+    skill_id    UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    endorser_id UUID NOT NULL REFERENCES principals(id),
+    note        TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (skill_id, endorser_id)
+);
+
+-- ─────────────────────────────────────────
+-- Skill version history
+-- ─────────────────────────────────────────
+
+CREATE TABLE skill_history (
+    id          UUID PRIMARY KEY DEFAULT uuidv7(),
+    skill_id    UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    version     INT NOT NULL,
+    body        TEXT NOT NULL,
+    parameters  JSONB NOT NULL,
+    changed_by  UUID NOT NULL REFERENCES principals(id),
+    change_note TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (skill_id, version)
+);
+
+-- ─────────────────────────────────────────
 -- Knowledge staleness flags
 -- ─────────────────────────────────────────
 --
@@ -770,6 +944,9 @@ CREATE TRIGGER principals_updated_at BEFORE UPDATE ON principals
     FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 
 CREATE TRIGGER knowledge_collections_updated_at BEFORE UPDATE ON knowledge_collections
+    FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+
+CREATE TRIGGER skills_updated_at BEFORE UPDATE ON skills
     FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 
 -- ─────────────────────────────────────────
@@ -904,8 +1081,9 @@ Retrieve memories **and** published knowledge semantically relevant to a query. 
 {
   "query":        "how does stripe webhook processing work",
   "scope":        "project:acme/api",
-  "memory_types": ["semantic", "procedural"],   // optional filter
-  "layers":       ["memory", "knowledge"],       // default: both
+  "memory_types": ["semantic", "procedural"],             // optional filter
+  "layers":       ["memory", "knowledge", "skills"],      // default: all three
+  "agent_type":   "claude-code",                          // filters skill compatibility
   "limit":        10,
   "min_score":    0.70
 }
@@ -934,6 +1112,18 @@ Retrieve memories **and** published knowledge semantically relevant to a query. 
       "source_ref":  "file:src/payments/stripe.go:14",
       "author":      "claude-code",
       "created_at":  "2026-03-20T14:22:00Z"
+    },
+    {
+      "layer":            "skill",
+      "id":               "0197cc1a-...",
+      "slug":             "test-webhook",
+      "name":             "Test Stripe Webhook",
+      "description":      "Sends a test Stripe webhook event and verifies the handler response",
+      "score":            0.81,
+      "visibility":       "team",
+      "agent_types":      ["claude-code"],
+      "invocation_count": 47,
+      "installed":        false
     }
   ]
 }
@@ -1076,6 +1266,67 @@ Create or manage a knowledge collection.
 }
 ```
 
+#### `skill_search` _(skill tool)_
+Find skills relevant to the current task by semantic similarity. Called automatically at session start to populate the agent's available command set; also callable on demand.
+
+```jsonc
+// Input
+{
+  "query":       "deploy to production",
+  "scope":       "project:acme/api",
+  "agent_type":  "claude-code",    // filter to compatible skills only
+  "limit":       5
+}
+
+// Output
+{
+  "skills": [
+    {
+      "id":          "0197cc1a-...",
+      "slug":        "deploy",
+      "name":        "Deploy to Production",
+      "description": "Runs the full deploy pipeline with smoke tests",
+      "score":       0.96,
+      "visibility":  "team",
+      "parameters":  [{"name": "env", "type": "enum", "values": ["staging","prod"], "default": "staging"}],
+      "invocation_count": 214,
+      "installed":   false    // whether already in the agent's command directory
+    }
+  ]
+}
+```
+
+#### `skill_install` _(skill tool)_
+Materialise a skill into the agent's local command directory. For Claude Code, writes a `.md` file to `.claude/commands/<slug>.md` (project-level) or `~/.claude/commands/<slug>.md` (user-level).
+
+```jsonc
+// Input
+{
+  "skill_id": "0197cc1a-...",
+  "target":   "project"   // "project" (.claude/commands/) or "user" (~/.claude/commands/)
+}
+
+// Output
+{
+  "path":    ".claude/commands/deploy.md",
+  "version": 3,
+  "action":  "created"   // or "updated" if already installed at an older version
+}
+```
+
+#### `skill_invoke` _(skill tool)_
+Record a skill invocation event (telemetry). Called by the agent after executing a skill so Postbrain can track usage. Does not execute the skill — the agent does that locally after installation.
+
+```jsonc
+// Input
+{
+  "skill_id":   "0197cc1a-...",
+  "parameters": {"env": "prod"},
+  "scope":      "project:acme/api"
+}
+// Records a skill_invoked event; updates invocation_count + last_invoked_at.
+```
+
 ---
 
 ### REST API
@@ -1134,12 +1385,27 @@ For agents or scripts that cannot use MCP:
 | `DELETE` | `/v1/sharing/grants/:id` | Revoke grant |
 | `GET` | `/v1/sharing/grants` | List grants for a principal |
 
+**Skills:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/skills` | Create a skill |
+| `GET` | `/v1/skills/search` | Search by query (`?q=...&scope=...&agent_type=...`) |
+| `GET` | `/v1/skills/:id` | Fetch skill with current body |
+| `PATCH` | `/v1/skills/:id` | Update (creates new version) |
+| `POST` | `/v1/skills/:id/endorse` | Endorse |
+| `POST` | `/v1/skills/:id/deprecate` | Deprecate |
+| `GET` | `/v1/skills/:id/history` | Full version history |
+| `POST` | `/v1/skills/:id/install` | Materialise to agent command dir |
+| `POST` | `/v1/skills/:id/invoke` | Record invocation telemetry |
+| `GET` | `/v1/skills/:id/stats` | Invocation stats (count, last used, top users) |
+
 **Promotion review:**
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/v1/promotions` | List pending promotion requests |
-| `POST` | `/v1/promotions/:id/approve` | Approve and create knowledge artifact |
+| `POST` | `/v1/promotions/:id/approve` | Approve and create knowledge artifact or skill |
 | `POST` | `/v1/promotions/:id/reject` | Reject with note |
 
 **Other:**
@@ -1161,13 +1427,15 @@ Postbrain uses **hybrid retrieval** across both layers, merging results into a s
 
 ### Step 1 — Candidate gathering (parallel)
 
-Two sub-queries run in parallel:
+Up to three sub-queries run in parallel depending on the `layers` param (`memory`, `knowledge`, `skills`; default: all three):
 
 **Memory candidates** — ANN search against `memories.embedding` (HNSW), restricted to scopes reachable from the requested scope (fan-out walk) plus any scopes where the caller has a `sharing_grant`. Returns up to `limit × 3` candidates.
 
 **Knowledge candidates** — ANN search against `knowledge_artifacts.embedding` (HNSW), restricted to published artifacts whose visibility level is reachable by the caller's principal membership chain. Returns up to `limit × 3` candidates.
 
-Both passes also run a parallel BM25 full-text query (`to_tsquery`) for keyword boost.
+**Skill candidates** — ANN search against `skills.embedding` (HNSW), restricted to published skills compatible with the calling agent type and reachable by visibility. Returns up to `limit × 2` candidates (skills are fewer in number than memories or knowledge).
+
+All passes also run a parallel BM25 full-text query (`to_tsquery`) for keyword boost.
 
 ### Step 2 — Per-layer scoring
 
@@ -1201,9 +1469,19 @@ Knowledge does not decay. `authority_boost` is based on visibility scope:
 
 `endorsement_factor = min(endorsement_count / 10, 1.0)` — capped at 1.0 at 10 endorsements.
 
+**Skill score:**
+```
+skill_score = (0.65 × cosine_similarity)
+            + (0.15 × bm25_score)
+            + (0.10 × authority_boost)      -- same visibility-based table as knowledge
+            + (0.10 × adoption_factor)
+```
+
+`adoption_factor = min(invocation_count / 50, 1.0)` — a skill used 50+ times scores at maximum adoption. This surfaces battle-tested skills over freshly published ones.
+
 ### Step 3 — Cross-layer merge and re-rank
 
-Memory and knowledge candidates are merged into a single list and sorted by their respective scores. The agent receives both in the same response with a `layer` field on each result. There is no artificial boosting of one layer over the other — scores are directly comparable because both are normalized to `[0, 1]`.
+Memory, knowledge, and skill candidates are merged into a single list and sorted by their respective scores. Each result carries a `layer` field. Scores are normalised to `[0, 1]` and directly comparable across layers.
 
 ### Step 4 — Deduplication
 
@@ -1353,6 +1631,40 @@ Once connected, Claude Code automatically has access to `remember`, `recall`, `f
 
 This ensures that every file change and session end triggers automatic memory updates without the agent having to remember to call `remember` explicitly.
 
+**Skill auto-install on session start:**
+
+Add a `PreToolUse` hook that fires once at the beginning of each session to sync skills for the current scope:
+
+```jsonc
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|Bash",
+        "command": "postbrain-hook snapshot --scope project:$POSTBRAIN_SCOPE"
+      }
+    ],
+    "Stop": [
+      {
+        "command": "postbrain-hook summarize-session --scope project:$POSTBRAIN_SCOPE"
+      }
+    ]
+  }
+}
+```
+
+And run skill sync separately as a one-time setup step or via a dedicated startup hook:
+
+```bash
+# Install all published skills visible to your scope into .claude/commands/
+postbrain-hook skill sync --scope project:$POSTBRAIN_SCOPE --agent claude-code
+
+# Or install a specific skill by slug
+postbrain-hook skill install review-pr --scope team:platform
+```
+
+The `sync` command compares the installed `.md` files against the registry and installs new skills, updates changed ones (version bump), and reports deprecated ones. It is idempotent — safe to run on every session start.
+
 ### OpenAI Codex / Custom Agents via REST
 
 ```python
@@ -1410,19 +1722,23 @@ postbrain/
 │   │   ├── mcp/                # MCP server + tool handlers
 │   │   │   ├── server.go
 │   │   │   ├── remember.go
-│   │   │   ├── recall.go       # unified recall (memory + knowledge)
+│   │   │   ├── recall.go       # unified recall (memory + knowledge + skills)
 │   │   │   ├── forget.go
 │   │   │   ├── context.go
 │   │   │   ├── summarize.go
 │   │   │   ├── publish.go      # knowledge: publish
 │   │   │   ├── endorse.go      # knowledge: endorse
 │   │   │   ├── promote.go      # knowledge: promote memory→knowledge
-│   │   │   └── collect.go      # knowledge: collection management
+│   │   │   ├── collect.go      # knowledge: collection management
+│   │   │   ├── skill_search.go # skill: search
+│   │   │   ├── skill_install.go# skill: install to agent command dir
+│   │   │   └── skill_invoke.go # skill: record invocation telemetry
 │   │   └── rest/               # REST API handlers
 │   │       ├── router.go
 │   │       ├── memories.go
 │   │       ├── knowledge.go
 │   │       ├── collections.go
+│   │       ├── skills.go
 │   │       ├── sharing.go
 │   │       ├── promotions.go
 │   │       ├── orgs.go         # principal + scope management
@@ -1456,8 +1772,14 @@ postbrain/
 │   │   ├── lifecycle.go        # draft→review→published→deprecated transitions
 │   │   ├── collections.go      # collection management
 │   │   └── promote.go          # promotion request handling
+│   ├── skills/
+│   │   ├── store.go            # skill CRUD
+│   │   ├── recall.go           # hybrid retrieval (skill side)
+│   │   ├── install.go          # materialise skill body to agent command dir
+│   │   ├── lifecycle.go        # draft→review→published→deprecated transitions
+│   │   └── sync.go             # bulk sync for postbrain-hook skill sync
 │   ├── retrieval/
-│   │   └── merge.go            # cross-layer merge and re-rank
+│   │   └── merge.go            # cross-layer merge and re-rank (memory+knowledge+skills)
 │   ├── principals/
 │   │   ├── store.go            # principal CRUD
 │   │   └── membership.go       # membership resolution
@@ -1482,7 +1804,9 @@ postbrain/
 │   ├── 003_age_graph.up.sql
 │   ├── 003_age_graph.down.sql
 │   ├── 004_multi_model_embeddings.up.sql
-│   └── 004_multi_model_embeddings.down.sql
+│   ├── 004_multi_model_embeddings.down.sql
+│   ├── 005_skills.up.sql
+│   └── 005_skills.down.sql
 ├── config.example.yaml
 ├── docker-compose.yml
 ├── Makefile
@@ -1806,6 +2130,8 @@ All extensions are standard PostgreSQL contrib modules or well-established third
 | **`pg_cron`** | Third-party | In-database cron scheduler. Runs TTL expiry (every 5 min), importance decay (nightly), low-value memory pruning (weekly), and pg_partman maintenance (hourly) as background SQL jobs. Decouples housekeeping from application server uptime. |
 | **`pg_partman`** | Third-party | Automated time-range partition management for the `events` table (monthly partitions). Pre-creates upcoming partitions, optionally detaches old ones for archival. Keeps query plans and vacuum efficient as the audit log grows. |
 
+> **Note on Apache AGE:** listed in the Knowledge Graph section rather than here; it is an optional overlay, not a baseline dependency.
+
 ### Not included and why
 
 | Extension | Reason excluded |
@@ -2005,3 +2331,6 @@ migrations/
 | **Web UI** | Visual knowledge browser: collection view, entity graph, promotion review queue, per-team knowledge health metrics (stale artifacts, low-endorsement artifacts). |
 | **Knowledge staleness detection** | ✅ Resolved — three signals: source_modified (hook-triggered), contradiction_detected (weekly LLM job with negation-embedding pre-filter), low_access_age (monthly pg_cron). `staleness_flags` table; annotated in recall/context responses; review queue at `GET /v1/knowledge/stale`. |
 | **Cross-company knowledge sharing** | Explicit opt-in mechanism for sharing `company`-visibility artifacts with partner companies (e.g., shared API contracts between API provider and consumer). |
+| **Skill outcome tracking** | v2: a `skill_invocations` table with an outcome/rating column so teams can see which skills consistently produce good results vs which get abandoned mid-run. The `events` table covers invocation counts for v1. |
+| **Skill testing** | v2: a `skill_test_cases` table with input/expected-output pairs; a CI-style job that re-runs tests when a skill is updated and blocks publishing if tests regress. |
+| **Public skill marketplace** | Opt-in registry of `company`-visibility skills that organisations choose to share publicly (e.g. open-source project contributors sharing their `/triage-issue` skill). Requires a federation/trust model. |
