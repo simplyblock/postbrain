@@ -572,6 +572,598 @@ func scanSkillScoreRows(rows pgx.Rows) ([]SkillScore, error) {
 	return results, rows.Err()
 }
 
+// ── Memories (minimal — promote path only) ────────────────────────────────────
+
+// GetMemory retrieves a memory by ID. Returns nil, nil if not found.
+// TODO(task-memory): expand scan fields when the full memory package is implemented.
+func GetMemory(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*Memory, error) {
+	var m Memory
+	err := pool.QueryRow(ctx,
+		`SELECT id, memory_type, scope_id, author_id, content, summary,
+		        promotion_status, promoted_to, source_ref, created_at, updated_at
+		 FROM memories WHERE id = $1`,
+		id,
+	).Scan(
+		&m.ID, &m.MemoryType, &m.ScopeID, &m.AuthorID, &m.Content, &m.Summary,
+		&m.PromotionStatus, &m.PromotedTo, &m.SourceRef, &m.CreatedAt, &m.UpdatedAt,
+	)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("db: get memory: %w", err)
+	}
+	return &m, nil
+}
+
+// ── Knowledge artifacts ───────────────────────────────────────────────────────
+
+// artifactColumns is the canonical SELECT column list for knowledge_artifacts.
+const artifactColumns = `id, knowledge_type, owner_scope_id, author_id,
+	visibility, status, published_at, deprecated_at, review_required,
+	title, content, summary, embedding::text, embedding_model_id, meta,
+	endorsement_count, access_count, last_accessed,
+	version, previous_version, source_memory_id, source_ref,
+	created_at, updated_at`
+
+// scanArtifact scans one knowledge_artifacts row into a KnowledgeArtifact.
+// The embedding column is returned as its text representation and is not parsed.
+func scanArtifact(row pgx.Row) (*KnowledgeArtifact, error) {
+	var a KnowledgeArtifact
+	var embeddingText *string
+	err := row.Scan(
+		&a.ID, &a.KnowledgeType, &a.OwnerScopeID, &a.AuthorID,
+		&a.Visibility, &a.Status, &a.PublishedAt, &a.DeprecatedAt, &a.ReviewRequired,
+		&a.Title, &a.Content, &a.Summary, &embeddingText, &a.EmbeddingModelID, &a.Meta,
+		&a.EndorsementCount, &a.AccessCount, &a.LastAccessed,
+		&a.Version, &a.PreviousVersion, &a.SourceMemoryID, &a.SourceRef,
+		&a.CreatedAt, &a.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &a, nil
+}
+
+// scanArtifactRows scans multiple knowledge_artifacts rows.
+func scanArtifactRows(rows pgx.Rows) ([]*KnowledgeArtifact, error) {
+	var results []*KnowledgeArtifact
+	for rows.Next() {
+		var a KnowledgeArtifact
+		var embeddingText *string
+		if err := rows.Scan(
+			&a.ID, &a.KnowledgeType, &a.OwnerScopeID, &a.AuthorID,
+			&a.Visibility, &a.Status, &a.PublishedAt, &a.DeprecatedAt, &a.ReviewRequired,
+			&a.Title, &a.Content, &a.Summary, &embeddingText, &a.EmbeddingModelID, &a.Meta,
+			&a.EndorsementCount, &a.AccessCount, &a.LastAccessed,
+			&a.Version, &a.PreviousVersion, &a.SourceMemoryID, &a.SourceRef,
+			&a.CreatedAt, &a.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		results = append(results, &a)
+	}
+	return results, rows.Err()
+}
+
+// CreateArtifact inserts a new knowledge artifact and returns the created record.
+func CreateArtifact(ctx context.Context, pool *pgxpool.Pool, a *KnowledgeArtifact) (*KnowledgeArtifact, error) {
+	var embedding interface{}
+	if len(a.Embedding) > 0 {
+		embedding = float32SliceToVector(a.Embedding)
+	}
+	if a.Meta == nil {
+		a.Meta = []byte("{}")
+	}
+	row := pool.QueryRow(ctx,
+		`INSERT INTO knowledge_artifacts
+		 (knowledge_type, owner_scope_id, author_id, visibility, status,
+		  published_at, deprecated_at, review_required,
+		  title, content, summary, embedding, embedding_model_id, meta,
+		  version, previous_version, source_memory_id, source_ref)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::vector,$13,$14,$15,$16,$17,$18)
+		 RETURNING `+artifactColumns,
+		a.KnowledgeType, a.OwnerScopeID, a.AuthorID, a.Visibility, a.Status,
+		a.PublishedAt, a.DeprecatedAt, a.ReviewRequired,
+		a.Title, a.Content, a.Summary, embedding, a.EmbeddingModelID, a.Meta,
+		a.Version, a.PreviousVersion, a.SourceMemoryID, a.SourceRef,
+	)
+	result, err := scanArtifact(row)
+	if err != nil {
+		return nil, fmt.Errorf("db: create artifact: %w", err)
+	}
+	return result, nil
+}
+
+// GetArtifact retrieves a knowledge artifact by ID. Returns nil, nil if not found.
+func GetArtifact(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*KnowledgeArtifact, error) {
+	row := pool.QueryRow(ctx,
+		`SELECT `+artifactColumns+` FROM knowledge_artifacts WHERE id = $1`, id,
+	)
+	a, err := scanArtifact(row)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("db: get artifact: %w", err)
+	}
+	return a, nil
+}
+
+// UpdateArtifact updates title, content, summary, embedding, and bumps the version.
+func UpdateArtifact(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, title, content string, summary *string, embedding []float32, modelID *uuid.UUID) (*KnowledgeArtifact, error) {
+	var embeddingVal interface{}
+	if len(embedding) > 0 {
+		embeddingVal = float32SliceToVector(embedding)
+	}
+	row := pool.QueryRow(ctx,
+		`UPDATE knowledge_artifacts
+		 SET title=$2, content=$3, summary=$4, embedding=$5::vector,
+		     embedding_model_id=$6, version=version+1, updated_at=now()
+		 WHERE id=$1
+		 RETURNING `+artifactColumns,
+		id, title, content, summary, embeddingVal, modelID,
+	)
+	a, err := scanArtifact(row)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("db: update artifact: %w", err)
+	}
+	return a, nil
+}
+
+// UpdateArtifactStatus updates status, published_at, and deprecated_at for an artifact.
+func UpdateArtifactStatus(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, status string, publishedAt, deprecatedAt *time.Time) error {
+	_, err := pool.Exec(ctx,
+		`UPDATE knowledge_artifacts
+		 SET status=$2, published_at=$3, deprecated_at=$4, updated_at=now()
+		 WHERE id=$1`,
+		id, status, publishedAt, deprecatedAt,
+	)
+	return err
+}
+
+// IncrementArtifactEndorsementCount increments the denormalized endorsement_count by 1.
+func IncrementArtifactEndorsementCount(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error {
+	_, err := pool.Exec(ctx,
+		`UPDATE knowledge_artifacts SET endorsement_count=endorsement_count+1, updated_at=now() WHERE id=$1`,
+		id,
+	)
+	return err
+}
+
+// IncrementArtifactAccess increments access_count and sets last_accessed = now().
+func IncrementArtifactAccess(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error {
+	_, err := pool.Exec(ctx,
+		`UPDATE knowledge_artifacts SET access_count=access_count+1, last_accessed=now(), updated_at=now() WHERE id=$1`,
+		id,
+	)
+	return err
+}
+
+// SnapshotArtifactVersion inserts a knowledge_history row.
+func SnapshotArtifactVersion(ctx context.Context, pool *pgxpool.Pool, h *KnowledgeHistory) error {
+	_, err := pool.Exec(ctx,
+		`INSERT INTO knowledge_history (artifact_id, version, content, summary, changed_by, change_note)
+		 VALUES ($1,$2,$3,$4,$5,$6)`,
+		h.ArtifactID, h.Version, h.Content, h.Summary, h.ChangedBy, h.ChangeNote,
+	)
+	return err
+}
+
+// ── Endorsements ─────────────────────────────────────────────────────────────
+
+// CreateEndorsement inserts a knowledge_endorsements row and returns the created record.
+func CreateEndorsement(ctx context.Context, pool *pgxpool.Pool, artifactID, endorserID uuid.UUID, note *string) (*KnowledgeEndorsement, error) {
+	var e KnowledgeEndorsement
+	err := pool.QueryRow(ctx,
+		`INSERT INTO knowledge_endorsements (artifact_id, endorser_id, note)
+		 VALUES ($1,$2,$3)
+		 RETURNING id, artifact_id, endorser_id, note, created_at`,
+		artifactID, endorserID, note,
+	).Scan(&e.ID, &e.ArtifactID, &e.EndorserID, &e.Note, &e.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &e, nil
+}
+
+// GetEndorsementByEndorser finds an endorsement by (artifact, endorser) pair.
+// Returns nil, nil if not found.
+func GetEndorsementByEndorser(ctx context.Context, pool *pgxpool.Pool, artifactID, endorserID uuid.UUID) (*KnowledgeEndorsement, error) {
+	var e KnowledgeEndorsement
+	err := pool.QueryRow(ctx,
+		`SELECT id, artifact_id, endorser_id, note, created_at
+		 FROM knowledge_endorsements WHERE artifact_id=$1 AND endorser_id=$2`,
+		artifactID, endorserID,
+	).Scan(&e.ID, &e.ArtifactID, &e.EndorserID, &e.Note, &e.CreatedAt)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &e, nil
+}
+
+// ── Visibility / listing ──────────────────────────────────────────────────────
+
+// ListVisibleArtifacts returns published artifacts visible to the given scope IDs.
+// For MVP: filters by owner_scope_id = ANY(callerScopeIDs) OR visibility = 'company'.
+// Full ltree visibility query goes in knowledge/visibility.go.
+func ListVisibleArtifacts(ctx context.Context, pool *pgxpool.Pool, callerScopeIDs []uuid.UUID, limit, offset int) ([]*KnowledgeArtifact, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT `+artifactColumns+`
+		 FROM knowledge_artifacts
+		 WHERE status = 'published'
+		   AND (owner_scope_id = ANY($1) OR visibility = 'company')
+		 ORDER BY created_at DESC
+		 LIMIT $2 OFFSET $3`,
+		callerScopeIDs, limit, offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanArtifactRows(rows)
+}
+
+// ── Retrieval ─────────────────────────────────────────────────────────────────
+
+// ArtifactScore pairs a knowledge artifact with its retrieval scores.
+type ArtifactScore struct {
+	Artifact  *KnowledgeArtifact
+	VecScore  float64
+	BM25Score float64
+}
+
+// RecallArtifactsByVector retrieves published artifacts ordered by vector similarity.
+func RecallArtifactsByVector(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, queryVec []float32, limit int) ([]ArtifactScore, error) {
+	vecStr := float32SliceToVector(queryVec)
+	rows, err := pool.Query(ctx,
+		`SELECT `+artifactColumns+`, 1 - (embedding <=> $3::vector) AS vec_score
+		 FROM knowledge_artifacts ka
+		 WHERE ka.status = 'published' AND ka.owner_scope_id = ANY($1)
+		 ORDER BY ka.embedding <=> $3::vector
+		 LIMIT $2`,
+		scopeIDs, limit, vecStr,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanArtifactScoreRows(rows)
+}
+
+// RecallArtifactsByFTS retrieves published artifacts via full-text search.
+func RecallArtifactsByFTS(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, query string, limit int) ([]ArtifactScore, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT `+artifactColumns+`,
+		        ts_rank_cd(to_tsvector('postbrain_fts', content),
+		                   plainto_tsquery('postbrain_fts', $3)) AS bm25_score
+		 FROM knowledge_artifacts
+		 WHERE status = 'published'
+		   AND owner_scope_id = ANY($1)
+		   AND to_tsvector('postbrain_fts', content) @@ plainto_tsquery('postbrain_fts', $3)
+		 ORDER BY bm25_score DESC
+		 LIMIT $2`,
+		scopeIDs, limit, query,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanArtifactFTSRows(rows)
+}
+
+// scanArtifactScoreRows scans rows that include a trailing vec_score column.
+func scanArtifactScoreRows(rows pgx.Rows) ([]ArtifactScore, error) {
+	var results []ArtifactScore
+	for rows.Next() {
+		var a KnowledgeArtifact
+		var embeddingText *string
+		var vecScore float64
+		if err := rows.Scan(
+			&a.ID, &a.KnowledgeType, &a.OwnerScopeID, &a.AuthorID,
+			&a.Visibility, &a.Status, &a.PublishedAt, &a.DeprecatedAt, &a.ReviewRequired,
+			&a.Title, &a.Content, &a.Summary, &embeddingText, &a.EmbeddingModelID, &a.Meta,
+			&a.EndorsementCount, &a.AccessCount, &a.LastAccessed,
+			&a.Version, &a.PreviousVersion, &a.SourceMemoryID, &a.SourceRef,
+			&a.CreatedAt, &a.UpdatedAt,
+			&vecScore,
+		); err != nil {
+			return nil, err
+		}
+		results = append(results, ArtifactScore{Artifact: &a, VecScore: vecScore})
+	}
+	return results, rows.Err()
+}
+
+// scanArtifactFTSRows scans rows that include a trailing bm25_score column.
+func scanArtifactFTSRows(rows pgx.Rows) ([]ArtifactScore, error) {
+	var results []ArtifactScore
+	for rows.Next() {
+		var a KnowledgeArtifact
+		var embeddingText *string
+		var bm25Score float64
+		if err := rows.Scan(
+			&a.ID, &a.KnowledgeType, &a.OwnerScopeID, &a.AuthorID,
+			&a.Visibility, &a.Status, &a.PublishedAt, &a.DeprecatedAt, &a.ReviewRequired,
+			&a.Title, &a.Content, &a.Summary, &embeddingText, &a.EmbeddingModelID, &a.Meta,
+			&a.EndorsementCount, &a.AccessCount, &a.LastAccessed,
+			&a.Version, &a.PreviousVersion, &a.SourceMemoryID, &a.SourceRef,
+			&a.CreatedAt, &a.UpdatedAt,
+			&bm25Score,
+		); err != nil {
+			return nil, err
+		}
+		results = append(results, ArtifactScore{Artifact: &a, BM25Score: bm25Score})
+	}
+	return results, rows.Err()
+}
+
+// ── Collections ───────────────────────────────────────────────────────────────
+
+const collectionColumns = `id, scope_id, owner_id, slug, name, description, visibility, meta, created_at, updated_at`
+
+func scanCollection(row pgx.Row) (*KnowledgeCollection, error) {
+	var c KnowledgeCollection
+	err := row.Scan(
+		&c.ID, &c.ScopeID, &c.OwnerID, &c.Slug, &c.Name, &c.Description,
+		&c.Visibility, &c.Meta, &c.CreatedAt, &c.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+// CreateCollection inserts a new knowledge collection and returns the created record.
+func CreateCollection(ctx context.Context, pool *pgxpool.Pool, c *KnowledgeCollection) (*KnowledgeCollection, error) {
+	if c.Meta == nil {
+		c.Meta = []byte("{}")
+	}
+	row := pool.QueryRow(ctx,
+		`INSERT INTO knowledge_collections (scope_id, owner_id, slug, name, description, visibility, meta)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7)
+		 RETURNING `+collectionColumns,
+		c.ScopeID, c.OwnerID, c.Slug, c.Name, c.Description, c.Visibility, c.Meta,
+	)
+	result, err := scanCollection(row)
+	if err != nil {
+		return nil, fmt.Errorf("db: create collection: %w", err)
+	}
+	return result, nil
+}
+
+// GetCollection retrieves a knowledge collection by ID. Returns nil, nil if not found.
+func GetCollection(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*KnowledgeCollection, error) {
+	row := pool.QueryRow(ctx,
+		`SELECT `+collectionColumns+` FROM knowledge_collections WHERE id=$1`, id,
+	)
+	c, err := scanCollection(row)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("db: get collection: %w", err)
+	}
+	return c, nil
+}
+
+// GetCollectionBySlug retrieves a knowledge collection by scope + slug. Returns nil, nil if not found.
+func GetCollectionBySlug(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, slug string) (*KnowledgeCollection, error) {
+	row := pool.QueryRow(ctx,
+		`SELECT `+collectionColumns+` FROM knowledge_collections WHERE scope_id=$1 AND slug=$2`,
+		scopeID, slug,
+	)
+	c, err := scanCollection(row)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("db: get collection by slug: %w", err)
+	}
+	return c, nil
+}
+
+// ListCollections returns all collections for a given scope.
+func ListCollections(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID) ([]*KnowledgeCollection, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT `+collectionColumns+` FROM knowledge_collections WHERE scope_id=$1 ORDER BY name`,
+		scopeID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var cs []*KnowledgeCollection
+	for rows.Next() {
+		var c KnowledgeCollection
+		if err := rows.Scan(
+			&c.ID, &c.ScopeID, &c.OwnerID, &c.Slug, &c.Name, &c.Description,
+			&c.Visibility, &c.Meta, &c.CreatedAt, &c.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		cs = append(cs, &c)
+	}
+	return cs, rows.Err()
+}
+
+// AddCollectionItem inserts a knowledge_collection_items row.
+func AddCollectionItem(ctx context.Context, pool *pgxpool.Pool, collectionID, artifactID, addedBy uuid.UUID) error {
+	_, err := pool.Exec(ctx,
+		`INSERT INTO knowledge_collection_items (collection_id, artifact_id, added_by)
+		 VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+		collectionID, artifactID, addedBy,
+	)
+	return err
+}
+
+// RemoveCollectionItem deletes a knowledge_collection_items row.
+func RemoveCollectionItem(ctx context.Context, pool *pgxpool.Pool, collectionID, artifactID uuid.UUID) error {
+	_, err := pool.Exec(ctx,
+		`DELETE FROM knowledge_collection_items WHERE collection_id=$1 AND artifact_id=$2`,
+		collectionID, artifactID,
+	)
+	return err
+}
+
+// ListCollectionItems returns the artifacts in a collection, ordered by position.
+func ListCollectionItems(ctx context.Context, pool *pgxpool.Pool, collectionID uuid.UUID) ([]*KnowledgeArtifact, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT `+artifactColumns+`
+		 FROM knowledge_artifacts ka
+		 JOIN knowledge_collection_items kci ON kci.artifact_id = ka.id
+		 WHERE kci.collection_id = $1
+		 ORDER BY kci.position, kci.added_at`,
+		collectionID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanArtifactRows(rows)
+}
+
+// ── Staleness flags ───────────────────────────────────────────────────────────
+
+// InsertStalenessFlag inserts a staleness_flags row and returns the created record.
+func InsertStalenessFlag(ctx context.Context, pool *pgxpool.Pool, f *StalenessFlag) (*StalenessFlag, error) {
+	if f.Evidence == nil {
+		f.Evidence = []byte("{}")
+	}
+	var result StalenessFlag
+	err := pool.QueryRow(ctx,
+		`INSERT INTO staleness_flags (artifact_id, signal, confidence, evidence, status)
+		 VALUES ($1,$2,$3,$4,COALESCE($5,'open'))
+		 RETURNING id, artifact_id, signal, confidence, evidence, status, flagged_at,
+		           reviewed_by, reviewed_at, review_note`,
+		f.ArtifactID, f.Signal, f.Confidence, f.Evidence, f.Status,
+	).Scan(
+		&result.ID, &result.ArtifactID, &result.Signal, &result.Confidence,
+		&result.Evidence, &result.Status, &result.FlaggedAt,
+		&result.ReviewedBy, &result.ReviewedAt, &result.ReviewNote,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("db: insert staleness flag: %w", err)
+	}
+	return &result, nil
+}
+
+// HasOpenStalenessFlag reports whether an artifact has an open staleness flag for the given signal.
+func HasOpenStalenessFlag(ctx context.Context, pool *pgxpool.Pool, artifactID uuid.UUID, signal string) (bool, error) {
+	var exists bool
+	err := pool.QueryRow(ctx,
+		`SELECT EXISTS(
+		     SELECT 1 FROM staleness_flags
+		     WHERE artifact_id=$1 AND signal=$2 AND status='open'
+		 )`,
+		artifactID, signal,
+	).Scan(&exists)
+	return exists, err
+}
+
+// UpdateStalenessFlag updates the status and review fields of a staleness flag.
+func UpdateStalenessFlag(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, status string, reviewedBy *uuid.UUID, note *string) error {
+	_, err := pool.Exec(ctx,
+		`UPDATE staleness_flags
+		 SET status=$2, reviewed_by=$3, review_note=$4, reviewed_at=now()
+		 WHERE id=$1`,
+		id, status, reviewedBy, note,
+	)
+	return err
+}
+
+// ── Promotion requests ────────────────────────────────────────────────────────
+
+const promotionColumns = `id, memory_id, requested_by, target_scope_id, target_visibility,
+	proposed_title, proposed_collection_id, status, reviewer_id, review_note,
+	reviewed_at, result_artifact_id, created_at`
+
+func scanPromotion(row pgx.Row) (*PromotionRequest, error) {
+	var p PromotionRequest
+	err := row.Scan(
+		&p.ID, &p.MemoryID, &p.RequestedBy, &p.TargetScopeID, &p.TargetVisibility,
+		&p.ProposedTitle, &p.ProposedCollectionID, &p.Status, &p.ReviewerID, &p.ReviewNote,
+		&p.ReviewedAt, &p.ResultArtifactID, &p.CreatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// CreatePromotionRequest inserts a new promotion_requests row and returns it.
+func CreatePromotionRequest(ctx context.Context, pool *pgxpool.Pool, req *PromotionRequest) (*PromotionRequest, error) {
+	row := pool.QueryRow(ctx,
+		`INSERT INTO promotion_requests
+		 (memory_id, requested_by, target_scope_id, target_visibility,
+		  proposed_title, proposed_collection_id)
+		 VALUES ($1,$2,$3,$4,$5,$6)
+		 RETURNING `+promotionColumns,
+		req.MemoryID, req.RequestedBy, req.TargetScopeID, req.TargetVisibility,
+		req.ProposedTitle, req.ProposedCollectionID,
+	)
+	result, err := scanPromotion(row)
+	if err != nil {
+		return nil, fmt.Errorf("db: create promotion request: %w", err)
+	}
+	return result, nil
+}
+
+// GetPromotionRequest retrieves a promotion request by ID. Returns nil, nil if not found.
+func GetPromotionRequest(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*PromotionRequest, error) {
+	row := pool.QueryRow(ctx,
+		`SELECT `+promotionColumns+` FROM promotion_requests WHERE id=$1`, id,
+	)
+	p, err := scanPromotion(row)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("db: get promotion request: %w", err)
+	}
+	return p, nil
+}
+
+// ListPendingPromotions returns pending promotion requests for a target scope.
+func ListPendingPromotions(ctx context.Context, pool *pgxpool.Pool, targetScopeID uuid.UUID) ([]*PromotionRequest, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT `+promotionColumns+`
+		 FROM promotion_requests
+		 WHERE status='pending' AND target_scope_id=$1
+		 ORDER BY created_at`,
+		targetScopeID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []*PromotionRequest
+	for rows.Next() {
+		var p PromotionRequest
+		if err := rows.Scan(
+			&p.ID, &p.MemoryID, &p.RequestedBy, &p.TargetScopeID, &p.TargetVisibility,
+			&p.ProposedTitle, &p.ProposedCollectionID, &p.Status, &p.ReviewerID, &p.ReviewNote,
+			&p.ReviewedAt, &p.ResultArtifactID, &p.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		results = append(results, &p)
+	}
+	return results, rows.Err()
+}
+
+// ExportFloat32SliceToVector formats a []float32 as a pg_vector literal string.
+// It is exported so other packages can format vector literals for raw SQL queries.
+func ExportFloat32SliceToVector(v []float32) string { return float32SliceToVector(v) }
+
 // float32SliceToVector formats a []float32 as a pg_vector literal string, e.g. "[1,2,3]".
 func float32SliceToVector(v []float32) string {
 	if len(v) == 0 {

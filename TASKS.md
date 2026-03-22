@@ -83,8 +83,8 @@
 - [x] `migrations/000005_age_graph.up.sql` — AGE graph setup wrapped in DO/EXCEPTION (no-op if absent)
 - [x] `migrations/000005_age_graph.down.sql`
 
-- [x] `models.go` — shared DB model types: `Principal`, `Membership`, `Scope`, `Token`, `Skill`, `SkillEndorsement`, `SkillHistory`, `SkillParameter`
-- [x] `queries.go` — thin pgx query layer: `CreatePrincipal`, `GetPrincipalByID`, `GetPrincipalBySlug`, `CreateMembership`, `DeleteMembership`, `GetMemberships`, `GetAllParentIDs`, `CreateScope`, `GetScopeByID`, `GetScopeByExternalID`, `GetAncestorScopeIDs`, `CreateToken`, `LookupToken`, `RevokeToken`, `UpdateTokenLastUsed`; skill queries: `CreateSkill`, `GetSkill`, `GetSkillBySlug`, `UpdateSkillContent`, `UpdateSkillStatus`, `SnapshotSkillVersion`, `CreateSkillEndorsement`, `GetSkillEndorsementByEndorser`, `CountSkillEndorsements`, `RecallSkillsByVector`, `RecallSkillsByFTS`, `ListPublishedSkillsForAgent`
+- [x] `models.go` — shared DB model types: `Memory`, `Principal`, `Membership`, `Scope`, `Token`, `Skill`, `SkillEndorsement`, `SkillHistory`, `SkillParameter`, `KnowledgeArtifact`, `KnowledgeEndorsement`, `KnowledgeHistory`, `KnowledgeCollection`, `KnowledgeCollectionItem`, `StalenessFlag`, `PromotionRequest`
+- [x] `queries.go` — thin pgx query layer: `CreatePrincipal`, `GetPrincipalByID`, `GetPrincipalBySlug`, `CreateMembership`, `DeleteMembership`, `GetMemberships`, `GetAllParentIDs`, `CreateScope`, `GetScopeByID`, `GetScopeByExternalID`, `GetAncestorScopeIDs`, `CreateToken`, `LookupToken`, `RevokeToken`, `UpdateTokenLastUsed`; skill queries: `CreateSkill`, `GetSkill`, `GetSkillBySlug`, `UpdateSkillContent`, `UpdateSkillStatus`, `SnapshotSkillVersion`, `CreateSkillEndorsement`, `GetSkillEndorsementByEndorser`, `CountSkillEndorsements`, `RecallSkillsByVector`, `RecallSkillsByFTS`, `ListPublishedSkillsForAgent`; knowledge queries: `GetMemory`, `CreateArtifact`, `GetArtifact`, `UpdateArtifact`, `UpdateArtifactStatus`, `IncrementArtifactEndorsementCount`, `IncrementArtifactAccess`, `SnapshotArtifactVersion`, `CreateEndorsement`, `GetEndorsementByEndorser`, `ListVisibleArtifacts`, `RecallArtifactsByVector`, `RecallArtifactsByFTS`, `CreateCollection`, `GetCollection`, `GetCollectionBySlug`, `ListCollections`, `AddCollectionItem`, `RemoveCollectionItem`, `ListCollectionItems`, `InsertStalenessFlag`, `HasOpenStalenessFlag`, `UpdateStalenessFlag`, `CreatePromotionRequest`, `GetPromotionRequest`, `ListPendingPromotions`
 
 - [ ] `db/queries/memories.sql` — sqlc queries:
   - `CreateMemory`, `GetMemory`, `UpdateMemory`, `SoftDeleteMemory`, `HardDeleteMemory`
@@ -256,73 +256,31 @@
 
 ### `internal/knowledge` — Knowledge Layer
 
-- [ ] `store.go`:
-  - `Create(ctx, input) (*Artifact, error)`:
+- [x] `store.go`:
+  - `Create(ctx, input) (*KnowledgeArtifact, error)`:
     - Embed content with text model
     - Set `status = "draft"` unless `auto_review = true` → set `status = "in_review"`
+    - Default `ReviewRequired = 1` if 0
     - Insert row; return artifact
-  - `Update(ctx, id, content, title, summary) (*Artifact, error)`:
+  - `Update(ctx, id, callerID, title, content, summary) (*KnowledgeArtifact, error)`:
     - Only allowed when `status IN ("draft", "in_review")`; return `ErrNotEditable` for published/deprecated
-    - Re-embed on content change
-    - If `status = "published"`: snapshot to `knowledge_history` first, then update and increment `version`
-  - `GetByID(ctx, id)`, `Search(ctx, query, scopeIDs, visibility)`
-
-- [ ] `recall.go`:
-  - Same hybrid formula as memory recall
-  - Filters: `status = "published"`, visibility resolved via ltree query (from DESIGN.md)
-  - Apply `+0.1` importance boost over raw formula (institutional trust boost)
-  - Append `{layer:"knowledge"}` to each result
-
-- [ ] `visibility.go`:
-  - `ResolveVisibleArtifacts(ctx, principalID, scopeID) ([]uuid.UUID, error)`:
-    - Use ltree visibility query from DESIGN.md
-    - Include artifacts shared via `sharing_grants` to any of the principal's scopes
-    - Exclude `status != "published"` from read results (draft/in_review are private to author + scope admins)
-
-- [ ] `lifecycle.go` — enforce the state machine from DESIGN.md exactly:
-  - `SubmitForReview(ctx, artifactID, callerID)`:
-    - Allowed from: `draft` only
-    - Who: author OR scope admin
-    - Action: set `status = "in_review"`
-  - `RetractTodraft(ctx, artifactID, callerID)`:
-    - Allowed from: `in_review` only
-    - Who: author OR scope admin
-    - Action: set `status = "draft"`
-  - `Endorse(ctx, artifactID, endorserID, note)`:
-    - Reject if `endorserID == artifact.author_id` → return `ErrSelfEndorsement`
-    - Reject if artifact not `in_review` → return `ErrNotReviewable`
-    - Insert `knowledge_endorsements` row (unique constraint handles duplicates)
-    - Increment `endorsement_count` on artifact
-    - If `endorsement_count >= review_required`: call `AutoPublish`
-    - Return `{endorsement_count, status, auto_published}`
-  - `AutoPublish(ctx, artifactID)` (internal):
-    - Set `status = "published"`, `published_at = now()`
-    - Snapshot to `knowledge_history`
-  - `Deprecate(ctx, artifactID, callerID)`:
-    - Who: scope admin only → verify via `principals.IsScopeAdmin`
-    - Set `status = "deprecated"`, `deprecated_at = now()`
-  - `Republish(ctx, artifactID, callerID)`:
-    - Allowed from: `deprecated` only
-    - Who: scope admin only
-    - Set `status = "published"`, clear `deprecated_at`
-  - `EmergencyRollback(ctx, artifactID, callerID)`:
-    - Who: scope admin only
-    - Set `status = "draft"`, clear `published_at` and `deprecated_at`
-
-- [ ] `collections.go`:
-  - `CreateCollection(ctx, scopeID, ownerID, slug, name, visibility) (*Collection, error)`
-  - `GetCollection(ctx, id)`, `GetCollectionBySlug(ctx, scopeID, slug)`
-  - `ListCollections(ctx, scopeID, principalID)`
-  - `AddItem(ctx, collectionID, artifactID, addedBy)` — appends at max(position)+1
-  - `RemoveItem(ctx, collectionID, artifactID)`
-
-- [ ] `promote.go` — 5-step atomic promotion transaction:
-  1. Validate: memory `promotion_status != "promoted"` and `!= "nominated"` (idempotency guard)
-  2. Create `knowledge_artifacts` row with `status = "draft"`, `source_memory_id = memory.id`
-  3. Set `promotion_requests.result_artifact_id`, `status = "approved"`
-  4. Set `memories.promoted_to = artifact.id`, `promotion_status = "promoted"`
-  5. Commit — all in one `pgx.Tx`
-  - `RejectPromotion(ctx, requestID, reviewerID, note)`: set `status = "rejected"`, record reviewer/note
+    - Re-embed on content change; snapshot history for in_review
+  - `GetByID(ctx, id)` — thin wrapper
+  - Sentinel errors: `ErrNotEditable`, `ErrNotFound`
+- [x] `lifecycle.go` — state machine from DESIGN.md:
+  - `SubmitForReview`, `RetractToDraft`, `Endorse` (with auto-publish + idempotent duplicate handling), `Deprecate`, `Republish`, `EmergencyRollback`
+  - Uses internal `lifecycleDB` interface for testability
+  - Sentinel errors: `ErrSelfEndorsement`, `ErrNotReviewable`, `ErrForbidden`, `ErrInvalidTransition`
+- [x] `visibility.go`:
+  - `ResolveVisibleScopeIDs(ctx, pool, principalID, requestedScopeID) ([]uuid.UUID, error)`:
+    - Walks ltree ancestor chain + adds personal scope
+    - `deduplicateScopeIDs` helper (unit-tested)
+- [x] `collections.go`:
+  - `CollectionStore`: `Create`, `GetByID`, `GetBySlug`, `List`, `AddItem`, `RemoveItem`, `ListItems`
+  - `Create` validates visibility against allowed set
+- [x] `promote.go`:
+  - `Promoter`: `CreateRequest` (with `ErrAlreadyPromoted` guard + mark nominated), `Approve` (5-step serializable tx), `Reject`
+  - `PromoteInput` struct
 
 ### `internal/skills` — Skills Registry
 
