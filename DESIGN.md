@@ -2987,10 +2987,154 @@ migrations/
 | **Agent-specific embedding models** | ✅ Resolved — `embedding_models` registry with separate text/code active models; `embedding_code` column on memories; independent `reembed` jobs per content type. |
 | **Streaming recall** | Server-sent events for streaming large recall result sets into context windows incrementally. |
 | **Review notifications** | Email / Slack / webhook notifications when a promotion request is pending review. Currently just polled via REST. |
-| **CLI / TUI** | `postbrain ls`, `postbrain search`, `postbrain knowledge browse` for human inspection without the web UI. |
-| **Web UI** | Visual knowledge browser: collection view, entity graph, promotion review queue, per-team knowledge health metrics (stale artifacts, low-endorsement artifacts). |
+| **CLI / TUI** | ✅ Resolved — see TUI section below. |
+| **Web UI** | ✅ Resolved — see Web UI section below. |
 | **Knowledge staleness detection** | ✅ Resolved — three signals: source_modified (hook-triggered), contradiction_detected (weekly LLM job with negation-embedding pre-filter), low_access_age (monthly pg_cron). `staleness_flags` table; annotated in recall/context responses; review queue at `GET /v1/knowledge/stale`. |
 | **Cross-company knowledge sharing** | Explicit opt-in mechanism for sharing `company`-visibility artifacts with partner companies (e.g., shared API contracts between API provider and consumer). |
 | **Skill outcome tracking** | v2: a `skill_invocations` table with an outcome/rating column so teams can see which skills consistently produce good results vs which get abandoned mid-run. The `events` table covers invocation counts for v1. |
 | **Skill testing** | v2: a `skill_test_cases` table with input/expected-output pairs; a CI-style job that re-runs tests when a skill is updated and blocks publishing if tests regress. |
 | **Public skill marketplace** | Opt-in registry of `company`-visibility skills that organisations choose to share publicly (e.g. open-source project contributors sharing their `/triage-issue` skill). Requires a federation/trust model. |
+
+---
+
+## Web UI
+
+The Web UI is a human-facing interface served by the existing Postbrain binary at `/ui`. It is intended for operators and developers who need to inspect, review, and manage the knowledge base without writing API calls.
+
+### Technology
+
+- **Rendering:** Go `html/template` + HTMX (loaded from CDN or embedded). No npm, no build step.
+- **Styling:** [Pico.css](https://picocss.com/) (classless, ~15 KB minified) embedded via `//go:embed`.
+- **Binary distribution:** All templates and static assets embedded via `//go:embed web/templates` and `//go:embed web/static`.
+- **Mount point:** `/ui` on the existing HTTP server.
+- **Authentication:** Accepts `Authorization: Bearer <token>` header (for API clients) or a `?token=` query parameter (for direct browser navigation). A login form at `/ui/login` sets the token in a session cookie for subsequent requests.
+
+### Package layout
+
+```
+web/
+├── templates/          # Go html/template files (*.html)
+│   ├── base.html       # shared layout: nav, header, footer
+│   ├── health.html
+│   ├── memories.html
+│   ├── knowledge.html
+│   ├── collections.html
+│   ├── promotions.html
+│   ├── staleness.html
+│   ├── graph.html
+│   ├── skills.html
+│   ├── principals.html
+│   └── metrics.html
+└── static/
+    ├── pico.min.css
+    └── htmx.min.js
+
+internal/ui/
+├── handler.go          # http.Handler for /ui; template rendering helpers
+├── auth.go             # session cookie validation; token-from-query-param
+└── handler_test.go     # unit tests for template rendering (no DB required)
+```
+
+### Pages
+
+| Page | Route | Description |
+|------|-------|-------------|
+| Overview | `GET /ui` | Server health, schema version, active memory count per scope, job status summary |
+| Memory Browser | `GET /ui/memories` | Search bar + scope selector; paginated results with type, importance, age; soft-delete button; HTMX infinite scroll |
+| Memory Detail | `GET /ui/memories/{id}` | Full content, metadata, entity links, promote button |
+| Knowledge Browser | `GET /ui/knowledge` | Filterable list (status, scope, visibility); inline endorse / deprecate actions |
+| Knowledge Detail | `GET /ui/knowledge/{id}` | Content, history timeline, endorsers, open staleness flags |
+| Collections | `GET /ui/collections` | Collection list; click-through to item list; add/remove item forms |
+| Promotion Queue | `GET /ui/promotions` | Pending promotion requests; approve / reject buttons |
+| Staleness Flags | `GET /ui/staleness` | Open flags grouped by artifact; dismiss (resolve) button |
+| Entity Graph | `GET /ui/graph` | D3.js force-directed graph of entities and relations; scope-filtered; node search |
+| Skills Registry | `GET /ui/skills` | Published skills; install button per agent type; inline invoke form with param inputs |
+| Principals & Scopes | `GET /ui/principals` | Scope hierarchy tree; membership table; add / remove member forms |
+| Metrics | `GET /ui/metrics` | Prometheus metric cards: tool p99, recall results by layer, job durations |
+| Login | `GET /ui/login` | Token input form; sets `pb_session` cookie; redirects to `/ui` |
+
+### HTMX interaction pattern
+
+Full-page navigations use standard `<a href>` links (no JavaScript required for basic browsing). Interactive elements (search, pagination, approve/reject, install) use HTMX `hx-get`/`hx-post` to swap partial fragments without full-page reloads. Each template has a `_partial` variant (e.g. `memories_rows.html`) returned when the request includes `HX-Request: true`.
+
+### Dependency on graph REST endpoint
+
+The entity graph page requires `GET /v1/entities` and `GET /v1/graph` — the `internal/api/rest/graph.go` handler that is currently deferred. The graph page must be implemented after `graph.go` is complete.
+
+### Authentication model
+
+The UI does not introduce new auth primitives. It reuses existing tokens from the `tokens` table. The `?token=` query param is accepted only on `/ui/login` (to avoid tokens appearing in server logs for other routes). After login, a short-lived session cookie (`pb_session`) holds the raw token. The `internal/ui/auth.go` middleware reads the cookie, hashes it, and calls `auth.TokenStore.Lookup` — the same path as the REST middleware.
+
+---
+
+## TUI (Terminal UI)
+
+The TUI is a keyboard-driven terminal interface for operators who prefer to stay in the terminal. It ships as a new binary (`postbrain-tui`) built from `cmd/postbrain-tui/`. It communicates exclusively through the existing REST API — no direct database access.
+
+### Technology
+
+- **Framework:** [`github.com/charmbracelet/bubbletea`](https://github.com/charmbracelet/bubbletea) — Elm-architecture terminal UI framework.
+- **Styling:** [`github.com/charmbracelet/lipgloss`](https://github.com/charmbracelet/lipgloss) — layout and colour primitives.
+- **Components:** [`github.com/charmbracelet/bubbles`](https://github.com/charmbracelet/bubbles) — text input, list, spinner, paginator, viewport.
+- **New dependencies** (approved): `bubbletea`, `lipgloss`, `bubbles` — all from the Charmbracelet suite, well-maintained, zero runtime dependencies beyond the Go standard library.
+
+### Package layout
+
+```
+cmd/postbrain-tui/
+└── main.go             # cobra root; --config, --url, --token flags
+
+internal/tui/
+├── client.go           # thin REST client (net/http); wraps all API calls
+├── model.go            # top-level bubbletea Model; screen stack; key dispatch
+├── screens/
+│   ├── scopes.go       # scope selector (entry screen)
+│   ├── memories.go     # memory list + detail
+│   ├── knowledge.go    # knowledge list + detail
+│   ├── promotions.go   # promotion queue
+│   ├── skills.go       # skill list + invoke form
+│   ├── graph.go        # ASCII entity/relation graph
+│   └── help.go         # keybinding reference
+└── tui_test.go         # unit tests for model transitions (no HTTP required)
+```
+
+### Screens and keybindings
+
+| Screen | Entry | Key actions |
+|--------|-------|-------------|
+| **Scope selector** | Startup | `↑↓` navigate tree, `Enter` select scope, `q` quit |
+| **Memory list** | After scope select | `/` search, `↑↓` navigate, `Enter` detail, `d` soft-delete, `D` hard-delete, `p` promote, `q` back |
+| **Memory detail** | `Enter` on memory | `q` back, `p` promote, `e` open in `$EDITOR` (read-only) |
+| **Knowledge list** | `k` from memory list | `/` search, `↑↓` navigate, `Enter` detail, `e` endorse, `dep` deprecate, `q` back |
+| **Knowledge detail** | `Enter` on artifact | History timeline pane, endorsers list, staleness flag indicator, `q` back |
+| **Promotion queue** | `P` from any list | `↑↓` navigate, `a` approve, `x` reject, `q` back |
+| **Skills list** | `s` from scope | `/` search, `i` install (prompt agent type), `inv` open invoke form, `q` back |
+| **Entity graph** | `g` from any list | ASCII force graph, `↑↓←→` pan, `/` search node, `Enter` show relations, `q` back |
+| **Help** | `?` from any screen | Full keybinding reference, `q` dismiss |
+
+### REST client
+
+`internal/tui/client.go` wraps `net/http` and exposes typed methods that mirror the REST API:
+
+```go
+type Client struct { baseURL, token string; http *http.Client }
+
+func (c *Client) RecallMemories(ctx, scopeID, query string, limit int) ([]*memory.Result, error)
+func (c *Client) GetKnowledge(ctx, id string) (*knowledge.Artifact, error)
+func (c *Client) ListPromotions(ctx string) ([]*db.PromotionRequest, error)
+func (c *Client) ApprovePromotion(ctx, id string) error
+// ... one method per REST endpoint used by the TUI
+```
+
+The client reads `--url` (default `http://localhost:7433`) and `--token` from flags or `POSTBRAIN_URL` / `POSTBRAIN_TOKEN` env vars — the same variables used by `postbrain-hook`.
+
+### ASCII entity graph
+
+When Apache AGE is unavailable (the common case), the graph screen falls back to the relational `entities` and `relations` tables via `GET /v1/entities` and `GET /v1/graph`. It renders a simple ASCII adjacency view using lipgloss borders:
+
+```
+[Go channels] ──IMPLEMENTS──▶ [concurrency primitive]
+              ──USED_IN──────▶ [postbrain/jobs/scheduler.go]
+```
+
+A D3-style force layout is not feasible in a terminal; the ASCII adjacency list is the target output.

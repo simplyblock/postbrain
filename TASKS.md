@@ -455,3 +455,100 @@ All tests follow TDD: test file written before implementation file.
   - `postbrain_recall_results_total{layer}` counter
 - [x] `log/slog` structured logging — `requestLoggerMiddleware` in `internal/api/rest/logging.go` injects `request_id` and `principal_id` into every /v1 request context; `LogFromContext` helper for handlers
 - [x] `/health` endpoint: `{"status":"ok","schema_version":N,"expected_version":M,"schema_dirty":false}` — returns 503 if dirty or version mismatch (`internal/api/rest/health.go` + `internal/db/schema_version.go`)
+
+---
+
+## Web UI Tasks
+
+Technology: Go `html/template` + HTMX + Pico.css, all embedded via `//go:embed`. Served at `/ui` from the existing binary. See DESIGN.md § Web UI for full specification.
+
+### Prerequisites
+
+- [ ] `internal/api/rest/graph.go` — `GET /v1/entities`, `GET /v1/graph`, `POST /v1/graph/query` (required by the entity graph page; implement before the graph page)
+
+### Infrastructure
+
+- [ ] `web/static/pico.min.css` — embed Pico.css v2 (classless theme)
+- [ ] `web/static/htmx.min.js` — embed HTMX v2
+- [ ] `web/templates/base.html` — shared layout: `<nav>`, `<main>`, `<footer>`; active-page highlighting; HTMX boosted links
+- [ ] `internal/ui/handler.go` — `NewUIHandler(pool, cfg)` returns `http.Handler`; `//go:embed web/templates` + `//go:embed web/static`; template rendering helpers (`renderPage`, `renderPartial`)
+- [ ] `internal/ui/auth.go` — session cookie middleware (`pb_session`); `?token=` query-param on `/ui/login` only; calls `auth.TokenStore.Lookup`; 401 → redirect to `/ui/login`
+- [ ] `internal/ui/handler_test.go` — unit tests: unauthenticated request redirects to login; login form sets cookie; template renders without panicking
+- [ ] `cmd/postbrain/main.go` — mount `ui.NewUIHandler` at `/ui` and `/ui/` in `runServe`
+
+### Pages
+
+- [ ] **Login** (`web/templates/login.html`) — token input form; POST to `/ui/login`; sets `pb_session` cookie; redirects to `/ui`
+- [ ] **Overview** (`web/templates/health.html`) — server status badge, schema version, active memory count per scope (from `/health` + `/v1/memories/recall` aggregate), job status from scheduler; auto-refreshes every 30 s via HTMX `hx-trigger="every 30s"`
+- [ ] **Memory Browser** (`web/templates/memories.html` + `memories_rows.html` partial) — scope selector dropdown; search bar; paginated results table (type, importance, age, source_ref); soft-delete button (HTMX swap); HTMX infinite scroll via `hx-trigger="revealed"`
+- [ ] **Memory Detail** (`web/templates/memory_detail.html`) — full content, metadata, entity links, promote button → POST `/v1/memories/{id}/promote`
+- [ ] **Knowledge Browser** (`web/templates/knowledge.html` + `knowledge_rows.html` partial) — filter by status / scope / visibility; inline endorse (POST `/v1/knowledge/{id}/endorse`) and deprecate buttons; HTMX row swap on action
+- [ ] **Knowledge Detail** (`web/templates/knowledge_detail.html`) — content pane, history timeline, endorsers list, open staleness flags; rollback button (admin only)
+- [ ] **Collections** (`web/templates/collections.html`) — collection list; click-through to item list (`collections_items.html`); add/remove item forms
+- [ ] **Promotion Queue** (`web/templates/promotions.html`) — pending requests table; approve (POST `/v1/promotions/{id}/approve`) and reject buttons; HTMX row removal on action
+- [ ] **Staleness Flags** (`web/templates/staleness.html`) — open flags grouped by artifact; signal-type badge; dismiss (PATCH staleness flag to `resolved`)
+- [ ] **Entity Graph** (`web/templates/graph.html`) — D3.js force-directed graph loaded from embedded JS; data from `GET /v1/graph`; scope-filtered; node search highlights matching nodes; **depends on `graph.go` REST endpoint**
+- [ ] **Skills Registry** (`web/templates/skills.html`) — published skills list; agent-type filter; install button (POST `/v1/skills/{id}/install`); inline invoke form with typed param inputs; rendered result shown in modal
+- [ ] **Principals & Scopes** (`web/templates/principals.html`) — ltree scope hierarchy rendered as indented tree; membership table per principal; add/remove member forms
+- [ ] **Metrics** (`web/templates/metrics.html`) — Prometheus metric cards via `/metrics` scrape or direct query; tool p99, recall results by layer, job durations; auto-refresh every 60 s
+
+### Testing
+
+- [ ] Integration tests (`internal/ui/ui_integration_test.go`, build tag `integration`) — login flow, memory browser returns 200, unauthenticated redirect, promote action returns correct status
+
+---
+
+## TUI Tasks
+
+Technology: `bubbletea` + `lipgloss` + `bubbles` (Charmbracelet suite). New binary `postbrain-tui`. Communicates via REST API only — no direct DB access. See DESIGN.md § TUI for full specification.
+
+### New dependencies (add to `go.mod`)
+
+- [ ] `github.com/charmbracelet/bubbletea` — Elm-architecture TUI framework
+- [ ] `github.com/charmbracelet/lipgloss` — layout and colour primitives
+- [ ] `github.com/charmbracelet/bubbles` — list, text input, spinner, paginator, viewport components
+
+### REST client
+
+- [ ] `internal/tui/client.go` — `Client{baseURL, token string; http *http.Client}`; typed methods for every REST endpoint used by the TUI:
+  - `RecallMemories(ctx, scopeID, query string, limit int) ([]*MemoryResult, error)`
+  - `GetMemory(ctx, id string) (*db.Memory, error)`
+  - `SoftDeleteMemory(ctx, id string) error`
+  - `HardDeleteMemory(ctx, id string) error`
+  - `PromoteMemory(ctx, id, targetScope, visibility string) error`
+  - `ListKnowledge(ctx, scopeID, status string) ([]*db.KnowledgeArtifact, error)`
+  - `GetArtifact(ctx, id string) (*db.KnowledgeArtifact, error)`
+  - `EndorseArtifact(ctx, id string) error`
+  - `DeprecateArtifact(ctx, id string) error`
+  - `ListPromotions(ctx string) ([]*db.PromotionRequest, error)`
+  - `ApprovePromotion(ctx, id string) error`
+  - `RejectPromotion(ctx, id string) error`
+  - `ListSkills(ctx, scopeID, agentType string) ([]*db.Skill, error)`
+  - `InvokeSkill(ctx, id string, params map[string]any) (string, error)`
+  - `ListEntities(ctx, scopeID string) ([]*db.Entity, error)`
+  - `ListRelations(ctx, scopeID string) ([]*db.Relation, error)`
+- [ ] `internal/tui/client_test.go` — unit tests using `httptest.Server` mock; verify each method serialises requests and deserialises responses correctly
+
+### Model and screen stack
+
+- [ ] `internal/tui/model.go` — top-level `Model` implementing `tea.Model`; screen stack (`[]tea.Model`); global key dispatch (`?` help, `q`/`Esc` pop screen, `ctrl+c` quit); window-resize message propagation
+- [ ] `internal/tui/model_test.go` — unit tests for screen push/pop, quit key, resize propagation (no HTTP)
+
+### Screens
+
+- [ ] `internal/tui/screens/scopes.go` — scope selector; fetches principal's scopes from `GET /v1/principals/{id}`; renders as indented tree using lipgloss; `Enter` pushes memory list screen
+- [ ] `internal/tui/screens/memories.go` — memory list (bubbles `list.Model`); `/` opens search input; `Enter` pushes detail; `d` soft-delete with confirm prompt; `D` hard-delete with confirm; `p` opens promote form; `q` pops
+- [ ] `internal/tui/screens/knowledge.go` — knowledge list (bubbles `list.Model`); `/` search; `Enter` detail; `e` endorse; `dep` deprecate; `q` pops; status badge coloured via lipgloss
+- [ ] `internal/tui/screens/promotions.go` — promotion queue (bubbles `list.Model`); `a` approve; `x` reject; confirmation prompt before each action; `q` pops
+- [ ] `internal/tui/screens/skills.go` — skills list; `i` install (prompts agent type via text input); `inv` opens param form (one input per required param); rendered result shown in viewport; `q` pops
+- [ ] `internal/tui/screens/graph.go` — ASCII adjacency list of entities and relations from `GET /v1/graph`; lipgloss borders; `/` searches and highlights matching node; `Enter` shows all relations for selected entity; `q` pops
+- [ ] `internal/tui/screens/help.go` — full keybinding reference rendered in a lipgloss table; `q` or `?` dismisses
+
+### Binary
+
+- [ ] `cmd/postbrain-tui/main.go` — cobra root command; `--config` (reads `server.addr` and `server.token`); `--url` override; `--token` override; `POSTBRAIN_URL` / `POSTBRAIN_TOKEN` env var fallback; `run` subcommand starts bubbletea program
+
+### Testing
+
+- [ ] `internal/tui/screens/*_test.go` — unit tests for each screen's `Update` function using synthetic `tea.Msg` values; no HTTP required
+- [ ] Integration test (`internal/tui/tui_integration_test.go`, build tag `integration`) — full round-trip via httptest server: scope select → memory list → create memory via REST → verify it appears in TUI list model
