@@ -24,6 +24,7 @@ var (
 // embeddingService is the subset of embedding.EmbeddingService used by this package.
 type embeddingService interface {
 	EmbedText(ctx context.Context, text string) ([]float32, error)
+	Summarize(ctx context.Context, text string) (string, error)
 	TextEmbedder() embeddingIface
 }
 
@@ -42,6 +43,10 @@ type embeddingServiceAdapter struct {
 
 func (a *embeddingServiceAdapter) EmbedText(ctx context.Context, text string) ([]float32, error) {
 	return a.svc.EmbedText(ctx, text)
+}
+
+func (a *embeddingServiceAdapter) Summarize(ctx context.Context, text string) (string, error) {
+	return a.svc.Summarize(ctx, text)
 }
 
 func (a *embeddingServiceAdapter) TextEmbedder() embeddingIface {
@@ -119,7 +124,7 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.KnowledgeArt
 	}
 
 	if input.Summary == nil {
-		if sum := Summarize(input.Content, 150); sum != input.Content {
+		if sum := s.summarizeContent(ctx, input.Content); sum != "" {
 			input.Summary = &sum
 		}
 	}
@@ -211,6 +216,24 @@ func (s *Store) GetByID(ctx context.Context, id uuid.UUID) (*db.KnowledgeArtifac
 		return nil, fmt.Errorf("knowledge: get by id: %w", err)
 	}
 	return a, nil
+}
+
+// summarizeContent attempts an AI-generated summary via the embedding service.
+// Falls back to extractive summarization when no generation model is configured
+// or when the AI call fails. Returns an empty string only if the content is
+// already short enough not to need a summary.
+func (s *Store) summarizeContent(ctx context.Context, content string) string {
+	if s.svc != nil {
+		if sum, err := s.svc.Summarize(ctx, content); err == nil && sum != "" {
+			return sum
+		}
+	}
+	// Extractive fallback.
+	sum := Summarize(content, 150)
+	if sum == content {
+		return "" // already short; no summary needed
+	}
+	return sum
 }
 
 // embedContent embeds text and returns the vector plus the model ID (if any).

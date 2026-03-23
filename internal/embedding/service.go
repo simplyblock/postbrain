@@ -7,10 +7,12 @@ import (
 	"github.com/simplyblock/postbrain/internal/config"
 )
 
-// EmbeddingService wraps a text embedder and an optional code embedder.
+// EmbeddingService wraps a text embedder, an optional code embedder, and an
+// optional text-generation summarizer.
 type EmbeddingService struct {
-	text Embedder
-	code Embedder // may be nil if no code model is configured
+	text       Embedder
+	code       Embedder   // may be nil if no code model is configured
+	summarizer Summarizer // may be nil if no summary model is configured
 }
 
 // NewService constructs an EmbeddingService from the given configuration.
@@ -24,6 +26,9 @@ func NewService(cfg *config.EmbeddingConfig) (*EmbeddingService, error) {
 		if cfg.CodeModel != "" {
 			svc.code = NewOllamaEmbedder(cfg, cfg.CodeModel)
 		}
+		if cfg.SummaryModel != "" {
+			svc.summarizer = NewOllamaSummarizer(cfg, cfg.SummaryModel)
+		}
 		return svc, nil
 
 	case "openai":
@@ -32,6 +37,9 @@ func NewService(cfg *config.EmbeddingConfig) (*EmbeddingService, error) {
 		}
 		if cfg.CodeModel != "" {
 			svc.code = NewOpenAIEmbedder(cfg, cfg.CodeModel, "")
+		}
+		if cfg.SummaryModel != "" {
+			svc.summarizer = NewOpenAISummarizer(cfg, cfg.SummaryModel, "")
 		}
 		return svc, nil
 
@@ -52,6 +60,16 @@ func (s *EmbeddingService) EmbedCode(ctx context.Context, text string) ([]float3
 		return s.code.Embed(ctx, text)
 	}
 	return s.text.Embed(ctx, text)
+}
+
+// Summarize generates a text summary using the configured summary model.
+// Returns an empty string (and no error) when no summary model is configured,
+// allowing callers to fall back to extractive summarization.
+func (s *EmbeddingService) Summarize(ctx context.Context, text string) (string, error) {
+	if s.summarizer == nil {
+		return "", nil
+	}
+	return s.summarizer.Summarize(ctx, text)
 }
 
 // TextEmbedder returns the underlying text Embedder.

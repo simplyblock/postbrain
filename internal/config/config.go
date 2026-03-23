@@ -34,6 +34,7 @@ type EmbeddingConfig struct {
 	OllamaURL      string        `mapstructure:"ollama_url"`
 	TextModel      string        `mapstructure:"text_model"`
 	CodeModel      string        `mapstructure:"code_model"`
+	SummaryModel   string        `mapstructure:"summary_model"`
 	OpenAIAPIKey   string        `mapstructure:"openai_api_key"`
 	RequestTimeout time.Duration `mapstructure:"request_timeout"`
 	BatchSize      int           `mapstructure:"batch_size"`

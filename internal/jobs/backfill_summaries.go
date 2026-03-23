@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/simplyblock/postbrain/internal/embedding"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 )
 
@@ -63,22 +64,28 @@ func (p *poolBackfillStore) setSummary(ctx context.Context, id uuid.UUID, summar
 const defaultBackfillBatchSize = 50
 
 // BackfillSummariesJob scans knowledge_artifacts with a NULL summary and fills
-// them using the same extractive summariser used at creation time.
+// them using AI summarization when available, falling back to extractive.
 type BackfillSummariesJob struct {
-	store     backfillSummaryStore
-	batchSize int
+	store      backfillSummaryStore
+	summarizer embedding.Summarizer // may be nil → extractive fallback
+	batchSize  int
 }
 
 // NewBackfillSummariesJob creates a BackfillSummariesJob backed by pool.
-// If batchSize is 0 it defaults to 50.
-func NewBackfillSummariesJob(pool *pgxpool.Pool, batchSize int) *BackfillSummariesJob {
+// svc may be nil; if non-nil and a summary model is configured, AI summarization
+// is used. If batchSize is 0 it defaults to 50.
+func NewBackfillSummariesJob(pool *pgxpool.Pool, svc *embedding.EmbeddingService, batchSize int) *BackfillSummariesJob {
 	if batchSize <= 0 {
 		batchSize = defaultBackfillBatchSize
 	}
-	return &BackfillSummariesJob{
+	j := &BackfillSummariesJob{
 		store:     &poolBackfillStore{pool: pool},
 		batchSize: batchSize,
 	}
+	if svc != nil {
+		j.summarizer = svc
+	}
+	return j
 }
 
 // Run processes all unsummarised artifacts in batches.
@@ -95,7 +102,7 @@ func (j *BackfillSummariesJob) Run(ctx context.Context) error {
 		}
 
 		for _, r := range batch {
-			sum := knowledge.Summarize(r.Content, 150)
+			sum := j.generateSummary(ctx, r.Content)
 			if err := j.store.setSummary(ctx, r.ID, sum); err != nil {
 				slog.Error("backfill summaries: update failed", "artifact_id", r.ID, "error", err)
 				continue
@@ -114,4 +121,14 @@ func (j *BackfillSummariesJob) Run(ctx context.Context) error {
 
 	slog.Info("backfill summaries: complete", "total_updated", total)
 	return nil
+}
+
+// generateSummary tries AI summarization first, falls back to extractive.
+func (j *BackfillSummariesJob) generateSummary(ctx context.Context, content string) string {
+	if j.summarizer != nil {
+		if sum, err := j.summarizer.Summarize(ctx, content); err == nil && sum != "" {
+			return sum
+		}
+	}
+	return knowledge.Summarize(content, 150)
 }

@@ -19,6 +19,10 @@ func (f *fakeEmbedder) EmbedText(_ context.Context, _ string) ([]float32, error)
 	return f.vec, f.err
 }
 
+func (f *fakeEmbedder) Summarize(_ context.Context, _ string) (string, error) {
+	return "", nil // no AI summarizer in unit tests; extractive fallback is used
+}
+
 func (f *fakeEmbedder) TextEmbedder() embeddingIface {
 	return &fakeEmbedderIface{slug: "test-model"}
 }

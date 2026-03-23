@@ -80,7 +80,7 @@ func (s *Scheduler) Register() error {
 	}
 
 	if s.cfg.BackfillSummariesEnabled {
-		job := NewBackfillSummariesJob(s.pool, 0)
+		job := NewBackfillSummariesJob(s.pool, s.svc, 0)
 		if _, err := s.cron.AddFunc("@every 24h", safeRun("backfill_summaries", func() {
 			if err := job.Run(context.Background()); err != nil {
 				slog.Error("backfill summaries job failed", "error", err)
