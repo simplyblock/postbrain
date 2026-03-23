@@ -470,6 +470,16 @@ func nullVec(vec []float32) interface{} {
 	return pgvector.NewVector(vec)
 }
 
+// nullUUID returns nil when id is the zero UUID so that pgx encodes it as SQL
+// NULL rather than inserting the zero UUID, which would fail FK constraints on
+// nullable UUID reference columns.
+func nullUUID(id uuid.UUID) interface{} {
+	if id == (uuid.UUID{}) {
+		return nil
+	}
+	return id
+}
+
 // CreateMemory inserts a new memory record.
 // embedding_code is passed as nil (SQL NULL) when the code vector is empty,
 // bypassing the sqlc-generated params struct whose pgvector.Vector field
@@ -513,8 +523,8 @@ RETURNING id, memory_type, scope_id, author_id,
 
 	row := pool.QueryRow(ctx, q,
 		m.MemoryType, m.ScopeID, m.AuthorID, m.Content, m.Summary,
-		pgvector.NewVector(m.Embedding.Slice()), m.EmbeddingModelID,
-		nullVec(m.EmbeddingCode.Slice()), m.EmbeddingCodeModelID,
+		pgvector.NewVector(m.Embedding.Slice()), nullUUID(m.EmbeddingModelID),
+		nullVec(m.EmbeddingCode.Slice()), nullUUID(m.EmbeddingCodeModelID),
 		m.ContentKind, m.Meta, version, confidence, importance,
 		m.ExpiresAt, m.PromotionStatus, m.PromotedTo, m.SourceRef,
 	)
@@ -560,8 +570,8 @@ RETURNING id, memory_type, scope_id, author_id,
 
 	row := pool.QueryRow(ctx, q,
 		id, content,
-		pgvector.NewVector(embedding), textModel,
-		nullVec(embeddingCode), codeModel,
+		pgvector.NewVector(embedding), nullUUID(textModel),
+		nullVec(embeddingCode), nullUUID(codeModel),
 		contentKind,
 	)
 
