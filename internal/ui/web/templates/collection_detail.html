@@ -1,0 +1,25 @@
+{{define "collection_detail"}}
+<h1>{{.Collection.Name}}</h1>
+<p><strong>Slug:</strong> {{.Collection.Slug}}</p>
+<p><strong>Visibility:</strong> {{.Collection.Visibility}}</p>
+{{if .Collection.Description}}<p>{{.Collection.Description}}</p>{{end}}
+<p><a href="/ui/collections">&larr; Back to Collections</a></p>
+
+<h2>Artifacts</h2>
+<table>
+  <thead><tr><th>Title</th><th>Type</th><th>Status</th><th>Visibility</th><th>Created</th></tr></thead>
+  <tbody>
+  {{range .Artifacts}}
+  <tr>
+    <td><a href="/ui/knowledge/{{.ID}}">{{.Title}}</a></td>
+    <td>{{.KnowledgeType}}</td>
+    <td>{{statusBadge .Status}}</td>
+    <td>{{.Visibility}}</td>
+    <td>{{timeAgo .CreatedAt}}</td>
+  </tr>
+  {{else}}
+  <tr><td colspan="5">No artifacts in this collection.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
