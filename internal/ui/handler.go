@@ -100,6 +100,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleKnowledgeDetail(w, r)
 	case r.URL.Path == "/ui/collections":
 		h.handleCollections(w, r)
+	case strings.HasPrefix(r.URL.Path, "/ui/collections/"):
+		h.handleCollectionDetail(w, r)
 	case r.URL.Path == "/ui/promotions":
 		h.handlePromotions(w, r)
 	case strings.HasSuffix(r.URL.Path, "/approve") && strings.HasPrefix(r.URL.Path, "/ui/promotions/") && r.Method == http.MethodPost:
@@ -315,6 +317,34 @@ func (h *Handler) handleCollections(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.render(w, r, "collections", "Collections", data)
+}
+
+// handleCollectionDetail serves GET /ui/collections/{id}.
+func (h *Handler) handleCollectionDetail(w http.ResponseWriter, r *http.Request) {
+	idStr := strings.TrimPrefix(r.URL.Path, "/ui/collections/")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	data := struct {
+		Collection *db.KnowledgeCollection
+		Artifacts  []*db.KnowledgeArtifact
+	}{}
+
+	if h.pool != nil {
+		coll, err := db.GetCollection(r.Context(), h.pool, id)
+		if err != nil || coll == nil {
+			http.NotFound(w, r)
+			return
+		}
+		data.Collection = coll
+		arts, _ := db.ListCollectionItems(r.Context(), h.pool, id)
+		data.Artifacts = arts
+	}
+
+	h.render(w, r, "collection_detail", "Collection", data)
 }
 
 // handlePromotions serves GET /ui/promotions.
