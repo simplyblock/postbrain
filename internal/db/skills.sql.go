@@ -44,7 +44,7 @@ RETURNING id, scope_id, author_id, source_artifact_id,
 type CreateSkillParams struct {
 	ScopeID          uuid.UUID
 	AuthorID         uuid.UUID
-	SourceArtifactID uuid.UUID
+	Column3          interface{}
 	Slug             string
 	Name             string
 	Description      string
@@ -57,16 +57,16 @@ type CreateSkillParams struct {
 	DeprecatedAt     *time.Time
 	ReviewRequired   int32
 	Version          int32
-	PreviousVersion  uuid.UUID
-	Embedding        pgvector_go.Vector
-	EmbeddingModelID uuid.UUID
+	Column16         interface{}
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
 }
 
 func (q *Queries) CreateSkill(ctx context.Context, arg CreateSkillParams) (*Skill, error) {
 	row := q.db.QueryRow(ctx, createSkill,
 		arg.ScopeID,
 		arg.AuthorID,
-		arg.SourceArtifactID,
+		arg.Column3,
 		arg.Slug,
 		arg.Name,
 		arg.Description,
@@ -79,7 +79,7 @@ func (q *Queries) CreateSkill(ctx context.Context, arg CreateSkillParams) (*Skil
 		arg.DeprecatedAt,
 		arg.ReviewRequired,
 		arg.Version,
-		arg.PreviousVersion,
+		arg.Column16,
 		arg.Embedding,
 		arg.EmbeddingModelID,
 	)
@@ -336,7 +336,7 @@ type RecallSkillsByFTSRow struct {
 	ID               uuid.UUID
 	ScopeID          uuid.UUID
 	AuthorID         uuid.UUID
-	SourceArtifactID uuid.UUID
+	SourceArtifactID *uuid.UUID
 	Slug             string
 	Name             string
 	Description      string
@@ -349,9 +349,9 @@ type RecallSkillsByFTSRow struct {
 	DeprecatedAt     *time.Time
 	ReviewRequired   int32
 	Version          int32
-	PreviousVersion  uuid.UUID
-	Embedding        pgvector_go.Vector
-	EmbeddingModelID uuid.UUID
+	PreviousVersion  *uuid.UUID
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
 	InvocationCount  int32
 	LastInvokedAt    *time.Time
 	CreatedAt        time.Time
@@ -425,7 +425,7 @@ LIMIT $4
 `
 
 type RecallSkillsByVectorParams struct {
-	Embedding pgvector_go.Vector
+	Embedding *pgvector_go.Vector
 	Column2   []uuid.UUID
 	Column3   interface{}
 	Limit     int32
@@ -435,7 +435,7 @@ type RecallSkillsByVectorRow struct {
 	ID               uuid.UUID
 	ScopeID          uuid.UUID
 	AuthorID         uuid.UUID
-	SourceArtifactID uuid.UUID
+	SourceArtifactID *uuid.UUID
 	Slug             string
 	Name             string
 	Description      string
@@ -448,9 +448,9 @@ type RecallSkillsByVectorRow struct {
 	DeprecatedAt     *time.Time
 	ReviewRequired   int32
 	Version          int32
-	PreviousVersion  uuid.UUID
-	Embedding        pgvector_go.Vector
-	EmbeddingModelID uuid.UUID
+	PreviousVersion  *uuid.UUID
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
 	InvocationCount  int32
 	LastInvokedAt    *time.Time
 	CreatedAt        time.Time
@@ -550,8 +550,8 @@ type UpdateSkillContentParams struct {
 	ID               uuid.UUID
 	Body             string
 	Parameters       []byte
-	Embedding        pgvector_go.Vector
-	EmbeddingModelID uuid.UUID
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
 }
 
 func (q *Queries) UpdateSkillContent(ctx context.Context, arg UpdateSkillContentParams) (*Skill, error) {

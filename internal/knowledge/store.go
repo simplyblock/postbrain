@@ -139,14 +139,7 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.KnowledgeArt
 		return nil, fmt.Errorf("knowledge: embed: %w", err)
 	}
 
-	var srcMemID uuid.UUID
-	if input.SourceMemoryID != nil {
-		srcMemID = *input.SourceMemoryID
-	}
-	var embModelID uuid.UUID
-	if modelID != nil {
-		embModelID = *modelID
-	}
+	embVec := pgvector.NewVector(embeddingVec)
 	artifact := &db.KnowledgeArtifact{
 		KnowledgeType:    input.KnowledgeType,
 		OwnerScopeID:     input.OwnerScopeID,
@@ -157,10 +150,10 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.KnowledgeArt
 		Title:            input.Title,
 		Content:          input.Content,
 		Summary:          input.Summary,
-		Embedding:        pgvector.NewVector(embeddingVec),
-		EmbeddingModelID: embModelID,
+		Embedding:        &embVec,
+		EmbeddingModelID: modelID,
 		Version:          1,
-		SourceMemoryID:   srcMemID,
+		SourceMemoryID:   input.SourceMemoryID,
 		SourceRef:        input.SourceRef,
 	}
 

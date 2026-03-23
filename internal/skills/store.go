@@ -83,14 +83,11 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.Skill, error
 		return nil, fmt.Errorf("skills: embed: %w", err)
 	}
 
-	var srcArtID uuid.UUID
-	if input.SourceArtifactID != nil {
-		srcArtID = *input.SourceArtifactID
-	}
+	embVec := pgvector.NewVector(embeddingVec)
 	skill := &db.Skill{
 		ScopeID:          input.ScopeID,
 		AuthorID:         input.AuthorID,
-		SourceArtifactID: srcArtID,
+		SourceArtifactID: input.SourceArtifactID,
 		Slug:             input.Slug,
 		Name:             input.Name,
 		Description:      input.Description,
@@ -101,7 +98,7 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.Skill, error
 		Status:           "draft",
 		ReviewRequired:   int32(input.ReviewRequired),
 		Version:          1,
-		Embedding:        pgvector.NewVector(embeddingVec),
+		Embedding:        &embVec,
 	}
 
 	created, err := s.creator.createSkill(ctx, skill)
@@ -142,7 +139,7 @@ func (s *Store) Update(ctx context.Context, id uuid.UUID, callerID uuid.UUID, bo
 		return nil, fmt.Errorf("skills: embed: %w", err)
 	}
 
-	updated, err := db.UpdateSkillContent(ctx, s.pool, id, body, paramsJSON, embeddingVec, &existing.EmbeddingModelID)
+	updated, err := db.UpdateSkillContent(ctx, s.pool, id, body, paramsJSON, embeddingVec, existing.EmbeddingModelID)
 	if err != nil {
 		return nil, fmt.Errorf("skills: update content: %w", err)
 	}

@@ -67,7 +67,7 @@ LIMIT $2 OFFSET $3
 `
 
 type GetMemoriesNeedingCodeReembedParams struct {
-	EmbeddingCodeModelID uuid.UUID
+	EmbeddingCodeModelID *uuid.UUID
 	Limit                int32
 	Offset               int32
 }
@@ -132,7 +132,7 @@ LIMIT $2 OFFSET $3
 `
 
 type GetMemoriesNeedingTextReembedParams struct {
-	EmbeddingModelID uuid.UUID
+	EmbeddingModelID *uuid.UUID
 	Limit            int32
 	Offset           int32
 }
@@ -189,8 +189,8 @@ WHERE id = $1
 
 type UpdateMemoryCodeEmbeddingParams struct {
 	ID                   uuid.UUID
-	EmbeddingCode        pgvector_go.Vector
-	EmbeddingCodeModelID uuid.UUID
+	EmbeddingCode        *pgvector_go.Vector
+	EmbeddingCodeModelID *uuid.UUID
 }
 
 func (q *Queries) UpdateMemoryCodeEmbedding(ctx context.Context, arg UpdateMemoryCodeEmbeddingParams) error {
@@ -205,8 +205,8 @@ WHERE id = $1
 
 type UpdateMemoryTextEmbeddingParams struct {
 	ID               uuid.UUID
-	Embedding        pgvector_go.Vector
-	EmbeddingModelID uuid.UUID
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
 }
 
 func (q *Queries) UpdateMemoryTextEmbedding(ctx context.Context, arg UpdateMemoryTextEmbeddingParams) error {

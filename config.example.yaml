@@ -28,3 +28,4 @@ jobs:
   contradiction_enabled: true
   reembed_enabled:       true
   age_check_enabled:     true
+  backfill_summaries_enabled: true

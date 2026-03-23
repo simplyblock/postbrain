@@ -1,0 +1,32 @@
+database:
+  url:             "postgresql://postgres:3WJCECZJ7DespfXJ@db.01kmbjjh51rvbf2t5fegc6nrsw.demo.vela.run:24818/postgres"
+  auto_migrate:    true
+  max_open:        25
+  max_idle:        5
+  connect_timeout: 10s
+
+embedding:
+  backend:         openai
+  ollama_url:      "http://localhost:11434"
+  text_model: "text-embedding-3-small"
+  code_model: "text-embedding-3-small"
+  summary_model: "gpt-4o-mini"
+  openai_api_key:  "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"
+  request_timeout: 30s
+  batch_size:      64
+
+server:
+  addr:     "localhost:7433"
+  token:    "changeme"
+  tls_cert: ""
+  tls_key:  ""
+
+migrations:
+  expected_version: 0
+
+jobs:
+  consolidation_enabled: true
+  contradiction_enabled: true
+  reembed_enabled:       true
+  age_check_enabled:     true
+  backfill_summaries_enabled: true

@@ -20,7 +20,7 @@ RETURNING id, scope_id, principal_id, started_at, ended_at, meta
 
 type CreateSessionParams struct {
 	ScopeID     uuid.UUID
-	PrincipalID uuid.UUID
+	PrincipalID *uuid.UUID
 	Meta        []byte
 }
 

@@ -199,16 +199,12 @@ func CreateScope(ctx context.Context, pool *pgxpool.Pool, kind, externalID, name
 	if meta == nil {
 		meta = []byte("{}")
 	}
-	var pid uuid.UUID
-	if parentID != nil {
-		pid = *parentID
-	}
 	q := New(pool)
 	row, err := q.CreateScope(ctx, CreateScopeParams{
 		Kind:        kind,
 		ExternalID:  externalID,
 		Name:        name,
-		ParentID:    pid,
+		Column4:     parentID,
 		PrincipalID: principalID,
 		Meta:        meta,
 	})
@@ -286,7 +282,7 @@ func GetAncestorScopeIDs(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.U
 // ListScopes returns scopes ordered by creation time, with pagination.
 func ListScopes(ctx context.Context, pool *pgxpool.Pool, limit, offset int) ([]*Scope, error) {
 	q := New(pool)
-	rows, err := q.ListScopes(ctx, int32(limit), int32(offset))
+	rows, err := q.ListScopes(ctx, ListScopesParams{Limit: int32(limit), Offset: int32(offset)})
 	if err != nil {
 		return nil, err
 	}
@@ -406,7 +402,7 @@ func CreateSession(ctx context.Context, pool *pgxpool.Pool, scopeID, principalID
 	q := New(pool)
 	return q.CreateSession(ctx, CreateSessionParams{
 		ScopeID:     scopeID,
-		PrincipalID: principalID,
+		PrincipalID: &principalID,
 		Meta:        meta,
 	})
 }
@@ -459,31 +455,19 @@ func ListMemoriesByScope(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.U
 	return ms, nil
 }
 
-// nullVec returns the vector wrapped in pgvector.Vector when non-empty, or nil
-// (which pgx encodes as SQL NULL) when the slice is empty. This is necessary
-// because pgvector.NewVector(nil).Value() returns "[]" rather than NULL, which
-// PostgreSQL rejects with "vector must have at least 1 dimension".
-func nullVec(vec []float32) interface{} {
+// vecPtr returns a *pgvector.Vector when the slice is non-empty, or nil (SQL NULL)
+// when the slice is empty. This is necessary because pgvector.NewVector(nil).Value()
+// returns "[]" rather than NULL, which PostgreSQL rejects with "vector must have at
+// least 1 dimension".
+func vecPtr(vec []float32) *pgvector.Vector {
 	if len(vec) == 0 {
 		return nil
 	}
-	return pgvector.NewVector(vec)
-}
-
-// nullUUID returns nil when id is the zero UUID so that pgx encodes it as SQL
-// NULL rather than inserting the zero UUID, which would fail FK constraints on
-// nullable UUID reference columns.
-func nullUUID(id uuid.UUID) interface{} {
-	if id == (uuid.UUID{}) {
-		return nil
-	}
-	return id
+	v := pgvector.NewVector(vec)
+	return &v
 }
 
 // CreateMemory inserts a new memory record.
-// embedding_code is passed as nil (SQL NULL) when the code vector is empty,
-// bypassing the sqlc-generated params struct whose pgvector.Vector field
-// cannot represent NULL.
 func CreateMemory(ctx context.Context, pool *pgxpool.Pool, m *Memory) (*Memory, error) {
 	if m.Meta == nil {
 		m.Meta = []byte("{}")
@@ -495,41 +479,40 @@ func CreateMemory(ctx context.Context, pool *pgxpool.Pool, m *Memory) (*Memory, 
 		m.PromotionStatus = "none"
 	}
 
-	version := m.Version
-	if version == 0 {
-		version = 1
+	var version interface{}
+	if m.Version != 0 {
+		version = m.Version
 	}
-	confidence := m.Confidence
-	if confidence == 0 {
-		confidence = 1.0
+	var confidence interface{}
+	if m.Confidence != 0 {
+		confidence = m.Confidence
 	}
-	importance := m.Importance
-	if importance == 0 {
-		importance = 0.5
+	var importance interface{}
+	if m.Importance != 0 {
+		importance = m.Importance
 	}
 
-	const q = `
-INSERT INTO memories
-(memory_type, scope_id, author_id, content, summary,
- embedding, embedding_model_id, embedding_code, embedding_code_model_id,
- content_kind, meta, version, is_active, confidence, importance,
- access_count, expires_at, promotion_status, promoted_to, source_ref)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,true,$13,$14,0,$15,$16,$17,$18)
-RETURNING id, memory_type, scope_id, author_id,
-    content, summary, embedding, embedding_model_id,
-    embedding_code, embedding_code_model_id, content_kind, meta,
-    version, is_active, confidence, importance, access_count, last_accessed,
-    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at`
-
-	row := pool.QueryRow(ctx, q,
-		m.MemoryType, m.ScopeID, m.AuthorID, m.Content, m.Summary,
-		pgvector.NewVector(m.Embedding.Slice()), nullUUID(m.EmbeddingModelID),
-		nullVec(m.EmbeddingCode.Slice()), nullUUID(m.EmbeddingCodeModelID),
-		m.ContentKind, m.Meta, version, confidence, importance,
-		m.ExpiresAt, m.PromotionStatus, nullUUID(m.PromotedTo), m.SourceRef,
-	)
-
-	created, err := scanMemoryRow(row)
+	q := New(pool)
+	created, err := q.CreateMemory(ctx, CreateMemoryParams{
+		MemoryType:           m.MemoryType,
+		ScopeID:              m.ScopeID,
+		AuthorID:             m.AuthorID,
+		Content:              m.Content,
+		Summary:              m.Summary,
+		Embedding:            m.Embedding,
+		EmbeddingModelID:     m.EmbeddingModelID,
+		EmbeddingCode:        m.EmbeddingCode,
+		EmbeddingCodeModelID: m.EmbeddingCodeModelID,
+		ContentKind:          m.ContentKind,
+		Meta:                 m.Meta,
+		Column12:             version,
+		Column13:             confidence,
+		Column14:             importance,
+		ExpiresAt:            m.ExpiresAt,
+		PromotionStatus:      m.PromotionStatus,
+		PromotedTo:           m.PromotedTo,
+		SourceRef:            m.SourceRef,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("db: create memory: %w", err)
 	}
@@ -538,80 +521,21 @@ RETURNING id, memory_type, scope_id, author_id,
 
 // UpdateMemoryContent updates content and embeddings.
 func UpdateMemoryContent(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, content string, embedding, embeddingCode []float32, textModelID, codeModelID *uuid.UUID, contentKind string) (*Memory, error) {
-	var textModel, codeModel uuid.UUID
-	if textModelID != nil {
-		textModel = *textModelID
-	}
-	if codeModelID != nil {
-		codeModel = *codeModelID
-	}
-
-	const q = `
-UPDATE memories
-SET content=$2, embedding=$3, embedding_model_id=$4,
-    embedding_code=$5, embedding_code_model_id=$6,
-    content_kind=$7, version=version+1, updated_at=now()
-WHERE id=$1
-RETURNING id, memory_type, scope_id, author_id,
-    content, summary, embedding, embedding_model_id,
-    embedding_code, embedding_code_model_id, content_kind, meta,
-    version, is_active, confidence, importance, access_count, last_accessed,
-    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at`
-
-	row := pool.QueryRow(ctx, q,
-		id, content,
-		pgvector.NewVector(embedding), nullUUID(textModel),
-		nullVec(embeddingCode), nullUUID(codeModel),
-		contentKind,
-	)
-
-	m, err := scanMemoryRow(row)
+	q := New(pool)
+	m, err := q.UpdateMemoryContent(ctx, UpdateMemoryContentParams{
+		ID:                   id,
+		Content:              content,
+		Embedding:            vecPtr(embedding),
+		EmbeddingModelID:     textModelID,
+		EmbeddingCode:        vecPtr(embeddingCode),
+		EmbeddingCodeModelID: codeModelID,
+		ContentKind:          contentKind,
+	})
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("db: update memory content: %w", err)
-	}
-	return m, nil
-}
-
-// rowScanner is satisfied by pgx.Row and pgx.Rows (via rows.Scan).
-type rowScanner interface {
-	Scan(dest ...any) error
-}
-
-// scanMemoryRow scans the standard memory RETURNING column list into a Memory.
-// Nullable vector and UUID columns are scanned into pointer types to handle
-// SQL NULL without error.
-func scanMemoryRow(row rowScanner) (*Memory, error) {
-	m := &Memory{}
-	var embCode *pgvector.Vector
-	var embModelID, embCodeModelID, promotedTo *uuid.UUID
-	err := row.Scan(
-		&m.ID, &m.MemoryType, &m.ScopeID, &m.AuthorID,
-		&m.Content, &m.Summary,
-		&m.Embedding, &embModelID,
-		&embCode, &embCodeModelID,
-		&m.ContentKind, &m.Meta,
-		&m.Version, &m.IsActive, &m.Confidence, &m.Importance,
-		&m.AccessCount, &m.LastAccessed,
-		&m.ExpiresAt, &m.PromotionStatus, &promotedTo,
-		&m.SourceRef, &m.CreatedAt, &m.UpdatedAt,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if embModelID != nil {
-		m.EmbeddingModelID = *embModelID
-	}
-	if embCode != nil {
-		m.EmbeddingCode = *embCode
-	}
-	if embCodeModelID != nil {
-		m.EmbeddingCodeModelID = *embCodeModelID
-	}
-	if promotedTo != nil {
-		m.PromotedTo = *promotedTo
 	}
 	return m, nil
 }
@@ -643,7 +567,7 @@ func FindNearDuplicates(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UU
 	q := New(pool)
 	ms, err := q.FindNearDuplicates(ctx, FindNearDuplicatesParams{
 		ScopeID:   scopeID,
-		Embedding: pgvector.NewVector(embedding),
+		Embedding: vecPtr(embedding),
 		Column3:   threshold,
 		Column4:   excl,
 	})
@@ -659,7 +583,7 @@ func RecallMemoriesByVector(ctx context.Context, pool *pgxpool.Pool, scopeIDs []
 	rows, err := q.RecallMemoriesByVector(ctx, RecallMemoriesByVectorParams{
 		Column1:   scopeIDs,
 		Limit:     int32(limit),
-		Embedding: pgvector.NewVector(queryVec),
+		Embedding: vecPtr(queryVec),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("db: recall memories by vector: %w", err)
@@ -669,7 +593,7 @@ func RecallMemoriesByVector(ctx context.Context, pool *pgxpool.Pool, scopeIDs []
 		mem := memoryFromRecallByVectorRow(r)
 		results[i] = MemoryScore{
 			Memory:   mem,
-			VecScore: r.VecScore,
+			VecScore: float64(r.VecScore),
 		}
 	}
 	return results, nil
@@ -681,7 +605,7 @@ func RecallMemoriesByCodeVector(ctx context.Context, pool *pgxpool.Pool, scopeID
 	rows, err := q.RecallMemoriesByCodeVector(ctx, RecallMemoriesByCodeVectorParams{
 		Column1:       scopeIDs,
 		Limit:         int32(limit),
-		EmbeddingCode: pgvector.NewVector(queryVec),
+		EmbeddingCode: vecPtr(queryVec),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("db: recall memories by code vector: %w", err)
@@ -691,7 +615,7 @@ func RecallMemoriesByCodeVector(ctx context.Context, pool *pgxpool.Pool, scopeID
 		mem := memoryFromRecallByCodeVectorRow(r)
 		results[i] = MemoryScore{
 			Memory:   mem,
-			VecScore: r.VecScore,
+			VecScore: float64(r.VecScore),
 		}
 	}
 	return results, nil
@@ -761,7 +685,7 @@ func UpsertEntity(ctx context.Context, pool *pgxpool.Pool, e *Entity) (*Entity, 
 		Name:             e.Name,
 		Canonical:        e.Canonical,
 		Meta:             e.Meta,
-		Embedding:        pgvector.NewVector(e.Embedding.Slice()),
+		Embedding:        e.Embedding,
 		EmbeddingModelID: e.EmbeddingModelID,
 	})
 	if err != nil {
@@ -891,12 +815,12 @@ func CreateArtifact(ctx context.Context, pool *pgxpool.Pool, a *KnowledgeArtifac
 		Title:            a.Title,
 		Content:          a.Content,
 		Summary:          a.Summary,
-		Embedding:        pgvector.NewVector(a.Embedding.Slice()),
+		Embedding:        a.Embedding,
 		EmbeddingModelID: a.EmbeddingModelID,
 		Meta:             a.Meta,
 		Version:          a.Version,
-		PreviousVersion:  a.PreviousVersion,
-		SourceMemoryID:   a.SourceMemoryID,
+		Column16:         a.PreviousVersion,
+		Column17:         a.SourceMemoryID,
 		SourceRef:        a.SourceRef,
 	})
 	if err != nil {
@@ -920,18 +844,14 @@ func GetArtifact(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*Knowle
 
 // UpdateArtifact updates title, content, summary, embedding, and bumps version.
 func UpdateArtifact(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, title, content string, summary *string, embedding []float32, modelID *uuid.UUID) (*KnowledgeArtifact, error) {
-	var model uuid.UUID
-	if modelID != nil {
-		model = *modelID
-	}
 	q := New(pool)
 	a, err := q.UpdateArtifact(ctx, UpdateArtifactParams{
 		ID:               id,
 		Title:            title,
 		Content:          content,
 		Summary:          summary,
-		Embedding:        pgvector.NewVector(embedding),
-		EmbeddingModelID: model,
+		Embedding:        vecPtr(embedding),
+		EmbeddingModelID: modelID,
 	})
 	if err == pgx.ErrNoRows {
 		return nil, nil
@@ -1040,7 +960,7 @@ func RecallArtifactsByVector(ctx context.Context, pool *pgxpool.Pool, scopeIDs [
 	rows, err := q.RecallArtifactsByVector(ctx, RecallArtifactsByVectorParams{
 		Column1:   scopeIDs,
 		Limit:     int32(limit),
-		Embedding: pgvector.NewVector(queryVec),
+		Embedding: vecPtr(queryVec),
 	})
 	if err != nil {
 		return nil, err
@@ -1050,7 +970,7 @@ func RecallArtifactsByVector(ctx context.Context, pool *pgxpool.Pool, scopeIDs [
 		art := artifactFromRecallByVectorRow(r)
 		results[i] = ArtifactScore{
 			Artifact: art,
-			VecScore: r.VecScore,
+			VecScore: float64(r.VecScore),
 		}
 	}
 	return results, nil
@@ -1209,15 +1129,11 @@ func HasOpenStalenessFlag(ctx context.Context, pool *pgxpool.Pool, artifactID uu
 
 // UpdateStalenessFlag updates a staleness flag.
 func UpdateStalenessFlag(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, status string, reviewedBy *uuid.UUID, note *string) error {
-	var rb uuid.UUID
-	if reviewedBy != nil {
-		rb = *reviewedBy
-	}
 	q := New(pool)
 	return q.UpdateStalenessFlag(ctx, UpdateStalenessFlagParams{
 		ID:         id,
 		Status:     status,
-		ReviewedBy: rb,
+		ReviewedBy: reviewedBy,
 		ReviewNote: note,
 	})
 }
@@ -1240,10 +1156,6 @@ func ListStalenessFlags(ctx context.Context, pool *pgxpool.Pool, status string, 
 
 // CreatePromotionRequest inserts a new promotion_requests row.
 func CreatePromotionRequest(ctx context.Context, pool *pgxpool.Pool, req *PromotionRequest) (*PromotionRequest, error) {
-	var collectionID uuid.UUID
-	if req.ProposedCollectionID != (uuid.UUID{}) {
-		collectionID = req.ProposedCollectionID
-	}
 	q := New(pool)
 	result, err := q.CreatePromotionRequest(ctx, CreatePromotionRequestParams{
 		MemoryID:             req.MemoryID,
@@ -1251,7 +1163,7 @@ func CreatePromotionRequest(ctx context.Context, pool *pgxpool.Pool, req *Promot
 		TargetScopeID:        req.TargetScopeID,
 		TargetVisibility:     req.TargetVisibility,
 		ProposedTitle:        req.ProposedTitle,
-		ProposedCollectionID: collectionID,
+		ProposedCollectionID: req.ProposedCollectionID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("db: create promotion request: %w", err)
@@ -1290,7 +1202,7 @@ func CreateSkill(ctx context.Context, pool *pgxpool.Pool, s *Skill) (*Skill, err
 	result, err := q.CreateSkill(ctx, CreateSkillParams{
 		ScopeID:          s.ScopeID,
 		AuthorID:         s.AuthorID,
-		SourceArtifactID: s.SourceArtifactID,
+		Column3:          s.SourceArtifactID,
 		Slug:             s.Slug,
 		Name:             s.Name,
 		Description:      s.Description,
@@ -1303,8 +1215,8 @@ func CreateSkill(ctx context.Context, pool *pgxpool.Pool, s *Skill) (*Skill, err
 		DeprecatedAt:     s.DeprecatedAt,
 		ReviewRequired:   s.ReviewRequired,
 		Version:          s.Version,
-		PreviousVersion:  s.PreviousVersion,
-		Embedding:        pgvector.NewVector(s.Embedding.Slice()),
+		Column16:         s.PreviousVersion,
+		Embedding:        s.Embedding,
 		EmbeddingModelID: s.EmbeddingModelID,
 	})
 	if err != nil {
@@ -1338,17 +1250,13 @@ func GetSkillBySlug(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, 
 
 // UpdateSkillContent updates the body, parameters, embedding, and bumps version.
 func UpdateSkillContent(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, body string, parameters []byte, embedding []float32, modelID *uuid.UUID) (*Skill, error) {
-	var model uuid.UUID
-	if modelID != nil {
-		model = *modelID
-	}
 	q := New(pool)
 	s, err := q.UpdateSkillContent(ctx, UpdateSkillContentParams{
 		ID:               id,
 		Body:             body,
 		Parameters:       parameters,
-		Embedding:        pgvector.NewVector(embedding),
-		EmbeddingModelID: model,
+		Embedding:        vecPtr(embedding),
+		EmbeddingModelID: modelID,
 	})
 	if err == pgx.ErrNoRows {
 		return nil, nil
@@ -1424,7 +1332,7 @@ func CountSkillEndorsements(ctx context.Context, pool *pgxpool.Pool, skillID uui
 func RecallSkillsByVector(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, queryVec []float32, agentType string, limit int) ([]SkillScore, error) {
 	q := New(pool)
 	rows, err := q.RecallSkillsByVector(ctx, RecallSkillsByVectorParams{
-		Embedding: pgvector.NewVector(queryVec),
+		Embedding: vecPtr(queryVec),
 		Column2:   scopeIDs,
 		Column3:   agentType,
 		Limit:     int32(limit),

@@ -15,7 +15,7 @@ type Consolidation struct {
 	ID        uuid.UUID
 	ScopeID   uuid.UUID
 	SourceIds []uuid.UUID
-	ResultID  uuid.UUID
+	ResultID  *uuid.UUID
 	Strategy  string
 	Reason    *string
 	CreatedAt time.Time
@@ -38,8 +38,8 @@ type Entity struct {
 	Name             string
 	Canonical        string
 	Meta             []byte
-	Embedding        pgvector_go.Vector
-	EmbeddingModelID uuid.UUID
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 }
@@ -66,15 +66,15 @@ type KnowledgeArtifact struct {
 	Title            string
 	Content          string
 	Summary          *string
-	Embedding        pgvector_go.Vector
-	EmbeddingModelID uuid.UUID
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
 	Meta             []byte
 	EndorsementCount int32
 	AccessCount      int32
 	LastAccessed     *time.Time
 	Version          int32
-	PreviousVersion  uuid.UUID
-	SourceMemoryID   uuid.UUID
+	PreviousVersion  *uuid.UUID
+	SourceMemoryID   *uuid.UUID
 	SourceRef        *string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
@@ -127,10 +127,10 @@ type Memory struct {
 	AuthorID             uuid.UUID
 	Content              string
 	Summary              *string
-	Embedding            pgvector_go.Vector
-	EmbeddingModelID     uuid.UUID
-	EmbeddingCode        pgvector_go.Vector
-	EmbeddingCodeModelID uuid.UUID
+	Embedding            *pgvector_go.Vector
+	EmbeddingModelID     *uuid.UUID
+	EmbeddingCode        *pgvector_go.Vector
+	EmbeddingCodeModelID *uuid.UUID
 	ContentKind          string
 	Meta                 []byte
 	Version              int32
@@ -141,7 +141,7 @@ type Memory struct {
 	LastAccessed         *time.Time
 	ExpiresAt            *time.Time
 	PromotionStatus      string
-	PromotedTo           uuid.UUID
+	PromotedTo           *uuid.UUID
 	SourceRef            *string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
@@ -167,7 +167,7 @@ type PrincipalMembership struct {
 	MemberID  uuid.UUID
 	ParentID  uuid.UUID
 	Role      string
-	GrantedBy uuid.UUID
+	GrantedBy *uuid.UUID
 	CreatedAt time.Time
 }
 
@@ -178,12 +178,12 @@ type PromotionRequest struct {
 	TargetScopeID        uuid.UUID
 	TargetVisibility     string
 	ProposedTitle        *string
-	ProposedCollectionID uuid.UUID
+	ProposedCollectionID *uuid.UUID
 	Status               string
-	ReviewerID           uuid.UUID
+	ReviewerID           *uuid.UUID
 	ReviewNote           *string
 	ReviewedAt           *time.Time
-	ResultArtifactID     uuid.UUID
+	ResultArtifactID     *uuid.UUID
 	CreatedAt            time.Time
 }
 
@@ -194,7 +194,7 @@ type Relation struct {
 	Predicate    string
 	ObjectID     uuid.UUID
 	Confidence   float64
-	SourceMemory uuid.UUID
+	SourceMemory *uuid.UUID
 	CreatedAt    time.Time
 }
 
@@ -203,7 +203,7 @@ type Scope struct {
 	Kind        string
 	ExternalID  string
 	Name        string
-	ParentID    uuid.UUID
+	ParentID    *uuid.UUID
 	PrincipalID uuid.UUID
 	Path        string
 	Meta        []byte
@@ -213,7 +213,7 @@ type Scope struct {
 type Session struct {
 	ID          uuid.UUID
 	ScopeID     uuid.UUID
-	PrincipalID uuid.UUID
+	PrincipalID *uuid.UUID
 	StartedAt   time.Time
 	EndedAt     *time.Time
 	Meta        []byte
@@ -221,8 +221,8 @@ type Session struct {
 
 type SharingGrant struct {
 	ID             uuid.UUID
-	MemoryID       uuid.UUID
-	ArtifactID     uuid.UUID
+	MemoryID       *uuid.UUID
+	ArtifactID     *uuid.UUID
 	GranteeScopeID uuid.UUID
 	GrantedBy      uuid.UUID
 	CanReshare     bool
@@ -234,7 +234,7 @@ type Skill struct {
 	ID               uuid.UUID
 	ScopeID          uuid.UUID
 	AuthorID         uuid.UUID
-	SourceArtifactID uuid.UUID
+	SourceArtifactID *uuid.UUID
 	Slug             string
 	Name             string
 	Description      string
@@ -247,9 +247,9 @@ type Skill struct {
 	DeprecatedAt     *time.Time
 	ReviewRequired   int32
 	Version          int32
-	PreviousVersion  uuid.UUID
-	Embedding        pgvector_go.Vector
-	EmbeddingModelID uuid.UUID
+	PreviousVersion  *uuid.UUID
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
 	InvocationCount  int32
 	LastInvokedAt    *time.Time
 	CreatedAt        time.Time
@@ -283,7 +283,7 @@ type StalenessFlag struct {
 	Evidence   []byte
 	Status     string
 	FlaggedAt  time.Time
-	ReviewedBy uuid.UUID
+	ReviewedBy *uuid.UUID
 	ReviewedAt *time.Time
 	ReviewNote *string
 }
