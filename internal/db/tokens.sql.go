@@ -52,6 +52,81 @@ func (q *Queries) CreateToken(ctx context.Context, arg CreateTokenParams) (*Toke
 	return &i, err
 }
 
+const listAllTokens = `-- name: ListAllTokens :many
+SELECT id, principal_id, token_hash, name, scope_ids, permissions, expires_at, last_used_at, created_at, revoked_at
+FROM tokens
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListAllTokens(ctx context.Context) ([]*Token, error) {
+	rows, err := q.db.Query(ctx, listAllTokens)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*Token{}
+	for rows.Next() {
+		var i Token
+		if err := rows.Scan(
+			&i.ID,
+			&i.PrincipalID,
+			&i.TokenHash,
+			&i.Name,
+			&i.ScopeIds,
+			&i.Permissions,
+			&i.ExpiresAt,
+			&i.LastUsedAt,
+			&i.CreatedAt,
+			&i.RevokedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTokensByPrincipal = `-- name: ListTokensByPrincipal :many
+SELECT id, principal_id, token_hash, name, scope_ids, permissions, expires_at, last_used_at, created_at, revoked_at
+FROM tokens
+WHERE principal_id = $1
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListTokensByPrincipal(ctx context.Context, principalID uuid.UUID) ([]*Token, error) {
+	rows, err := q.db.Query(ctx, listTokensByPrincipal, principalID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*Token{}
+	for rows.Next() {
+		var i Token
+		if err := rows.Scan(
+			&i.ID,
+			&i.PrincipalID,
+			&i.TokenHash,
+			&i.Name,
+			&i.ScopeIds,
+			&i.Permissions,
+			&i.ExpiresAt,
+			&i.LastUsedAt,
+			&i.CreatedAt,
+			&i.RevokedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lookupToken = `-- name: LookupToken :one
 SELECT id, principal_id, token_hash, name, scope_ids, permissions, expires_at, last_used_at, created_at, revoked_at
 FROM tokens WHERE token_hash = $1

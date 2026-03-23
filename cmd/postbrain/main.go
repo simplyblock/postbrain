@@ -10,14 +10,18 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+	"text/tabwriter"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
 
 	mcpapi "github.com/simplyblock/postbrain/internal/api/mcp"
 	restapi "github.com/simplyblock/postbrain/internal/api/rest"
+	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/embedding"
@@ -34,7 +38,7 @@ func main() {
 	}
 	root.PersistentFlags().StringVar(&cfgPath, "config", "config.yaml", "path to config file")
 
-	root.AddCommand(serveCmd(), migrateCmd())
+	root.AddCommand(serveCmd(), migrateCmd(), tokenCmd())
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}
@@ -236,6 +240,177 @@ func migrateForceCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// TODO(task-migrate): implement db.MigrateForce(N)
 			slog.Info("migrate force: not yet implemented", "version", args[0])
+			return nil
+		},
+	}
+}
+
+// ── token subcommand ──────────────────────────────────────────────────────────
+
+func tokenCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "token",
+		Short: "Manage API tokens",
+	}
+	cmd.AddCommand(tokenCreateCmd(), tokenListCmd(), tokenRevokeCmd())
+	return cmd
+}
+
+func tokenCreateCmd() *cobra.Command {
+	var (
+		principalSlug string
+		name          string
+		permissions   []string
+	)
+	cmd := &cobra.Command{
+		Use:   "create",
+		Short: "Create a new API token and print it once",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if principalSlug == "" {
+				return fmt.Errorf("--principal is required")
+			}
+			if name == "" {
+				return fmt.Errorf("--name is required")
+			}
+			cfg, err := config.Load(cfgPath)
+			if err != nil {
+				return err
+			}
+			ctx := context.Background()
+			pool, err := db.NewPool(ctx, &cfg.Database)
+			if err != nil {
+				return err
+			}
+			defer pool.Close()
+
+			principal, err := db.GetPrincipalBySlug(ctx, pool, principalSlug)
+			if err != nil {
+				return fmt.Errorf("lookup principal: %w", err)
+			}
+			if principal == nil {
+				return fmt.Errorf("principal %q not found", principalSlug)
+			}
+
+			raw, hash, err := auth.GenerateToken()
+			if err != nil {
+				return err
+			}
+
+			if len(permissions) == 0 {
+				permissions = []string{"read", "write"}
+			}
+
+			t, err := db.CreateToken(ctx, pool, principal.ID, hash, name, nil, permissions, nil)
+			if err != nil {
+				return fmt.Errorf("create token: %w", err)
+			}
+
+			fmt.Printf("Token ID:    %s\n", t.ID)
+			fmt.Printf("Principal:   %s (%s)\n", principal.Slug, principal.ID)
+			fmt.Printf("Name:        %s\n", t.Name)
+			fmt.Printf("Permissions: %s\n", strings.Join(t.Permissions, ", "))
+			fmt.Printf("Created:     %s\n", t.CreatedAt.Format(time.RFC3339))
+			fmt.Printf("\nToken (shown once — store it now):\n\n  %s\n\n", raw)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&principalSlug, "principal", "", "Principal slug to own the token (required)")
+	cmd.Flags().StringVar(&name, "name", "", "Human-readable token name (required)")
+	cmd.Flags().StringSliceVar(&permissions, "permissions", nil, "Comma-separated permissions (default: read,write)")
+	return cmd
+}
+
+func tokenListCmd() *cobra.Command {
+	var principalSlug string
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List API tokens",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load(cfgPath)
+			if err != nil {
+				return err
+			}
+			ctx := context.Background()
+			pool, err := db.NewPool(ctx, &cfg.Database)
+			if err != nil {
+				return err
+			}
+			defer pool.Close()
+
+			var tokens []*db.Token
+			if principalSlug != "" {
+				principal, err := db.GetPrincipalBySlug(ctx, pool, principalSlug)
+				if err != nil {
+					return fmt.Errorf("lookup principal: %w", err)
+				}
+				if principal == nil {
+					return fmt.Errorf("principal %q not found", principalSlug)
+				}
+				tokens, err = db.ListTokens(ctx, pool, &principal.ID)
+				if err != nil {
+					return fmt.Errorf("list tokens: %w", err)
+				}
+			} else {
+				tokens, err = db.ListTokens(ctx, pool, nil)
+				if err != nil {
+					return fmt.Errorf("list tokens: %w", err)
+				}
+			}
+
+			if len(tokens) == 0 {
+				fmt.Println("No tokens found.")
+				return nil
+			}
+
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "ID\tNAME\tPRINCIPAL\tPERMISSIONS\tCREATED\tREVOKED")
+			for _, t := range tokens {
+				revoked := ""
+				if !t.RevokedAt.IsZero() {
+					revoked = t.RevokedAt.Format(time.RFC3339)
+				}
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+					t.ID,
+					t.Name,
+					t.PrincipalID,
+					strings.Join(t.Permissions, ","),
+					t.CreatedAt.Format(time.RFC3339),
+					revoked,
+				)
+			}
+			return w.Flush()
+		},
+	}
+	cmd.Flags().StringVar(&principalSlug, "principal", "", "Filter to tokens owned by this principal slug")
+	return cmd
+}
+
+func tokenRevokeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "revoke <token-id>",
+		Short: "Revoke an API token by ID",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load(cfgPath)
+			if err != nil {
+				return err
+			}
+			ctx := context.Background()
+			pool, err := db.NewPool(ctx, &cfg.Database)
+			if err != nil {
+				return err
+			}
+			defer pool.Close()
+
+			tid, err := uuid.Parse(args[0])
+			if err != nil {
+				return fmt.Errorf("invalid token ID: %w", err)
+			}
+
+			if err := db.RevokeToken(ctx, pool, tid); err != nil {
+				return fmt.Errorf("revoke token: %w", err)
+			}
+			fmt.Printf("Token %s revoked.\n", tid)
 			return nil
 		},
 	}

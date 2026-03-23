@@ -294,6 +294,16 @@ func UpdateTokenLastUsed(ctx context.Context, pool *pgxpool.Pool, tokenID uuid.U
 	return q.UpdateTokenLastUsed(ctx, tokenID)
 }
 
+// ListTokens returns all tokens, optionally filtered to a single principal.
+// Pass nil to list all tokens across all principals.
+func ListTokens(ctx context.Context, pool *pgxpool.Pool, principalID *uuid.UUID) ([]*Token, error) {
+	q := New(pool)
+	if principalID == nil {
+		return q.ListAllTokens(ctx)
+	}
+	return q.ListTokensByPrincipal(ctx, *principalID)
+}
+
 // ── Memories ──────────────────────────────────────────────────────────────────
 
 // GetMemory retrieves a memory by ID. Returns nil, nil if not found.
