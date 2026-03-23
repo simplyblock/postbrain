@@ -38,7 +38,7 @@ func main() {
 	}
 	root.PersistentFlags().StringVar(&cfgPath, "config", "config.yaml", "path to config file")
 
-	root.AddCommand(serveCmd(), migrateCmd(), tokenCmd())
+	root.AddCommand(serveCmd(), migrateCmd(), tokenCmd(), onboardCmd())
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}
@@ -414,4 +414,185 @@ func tokenRevokeCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// ── onboard subcommand ────────────────────────────────────────────────────────
+
+func onboardCmd() *cobra.Command {
+	var (
+		databaseURL   string
+		adminSlug     string
+		displayName   string
+		tokenName     string
+		skipMigrate   bool
+		textModel     string
+		codeModel     string
+		modelDims     int
+	)
+
+	cmd := &cobra.Command{
+		Use:   "onboard",
+		Short: "Bootstrap a fresh Postbrain installation",
+		Long: `onboard sets up everything needed for a first run:
+
+  1. Runs all pending migrations (unless --skip-migrate)
+  2. Creates the admin principal (idempotent — reuses existing slug)
+  3. Creates the admin's personal scope  (idempotent)
+  4. Registers the configured embedding model in the DB (when --dimensions is given)
+  5. Creates a new API token with full permissions
+  6. Prints the raw token — store it now, it will not be shown again
+
+Requires only a database URL, either via --database-url or the
+POSTBRAIN_DATABASE_URL env var (or a config file with database.url set).`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+
+			// ── 1. Resolve database URL ──────────────────────────────────────
+			dbURL := databaseURL
+			if dbURL == "" {
+				var err error
+				dbURL, err = config.LoadDatabaseURL(cfgPath)
+				if err != nil {
+					return fmt.Errorf("database URL not found: %w\n\nPass --database-url or set POSTBRAIN_DATABASE_URL", err)
+				}
+			}
+
+			dbCfg := &config.DatabaseConfig{
+				URL:            dbURL,
+				MaxOpen:        5,
+				MaxIdle:        2,
+				ConnectTimeout: 15 * time.Second,
+			}
+
+			pool, err := db.NewPool(ctx, dbCfg)
+			if err != nil {
+				return fmt.Errorf("connect to database: %w", err)
+			}
+			defer pool.Close()
+
+			fmt.Println("Postbrain — first-run setup")
+			fmt.Println(strings.Repeat("─", 50))
+
+			// ── 2. Migrations ────────────────────────────────────────────────
+			if !skipMigrate {
+				fmt.Print("Running migrations ... ")
+				if err := db.CheckAndMigrate(ctx, pool, true); err != nil {
+					return fmt.Errorf("migrate: %w", err)
+				}
+				fmt.Println("done")
+			} else {
+				fmt.Println("Skipping migrations (--skip-migrate)")
+			}
+
+			// ── 3. Admin principal ───────────────────────────────────────────
+			fmt.Printf("Creating principal %q ... ", adminSlug)
+			principal, err := db.GetPrincipalBySlug(ctx, pool, adminSlug)
+			if err != nil {
+				return fmt.Errorf("look up principal: %w", err)
+			}
+			if principal != nil {
+				fmt.Printf("already exists (%s)\n", principal.ID)
+			} else {
+				principal, err = db.CreatePrincipal(ctx, pool, "user", adminSlug, displayName, nil)
+				if err != nil {
+					return fmt.Errorf("create principal: %w", err)
+				}
+				fmt.Printf("created (%s)\n", principal.ID)
+			}
+
+			// ── 4. Personal scope ────────────────────────────────────────────
+			scopeExternalID := adminSlug
+			fmt.Printf("Creating scope user:%s ... ", scopeExternalID)
+			scope, err := db.GetScopeByExternalID(ctx, pool, "user", scopeExternalID)
+			if err != nil {
+				return fmt.Errorf("look up scope: %w", err)
+			}
+			if scope != nil {
+				fmt.Printf("already exists (%s)\n", scope.ID)
+			} else {
+				scope, err = db.CreateScope(ctx, pool, "user", scopeExternalID, displayName, nil, principal.ID, nil)
+				if err != nil {
+					return fmt.Errorf("create scope: %w", err)
+				}
+				fmt.Printf("created (%s)\n", scope.ID)
+			}
+
+			// ── 5. Embedding model ───────────────────────────────────────────
+			if modelDims > 0 {
+				fmt.Printf("Registering text embedding model %q (%d dims) ... ", textModel, modelDims)
+				q := db.New(pool)
+				_, err := q.UpsertEmbeddingModel(ctx, db.UpsertEmbeddingModelParams{
+					Slug:        textModel,
+					Dimensions:  int32(modelDims), //nolint:gosec
+					ContentType: "text",
+					IsActive:    true,
+				})
+				if err != nil {
+					return fmt.Errorf("register text model: %w", err)
+				}
+				fmt.Println("done")
+
+				if codeModel != "" && codeModel != textModel {
+					fmt.Printf("Registering code embedding model %q (%d dims) ... ", codeModel, modelDims)
+					_, err = q.UpsertEmbeddingModel(ctx, db.UpsertEmbeddingModelParams{
+						Slug:        codeModel,
+						Dimensions:  int32(modelDims), //nolint:gosec
+						ContentType: "code",
+						IsActive:    true,
+					})
+					if err != nil {
+						return fmt.Errorf("register code model: %w", err)
+					}
+					fmt.Println("done")
+				}
+			} else {
+				fmt.Println("Skipping embedding model registration (pass --dimensions to register)")
+			}
+
+			// ── 6. API token ─────────────────────────────────────────────────
+			fmt.Printf("Creating API token %q ... ", tokenName)
+			raw, hash, err := auth.GenerateToken()
+			if err != nil {
+				return err
+			}
+			token, err := db.CreateToken(ctx, pool, principal.ID, hash, tokenName, nil,
+				[]string{"read", "write", "admin"}, nil)
+			if err != nil {
+				return fmt.Errorf("create token: %w", err)
+			}
+			fmt.Printf("created (%s)\n", token.ID)
+
+			// ── Summary ──────────────────────────────────────────────────────
+			fmt.Println()
+			fmt.Println(strings.Repeat("─", 50))
+			fmt.Println("Setup complete. Summary:")
+			fmt.Println()
+			fmt.Printf("  Principal : %s  (kind=user, id=%s)\n", principal.Slug, principal.ID)
+			fmt.Printf("  Scope     : user:%s  (id=%s)\n", scope.ExternalID, scope.ID)
+			fmt.Printf("  Token ID  : %s\n", token.ID)
+			fmt.Printf("  Token name: %s\n", token.Name)
+			fmt.Println()
+			fmt.Println("  Bearer token (shown once — store it now):")
+			fmt.Println()
+			fmt.Printf("    %s\n", raw)
+			fmt.Println()
+			fmt.Println("  Use it in:")
+			fmt.Printf("    curl -H 'Authorization: Bearer %s' http://localhost:7433/v1/memories/recall?q=hello&scope=user:%s\n", raw, adminSlug)
+			fmt.Println()
+			fmt.Println("  For the Web UI, open http://localhost:7433/ui and paste the token.")
+			fmt.Println()
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&databaseURL, "database-url", "", "PostgreSQL URL (overrides config file and POSTBRAIN_DATABASE_URL)")
+	cmd.Flags().StringVar(&adminSlug, "slug", "admin", "Slug for the admin principal")
+	cmd.Flags().StringVar(&displayName, "display-name", "Admin", "Display name for the admin principal")
+	cmd.Flags().StringVar(&tokenName, "token-name", "admin", "Name for the generated API token")
+	cmd.Flags().BoolVar(&skipMigrate, "skip-migrate", false, "Skip running database migrations")
+	cmd.Flags().StringVar(&textModel, "text-model", "nomic-embed-text", "Text embedding model slug to register")
+	cmd.Flags().StringVar(&codeModel, "code-model", "", "Code embedding model slug to register (optional)")
+	cmd.Flags().IntVar(&modelDims, "dimensions", 0, "Embedding vector dimensions; required to register the model (e.g. 768 for nomic-embed-text)")
+
+	return cmd
 }

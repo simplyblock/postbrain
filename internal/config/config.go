@@ -61,6 +61,32 @@ type JobsConfig struct {
 	AgeCheckEnabled      bool `mapstructure:"age_check_enabled"`
 }
 
+// LoadDatabaseURL reads only the database URL from the config file at path
+// (or the POSTBRAIN_DATABASE_URL env var) without validating any other fields.
+// It is intended for bootstrap commands like `onboard` that run before the
+// full server config has been completed.
+func LoadDatabaseURL(path string) (string, error) {
+	v := viper.New()
+	v.SetConfigFile(path)
+	v.SetEnvPrefix("POSTBRAIN")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AutomaticEnv()
+
+	if err := v.ReadInConfig(); err != nil {
+		// Config file may not exist yet — fall through to env var.
+		if !errors.Is(err, viper.ConfigFileNotFoundError{}) {
+			// Only return real read errors; missing file is OK if env var is set.
+			_ = err
+		}
+	}
+
+	url := v.GetString("database.url")
+	if url == "" {
+		return "", errors.New("database.url is required (set in config file or POSTBRAIN_DATABASE_URL env var)")
+	}
+	return url, nil
+}
+
 // Load reads configuration from the YAML file at path, applies defaults,
 // overlays environment variables (prefix POSTBRAIN_), and validates required
 // fields. It returns an error if database.url or server.token is empty.
