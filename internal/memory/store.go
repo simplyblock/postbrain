@@ -179,19 +179,21 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 
 	// 6. Insert.
 	textVecVal := pgvector.NewVector(textVec)
-	codeVecVal := pgvector.NewVector(codeVec)
 	m := &db.Memory{
-		MemoryType:    input.MemoryType,
-		ScopeID:       input.ScopeID,
-		AuthorID:      input.AuthorID,
-		Content:       input.Content,
-		Embedding:     &textVecVal,
-		EmbeddingCode: &codeVecVal,
-		ContentKind:   contentKind,
-		Meta:          input.Meta,
-		Importance:    input.Importance,
-		ExpiresAt:     expiresAt,
-		SourceRef:     input.SourceRef,
+		MemoryType:  input.MemoryType,
+		ScopeID:     input.ScopeID,
+		AuthorID:    input.AuthorID,
+		Content:     input.Content,
+		Embedding:   &textVecVal,
+		ContentKind: contentKind,
+		Meta:        input.Meta,
+		Importance:  input.Importance,
+		ExpiresAt:   expiresAt,
+		SourceRef:   input.SourceRef,
+	}
+	if len(codeVec) > 0 {
+		v := pgvector.NewVector(codeVec)
+		m.EmbeddingCode = &v
 	}
 	created, err := s.creator.CreateMemory(ctx, m)
 	if err != nil {

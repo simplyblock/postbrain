@@ -1623,3 +1623,31 @@ func skillFromRecallByFTSRow(r *RecallSkillsByFTSRow) *Skill {
 		UpdatedAt:        r.UpdatedAt,
 	}
 }
+
+// GetScopesByIDs fetches all scopes whose IDs are in the provided slice.
+// Returns an empty slice (not nil) when ids is empty.
+func GetScopesByIDs(ctx context.Context, pool *pgxpool.Pool, ids []uuid.UUID) ([]*Scope, error) {
+	if len(ids) == 0 {
+		return []*Scope{}, nil
+	}
+	rows, err := pool.Query(ctx,
+		`SELECT id, kind, external_id, name, parent_id, principal_id, path::text, meta, created_at
+		 FROM scopes WHERE id = ANY($1)
+		 ORDER BY created_at DESC`,
+		ids,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("db: get scopes by ids: %w", err)
+	}
+	defer rows.Close()
+	var scopes []*Scope
+	for rows.Next() {
+		var s Scope
+		if err := rows.Scan(&s.ID, &s.Kind, &s.ExternalID, &s.Name, &s.ParentID,
+			&s.PrincipalID, &s.Path, &s.Meta, &s.CreatedAt); err != nil {
+			return nil, fmt.Errorf("db: get scopes by ids scan: %w", err)
+		}
+		scopes = append(scopes, &s)
+	}
+	return scopes, rows.Err()
+}

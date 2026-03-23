@@ -168,7 +168,7 @@ func (s *Server) registerTools() {
 		mcpgo.WithString("artifact_id", mcpgo.Description("UUID of the artifact (for add_to_collection)")),
 		mcpgo.WithString("collection_id", mcpgo.Description("UUID of the collection (for add_to_collection)")),
 		mcpgo.WithString("collection_slug", mcpgo.Description("Slug alternative to collection_id")),
-		mcpgo.WithString("scope", mcpgo.Description("Scope as kind:external_id (required for create_collection)")),
+		mcpgo.WithString("scope", mcpgo.Description("Scope as kind:external_id (required for create_collection and when using collection_slug)")),
 		mcpgo.WithString("name", mcpgo.Description("Collection name (required for create_collection)")),
 		mcpgo.WithString("description", mcpgo.Description("Collection description (optional)")),
 	), withToolMetrics("collect", s.handleCollect))
@@ -207,6 +207,11 @@ func (s *Server) registerTools() {
 		mcpgo.WithDescription("Retrieve the full content of a knowledge artifact by ID. Use when recall returns full_content_available=true and the summary is insufficient."),
 		mcpgo.WithString("artifact_id", mcpgo.Required(), mcpgo.Description("UUID of the knowledge artifact")),
 	), withToolMetrics("knowledge_detail", s.handleKnowledgeDetail))
+
+	// list_scopes
+	s.mcpServer.AddTool(mcpgo.NewTool("list_scopes",
+		mcpgo.WithDescription("List all scopes accessible to the current token. Returns scope IDs and their kind:external_id strings for use in other tools."),
+	), withToolMetrics("list_scopes", s.handleListScopes))
 }
 
 // Handler returns an http.Handler that serves both the MCP Streamable HTTP
