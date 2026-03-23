@@ -1,7 +1,8 @@
 .PHONY: build test lint fmt migrate-up migrate-down docker-up docker-down generate
 
 build:
-	go build ./cmd/postbrain ./cmd/postbrain-hook
+	go build -o postbrain ./cmd/postbrain
+	go build -o postbrain-hook ./cmd/postbrain-hook
 
 test:
 	go test ./...
