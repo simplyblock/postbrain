@@ -6,4 +6,25 @@
   <button type="submit">Search</button>
 </form>
 <div id="results">{{template "knowledge_rows" .}}</div>
+
+<h2>Upload Document</h2>
+{{if .UploadError}}<p style="color:red">{{.UploadError}}</p>{{end}}
+<form method="POST" action="/ui/knowledge/upload" enctype="multipart/form-data">
+  <label>File (.txt, .md, .pdf, .docx)
+    <input type="file" name="file" accept=".txt,.md,.pdf,.docx" required>
+  </label>
+  <label>Scope<input type="text" name="scope" placeholder="e.g. project:noctarius/test" required></label>
+  <label>Title (optional)<input type="text" name="title" placeholder="defaults to filename"></label>
+  <label>Type
+    <select name="knowledge_type">
+      <option value="documentation">documentation</option>
+      <option value="architecture">architecture</option>
+      <option value="runbook">runbook</option>
+      <option value="decision">decision</option>
+      <option value="reference">reference</option>
+    </select>
+  </label>
+  <label><input type="checkbox" name="auto_review"> Submit for review immediately</label>
+  <button type="submit">Upload</button>
+</form>
 {{end}}

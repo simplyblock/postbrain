@@ -9,18 +9,18 @@ import (
 
 // TestNewHandler_NilPool_Succeeds verifies that NewHandler with a nil pool parses templates without error.
 func TestNewHandler_NilPool_Succeeds(t *testing.T) {
-	h, err := NewHandler(nil)
+	h, err := NewHandler(nil, nil)
 	if err != nil {
-		t.Fatalf("NewHandler(nil) returned error: %v", err)
+		t.Fatalf("NewHandler(nil, nil) returned error: %v", err)
 	}
 	if h == nil {
-		t.Fatal("NewHandler(nil) returned nil handler")
+		t.Fatal("NewHandler(nil, nil) returned nil handler")
 	}
 }
 
 // TestLoginGET_Returns200 verifies that GET /ui/login returns 200 with the login form.
 func TestLoginGET_Returns200(t *testing.T) {
-	h, err := NewHandler(nil)
+	h, err := NewHandler(nil, nil)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}
@@ -39,7 +39,7 @@ func TestLoginGET_Returns200(t *testing.T) {
 
 // TestUIRoot_NoCookie_RedirectsToLogin verifies that GET /ui without a session cookie redirects to /ui/login.
 func TestUIRoot_NoCookie_RedirectsToLogin(t *testing.T) {
-	h, err := NewHandler(nil)
+	h, err := NewHandler(nil, nil)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestUIRoot_NoCookie_RedirectsToLogin(t *testing.T) {
 
 // TestUIMetrics_NoCookie_RedirectsToLogin verifies that GET /ui/metrics without a session cookie redirects.
 func TestUIMetrics_NoCookie_RedirectsToLogin(t *testing.T) {
-	h, err := NewHandler(nil)
+	h, err := NewHandler(nil, nil)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}

@@ -101,6 +101,7 @@ func (ro *Router) Handler() http.Handler {
 		r.Post("/memories/{id}/promote", ro.promoteMemory)
 
 		// Knowledge endpoints.
+		r.Post("/knowledge/upload", ro.uploadKnowledge)
 		r.Post("/knowledge", ro.createArtifact)
 		r.Get("/knowledge/search", ro.searchArtifacts)
 		r.Get("/knowledge/{id}", ro.getArtifact)

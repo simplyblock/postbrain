@@ -238,6 +238,11 @@
     - Score: `0.50*vec + 0.20*bm25 + 0.20*normalizeEndorsements(count) + 0.10*recency + 0.10 boost`
     - `RecallInput`, `ArtifactResult` types
 
+### `internal/ingest` — Document Text Extraction
+
+- [x] `extract.go` — `Extract(filename, data) (string, error)`: .txt/.md passthrough; PDF via `github.com/ledongthuc/pdf`; DOCX via zip+XML parse; `ErrUnsupportedFormat` sentinel
+- [x] `extract_test.go` — TestExtractTxt, TestExtractMarkdown, TestExtractDocx, TestExtractUnsupported, TestExtractPDFInvalid
+
 ### `internal/skills` — Skills Registry
 
 - [x] `store.go`:
@@ -383,6 +388,7 @@
 - [x] `health.go` — `GET /health`
 - [x] `helpers.go` — `writeJSON`, `writeError`, `readJSON`, `uuidParam`, `paginationFromRequest`
 - [x] `router_test.go` — GET /health 200, POST /v1/memories no auth 401, invalid token 401
+- [x] `upload.go` + `upload_test.go` — `POST /v1/knowledge/upload` multipart file upload; text extraction via `internal/ingest`; 401 test; supports .txt, .md, .pdf, .docx
 - [ ] `graph.go` — `GET /v1/entities`, `GET /v1/graph`, `POST /v1/graph/query` (deferred: requires AGE layer)
 
 ### `cmd/postbrain` — Server Binary
@@ -475,7 +481,7 @@ Technology: Go `html/template` + HTMX + Pico.css, all embedded via `//go:embed`.
 - [x] `web/static/pico.min.css` — embed Pico.css v2 (classless theme; placeholder file — replace with real minified file from picocss.com)
 - [x] `web/static/htmx.min.js` — embed HTMX v2 (placeholder file — replace with real minified file from htmx.org)
 - [x] `web/templates/base.html` — shared layout: `<nav>`, `<main>`, `<footer>`; active-page highlighting; HTMX boosted links
-- [x] `internal/ui/handler.go` — `NewHandler(pool)` returns `http.Handler`; `//go:embed web/templates` + `//go:embed web/static`; template rendering helpers (`render`)
+- [x] `internal/ui/handler.go` — `NewHandler(pool, svc)` returns `http.Handler`; `//go:embed web/templates` + `//go:embed web/static`; template rendering helpers (`render`); `POST /ui/knowledge/upload` via `handleUploadKnowledge`
 - [x] `internal/ui/auth.go` — session cookie middleware (`pb_session`); `?token=` query-param on `/ui/login` only; calls `auth.TokenStore.Lookup`; 401 → redirect to `/ui/login`
 - [x] `internal/ui/handler_test.go` — unit tests: unauthenticated request redirects to login; login form sets cookie; template renders without panicking
 - [x] `cmd/postbrain/main.go` — mount `ui.NewHandler` at `/ui` and `/ui/` in `runServe`
@@ -486,7 +492,7 @@ Technology: Go `html/template` + HTMX + Pico.css, all embedded via `//go:embed`.
 - [x] **Overview** (`web/templates/health.html`) — server status badge, schema version
 - [x] **Memory Browser** (`web/templates/memories.html` + `memories_rows.html` partial) — scope selector; search bar; paginated results table; soft-delete button (HTMX swap)
 - [x] **Memory Detail** (`web/templates/memory_detail.html`) — full content, metadata, promote button
-- [x] **Knowledge Browser** (`web/templates/knowledge.html` + `knowledge_rows.html` partial) — filter by status; inline endorse buttons; HTMX row swap
+- [x] **Knowledge Browser** (`web/templates/knowledge.html` + `knowledge_rows.html` partial) — filter by status; inline endorse buttons; HTMX row swap; document upload form (.txt/.md/.pdf/.docx)
 - [x] **Knowledge Detail** (`web/templates/knowledge_detail.html`) — content pane, endorsement count
 - [x] **Collections** (`web/templates/collections.html`) — collection list
 - [x] **Promotion Queue** (`web/templates/promotions.html`) — pending requests table; approve/reject buttons

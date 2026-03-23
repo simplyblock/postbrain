@@ -4,8 +4,10 @@ package ui
 import (
 	"embed"
 	"html/template"
+	"io"
 	"io/fs"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
@@ -13,6 +15,8 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/ingest"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 	"github.com/simplyblock/postbrain/internal/principals"
 )
@@ -29,10 +33,11 @@ type Handler struct {
 	templates *template.Template
 	staticFS  fs.FS
 	knwLife   *knowledge.Lifecycle
+	knwStore  *knowledge.Store
 }
 
 // NewHandler creates a UI Handler with parsed templates.
-func NewHandler(pool *pgxpool.Pool) (*Handler, error) {
+func NewHandler(pool *pgxpool.Pool, svc *embedding.EmbeddingService) (*Handler, error) {
 	funcMap := template.FuncMap{
 		"truncate":    truncate,
 		"timeAgo":     timeAgo,
@@ -53,6 +58,9 @@ func NewHandler(pool *pgxpool.Pool) (*Handler, error) {
 	if pool != nil {
 		membership := principals.NewMembershipStore(pool)
 		h.knwLife = knowledge.NewLifecycle(pool, membership)
+	}
+	if pool != nil && svc != nil {
+		h.knwStore = knowledge.NewStore(pool, svc)
 	}
 	return h, nil
 }
@@ -80,6 +88,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleMemories(w, r)
 	case strings.HasPrefix(r.URL.Path, "/ui/memories/"):
 		h.handleMemoryDetail(w, r)
+	case r.URL.Path == "/ui/knowledge/upload" && r.Method == http.MethodPost:
+		h.handleUploadKnowledge(w, r)
 	case r.URL.Path == "/ui/knowledge":
 		h.handleKnowledge(w, r)
 	case strings.HasSuffix(r.URL.Path, "/endorse") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
@@ -231,8 +241,9 @@ func (h *Handler) handleKnowledge(w http.ResponseWriter, r *http.Request) {
 	_ = q
 
 	data := struct {
-		Query     string
-		Artifacts []*db.KnowledgeArtifact
+		Query       string
+		Artifacts   []*db.KnowledgeArtifact
+		UploadError string
 	}{
 		Query:     q,
 		Artifacts: nil,
@@ -608,4 +619,83 @@ func (h *Handler) handleEndorseArtifact(w http.ResponseWriter, r *http.Request) 
 // handleMetrics serves GET /ui/metrics.
 func (h *Handler) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "metrics", "Metrics", nil)
+}
+
+// handleUploadKnowledge serves POST /ui/knowledge/upload.
+func (h *Handler) handleUploadKnowledge(w http.ResponseWriter, r *http.Request) {
+	if h.knwStore == nil {
+		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		http.Error(w, "file too large or invalid form", http.StatusBadRequest)
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "file field is required", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(io.LimitReader(file, 32<<20))
+	if err != nil {
+		http.Error(w, "failed to read file", http.StatusInternalServerError)
+		return
+	}
+
+	text, err := ingest.Extract(header.Filename, data)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(text) == "" {
+		http.Error(w, "extracted text is empty", http.StatusBadRequest)
+		return
+	}
+
+	scopeStr := r.FormValue("scope")
+	if scopeStr == "" {
+		http.Error(w, "scope is required", http.StatusBadRequest)
+		return
+	}
+	parts := strings.SplitN(scopeStr, ":", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		http.Error(w, "scope must be kind:external_id", http.StatusBadRequest)
+		return
+	}
+	scope, err := db.GetScopeByExternalID(r.Context(), h.pool, parts[0], parts[1])
+	if err != nil || scope == nil {
+		http.Error(w, "scope not found", http.StatusBadRequest)
+		return
+	}
+
+	title := r.FormValue("title")
+	if title == "" {
+		base := filepath.Base(header.Filename)
+		title = strings.TrimSuffix(base, filepath.Ext(base))
+	}
+
+	knowledgeType := r.FormValue("knowledge_type")
+	if knowledgeType == "" {
+		knowledgeType = "documentation"
+	}
+
+	authorID := h.principalFromCookie(r)
+
+	_, err = h.knwStore.Create(r.Context(), knowledge.CreateInput{
+		KnowledgeType: knowledgeType,
+		OwnerScopeID:  scope.ID,
+		AuthorID:      authorID,
+		Visibility:    "team",
+		Title:         title,
+		Content:       text,
+		AutoReview:    r.FormValue("auto_review") == "on",
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/ui/knowledge", http.StatusSeeOther)
 }

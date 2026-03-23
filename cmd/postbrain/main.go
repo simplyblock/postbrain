@@ -92,7 +92,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	mux.Handle("/", restSrv.Handler())
 
 	// Web UI.
-	uiHandler, err := uiapi.NewHandler(pool)
+	uiHandler, err := uiapi.NewHandler(pool, svc)
 	if err != nil {
 		return fmt.Errorf("ui handler: %w", err)
 	}
