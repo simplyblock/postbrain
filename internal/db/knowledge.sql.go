@@ -516,7 +516,7 @@ type RecallArtifactsByVectorRow struct {
 	SourceRef        *string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
-	VecScore         int32
+	VecScore         float64
 }
 
 func (q *Queries) RecallArtifactsByVector(ctx context.Context, arg RecallArtifactsByVectorParams) ([]*RecallArtifactsByVectorRow, error) {

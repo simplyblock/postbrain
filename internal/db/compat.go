@@ -579,7 +579,7 @@ func RecallMemoriesByVector(ctx context.Context, pool *pgxpool.Pool, scopeIDs []
 		mem := memoryFromRecallByVectorRow(r)
 		results[i] = MemoryScore{
 			Memory:   mem,
-			VecScore: float64(r.VecScore),
+			VecScore: r.VecScore,
 		}
 	}
 	return results, nil
@@ -601,7 +601,7 @@ func RecallMemoriesByCodeVector(ctx context.Context, pool *pgxpool.Pool, scopeID
 		mem := memoryFromRecallByCodeVectorRow(r)
 		results[i] = MemoryScore{
 			Memory:   mem,
-			VecScore: float64(r.VecScore),
+			VecScore: r.VecScore,
 		}
 	}
 	return results, nil
@@ -960,7 +960,7 @@ func RecallArtifactsByVector(ctx context.Context, pool *pgxpool.Pool, scopeIDs [
 		art := artifactFromRecallByVectorRow(r)
 		results[i] = ArtifactScore{
 			Artifact: art,
-			VecScore: float64(r.VecScore),
+			VecScore: r.VecScore,
 		}
 	}
 	return results, nil
