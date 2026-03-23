@@ -128,7 +128,7 @@ func makeMemory(id uuid.UUID, memType string, importance float64) *db.Memory {
 		MemoryType:   memType,
 		Importance:   importance,
 		CreatedAt:    now,
-		LastAccessed: now,
+		LastAccessed: &now,
 	}
 }
 

@@ -174,8 +174,10 @@ func (s *Store) Recall(ctx context.Context, input RecallInput) ([]*MemoryResult,
 			continue
 		}
 
-		ref := m.LastAccessed
-		if ref.IsZero() {
+		var ref time.Time
+		if m.LastAccessed != nil {
+			ref = *m.LastAccessed
+		} else {
 			ref = m.CreatedAt
 		}
 		days := now.Sub(ref).Hours() / 24

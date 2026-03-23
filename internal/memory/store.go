@@ -175,10 +175,6 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 	}
 
 	// 6. Insert.
-	var expiresAtVal time.Time
-	if expiresAt != nil {
-		expiresAtVal = *expiresAt
-	}
 	m := &db.Memory{
 		MemoryType:    input.MemoryType,
 		ScopeID:       input.ScopeID,
@@ -189,7 +185,7 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 		ContentKind:   contentKind,
 		Meta:          input.Meta,
 		Importance:    input.Importance,
-		ExpiresAt:     expiresAtVal,
+		ExpiresAt:     expiresAt,
 		SourceRef:     input.SourceRef,
 	}
 	created, err := s.creator.CreateMemory(ctx, m)

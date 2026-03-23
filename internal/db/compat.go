@@ -306,10 +306,6 @@ func CreateToken(ctx context.Context, pool *pgxpool.Pool, principalID uuid.UUID,
 	if len(permissions) == 0 {
 		permissions = []string{"read"}
 	}
-	var exp time.Time
-	if expiresAt != nil {
-		exp = *expiresAt
-	}
 	q := New(pool)
 	t, err := q.CreateToken(ctx, CreateTokenParams{
 		PrincipalID: principalID,
@@ -317,7 +313,7 @@ func CreateToken(ctx context.Context, pool *pgxpool.Pool, principalID uuid.UUID,
 		Name:        name,
 		ScopeIds:    scopeIDs,
 		Permissions: permissions,
-		ExpiresAt:   exp,
+		ExpiresAt:   expiresAt,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("db: create token: %w", err)
@@ -822,8 +818,8 @@ func UpdateArtifactStatus(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID,
 	return q.UpdateArtifactStatus(ctx, UpdateArtifactStatusParams{
 		ID:           id,
 		Status:       status,
-		PublishedAt:  derefTime(publishedAt),
-		DeprecatedAt: derefTime(deprecatedAt),
+		PublishedAt:  publishedAt,
+		DeprecatedAt: deprecatedAt,
 	})
 }
 
@@ -1227,8 +1223,8 @@ func UpdateSkillStatus(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, st
 	return q.UpdateSkillStatus(ctx, UpdateSkillStatusParams{
 		ID:           id,
 		Status:       status,
-		PublishedAt:  derefTime(publishedAt),
-		DeprecatedAt: derefTime(deprecatedAt),
+		PublishedAt:  publishedAt,
+		DeprecatedAt: deprecatedAt,
 	})
 }
 

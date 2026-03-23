@@ -375,6 +375,8 @@
 - [x] `sharing.go` — `POST /v1/sharing/grants`, `DELETE /v1/sharing/grants/:id`, `GET /v1/sharing/grants`
 - [x] `promotions.go` — `GET /v1/promotions`, `POST /v1/promotions/:id/approve`, `POST /v1/promotions/:id/reject`
 - [x] `scopes.go` — `GET/POST /v1/scopes`, `GET/PUT/DELETE /v1/scopes/:id`; DB layer extended with `ListScopes`, `UpdateScope`, `DeleteScope`; web UI principals page updated to show scopes table
+- [x] Fix nil-UUID FK violations on `knowledge_artifacts` and `skills` inserts (`previous_version`, `source_memory_id`, `source_artifact_id` — add `NULLIF` guards matching scopes pattern)
+- [x] Fix nullable `TIMESTAMPTZ` columns scanned into non-pointer `time.Time` fields (crash on first publish/remember): change `PublishedAt`, `DeprecatedAt`, `LastAccessed`, `ExpiresAt`, `LastInvokedAt`, `EndedAt`, `ReviewedAt` to `*time.Time` across all models, generated sql.go files, and callers
 - [x] `orgs.go` — `GET/POST /v1/principals`, `GET/PUT/DELETE /v1/principals/:id`, `GET/POST/DELETE /v1/principals/:id/members`
 - [x] `sessions.go` — `POST /v1/sessions`, `PATCH /v1/sessions/:id` (TODO: persist to DB)
 - [x] `context.go` — `GET /v1/context`

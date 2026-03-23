@@ -53,8 +53,8 @@ type CreateSkillParams struct {
 	Parameters       []byte
 	Visibility       string
 	Status           string
-	PublishedAt      time.Time
-	DeprecatedAt     time.Time
+	PublishedAt      *time.Time
+	DeprecatedAt     *time.Time
 	ReviewRequired   int32
 	Version          int32
 	PreviousVersion  uuid.UUID
@@ -345,15 +345,15 @@ type RecallSkillsByFTSRow struct {
 	Parameters       []byte
 	Visibility       string
 	Status           string
-	PublishedAt      time.Time
-	DeprecatedAt     time.Time
+	PublishedAt      *time.Time
+	DeprecatedAt     *time.Time
 	ReviewRequired   int32
 	Version          int32
 	PreviousVersion  uuid.UUID
 	Embedding        pgvector_go.Vector
 	EmbeddingModelID uuid.UUID
 	InvocationCount  int32
-	LastInvokedAt    time.Time
+	LastInvokedAt    *time.Time
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 	Score            float32
@@ -444,15 +444,15 @@ type RecallSkillsByVectorRow struct {
 	Parameters       []byte
 	Visibility       string
 	Status           string
-	PublishedAt      time.Time
-	DeprecatedAt     time.Time
+	PublishedAt      *time.Time
+	DeprecatedAt     *time.Time
 	ReviewRequired   int32
 	Version          int32
 	PreviousVersion  uuid.UUID
 	Embedding        pgvector_go.Vector
 	EmbeddingModelID uuid.UUID
 	InvocationCount  int32
-	LastInvokedAt    time.Time
+	LastInvokedAt    *time.Time
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 	Score            interface{}
@@ -599,8 +599,8 @@ WHERE id=$1
 type UpdateSkillStatusParams struct {
 	ID           uuid.UUID
 	Status       string
-	PublishedAt  time.Time
-	DeprecatedAt time.Time
+	PublishedAt  *time.Time
+	DeprecatedAt *time.Time
 }
 
 func (q *Queries) UpdateSkillStatus(ctx context.Context, arg UpdateSkillStatusParams) error {

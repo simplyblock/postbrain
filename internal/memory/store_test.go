@@ -171,8 +171,8 @@ func TestCreate_NonWorkingMemory_ExpiresAtNil(t *testing.T) {
 	}
 
 	created := mc.created.m
-	if !created.ExpiresAt.IsZero() {
-		t.Fatalf("expected ExpiresAt to be zero for semantic memory, got %v", created.ExpiresAt)
+	if created.ExpiresAt != nil {
+		t.Fatalf("expected ExpiresAt to be nil for semantic memory, got %v", created.ExpiresAt)
 	}
 }
 

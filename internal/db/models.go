@@ -60,8 +60,8 @@ type KnowledgeArtifact struct {
 	AuthorID         uuid.UUID
 	Visibility       string
 	Status           string
-	PublishedAt      time.Time
-	DeprecatedAt     time.Time
+	PublishedAt      *time.Time
+	DeprecatedAt     *time.Time
 	ReviewRequired   int32
 	Title            string
 	Content          string
@@ -71,7 +71,7 @@ type KnowledgeArtifact struct {
 	Meta             []byte
 	EndorsementCount int32
 	AccessCount      int32
-	LastAccessed     time.Time
+	LastAccessed     *time.Time
 	Version          int32
 	PreviousVersion  uuid.UUID
 	SourceMemoryID   uuid.UUID
@@ -138,8 +138,8 @@ type Memory struct {
 	Confidence           float64
 	Importance           float64
 	AccessCount          int32
-	LastAccessed         time.Time
-	ExpiresAt            time.Time
+	LastAccessed         *time.Time
+	ExpiresAt            *time.Time
 	PromotionStatus      string
 	PromotedTo           uuid.UUID
 	SourceRef            *string
@@ -182,7 +182,7 @@ type PromotionRequest struct {
 	Status               string
 	ReviewerID           uuid.UUID
 	ReviewNote           *string
-	ReviewedAt           time.Time
+	ReviewedAt           *time.Time
 	ResultArtifactID     uuid.UUID
 	CreatedAt            time.Time
 }
@@ -215,7 +215,7 @@ type Session struct {
 	ScopeID     uuid.UUID
 	PrincipalID uuid.UUID
 	StartedAt   time.Time
-	EndedAt     time.Time
+	EndedAt     *time.Time
 	Meta        []byte
 }
 
@@ -226,7 +226,7 @@ type SharingGrant struct {
 	GranteeScopeID uuid.UUID
 	GrantedBy      uuid.UUID
 	CanReshare     bool
-	ExpiresAt      time.Time
+	ExpiresAt      *time.Time
 	CreatedAt      time.Time
 }
 
@@ -243,15 +243,15 @@ type Skill struct {
 	Parameters       []byte
 	Visibility       string
 	Status           string
-	PublishedAt      time.Time
-	DeprecatedAt     time.Time
+	PublishedAt      *time.Time
+	DeprecatedAt     *time.Time
 	ReviewRequired   int32
 	Version          int32
 	PreviousVersion  uuid.UUID
 	Embedding        pgvector_go.Vector
 	EmbeddingModelID uuid.UUID
 	InvocationCount  int32
-	LastInvokedAt    time.Time
+	LastInvokedAt    *time.Time
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 }
@@ -284,7 +284,7 @@ type StalenessFlag struct {
 	Status     string
 	FlaggedAt  time.Time
 	ReviewedBy uuid.UUID
-	ReviewedAt time.Time
+	ReviewedAt *time.Time
 	ReviewNote *string
 }
 
@@ -295,7 +295,7 @@ type Token struct {
 	Name        string
 	ScopeIds    []uuid.UUID
 	Permissions []string
-	ExpiresAt   time.Time
+	ExpiresAt   *time.Time
 	LastUsedAt  *time.Time
 	CreatedAt   time.Time
 	RevokedAt   *time.Time

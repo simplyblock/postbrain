@@ -24,7 +24,7 @@ type CreateTokenParams struct {
 	Name        string
 	ScopeIds    []uuid.UUID
 	Permissions []string
-	ExpiresAt   time.Time
+	ExpiresAt   *time.Time
 }
 
 func (q *Queries) CreateToken(ctx context.Context, arg CreateTokenParams) (*Token, error) {

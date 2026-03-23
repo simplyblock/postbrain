@@ -44,7 +44,7 @@ type CreateMemoryParams struct {
 	Column12             interface{}
 	Column13             interface{}
 	Column14             interface{}
-	ExpiresAt            time.Time
+	ExpiresAt            *time.Time
 	PromotionStatus      string
 	PromotedTo           uuid.UUID
 	SourceRef            *string
@@ -385,8 +385,8 @@ type RecallMemoriesByCodeVectorRow struct {
 	Confidence           float64
 	Importance           float64
 	AccessCount          int32
-	LastAccessed         time.Time
-	ExpiresAt            time.Time
+	LastAccessed         *time.Time
+	ExpiresAt            *time.Time
 	PromotionStatus      string
 	PromotedTo           uuid.UUID
 	SourceRef            *string
@@ -479,8 +479,8 @@ type RecallMemoriesByFTSRow struct {
 	Confidence           float64
 	Importance           float64
 	AccessCount          int32
-	LastAccessed         time.Time
-	ExpiresAt            time.Time
+	LastAccessed         *time.Time
+	ExpiresAt            *time.Time
 	PromotionStatus      string
 	PromotedTo           uuid.UUID
 	SourceRef            *string
@@ -572,8 +572,8 @@ type RecallMemoriesByVectorRow struct {
 	Confidence           float64
 	Importance           float64
 	AccessCount          int32
-	LastAccessed         time.Time
-	ExpiresAt            time.Time
+	LastAccessed         *time.Time
+	ExpiresAt            *time.Time
 	PromotionStatus      string
 	PromotedTo           uuid.UUID
 	SourceRef            *string

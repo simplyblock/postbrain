@@ -37,8 +37,8 @@ type CreateArtifactParams struct {
 	AuthorID         uuid.UUID
 	Visibility       string
 	Status           string
-	PublishedAt      time.Time
-	DeprecatedAt     time.Time
+	PublishedAt      *time.Time
+	DeprecatedAt     *time.Time
 	ReviewRequired   int32
 	Title            string
 	Content          string
@@ -342,8 +342,8 @@ type RecallArtifactsByFTSRow struct {
 	AuthorID         uuid.UUID
 	Visibility       string
 	Status           string
-	PublishedAt      time.Time
-	DeprecatedAt     time.Time
+	PublishedAt      *time.Time
+	DeprecatedAt     *time.Time
 	ReviewRequired   int32
 	Title            string
 	Content          string
@@ -353,7 +353,7 @@ type RecallArtifactsByFTSRow struct {
 	Meta             []byte
 	EndorsementCount int32
 	AccessCount      int32
-	LastAccessed     time.Time
+	LastAccessed     *time.Time
 	Version          int32
 	PreviousVersion  uuid.UUID
 	SourceMemoryID   uuid.UUID
@@ -436,8 +436,8 @@ type RecallArtifactsByVectorRow struct {
 	AuthorID         uuid.UUID
 	Visibility       string
 	Status           string
-	PublishedAt      time.Time
-	DeprecatedAt     time.Time
+	PublishedAt      *time.Time
+	DeprecatedAt     *time.Time
 	ReviewRequired   int32
 	Title            string
 	Content          string
@@ -447,7 +447,7 @@ type RecallArtifactsByVectorRow struct {
 	Meta             []byte
 	EndorsementCount int32
 	AccessCount      int32
-	LastAccessed     time.Time
+	LastAccessed     *time.Time
 	Version          int32
 	PreviousVersion  uuid.UUID
 	SourceMemoryID   uuid.UUID
@@ -599,8 +599,8 @@ WHERE id=$1
 type UpdateArtifactStatusParams struct {
 	ID           uuid.UUID
 	Status       string
-	PublishedAt  time.Time
-	DeprecatedAt time.Time
+	PublishedAt  *time.Time
+	DeprecatedAt *time.Time
 }
 
 func (q *Queries) UpdateArtifactStatus(ctx context.Context, arg UpdateArtifactStatusParams) error {
