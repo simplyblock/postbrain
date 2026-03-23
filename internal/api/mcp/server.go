@@ -203,17 +203,24 @@ func (s *Server) registerTools() {
 	), withToolMetrics("skill_invoke", s.handleSkillInvoke))
 }
 
-// Handler returns an http.Handler for the MCP SSE endpoint.
-// It wraps the SSE handler with bearer token authentication.
+// Handler returns an http.Handler that serves both the MCP Streamable HTTP
+// transport (used by Codex and other modern clients) and the legacy SSE
+// transport (used by Claude Code), both at the same mount path.
 func (s *Server) Handler() http.Handler {
+	streamable := mcpserver.NewStreamableHTTPServer(s.mcpServer)
 	sseServer := mcpserver.NewSSEServer(s.mcpServer)
 
-	// Wrap with bearer token middleware when a token store is available.
+	mux := http.NewServeMux()
+	mux.Handle("/sse", sseServer)
+	mux.Handle("/message", sseServer)
+	mux.Handle("/", streamable)
+
+	var h http.Handler = mux
 	if s.tokenStore != nil && s.pool != nil {
 		mw := auth.BearerTokenMiddleware(s.tokenStore, s.pool)
-		return mw(sseServer)
+		h = mw(mux)
 	}
-	return sseServer
+	return h
 }
 
 // parseScopeString splits a scope string of the form "kind:external_id" into its parts.
