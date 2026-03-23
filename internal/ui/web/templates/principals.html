@@ -40,8 +40,26 @@
   </tbody>
 </table>
 
+<h2>Create Principal</h2>
+{{if .PrincipalFormError}}<p style="color:red">{{.PrincipalFormError}}</p>{{end}}
+<form method="POST" action="/ui/principals">
+  <label>Kind
+    <select name="kind" required>
+      <option value="">— select —</option>
+      <option value="user">user</option>
+      <option value="agent">agent</option>
+      <option value="team">team</option>
+      <option value="department">department</option>
+      <option value="company">company</option>
+    </select>
+  </label>
+  <label>Slug<input type="text" name="slug" placeholder="e.g. noctarius" required></label>
+  <label>Display Name<input type="text" name="display_name" placeholder="e.g. Noctarius" required></label>
+  <button type="submit">Create Principal</button>
+</form>
+
 <h2>Create Scope</h2>
-{{if .FormError}}<p style="color:red">{{.FormError}}</p>{{end}}
+{{if .ScopeFormError}}<p style="color:red">{{.ScopeFormError}}</p>{{end}}
 <form method="POST" action="/ui/scopes">
   <label>Kind
     <select name="kind" required>

@@ -96,6 +96,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleGraph(w, r)
 	case r.URL.Path == "/ui/skills":
 		h.handleSkills(w, r)
+	case r.URL.Path == "/ui/principals" && r.Method == http.MethodPost:
+		h.handleCreatePrincipal(w, r)
 	case r.URL.Path == "/ui/principals":
 		h.handlePrincipals(w, r)
 	case r.URL.Path == "/ui/scopes" && r.Method == http.MethodPost:
@@ -381,16 +383,17 @@ func (h *Handler) handleSkills(w http.ResponseWriter, r *http.Request) {
 
 // handlePrincipals serves GET /ui/principals.
 func (h *Handler) handlePrincipals(w http.ResponseWriter, r *http.Request) {
-	h.renderPrincipals(w, r, "")
+	h.renderPrincipals(w, r, "", "")
 }
 
-// renderPrincipals renders the principals+scopes page with an optional form error.
-func (h *Handler) renderPrincipals(w http.ResponseWriter, r *http.Request, formError string) {
+// renderPrincipals renders the principals+scopes page with optional form errors.
+func (h *Handler) renderPrincipals(w http.ResponseWriter, r *http.Request, principalErr, scopeErr string) {
 	data := struct {
-		Principals []*db.Principal
-		Scopes     []*db.Scope
-		FormError  string
-	}{FormError: formError}
+		Principals         []*db.Principal
+		Scopes             []*db.Scope
+		PrincipalFormError string
+		ScopeFormError     string
+	}{PrincipalFormError: principalErr, ScopeFormError: scopeErr}
 
 	if h.pool != nil {
 		principals, err := db.ListPrincipals(r.Context(), h.pool, 50, 0)
@@ -408,20 +411,44 @@ func (h *Handler) renderPrincipals(w http.ResponseWriter, r *http.Request, formE
 
 // handleDeleteScope serves POST /ui/scopes/{id}/delete.
 func (h *Handler) handleDeleteScope(w http.ResponseWriter, r *http.Request) {
-	// Path: /ui/scopes/{id}/delete
 	trimmed := strings.TrimPrefix(r.URL.Path, "/ui/scopes/")
 	idStr := strings.TrimSuffix(trimmed, "/delete")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		h.renderPrincipals(w, r, "invalid scope id")
+		h.renderPrincipals(w, r, "", "invalid scope id")
 		return
 	}
 	if h.pool == nil {
-		h.renderPrincipals(w, r, "service unavailable")
+		h.renderPrincipals(w, r, "", "service unavailable")
 		return
 	}
 	if err := db.DeleteScope(r.Context(), h.pool, id); err != nil {
-		h.renderPrincipals(w, r, err.Error())
+		h.renderPrincipals(w, r, "", err.Error())
+		return
+	}
+	http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
+}
+
+// handleCreatePrincipal serves POST /ui/principals.
+func (h *Handler) handleCreatePrincipal(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		h.renderPrincipals(w, r, "bad form data", "")
+		return
+	}
+	kind := r.FormValue("kind")
+	slug := r.FormValue("slug")
+	displayName := r.FormValue("display_name")
+	if kind == "" || slug == "" || displayName == "" {
+		h.renderPrincipals(w, r, "kind, slug and display_name are required", "")
+		return
+	}
+	if h.pool == nil {
+		h.renderPrincipals(w, r, "service unavailable", "")
+		return
+	}
+	ps := principals.NewStore(h.pool)
+	if _, err := ps.Create(r.Context(), kind, slug, displayName, nil); err != nil {
+		h.renderPrincipals(w, r, err.Error(), "")
 		return
 	}
 	http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
@@ -430,7 +457,7 @@ func (h *Handler) handleDeleteScope(w http.ResponseWriter, r *http.Request) {
 // handleCreateScope serves POST /ui/scopes.
 func (h *Handler) handleCreateScope(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		h.renderPrincipals(w, r, "bad form data")
+		h.renderPrincipals(w, r, "", "bad form data")
 		return
 	}
 	kind := r.FormValue("kind")
@@ -440,30 +467,29 @@ func (h *Handler) handleCreateScope(w http.ResponseWriter, r *http.Request) {
 	parentIDStr := r.FormValue("parent_id")
 
 	if kind == "" || externalID == "" || name == "" || principalIDStr == "" {
-		h.renderPrincipals(w, r, "kind, external_id, name and principal are required")
+		h.renderPrincipals(w, r, "", "kind, external_id, name and principal are required")
 		return
 	}
 	principalID, err := uuid.Parse(principalIDStr)
 	if err != nil {
-		h.renderPrincipals(w, r, "invalid principal id")
+		h.renderPrincipals(w, r, "", "invalid principal id")
 		return
 	}
 	var parentID *uuid.UUID
 	if parentIDStr != "" {
 		pid, err := uuid.Parse(parentIDStr)
 		if err != nil {
-			h.renderPrincipals(w, r, "invalid parent scope id")
+			h.renderPrincipals(w, r, "", "invalid parent scope id")
 			return
 		}
 		parentID = &pid
 	}
-
 	if h.pool == nil {
-		h.renderPrincipals(w, r, "service unavailable")
+		h.renderPrincipals(w, r, "", "service unavailable")
 		return
 	}
 	if _, err := db.CreateScope(r.Context(), h.pool, kind, externalID, name, parentID, principalID, nil); err != nil {
-		h.renderPrincipals(w, r, err.Error())
+		h.renderPrincipals(w, r, "", err.Error())
 		return
 	}
 	http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
