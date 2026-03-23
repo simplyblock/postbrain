@@ -426,6 +426,22 @@ func EndSession(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, meta []by
 	})
 }
 
+// InsertEvent appends a typed event to the partitioned events table.
+// sessionID may be uuid.Nil when no session context is available.
+func InsertEvent(ctx context.Context, pool *pgxpool.Pool, sessionID, scopeID uuid.UUID, eventType string, payload []byte) error {
+	if payload == nil {
+		payload = []byte("{}")
+	}
+	_, err := pool.Exec(ctx,
+		`INSERT INTO events (session_id, scope_id, event_type, payload) VALUES ($1,$2,$3,$4)`,
+		sessionID, scopeID, eventType, payload,
+	)
+	if err != nil {
+		return fmt.Errorf("db: insert event: %w", err)
+	}
+	return nil
+}
+
 // ── Memories ──────────────────────────────────────────────────────────────────
 
 // GetMemory retrieves a memory by ID. Returns nil, nil if not found.

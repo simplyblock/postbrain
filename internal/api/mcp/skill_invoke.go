@@ -58,6 +58,18 @@ func (s *Server) handleSkillInvoke(ctx context.Context, req mcpgo.CallToolReques
 		return mcpgo.NewToolResultError(fmt.Sprintf("skill_invoke: %v", err)), nil
 	}
 
+	// Fire-and-forget invocation event; activates the skills_update_invocation_stats trigger.
+	go func() {
+		sessionID := uuid.Nil
+		if sid, ok := args["session_id"].(string); ok && sid != "" {
+			if parsed, err := uuid.Parse(sid); err == nil {
+				sessionID = parsed
+			}
+		}
+		payload, _ := json.Marshal(map[string]any{"skill_id": skill.ID.String()})
+		_ = db.InsertEvent(context.Background(), s.pool, sessionID, scope.ID, "skill_invoked", payload)
+	}()
+
 	out, _ := json.Marshal(map[string]any{
 		"skill_id": skill.ID.String(),
 		"slug":     skill.Slug,
@@ -75,5 +87,3 @@ func isValidationError(err error, target **skills.ValidationError) bool {
 	return false
 }
 
-// suppress unused import warning
-var _ = uuid.UUID{}

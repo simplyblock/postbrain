@@ -200,6 +200,7 @@ func (s *Server) registerTools() {
 		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
 		mcpgo.WithString("agent_type", mcpgo.Description("Agent type for filtering")),
 		mcpgo.WithObject("params", mcpgo.Description("Parameter map for substitution")),
+		mcpgo.WithString("session_id", mcpgo.Description("Session ID from session_begin; used to correlate invocation events")),
 	), withToolMetrics("skill_invoke", s.handleSkillInvoke))
 
 	// knowledge_detail
@@ -212,6 +213,18 @@ func (s *Server) registerTools() {
 	s.mcpServer.AddTool(mcpgo.NewTool("list_scopes",
 		mcpgo.WithDescription("List all scopes accessible to the current token. Returns scope IDs and their kind:external_id strings for use in other tools."),
 	), withToolMetrics("list_scopes", s.handleListScopes))
+
+	// session_begin
+	s.mcpServer.AddTool(mcpgo.NewTool("session_begin",
+		mcpgo.WithDescription("Start a new agent session for a scope. Returns a session_id to pass to skill_invoke for event correlation. Call once at the start of each agent session."),
+		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
+	), withToolMetrics("session_begin", s.handleSessionBegin))
+
+	// session_end
+	s.mcpServer.AddTool(mcpgo.NewTool("session_end",
+		mcpgo.WithDescription("Close an agent session. Call when the agent session is ending (e.g. in a Stop hook)."),
+		mcpgo.WithString("session_id", mcpgo.Required(), mcpgo.Description("Session ID returned by session_begin")),
+	), withToolMetrics("session_end", s.handleSessionEnd))
 }
 
 // Handler returns an http.Handler that serves both the MCP Streamable HTTP

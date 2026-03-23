@@ -82,6 +82,11 @@ func (mc *mockCreator) LinkMemoryToEntity(_ context.Context, _, _ uuid.UUID, _ s
 	return nil
 }
 
+func (mc *mockCreator) UpsertRelation(_ context.Context, r *db.Relation) (*db.Relation, error) {
+	r.ID = uuid.New()
+	return r, nil
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 func newTestStore(withCode bool, creator memoryDB) *Store {
