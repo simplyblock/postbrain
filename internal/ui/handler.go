@@ -678,7 +678,7 @@ func (h *Handler) handleUploadKnowledge(w http.ResponseWriter, r *http.Request) 
 
 	knowledgeType := r.FormValue("knowledge_type")
 	if knowledgeType == "" {
-		knowledgeType = "documentation"
+		knowledgeType = "reference"
 	}
 
 	authorID := h.principalFromCookie(r)

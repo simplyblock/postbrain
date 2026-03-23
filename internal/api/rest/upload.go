@@ -69,7 +69,7 @@ func (ro *Router) uploadKnowledge(w http.ResponseWriter, r *http.Request) {
 
 	knowledgeType := r.FormValue("knowledge_type")
 	if knowledgeType == "" {
-		knowledgeType = "documentation"
+		knowledgeType = "reference"
 	}
 
 	visibility := r.FormValue("visibility")
