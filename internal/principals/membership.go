@@ -106,6 +106,11 @@ func (m *MembershipStore) IsScopeAdmin(ctx context.Context, principalID, scopeID
 	var exists bool
 	err = m.pool.QueryRow(ctx,
 		`SELECT EXISTS(
+		     -- direct scope ownership counts as admin
+		     SELECT 1 FROM scopes
+		     WHERE id = ANY($1) AND principal_id = $2
+		     UNION ALL
+		     -- explicit admin membership on a scope in the ancestor chain
 		     SELECT 1 FROM principal_memberships pm
 		     JOIN scopes s ON s.principal_id = pm.parent_id
 		     WHERE s.id = ANY($1)
