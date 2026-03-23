@@ -300,15 +300,18 @@ func (h *Handler) handleCollections(w http.ResponseWriter, r *http.Request) {
 		Collections []*db.KnowledgeCollection
 	}{}
 
-	scopeStr := r.URL.Query().Get("scope_id")
-	if h.pool != nil && scopeStr != "" {
-		sid, err := uuid.Parse(scopeStr)
-		if err == nil {
-			colls, err := db.ListCollections(r.Context(), h.pool, sid)
+	if h.pool != nil {
+		var colls []*db.KnowledgeCollection
+		scopeStr := r.URL.Query().Get("scope_id")
+		if scopeStr != "" {
+			sid, err := uuid.Parse(scopeStr)
 			if err == nil {
-				data.Collections = colls
+				colls, _ = db.ListCollections(r.Context(), h.pool, sid)
 			}
+		} else {
+			colls, _ = db.ListAllCollections(r.Context(), h.pool)
 		}
+		data.Collections = colls
 	}
 
 	h.render(w, r, "collections", "Collections", data)

@@ -1076,6 +1076,28 @@ func ListCollections(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID)
 	return cs, nil
 }
 
+// ListAllCollections returns all collections across all scopes, ordered by name.
+func ListAllCollections(ctx context.Context, pool *pgxpool.Pool) ([]*KnowledgeCollection, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT id, scope_id, owner_id, slug, name, description, visibility, meta, created_at, updated_at
+		 FROM knowledge_collections ORDER BY name`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("db: list all collections: %w", err)
+	}
+	defer rows.Close()
+	var cs []*KnowledgeCollection
+	for rows.Next() {
+		var c KnowledgeCollection
+		if err := rows.Scan(&c.ID, &c.ScopeID, &c.OwnerID, &c.Slug, &c.Name, &c.Description,
+			&c.Visibility, &c.Meta, &c.CreatedAt, &c.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("db: list all collections scan: %w", err)
+		}
+		cs = append(cs, &c)
+	}
+	return cs, rows.Err()
+}
+
 // AddCollectionItem inserts a knowledge_collection_items row.
 func AddCollectionItem(ctx context.Context, pool *pgxpool.Pool, collectionID, artifactID, addedBy uuid.UUID) error {
 	q := New(pool)
