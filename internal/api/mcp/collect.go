@@ -58,19 +58,18 @@ func (s *Server) collectAddToCollection(ctx context.Context, args map[string]any
 		}
 	} else if slug, ok := args["collection_slug"].(string); ok && slug != "" {
 		scopeStr, _ := args["scope"].(string)
-		var scopeID uuid.UUID
-		if scopeStr != "" {
-			kind, externalID, err := parseScopeString(scopeStr)
-			if err != nil {
-				return mcpgo.NewToolResultError(fmt.Sprintf("collect: invalid scope: %v", err)), nil
-			}
-			scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
-			if err != nil || scope == nil {
-				return mcpgo.NewToolResultError("collect: scope not found"), nil
-			}
-			scopeID = scope.ID
+		if scopeStr == "" {
+			return mcpgo.NewToolResultError("collect: 'scope' is required when using 'collection_slug'"), nil
 		}
-		coll, err := s.knwColl.GetBySlug(ctx, scopeID, slug)
+		kind, externalID, err := parseScopeString(scopeStr)
+		if err != nil {
+			return mcpgo.NewToolResultError(fmt.Sprintf("collect: invalid scope: %v", err)), nil
+		}
+		scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
+		if err != nil || scope == nil {
+			return mcpgo.NewToolResultError("collect: scope not found"), nil
+		}
+		coll, err := s.knwColl.GetBySlug(ctx, scope.ID, slug)
 		if err != nil || coll == nil {
 			return mcpgo.NewToolResultError(fmt.Sprintf("collect: collection '%s' not found", slug)), nil
 		}
