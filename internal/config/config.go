@@ -4,7 +4,6 @@ package config
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -43,7 +42,6 @@ type EmbeddingConfig struct {
 // ServerConfig holds HTTP/MCP server parameters.
 type ServerConfig struct {
 	Addr    string `mapstructure:"addr"`
-	Token   string `mapstructure:"token"`
 	TLSCert string `mapstructure:"tls_cert"`
 	TLSKey  string `mapstructure:"tls_key"`
 }
@@ -136,19 +134,8 @@ func Load(path string) (*Config, error) {
 	}
 
 	// Validate required fields
-	var errs []error
 	if cfg.Database.URL == "" {
-		errs = append(errs, errors.New("database.url is required"))
-	}
-	if cfg.Server.Token == "" {
-		errs = append(errs, errors.New("server.token is required"))
-	}
-	if len(errs) > 0 {
-		return nil, errors.Join(errs...)
-	}
-
-	if cfg.Server.Token == "changeme" {
-		slog.Warn("server.token is set to the default value 'changeme'; change it before production use")
+		return nil, errors.New("database.url is required")
 	}
 
 	return &cfg, nil

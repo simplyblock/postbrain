@@ -420,14 +420,15 @@ func tokenRevokeCmd() *cobra.Command {
 
 func onboardCmd() *cobra.Command {
 	var (
-		databaseURL   string
-		adminSlug     string
-		displayName   string
-		tokenName     string
-		skipMigrate   bool
-		textModel     string
-		codeModel     string
-		modelDims     int
+		databaseURL string
+		adminSlug   string
+		displayName string
+		tokenName   string
+		skipMigrate bool
+		textModel   string
+		codeModel   string
+		modelDims   int
+		force       bool
 	)
 
 	cmd := &cobra.Command{
@@ -472,6 +473,21 @@ POSTBRAIN_DATABASE_URL env var (or a config file with database.url set).`,
 
 			fmt.Println("Postbrain — first-run setup")
 			fmt.Println(strings.Repeat("─", 50))
+
+			// ── Guard: refuse if tokens already exist ────────────────────────
+			if !force {
+				existing, err := db.ListTokens(ctx, pool, nil)
+				if err != nil {
+					return fmt.Errorf("check existing tokens: %w", err)
+				}
+				if len(existing) > 0 {
+					return fmt.Errorf(
+						"this instance already has %d token(s) — onboard is for fresh installations only.\n"+
+							"Use 'postbrain token create' to add more tokens, or pass --force to run anyway.",
+						len(existing),
+					)
+				}
+			}
 
 			// ── 2. Migrations ────────────────────────────────────────────────
 			if !skipMigrate {
@@ -593,6 +609,7 @@ POSTBRAIN_DATABASE_URL env var (or a config file with database.url set).`,
 	cmd.Flags().StringVar(&textModel, "text-model", "nomic-embed-text", "Text embedding model slug to register")
 	cmd.Flags().StringVar(&codeModel, "code-model", "", "Code embedding model slug to register (optional)")
 	cmd.Flags().IntVar(&modelDims, "dimensions", 0, "Embedding vector dimensions; required to register the model (e.g. 768 for nomic-embed-text)")
+	cmd.Flags().BoolVar(&force, "force", false, "Run even if tokens already exist (e.g. to add a second admin)")
 
 	return cmd
 }

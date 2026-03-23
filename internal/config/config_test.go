@@ -38,7 +38,6 @@ embedding:
 
 server:
   addr:     ":7433"
-  token:    "supersecret"
   tls_cert: "/etc/tls/cert.pem"
   tls_key:  "/etc/tls/key.pem"
 
@@ -105,9 +104,6 @@ func TestLoad_AllFields(t *testing.T) {
 	if cfg.Server.Addr != ":7433" {
 		t.Errorf("Server.Addr = %q", cfg.Server.Addr)
 	}
-	if cfg.Server.Token != "supersecret" {
-		t.Errorf("Server.Token = %q", cfg.Server.Token)
-	}
 	if cfg.Server.TLSCert != "/etc/tls/cert.pem" {
 		t.Errorf("Server.TLSCert = %q", cfg.Server.TLSCert)
 	}
@@ -139,40 +135,11 @@ func TestLoad_AllFields(t *testing.T) {
 func TestLoad_MissingDatabaseURL(t *testing.T) {
 	path := writeYAML(t, `
 server:
-  token: "supersecret"
+  addr: ":7433"
 `)
 	_, err := config.Load(path)
 	if err == nil {
 		t.Fatal("expected error for missing database.url, got nil")
-	}
-}
-
-// TestLoad_MissingServerToken verifies that a missing server.token returns an error.
-func TestLoad_MissingServerToken(t *testing.T) {
-	path := writeYAML(t, `
-database:
-  url: "postgres://localhost/postbrain"
-`)
-	_, err := config.Load(path)
-	if err == nil {
-		t.Fatal("expected error for missing server.token, got nil")
-	}
-}
-
-// TestLoad_ChangemeToken verifies that token "changeme" is accepted (just warns).
-func TestLoad_ChangemeToken(t *testing.T) {
-	path := writeYAML(t, `
-database:
-  url: "postgres://localhost/postbrain"
-server:
-  token: "changeme"
-`)
-	cfg, err := config.Load(path)
-	if err != nil {
-		t.Fatalf("expected no error for changeme token, got: %v", err)
-	}
-	if cfg.Server.Token != "changeme" {
-		t.Errorf("Server.Token = %q", cfg.Server.Token)
 	}
 }
 
@@ -181,8 +148,6 @@ func TestLoad_EnvOverride(t *testing.T) {
 	path := writeYAML(t, `
 database:
   url: "postgres://localhost/postbrain"
-server:
-  token: "supersecret"
 `)
 	t.Setenv("POSTBRAIN_DATABASE_URL", "postgres://override:override@remotehost/postbrain")
 	cfg, err := config.Load(path)
@@ -199,8 +164,6 @@ func TestLoad_Defaults(t *testing.T) {
 	path := writeYAML(t, `
 database:
   url: "postgres://localhost/postbrain"
-server:
-  token: "supersecret"
 `)
 	cfg, err := config.Load(path)
 	if err != nil {
