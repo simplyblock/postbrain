@@ -526,7 +526,7 @@ RETURNING id, memory_type, scope_id, author_id,
 		pgvector.NewVector(m.Embedding.Slice()), nullUUID(m.EmbeddingModelID),
 		nullVec(m.EmbeddingCode.Slice()), nullUUID(m.EmbeddingCodeModelID),
 		m.ContentKind, m.Meta, version, confidence, importance,
-		m.ExpiresAt, m.PromotionStatus, m.PromotedTo, m.SourceRef,
+		m.ExpiresAt, m.PromotionStatus, nullUUID(m.PromotedTo), m.SourceRef,
 	)
 
 	created := &Memory{}
