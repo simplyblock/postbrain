@@ -91,8 +91,13 @@ func syncInternal(ctx context.Context, sdb syncDB, scopeIDs []uuid.UUID, agentTy
 	return result, nil
 }
 
-// readInstalledVersion reads the version field from the frontmatter of an installed skill file.
-// Returns 0 if the file cannot be read or has no version line (treated as outdated).
+// ReadInstalledVersion reads the version field from the frontmatter of an
+// installed skill file. Returns 0 if the file cannot be read or has no version
+// line (treated as outdated). Exported for use by the hook CLI.
+func ReadInstalledVersion(slug, agentType, workdir string) int {
+	return readInstalledVersion(slug, agentType, workdir)
+}
+
 func readInstalledVersion(slug, agentType, workdir string) int {
 	path := TargetPath(slug, agentType, workdir)
 	f, err := os.Open(path)

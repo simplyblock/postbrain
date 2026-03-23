@@ -14,7 +14,7 @@ import (
 
 const createScope = `-- name: CreateScope :one
 INSERT INTO scopes (kind, external_id, name, parent_id, principal_id, meta, path)
-VALUES ($1, $2, $3, $4, $5, $6, 'placeholder')
+VALUES ($1, $2, $3, NULLIF($4, '00000000-0000-0000-0000-000000000000'::uuid), $5, $6, 'placeholder')
 RETURNING id, kind, external_id, name, parent_id, principal_id, path::text, meta, created_at
 `
 

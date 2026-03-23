@@ -432,7 +432,7 @@ func tokenListCmd() *cobra.Command {
 			fmt.Fprintln(w, "ID\tNAME\tPRINCIPAL\tPERMISSIONS\tCREATED\tREVOKED")
 			for _, t := range tokens {
 				revoked := ""
-				if !t.RevokedAt.IsZero() {
+				if t.RevokedAt != nil {
 					revoked = t.RevokedAt.Format(time.RFC3339)
 				}
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",

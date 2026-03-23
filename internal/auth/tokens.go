@@ -58,7 +58,7 @@ func (ts *TokenStore) Lookup(ctx context.Context, hash string) (*db.Token, error
 		return nil, nil
 	}
 	// Check revocation.
-	if !t.RevokedAt.IsZero() {
+	if t.RevokedAt != nil {
 		return nil, nil
 	}
 	// Check expiry.

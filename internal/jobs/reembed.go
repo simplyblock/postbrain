@@ -111,8 +111,6 @@ func (j *ReembedJob) RunText(ctx context.Context) error {
 		slog.Info("reembed text: batch processed",
 			"offset", offset, "count", len(batch), "total_so_far", total)
 
-		// TODO(task-jobs): insert reembed_batch event once background job scope handling is defined
-
 		if len(batch) < j.batchSize {
 			break
 		}
@@ -184,8 +182,6 @@ func (j *ReembedJob) RunCode(ctx context.Context) error {
 		total += len(batch)
 		slog.Info("reembed code: batch processed",
 			"offset", offset, "count", len(batch), "total_so_far", total)
-
-		// TODO(task-jobs): insert reembed_batch event once background job scope handling is defined
 
 		if len(batch) < j.batchSize {
 			break

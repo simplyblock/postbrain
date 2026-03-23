@@ -296,7 +296,7 @@ type Token struct {
 	ScopeIds    []uuid.UUID
 	Permissions []string
 	ExpiresAt   time.Time
-	LastUsedAt  time.Time
+	LastUsedAt  *time.Time
 	CreatedAt   time.Time
-	RevokedAt   time.Time
+	RevokedAt   *time.Time
 }

@@ -202,7 +202,6 @@ func runSummarizeSession(ctx context.Context, sessionID string) error {
 		return nil
 	}
 
-	// TODO(task-hook): POST /v1/memories/summarize endpoint needed; currently using MCP tool.
 	// Call POST /v1/memories/summarize (REST endpoint that proxies consolidation logic).
 	summarizeResp, err := client.post(ctx, "/v1/memories/summarize", map[string]any{
 		"scope":   scopeFlag,
@@ -291,8 +290,11 @@ func runSkillSync(ctx context.Context, agentType, workdir string) error {
 				continue
 			}
 			installed = append(installed, sk.Slug)
-		} else {
-			// TODO(task-hook): check version mismatch from frontmatter and re-install if stale
+		} else if skills.ReadInstalledVersion(sk.Slug, agentType, workdir) != sk.Version {
+			if _, err := skills.Install(dbSkill, agentType, workdir); err != nil {
+				slog.Warn("skill sync: update failed", "slug", sk.Slug, "err", err)
+				continue
+			}
 			updated = append(updated, sk.Slug)
 		}
 	}
@@ -331,8 +333,42 @@ func skillInstallCmd() *cobra.Command {
 				return err
 			}
 			defer resp.Body.Close()
-			// TODO(task-hook): parse response and install skill via skills.Install
-			slog.Info("skill install", "slug", slug)
+
+			var result struct {
+				Data []struct {
+					ID          string          `json:"id"`
+					Slug        string          `json:"slug"`
+					Name        string          `json:"name"`
+					Description string          `json:"description"`
+					AgentTypes  []string        `json:"agent_types"`
+					Body        string          `json:"body"`
+					Version     int             `json:"version"`
+					Parameters  json.RawMessage `json:"parameters"`
+				} `json:"data"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+				return fmt.Errorf("skill install: decode: %w", err)
+			}
+			if len(result.Data) == 0 {
+				return fmt.Errorf("skill install: slug %q not found in registry", slug)
+			}
+			sk := result.Data[0]
+			skillID, _ := uuid.Parse(sk.ID)
+			dbSkill := &db.Skill{
+				ID:          skillID,
+				Slug:        sk.Slug,
+				Name:        sk.Name,
+				Description: sk.Description,
+				AgentTypes:  sk.AgentTypes,
+				Body:        sk.Body,
+				Version:     int32(sk.Version),
+				Parameters:  sk.Parameters,
+			}
+			path, err := skills.Install(dbSkill, agentType, workdir)
+			if err != nil {
+				return fmt.Errorf("skill install: %w", err)
+			}
+			slog.Info("skill install: installed", "slug", slug, "path", path)
 			return nil
 		},
 	}
