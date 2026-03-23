@@ -15,3 +15,16 @@ FROM scopes WHERE kind = $1 AND external_id = $2;
 SELECT s2.id FROM scopes s1
 JOIN scopes s2 ON s2.path @> s1.path
 WHERE s1.id = $1;
+
+-- name: ListScopes :many
+SELECT id, kind, external_id, name, parent_id, principal_id, path::text, meta, created_at
+FROM scopes
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2;
+
+-- name: UpdateScope :one
+UPDATE scopes SET name = $2, meta = $3 WHERE id = $1
+RETURNING id, kind, external_id, name, parent_id, principal_id, path::text, meta, created_at;
+
+-- name: DeleteScope :exec
+DELETE FROM scopes WHERE id = $1;

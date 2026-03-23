@@ -136,6 +136,13 @@ func (ro *Router) Handler() http.Handler {
 		r.Post("/promotions/{id}/approve", ro.approvePromotion)
 		r.Post("/promotions/{id}/reject", ro.rejectPromotion)
 
+		// Scopes & hierarchy.
+		r.Get("/scopes", ro.listScopes)
+		r.Post("/scopes", ro.createScope)
+		r.Get("/scopes/{id}", ro.getScope)
+		r.Put("/scopes/{id}", ro.updateScope)
+		r.Delete("/scopes/{id}", ro.deleteScope)
+
 		// Principals & membership.
 		r.Get("/principals", ro.listPrincipals)
 		r.Post("/principals", ro.createPrincipal)

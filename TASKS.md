@@ -374,6 +374,7 @@
 - [x] `skills.go` — `POST /v1/skills`, `GET /v1/skills/search`, `GET/PATCH /v1/skills/:id`, `POST /v1/skills/:id/endorse`, `POST /v1/skills/:id/deprecate`, `POST /v1/skills/:id/install`, `POST /v1/skills/:id/invoke`
 - [x] `sharing.go` — `POST /v1/sharing/grants`, `DELETE /v1/sharing/grants/:id`, `GET /v1/sharing/grants`
 - [x] `promotions.go` — `GET /v1/promotions`, `POST /v1/promotions/:id/approve`, `POST /v1/promotions/:id/reject`
+- [x] `scopes.go` — `GET/POST /v1/scopes`, `GET/PUT/DELETE /v1/scopes/:id`; DB layer extended with `ListScopes`, `UpdateScope`, `DeleteScope`; web UI principals page updated to show scopes table
 - [x] `orgs.go` — `GET/POST /v1/principals`, `GET/PUT/DELETE /v1/principals/:id`, `GET/POST/DELETE /v1/principals/:id/members`
 - [x] `sessions.go` — `POST /v1/sessions`, `PATCH /v1/sessions/:id` (TODO: persist to DB)
 - [x] `context.go` — `GET /v1/context`

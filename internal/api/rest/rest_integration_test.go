@@ -128,3 +128,143 @@ func TestREST_E2E(t *testing.T) {
 		}
 	})
 }
+
+func TestScopes_CRUD(t *testing.T) {
+	ctx := context.Background()
+	pool := testhelper.NewTestPool(t)
+	svc := testhelper.NewMockEmbeddingService()
+	cfg := &config.Config{}
+
+	principal := testhelper.CreateTestPrincipal(t, pool, "user", "scopes-e2e-user")
+	rawToken, hashToken, err := auth.GenerateToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.CreateToken(ctx, pool, principal.ID, hashToken, "scopes-test-token", nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	handler := rest.NewRouter(pool, svc, cfg).Handler()
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	authHeader := "Bearer " + rawToken
+
+	var createdScopeID string
+
+	t.Run("create scope returns 201", func(t *testing.T) {
+		body := map[string]any{
+			"kind":         "project",
+			"external_id":  "e2e-proj",
+			"name":         "E2E Project",
+			"principal_id": principal.ID.String(),
+		}
+		b, _ := json.Marshal(body)
+		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/scopes", bytes.NewReader(b))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", authHeader)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("expected 201, got %d", resp.StatusCode)
+		}
+		var result map[string]any
+		json.NewDecoder(resp.Body).Decode(&result)
+		if result["id"] == nil {
+			t.Error("expected id in response")
+		}
+		createdScopeID, _ = result["id"].(string)
+	})
+
+	t.Run("list scopes returns 200", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, srv.URL+"/v1/scopes", nil)
+		req.Header.Set("Authorization", authHeader)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected 200, got %d", resp.StatusCode)
+		}
+		var result map[string]any
+		json.NewDecoder(resp.Body).Decode(&result)
+		if result["scopes"] == nil {
+			t.Error("expected scopes key in response")
+		}
+	})
+
+	t.Run("get scope returns 200", func(t *testing.T) {
+		if createdScopeID == "" {
+			t.Skip("scope not created")
+		}
+		req, _ := http.NewRequest(http.MethodGet, srv.URL+"/v1/scopes/"+createdScopeID, nil)
+		req.Header.Set("Authorization", authHeader)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected 200, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("update scope returns 200", func(t *testing.T) {
+		if createdScopeID == "" {
+			t.Skip("scope not created")
+		}
+		body := map[string]any{"name": "E2E Project Updated"}
+		b, _ := json.Marshal(body)
+		req, _ := http.NewRequest(http.MethodPut, srv.URL+"/v1/scopes/"+createdScopeID, bytes.NewReader(b))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", authHeader)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected 200, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("get nonexistent scope returns 404", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, srv.URL+"/v1/scopes/00000000-0000-0000-0000-000000000099", nil)
+		req.Header.Set("Authorization", authHeader)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("expected 404, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("delete scope returns 204", func(t *testing.T) {
+		if createdScopeID == "" {
+			t.Skip("scope not created")
+		}
+		req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/v1/scopes/"+createdScopeID, nil)
+		req.Header.Set("Authorization", authHeader)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusNoContent {
+			t.Errorf("expected 204, got %d", resp.StatusCode)
+		}
+	})
+}

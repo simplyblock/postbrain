@@ -128,6 +128,104 @@ func (q *Queries) GetScopeByExternalID(ctx context.Context, arg GetScopeByExtern
 	return &i, err
 }
 
+const listScopes = `-- name: ListScopes :many
+SELECT id, kind, external_id, name, parent_id, principal_id, path::text, meta, created_at
+FROM scopes
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListScopesRow struct {
+	ID          uuid.UUID
+	Kind        string
+	ExternalID  string
+	Name        string
+	ParentID    uuid.UUID
+	PrincipalID uuid.UUID
+	Path        string
+	Meta        []byte
+	CreatedAt   time.Time
+}
+
+func (q *Queries) ListScopes(ctx context.Context, limit, offset int32) ([]*ListScopesRow, error) {
+	rows, err := q.db.Query(ctx, listScopes, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*ListScopesRow{}
+	for rows.Next() {
+		var i ListScopesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.ExternalID,
+			&i.Name,
+			&i.ParentID,
+			&i.PrincipalID,
+			&i.Path,
+			&i.Meta,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateScope = `-- name: UpdateScope :one
+UPDATE scopes SET name = $2, meta = $3 WHERE id = $1
+RETURNING id, kind, external_id, name, parent_id, principal_id, path::text, meta, created_at
+`
+
+type UpdateScopeParams struct {
+	ID   uuid.UUID
+	Name string
+	Meta []byte
+}
+
+type UpdateScopeRow struct {
+	ID          uuid.UUID
+	Kind        string
+	ExternalID  string
+	Name        string
+	ParentID    uuid.UUID
+	PrincipalID uuid.UUID
+	Path        string
+	Meta        []byte
+	CreatedAt   time.Time
+}
+
+func (q *Queries) UpdateScope(ctx context.Context, arg UpdateScopeParams) (*UpdateScopeRow, error) {
+	row := q.db.QueryRow(ctx, updateScope, arg.ID, arg.Name, arg.Meta)
+	var i UpdateScopeRow
+	err := row.Scan(
+		&i.ID,
+		&i.Kind,
+		&i.ExternalID,
+		&i.Name,
+		&i.ParentID,
+		&i.PrincipalID,
+		&i.Path,
+		&i.Meta,
+		&i.CreatedAt,
+	)
+	return &i, err
+}
+
+const deleteScope = `-- name: DeleteScope :exec
+DELETE FROM scopes WHERE id = $1
+`
+
+func (q *Queries) DeleteScope(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteScope, id)
+	return err
+}
+
 const getScopeByID = `-- name: GetScopeByID :one
 SELECT id, kind, external_id, name, parent_id, principal_id, path::text, meta, created_at
 FROM scopes WHERE id = $1

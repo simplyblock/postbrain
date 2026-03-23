@@ -243,6 +243,62 @@ func GetAncestorScopeIDs(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.U
 	return q.GetAncestorScopeIDs(ctx, scopeID)
 }
 
+// ListScopes returns scopes ordered by creation time, with pagination.
+func ListScopes(ctx context.Context, pool *pgxpool.Pool, limit, offset int) ([]*Scope, error) {
+	q := New(pool)
+	rows, err := q.ListScopes(ctx, int32(limit), int32(offset))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Scope, len(rows))
+	for i, row := range rows {
+		out[i] = &Scope{
+			ID:          row.ID,
+			Kind:        row.Kind,
+			ExternalID:  row.ExternalID,
+			Name:        row.Name,
+			ParentID:    row.ParentID,
+			PrincipalID: row.PrincipalID,
+			Path:        row.Path,
+			Meta:        row.Meta,
+			CreatedAt:   row.CreatedAt,
+		}
+	}
+	return out, nil
+}
+
+// UpdateScope updates the name and meta of a scope.
+func UpdateScope(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, name string, meta []byte) (*Scope, error) {
+	if meta == nil {
+		meta = []byte("{}")
+	}
+	q := New(pool)
+	row, err := q.UpdateScope(ctx, UpdateScopeParams{ID: id, Name: name, Meta: meta})
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &Scope{
+		ID:          row.ID,
+		Kind:        row.Kind,
+		ExternalID:  row.ExternalID,
+		Name:        row.Name,
+		ParentID:    row.ParentID,
+		PrincipalID: row.PrincipalID,
+		Path:        row.Path,
+		Meta:        row.Meta,
+		CreatedAt:   row.CreatedAt,
+	}, nil
+}
+
+// DeleteScope removes a scope by UUID.
+func DeleteScope(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error {
+	q := New(pool)
+	return q.DeleteScope(ctx, id)
+}
+
 // ── Tokens ────────────────────────────────────────────────────────────────────
 
 // CreateToken inserts a new token record.
@@ -1228,7 +1284,6 @@ func CountSkillEndorsements(ctx context.Context, pool *pgxpool.Pool, skillID uui
 	}
 	return int(count), nil
 }
-
 
 // RecallSkillsByVector retrieves published skills by vector similarity.
 func RecallSkillsByVector(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, queryVec []float32, agentType string, limit int) ([]SkillScore, error) {

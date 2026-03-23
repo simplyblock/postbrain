@@ -368,12 +368,17 @@ func (h *Handler) handleSkills(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handlePrincipals(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		Principals []*db.Principal
+		Scopes     []*db.Scope
 	}{}
 
 	if h.pool != nil {
 		principals, err := db.ListPrincipals(r.Context(), h.pool, 50, 0)
 		if err == nil {
 			data.Principals = principals
+		}
+		scopes, err := db.ListScopes(r.Context(), h.pool, 50, 0)
+		if err == nil {
+			data.Scopes = scopes
 		}
 	}
 
