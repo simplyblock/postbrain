@@ -529,18 +529,8 @@ RETURNING id, memory_type, scope_id, author_id,
 		m.ExpiresAt, m.PromotionStatus, nullUUID(m.PromotedTo), m.SourceRef,
 	)
 
-	created := &Memory{}
-	if err := row.Scan(
-		&created.ID, &created.MemoryType, &created.ScopeID, &created.AuthorID,
-		&created.Content, &created.Summary,
-		&created.Embedding, &created.EmbeddingModelID,
-		&created.EmbeddingCode, &created.EmbeddingCodeModelID,
-		&created.ContentKind, &created.Meta,
-		&created.Version, &created.IsActive, &created.Confidence, &created.Importance,
-		&created.AccessCount, &created.LastAccessed,
-		&created.ExpiresAt, &created.PromotionStatus, &created.PromotedTo,
-		&created.SourceRef, &created.CreatedAt, &created.UpdatedAt,
-	); err != nil {
+	created, err := scanMemoryRow(row)
+	if err != nil {
 		return nil, fmt.Errorf("db: create memory: %w", err)
 	}
 	return created, nil
@@ -575,23 +565,53 @@ RETURNING id, memory_type, scope_id, author_id,
 		contentKind,
 	)
 
-	m := &Memory{}
-	err := row.Scan(
-		&m.ID, &m.MemoryType, &m.ScopeID, &m.AuthorID,
-		&m.Content, &m.Summary,
-		&m.Embedding, &m.EmbeddingModelID,
-		&m.EmbeddingCode, &m.EmbeddingCodeModelID,
-		&m.ContentKind, &m.Meta,
-		&m.Version, &m.IsActive, &m.Confidence, &m.Importance,
-		&m.AccessCount, &m.LastAccessed,
-		&m.ExpiresAt, &m.PromotionStatus, &m.PromotedTo,
-		&m.SourceRef, &m.CreatedAt, &m.UpdatedAt,
-	)
+	m, err := scanMemoryRow(row)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("db: update memory content: %w", err)
+	}
+	return m, nil
+}
+
+// rowScanner is satisfied by pgx.Row and pgx.Rows (via rows.Scan).
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+// scanMemoryRow scans the standard memory RETURNING column list into a Memory.
+// Nullable vector and UUID columns are scanned into pointer types to handle
+// SQL NULL without error.
+func scanMemoryRow(row rowScanner) (*Memory, error) {
+	m := &Memory{}
+	var embCode *pgvector.Vector
+	var embModelID, embCodeModelID, promotedTo *uuid.UUID
+	err := row.Scan(
+		&m.ID, &m.MemoryType, &m.ScopeID, &m.AuthorID,
+		&m.Content, &m.Summary,
+		&m.Embedding, &embModelID,
+		&embCode, &embCodeModelID,
+		&m.ContentKind, &m.Meta,
+		&m.Version, &m.IsActive, &m.Confidence, &m.Importance,
+		&m.AccessCount, &m.LastAccessed,
+		&m.ExpiresAt, &m.PromotionStatus, &promotedTo,
+		&m.SourceRef, &m.CreatedAt, &m.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if embModelID != nil {
+		m.EmbeddingModelID = *embModelID
+	}
+	if embCode != nil {
+		m.EmbeddingCode = *embCode
+	}
+	if embCodeModelID != nil {
+		m.EmbeddingCodeModelID = *embCodeModelID
+	}
+	if promotedTo != nil {
+		m.PromotedTo = *promotedTo
 	}
 	return m, nil
 }
