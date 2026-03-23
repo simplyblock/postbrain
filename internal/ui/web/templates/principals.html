@@ -18,7 +18,7 @@
 </table>
 <h2>Scopes</h2>
 <table>
-  <thead><tr><th>Kind</th><th>External ID</th><th>Name</th><th>Path</th><th>Created</th></tr></thead>
+  <thead><tr><th>Kind</th><th>External ID</th><th>Name</th><th>Path</th><th>Created</th><th></th></tr></thead>
   <tbody>
   {{range .Scopes}}
   <tr>
@@ -27,9 +27,15 @@
     <td>{{.Name}}</td>
     <td><code>{{.Path}}</code></td>
     <td>{{timeAgo .CreatedAt}}</td>
+    <td>
+      <form method="POST" action="/ui/scopes/{{.ID}}/delete" style="display:inline"
+            onsubmit="return confirm('Delete scope {{.ExternalID}}?')">
+        <button type="submit" class="secondary">Delete</button>
+      </form>
+    </td>
   </tr>
   {{else}}
-  <tr><td colspan="5">No scopes.</td></tr>
+  <tr><td colspan="6">No scopes.</td></tr>
   {{end}}
   </tbody>
 </table>

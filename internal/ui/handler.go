@@ -89,6 +89,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handlePrincipals(w, r)
 	case r.URL.Path == "/ui/scopes" && r.Method == http.MethodPost:
 		h.handleCreateScope(w, r)
+	case strings.HasSuffix(r.URL.Path, "/delete") && strings.HasPrefix(r.URL.Path, "/ui/scopes/") && r.Method == http.MethodPost:
+		h.handleDeleteScope(w, r)
 	case r.URL.Path == "/ui/metrics":
 		h.handleMetrics(w, r)
 	default:
@@ -391,6 +393,27 @@ func (h *Handler) renderPrincipals(w http.ResponseWriter, r *http.Request, formE
 	}
 
 	h.render(w, r, "principals", "Principals", data)
+}
+
+// handleDeleteScope serves POST /ui/scopes/{id}/delete.
+func (h *Handler) handleDeleteScope(w http.ResponseWriter, r *http.Request) {
+	// Path: /ui/scopes/{id}/delete
+	trimmed := strings.TrimPrefix(r.URL.Path, "/ui/scopes/")
+	idStr := strings.TrimSuffix(trimmed, "/delete")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		h.renderPrincipals(w, r, "invalid scope id")
+		return
+	}
+	if h.pool == nil {
+		h.renderPrincipals(w, r, "service unavailable")
+		return
+	}
+	if err := db.DeleteScope(r.Context(), h.pool, id); err != nil {
+		h.renderPrincipals(w, r, err.Error())
+		return
+	}
+	http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
 }
 
 // handleCreateScope serves POST /ui/scopes.
