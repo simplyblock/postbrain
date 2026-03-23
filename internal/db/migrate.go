@@ -5,7 +5,11 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
+	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5" // pgx/v5 database driver
@@ -39,48 +43,19 @@ const advisoryLockKey = int64(0x706f737462726169) // 8101067571501756777
 // TODO(task-infra): add an integration test that exercises CheckAndMigrate
 // against a real PostgreSQL instance spun up by testcontainers.
 func CheckAndMigrate(ctx context.Context, pool *pgxpool.Pool, autoMigrate bool) error {
-	conn, err := pool.Acquire(ctx)
+	m, conn, release, err := newMigrator(ctx, pool)
 	if err != nil {
-		return fmt.Errorf("migrate: acquire connection: %w", err)
+		return err
 	}
-	defer conn.Release()
+	defer release()
 
-	// Acquire advisory lock (session-level; released when connection is returned).
+	// Acquire advisory lock to prevent concurrent migration runs.
 	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", advisoryLockKey); err != nil {
 		return fmt.Errorf("migrate: acquire advisory lock: %w", err)
 	}
 	defer func() {
 		if _, unlockErr := conn.Exec(ctx, "SELECT pg_advisory_unlock($1)", advisoryLockKey); unlockErr != nil {
 			slog.Error("migrate: release advisory lock", "error", unlockErr)
-		}
-	}()
-
-	src, err := iofs.New(migrationsFS, "migrations")
-	if err != nil {
-		return fmt.Errorf("migrate: create iofs source: %w", err)
-	}
-
-	// Build a DSN from the pool config for the migrate driver.
-	connConfig := conn.Conn().Config()
-	dsn := fmt.Sprintf("pgx5://%s:%s@%s:%d/%s",
-		connConfig.User,
-		connConfig.Password,
-		connConfig.Host,
-		connConfig.Port,
-		connConfig.Database,
-	)
-
-	m, err := migrate.NewWithSourceInstance("iofs", src, dsn)
-	if err != nil {
-		return fmt.Errorf("migrate: create migrator: %w", err)
-	}
-	defer func() {
-		srcErr, dbErr := m.Close()
-		if srcErr != nil {
-			slog.Error("migrate: close source", "error", srcErr)
-		}
-		if dbErr != nil {
-			slog.Error("migrate: close db", "error", dbErr)
 		}
 	}()
 
@@ -113,4 +88,164 @@ func CheckAndMigrate(ctx context.Context, pool *pgxpool.Pool, autoMigrate bool) 
 	slog.Info("migrate: schema up to date", "version", newVersion)
 
 	return nil
+}
+
+// MigrationInfo describes a single migration file.
+type MigrationInfo struct {
+	Version uint
+	Name    string
+	Applied bool
+	Dirty   bool
+}
+
+// MigrateStatus returns the list of all known migrations together with their
+// applied/pending state. It does not acquire the advisory lock because it only
+// reads state.
+func MigrateStatus(ctx context.Context, pool *pgxpool.Pool) ([]MigrationInfo, error) {
+	m, _, release, err := newMigrator(ctx, pool)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
+	currentVersion, dirty, err := m.Version()
+	if err != nil && !errors.Is(err, migrate.ErrNilVersion) {
+		return nil, fmt.Errorf("migrate: get version: %w", err)
+	}
+
+	// Walk embedded migration files to build the full list.
+	var infos []MigrationInfo
+	_ = fs.WalkDir(migrationsFS, "migrations", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		// Only process .up.sql files to avoid listing down files as separate entries.
+		if !strings.HasSuffix(path, ".up.sql") {
+			return nil
+		}
+		base := d.Name() // e.g. "000003_knowledge_layer.up.sql"
+		parts := strings.SplitN(base, "_", 2)
+		if len(parts) < 2 {
+			return nil
+		}
+		v, parseErr := strconv.ParseUint(parts[0], 10, 64)
+		if parseErr != nil {
+			return nil
+		}
+		name := strings.TrimSuffix(parts[1], ".up.sql")
+		applied := !errors.Is(err, migrate.ErrNilVersion) && uint(v) <= currentVersion
+		isDirty := dirty && uint(v) == currentVersion
+		infos = append(infos, MigrationInfo{
+			Version: uint(v),
+			Name:    name,
+			Applied: applied,
+			Dirty:   isDirty,
+		})
+		return nil
+	})
+
+	sort.Slice(infos, func(i, j int) bool { return infos[i].Version < infos[j].Version })
+	return infos, nil
+}
+
+// MigrateDown rolls back the last n migrations. Pass n=1 to roll back one step.
+func MigrateDown(ctx context.Context, pool *pgxpool.Pool, n int) error {
+	if n <= 0 {
+		n = 1
+	}
+	m, conn, release, err := newMigrator(ctx, pool)
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	if _, lockErr := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", advisoryLockKey); lockErr != nil {
+		return fmt.Errorf("migrate: acquire advisory lock: %w", lockErr)
+	}
+	defer func() {
+		if _, unlockErr := conn.Exec(ctx, "SELECT pg_advisory_unlock($1)", advisoryLockKey); unlockErr != nil {
+			slog.Error("migrate: release advisory lock", "error", unlockErr)
+		}
+	}()
+
+	if err := m.Steps(-n); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("migrate down %d: %w", n, err)
+	}
+
+	version, dirty, _ := m.Version()
+	if errors.Is(err, migrate.ErrNilVersion) {
+		slog.Info("migrate: rolled back to clean state (no migrations applied)")
+	} else {
+		slog.Info("migrate: rolled back", "steps", n, "current_version", version, "dirty", dirty)
+	}
+	return nil
+}
+
+// MigrateForce sets the schema_migrations version to v without running any SQL.
+// Use this to clear a dirty state after manually fixing a failed migration.
+func MigrateForce(ctx context.Context, pool *pgxpool.Pool, v int) error {
+	m, conn, release, err := newMigrator(ctx, pool)
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	if _, lockErr := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", advisoryLockKey); lockErr != nil {
+		return fmt.Errorf("migrate: acquire advisory lock: %w", lockErr)
+	}
+	defer func() {
+		if _, unlockErr := conn.Exec(ctx, "SELECT pg_advisory_unlock($1)", advisoryLockKey); unlockErr != nil {
+			slog.Error("migrate: release advisory lock", "error", unlockErr)
+		}
+	}()
+
+	if err := m.Force(v); err != nil {
+		return fmt.Errorf("migrate force %d: %w", v, err)
+	}
+	slog.Info("migrate: forced version", "version", v)
+	return nil
+}
+
+// newMigrator creates a golang-migrate Migrator from the pool's connection config.
+// The caller is responsible for calling release() to return the connection to the pool.
+// The returned *pgxpool.Conn is available for the caller to acquire advisory locks on.
+func newMigrator(ctx context.Context, pool *pgxpool.Pool) (*migrate.Migrate, *pgxpool.Conn, func(), error) {
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return nil, nil, func() {}, fmt.Errorf("migrate: acquire connection: %w", err)
+	}
+
+	src, err := iofs.New(migrationsFS, "migrations")
+	if err != nil {
+		conn.Release()
+		return nil, nil, func() {}, fmt.Errorf("migrate: create iofs source: %w", err)
+	}
+
+	connConfig := conn.Conn().Config()
+	dsn := fmt.Sprintf("pgx5://%s:%s@%s:%d/%s",
+		connConfig.User,
+		connConfig.Password,
+		connConfig.Host,
+		connConfig.Port,
+		connConfig.Database,
+	)
+
+	m, err := migrate.NewWithSourceInstance("iofs", src, dsn)
+	if err != nil {
+		conn.Release()
+		return nil, nil, func() {}, fmt.Errorf("migrate: create migrator: %w", err)
+	}
+
+	release := func() {
+		srcErr, dbErr := m.Close()
+		if srcErr != nil {
+			slog.Error("migrate: close source", "error", srcErr)
+		}
+		if dbErr != nil {
+			slog.Error("migrate: close db", "error", dbErr)
+		}
+		conn.Release()
+	}
+
+	return m, conn, release, nil
 }

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"text/tabwriter"
@@ -191,9 +192,25 @@ func migrateDownCmd() *cobra.Command {
 		Short: "Roll back N migrations (default 1)",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO(task-migrate): implement MigrateDown(N) in db package
-			slog.Info("migrate down: not yet implemented")
-			return nil
+			n := 1
+			if len(args) == 1 {
+				var err error
+				n, err = strconv.Atoi(args[0])
+				if err != nil || n <= 0 {
+					return fmt.Errorf("N must be a positive integer, got %q", args[0])
+				}
+			}
+			dbURL, err := config.LoadDatabaseURL(cfgPath)
+			if err != nil {
+				return err
+			}
+			ctx := context.Background()
+			pool, err := db.NewPool(ctx, &config.DatabaseConfig{URL: dbURL, MaxOpen: 5, MaxIdle: 2, ConnectTimeout: 15 * time.Second})
+			if err != nil {
+				return err
+			}
+			defer pool.Close()
+			return db.MigrateDown(ctx, pool, n)
 		},
 	}
 }
@@ -203,9 +220,34 @@ func migrateStatusCmd() *cobra.Command {
 		Use:   "status",
 		Short: "Show applied and pending migrations",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO(task-migrate): implement MigrateStatus() in db package
-			slog.Info("migrate status: not yet implemented")
-			return nil
+			dbURL, err := config.LoadDatabaseURL(cfgPath)
+			if err != nil {
+				return err
+			}
+			ctx := context.Background()
+			pool, err := db.NewPool(ctx, &config.DatabaseConfig{URL: dbURL, MaxOpen: 5, MaxIdle: 2, ConnectTimeout: 15 * time.Second})
+			if err != nil {
+				return err
+			}
+			defer pool.Close()
+
+			infos, err := db.MigrateStatus(ctx, pool)
+			if err != nil {
+				return err
+			}
+
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "VERSION\tNAME\tSTATUS")
+			for _, m := range infos {
+				status := "pending"
+				if m.Dirty {
+					status = "dirty"
+				} else if m.Applied {
+					status = "applied"
+				}
+				fmt.Fprintf(w, "%d\t%s\t%s\n", m.Version, m.Name, status)
+			}
+			return w.Flush()
 		},
 	}
 }
@@ -215,18 +257,30 @@ func migrateVersionCmd() *cobra.Command {
 		Use:   "version",
 		Short: "Print current schema version",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load(cfgPath)
+			dbURL, err := config.LoadDatabaseURL(cfgPath)
 			if err != nil {
 				return err
 			}
 			ctx := context.Background()
-			pool, err := db.NewPool(ctx, &cfg.Database)
+			pool, err := db.NewPool(ctx, &config.DatabaseConfig{URL: dbURL, MaxOpen: 5, MaxIdle: 2, ConnectTimeout: 15 * time.Second})
 			if err != nil {
 				return err
 			}
 			defer pool.Close()
-			_ = pool // TODO(task-migrate): query schema version
-			fmt.Println("schema version: (implement db.CurrentVersion)")
+
+			version, dirty, err := db.SchemaVersion(ctx, pool)
+			if err != nil {
+				return err
+			}
+			if version == 0 {
+				fmt.Println("schema version: none (no migrations applied)")
+				return nil
+			}
+			if dirty {
+				fmt.Printf("schema version: %d (dirty)\n", version)
+			} else {
+				fmt.Printf("schema version: %d\n", version)
+			}
 			return nil
 		},
 	}
@@ -234,13 +288,25 @@ func migrateVersionCmd() *cobra.Command {
 
 func migrateForceCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "force [N]",
-		Short: "Force schema version to N (clears dirty state)",
+		Use:   "force <N>",
+		Short: "Force schema version to N without running SQL (clears dirty state)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO(task-migrate): implement db.MigrateForce(N)
-			slog.Info("migrate force: not yet implemented", "version", args[0])
-			return nil
+			v, err := strconv.Atoi(args[0])
+			if err != nil || v < 0 {
+				return fmt.Errorf("N must be a non-negative integer, got %q", args[0])
+			}
+			dbURL, err := config.LoadDatabaseURL(cfgPath)
+			if err != nil {
+				return err
+			}
+			ctx := context.Background()
+			pool, err := db.NewPool(ctx, &config.DatabaseConfig{URL: dbURL, MaxOpen: 5, MaxIdle: 2, ConnectTimeout: 15 * time.Second})
+			if err != nil {
+				return err
+			}
+			defer pool.Close()
+			return db.MigrateForce(ctx, pool, v)
 		},
 	}
 }
