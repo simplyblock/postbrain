@@ -62,17 +62,13 @@ func (s *Store) GetEntityByCanonical(ctx context.Context, scopeID uuid.UUID, ent
 
 // UpsertRelation inserts or updates a relation between two entities.
 func (s *Store) UpsertRelation(ctx context.Context, scopeID, subjectID uuid.UUID, predicate string, objectID uuid.UUID, confidence float64, sourceMemoryID *uuid.UUID) (*db.Relation, error) {
-	var srcMem uuid.UUID
-	if sourceMemoryID != nil {
-		srcMem = *sourceMemoryID
-	}
 	r := &db.Relation{
 		ScopeID:      scopeID,
 		SubjectID:    subjectID,
 		Predicate:    predicate,
 		ObjectID:     objectID,
 		Confidence:   confidence,
-		SourceMemory: srcMem,
+		SourceMemory: sourceMemoryID,
 	}
 	result, err := db.UpsertRelation(ctx, s.pool, r)
 	if err != nil {

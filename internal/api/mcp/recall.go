@@ -119,9 +119,8 @@ func (s *Server) handleRecall(ctx context.Context, req mcpgo.CallToolRequest) (*
 			if m.Memory.SourceRef != nil {
 				r.SourceRef = *m.Memory.SourceRef
 			}
-			if m.Memory.PromotedTo != (uuid.UUID{}) {
-				promotedTo := m.Memory.PromotedTo
-				r.PromotedTo = &promotedTo
+			if m.Memory.PromotedTo != nil {
+				r.PromotedTo = m.Memory.PromotedTo
 			}
 			allResults = append(allResults, r)
 		}

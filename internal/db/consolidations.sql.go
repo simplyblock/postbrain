@@ -20,7 +20,7 @@ RETURNING id, scope_id, source_ids, result_id, strategy, reason, created_at
 type CreateConsolidationParams struct {
 	ScopeID   uuid.UUID
 	SourceIds []uuid.UUID
-	ResultID  uuid.UUID
+	ResultID  *uuid.UUID
 	Strategy  string
 	Reason    *string
 }

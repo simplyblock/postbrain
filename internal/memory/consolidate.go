@@ -156,12 +156,13 @@ func (c *Consolidator) MergeCluster(ctx context.Context, cluster []*db.Memory, s
 	// 4. Create new semantic memory.
 	scopeID := cluster[0].ScopeID
 	authorID := cluster[0].AuthorID
+	embVec := pgvector.NewVector(vec)
 	newMem := &db.Memory{
 		MemoryType: "semantic",
 		ScopeID:    scopeID,
 		AuthorID:   authorID,
 		Content:    summary,
-		Embedding:  pgvector.NewVector(vec),
+		Embedding:  &embVec,
 		Importance: maxImportance,
 	}
 	created, err := cdb.CreateMemory(ctx, newMem)
@@ -181,7 +182,7 @@ func (c *Consolidator) MergeCluster(ctx context.Context, cluster []*db.Memory, s
 	_, err = cdb.CreateConsolidation(ctx, &db.Consolidation{
 		ScopeID:   scopeID,
 		SourceIds: sourceIDs,
-		ResultID:  resultID,
+		ResultID:  &resultID,
 		Strategy:  "merge",
 	})
 	if err != nil {

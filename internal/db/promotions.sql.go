@@ -27,7 +27,7 @@ type CreatePromotionRequestParams struct {
 	TargetScopeID        uuid.UUID
 	TargetVisibility     string
 	ProposedTitle        *string
-	ProposedCollectionID uuid.UUID
+	ProposedCollectionID *uuid.UUID
 }
 
 func (q *Queries) CreatePromotionRequest(ctx context.Context, arg CreatePromotionRequestParams) (*PromotionRequest, error) {
@@ -138,9 +138,9 @@ WHERE id=$1
 type UpdatePromotionRequestParams struct {
 	ID               uuid.UUID
 	Status           string
-	ReviewerID       uuid.UUID
+	ReviewerID       *uuid.UUID
 	ReviewNote       *string
-	ResultArtifactID uuid.UUID
+	ResultArtifactID *uuid.UUID
 }
 
 func (q *Queries) UpdatePromotionRequest(ctx context.Context, arg UpdatePromotionRequestParams) error {

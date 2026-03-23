@@ -43,12 +43,12 @@ type CreateArtifactParams struct {
 	Title            string
 	Content          string
 	Summary          *string
-	Embedding        pgvector_go.Vector
-	EmbeddingModelID uuid.UUID
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
 	Meta             []byte
 	Version          int32
-	PreviousVersion  uuid.UUID
-	SourceMemoryID   uuid.UUID
+	Column16         interface{}
+	Column17         interface{}
 	SourceRef        *string
 }
 
@@ -69,8 +69,8 @@ func (q *Queries) CreateArtifact(ctx context.Context, arg CreateArtifactParams) 
 		arg.EmbeddingModelID,
 		arg.Meta,
 		arg.Version,
-		arg.PreviousVersion,
-		arg.SourceMemoryID,
+		arg.Column16,
+		arg.Column17,
 		arg.SourceRef,
 	)
 	var i KnowledgeArtifact
@@ -410,15 +410,15 @@ type RecallArtifactsByFTSRow struct {
 	Title            string
 	Content          string
 	Summary          *string
-	Embedding        pgvector_go.Vector
-	EmbeddingModelID uuid.UUID
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
 	Meta             []byte
 	EndorsementCount int32
 	AccessCount      int32
 	LastAccessed     *time.Time
 	Version          int32
-	PreviousVersion  uuid.UUID
-	SourceMemoryID   uuid.UUID
+	PreviousVersion  *uuid.UUID
+	SourceMemoryID   *uuid.UUID
 	SourceRef        *string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
@@ -488,7 +488,7 @@ LIMIT $2
 type RecallArtifactsByVectorParams struct {
 	Column1   []uuid.UUID
 	Limit     int32
-	Embedding pgvector_go.Vector
+	Embedding *pgvector_go.Vector
 }
 
 type RecallArtifactsByVectorRow struct {
@@ -504,19 +504,19 @@ type RecallArtifactsByVectorRow struct {
 	Title            string
 	Content          string
 	Summary          *string
-	Embedding        pgvector_go.Vector
-	EmbeddingModelID uuid.UUID
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
 	Meta             []byte
 	EndorsementCount int32
 	AccessCount      int32
 	LastAccessed     *time.Time
 	Version          int32
-	PreviousVersion  uuid.UUID
-	SourceMemoryID   uuid.UUID
+	PreviousVersion  *uuid.UUID
+	SourceMemoryID   *uuid.UUID
 	SourceRef        *string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
-	VecScore         float64
+	VecScore         int32
 }
 
 func (q *Queries) RecallArtifactsByVector(ctx context.Context, arg RecallArtifactsByVectorParams) ([]*RecallArtifactsByVectorRow, error) {
@@ -609,8 +609,8 @@ type UpdateArtifactParams struct {
 	Title            string
 	Content          string
 	Summary          *string
-	Embedding        pgvector_go.Vector
-	EmbeddingModelID uuid.UUID
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
 }
 
 func (q *Queries) UpdateArtifact(ctx context.Context, arg UpdateArtifactParams) (*KnowledgeArtifact, error) {

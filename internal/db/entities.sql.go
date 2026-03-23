@@ -245,8 +245,8 @@ type UpsertEntityParams struct {
 	Name             string
 	Canonical        string
 	Meta             []byte
-	Embedding        pgvector_go.Vector
-	EmbeddingModelID uuid.UUID
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
 }
 
 func (q *Queries) UpsertEntity(ctx context.Context, arg UpsertEntityParams) (*Entity, error) {
@@ -289,7 +289,7 @@ type UpsertRelationParams struct {
 	Predicate    string
 	ObjectID     uuid.UUID
 	Confidence   float64
-	SourceMemory uuid.UUID
+	SourceMemory *uuid.UUID
 }
 
 func (q *Queries) UpsertRelation(ctx context.Context, arg UpsertRelationParams) (*Relation, error) {

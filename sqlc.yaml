@@ -22,11 +22,15 @@ sql:
             go_type:
               import: "github.com/google/uuid"
               type: "UUID"
+              pointer: true
           - db_type: "timestamptz"
-            go_type: "time.Time"
+            go_type:
+              type: "time.Time"
           - db_type: "timestamptz"
             nullable: true
-            go_type: "time.Time"
+            go_type:
+              type: "time.Time"
+              pointer: true
           - db_type: "vector"
             go_type:
               import: "github.com/pgvector/pgvector-go"
@@ -36,8 +40,12 @@ sql:
             go_type:
               import: "github.com/pgvector/pgvector-go"
               type: "Vector"
+              pointer: true
           - db_type: "ltree"
-            go_type: "string"
+            go_type:
+              type: "string"
           - db_type: "ltree"
             nullable: true
-            go_type: "string"
+            go_type:
+              type: "string"
+              pointer: true

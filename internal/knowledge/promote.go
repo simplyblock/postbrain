@@ -83,17 +83,13 @@ func (p *Promoter) CreateRequest(ctx context.Context, input PromoteInput) (*db.P
 		return nil, ErrAlreadyPromoted
 	}
 
-	var proposedCollectionID uuid.UUID
-	if input.ProposedCollectionID != nil {
-		proposedCollectionID = *input.ProposedCollectionID
-	}
 	req := &db.PromotionRequest{
 		MemoryID:             input.MemoryID,
 		RequestedBy:          input.RequestedBy,
 		TargetScopeID:        input.TargetScopeID,
 		TargetVisibility:     input.TargetVisibility,
 		ProposedTitle:        input.ProposedTitle,
-		ProposedCollectionID: proposedCollectionID,
+		ProposedCollectionID: input.ProposedCollectionID,
 	}
 	created, err := p.dbOps.createPromotionRequest(ctx, req)
 	if err != nil {

@@ -21,7 +21,7 @@ type CreateMembershipParams struct {
 	MemberID  uuid.UUID
 	ParentID  uuid.UUID
 	Role      string
-	GrantedBy uuid.UUID
+	GrantedBy *uuid.UUID
 }
 
 func (q *Queries) CreateMembership(ctx context.Context, arg CreateMembershipParams) (*PrincipalMembership, error) {

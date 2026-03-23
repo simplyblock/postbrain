@@ -178,13 +178,15 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 	}
 
 	// 6. Insert.
+	textVecVal := pgvector.NewVector(textVec)
+	codeVecVal := pgvector.NewVector(codeVec)
 	m := &db.Memory{
 		MemoryType:    input.MemoryType,
 		ScopeID:       input.ScopeID,
 		AuthorID:      input.AuthorID,
 		Content:       input.Content,
-		Embedding:     pgvector.NewVector(textVec),
-		EmbeddingCode: pgvector.NewVector(codeVec),
+		Embedding:     &textVecVal,
+		EmbeddingCode: &codeVecVal,
 		ContentKind:   contentKind,
 		Meta:          input.Meta,
 		Importance:    input.Importance,

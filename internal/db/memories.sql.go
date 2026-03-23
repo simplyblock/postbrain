@@ -35,10 +35,10 @@ type CreateMemoryParams struct {
 	AuthorID             uuid.UUID
 	Content              string
 	Summary              *string
-	Embedding            pgvector_go.Vector
-	EmbeddingModelID     uuid.UUID
-	EmbeddingCode        pgvector_go.Vector
-	EmbeddingCodeModelID uuid.UUID
+	Embedding            *pgvector_go.Vector
+	EmbeddingModelID     *uuid.UUID
+	EmbeddingCode        *pgvector_go.Vector
+	EmbeddingCodeModelID *uuid.UUID
 	ContentKind          string
 	Meta                 []byte
 	Column12             interface{}
@@ -46,7 +46,7 @@ type CreateMemoryParams struct {
 	Column14             interface{}
 	ExpiresAt            *time.Time
 	PromotionStatus      string
-	PromotedTo           uuid.UUID
+	PromotedTo           *uuid.UUID
 	SourceRef            *string
 }
 
@@ -117,7 +117,7 @@ LIMIT 5
 
 type FindNearDuplicatesParams struct {
 	ScopeID   uuid.UUID
-	Embedding pgvector_go.Vector
+	Embedding *pgvector_go.Vector
 	Column3   float64
 	Column4   uuid.UUID
 }
@@ -364,7 +364,7 @@ LIMIT $2
 type RecallMemoriesByCodeVectorParams struct {
 	Column1       []uuid.UUID
 	Limit         int32
-	EmbeddingCode pgvector_go.Vector
+	EmbeddingCode *pgvector_go.Vector
 }
 
 type RecallMemoriesByCodeVectorRow struct {
@@ -374,10 +374,10 @@ type RecallMemoriesByCodeVectorRow struct {
 	AuthorID             uuid.UUID
 	Content              string
 	Summary              *string
-	Embedding            pgvector_go.Vector
-	EmbeddingModelID     uuid.UUID
-	EmbeddingCode        pgvector_go.Vector
-	EmbeddingCodeModelID uuid.UUID
+	Embedding            *pgvector_go.Vector
+	EmbeddingModelID     *uuid.UUID
+	EmbeddingCode        *pgvector_go.Vector
+	EmbeddingCodeModelID *uuid.UUID
 	ContentKind          string
 	Meta                 []byte
 	Version              int32
@@ -388,11 +388,11 @@ type RecallMemoriesByCodeVectorRow struct {
 	LastAccessed         *time.Time
 	ExpiresAt            *time.Time
 	PromotionStatus      string
-	PromotedTo           uuid.UUID
+	PromotedTo           *uuid.UUID
 	SourceRef            *string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
-	VecScore             float64
+	VecScore             int32
 }
 
 func (q *Queries) RecallMemoriesByCodeVector(ctx context.Context, arg RecallMemoriesByCodeVectorParams) ([]*RecallMemoriesByCodeVectorRow, error) {
@@ -468,10 +468,10 @@ type RecallMemoriesByFTSRow struct {
 	AuthorID             uuid.UUID
 	Content              string
 	Summary              *string
-	Embedding            pgvector_go.Vector
-	EmbeddingModelID     uuid.UUID
-	EmbeddingCode        pgvector_go.Vector
-	EmbeddingCodeModelID uuid.UUID
+	Embedding            *pgvector_go.Vector
+	EmbeddingModelID     *uuid.UUID
+	EmbeddingCode        *pgvector_go.Vector
+	EmbeddingCodeModelID *uuid.UUID
 	ContentKind          string
 	Meta                 []byte
 	Version              int32
@@ -482,7 +482,7 @@ type RecallMemoriesByFTSRow struct {
 	LastAccessed         *time.Time
 	ExpiresAt            *time.Time
 	PromotionStatus      string
-	PromotedTo           uuid.UUID
+	PromotedTo           *uuid.UUID
 	SourceRef            *string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
@@ -551,7 +551,7 @@ LIMIT $2
 type RecallMemoriesByVectorParams struct {
 	Column1   []uuid.UUID
 	Limit     int32
-	Embedding pgvector_go.Vector
+	Embedding *pgvector_go.Vector
 }
 
 type RecallMemoriesByVectorRow struct {
@@ -561,10 +561,10 @@ type RecallMemoriesByVectorRow struct {
 	AuthorID             uuid.UUID
 	Content              string
 	Summary              *string
-	Embedding            pgvector_go.Vector
-	EmbeddingModelID     uuid.UUID
-	EmbeddingCode        pgvector_go.Vector
-	EmbeddingCodeModelID uuid.UUID
+	Embedding            *pgvector_go.Vector
+	EmbeddingModelID     *uuid.UUID
+	EmbeddingCode        *pgvector_go.Vector
+	EmbeddingCodeModelID *uuid.UUID
 	ContentKind          string
 	Meta                 []byte
 	Version              int32
@@ -575,11 +575,11 @@ type RecallMemoriesByVectorRow struct {
 	LastAccessed         *time.Time
 	ExpiresAt            *time.Time
 	PromotionStatus      string
-	PromotedTo           uuid.UUID
+	PromotedTo           *uuid.UUID
 	SourceRef            *string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
-	VecScore             float64
+	VecScore             int32
 }
 
 func (q *Queries) RecallMemoriesByVector(ctx context.Context, arg RecallMemoriesByVectorParams) ([]*RecallMemoriesByVectorRow, error) {
@@ -653,10 +653,10 @@ RETURNING id, memory_type, scope_id, author_id,
 type UpdateMemoryContentParams struct {
 	ID                   uuid.UUID
 	Content              string
-	Embedding            pgvector_go.Vector
-	EmbeddingModelID     uuid.UUID
-	EmbeddingCode        pgvector_go.Vector
-	EmbeddingCodeModelID uuid.UUID
+	Embedding            *pgvector_go.Vector
+	EmbeddingModelID     *uuid.UUID
+	EmbeddingCode        *pgvector_go.Vector
+	EmbeddingCodeModelID *uuid.UUID
 	ContentKind          string
 }
 

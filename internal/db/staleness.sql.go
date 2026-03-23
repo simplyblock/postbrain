@@ -124,7 +124,7 @@ WHERE id=$1
 type UpdateStalenessFlagParams struct {
 	ID         uuid.UUID
 	Status     string
-	ReviewedBy uuid.UUID
+	ReviewedBy *uuid.UUID
 	ReviewNote *string
 }
 
