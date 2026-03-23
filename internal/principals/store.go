@@ -67,6 +67,15 @@ func (s *Store) Update(ctx context.Context, id uuid.UUID, displayName string, me
 	return &p, nil
 }
 
+// List returns principals ordered by creation time, with pagination.
+func (s *Store) List(ctx context.Context, limit, offset int) ([]*db.Principal, error) {
+	ps, err := db.ListPrincipals(ctx, s.pool, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("principals: list: %w", err)
+	}
+	return ps, nil
+}
+
 // Delete removes a principal by UUID.
 func (s *Store) Delete(ctx context.Context, id uuid.UUID) error {
 	_, err := s.pool.Exec(ctx, `DELETE FROM principals WHERE id = $1`, id)

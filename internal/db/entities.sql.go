@@ -187,6 +187,47 @@ func (q *Queries) ListRelationsForEntity(ctx context.Context, subjectID uuid.UUI
 	return items, nil
 }
 
+const listRelationsForEntityByPredicate = `-- name: ListRelationsForEntityByPredicate :many
+SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, created_at
+FROM relations
+WHERE (subject_id = $1 OR object_id = $1) AND predicate = $2
+ORDER BY created_at
+`
+
+type ListRelationsForEntityByPredicateParams struct {
+	SubjectID uuid.UUID
+	Predicate string
+}
+
+func (q *Queries) ListRelationsForEntityByPredicate(ctx context.Context, arg ListRelationsForEntityByPredicateParams) ([]*Relation, error) {
+	rows, err := q.db.Query(ctx, listRelationsForEntityByPredicate, arg.SubjectID, arg.Predicate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*Relation{}
+	for rows.Next() {
+		var i Relation
+		if err := rows.Scan(
+			&i.ID,
+			&i.ScopeID,
+			&i.SubjectID,
+			&i.Predicate,
+			&i.ObjectID,
+			&i.Confidence,
+			&i.SourceMemory,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertEntity = `-- name: UpsertEntity :one
 INSERT INTO entities (scope_id, entity_type, name, canonical, meta, embedding, embedding_model_id)
 VALUES ($1,$2,$3,$4,$5,$6,$7)

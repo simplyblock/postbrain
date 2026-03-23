@@ -304,6 +304,40 @@ func ListTokens(ctx context.Context, pool *pgxpool.Pool, principalID *uuid.UUID)
 	return q.ListTokensByPrincipal(ctx, *principalID)
 }
 
+// ── Sessions ─────────────────────────────────────────────────────────────────
+
+// CreateSession inserts a new session row.
+func CreateSession(ctx context.Context, pool *pgxpool.Pool, scopeID, principalID uuid.UUID, meta []byte) (*Session, error) {
+	if meta == nil {
+		meta = []byte("{}")
+	}
+	q := New(pool)
+	return q.CreateSession(ctx, CreateSessionParams{
+		ScopeID:     scopeID,
+		PrincipalID: principalID,
+		Meta:        meta,
+	})
+}
+
+// GetSession retrieves a session by ID. Returns nil, nil if not found.
+func GetSession(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*Session, error) {
+	q := New(pool)
+	s, err := q.GetSession(ctx, id)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	return s, err
+}
+
+// EndSession marks a session as ended, optionally merging meta.
+func EndSession(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, meta []byte) (*Session, error) {
+	q := New(pool)
+	return q.EndSession(ctx, EndSessionParams{
+		ID:      id,
+		Column3: meta,
+	})
+}
+
 // ── Memories ──────────────────────────────────────────────────────────────────
 
 // GetMemory retrieves a memory by ID. Returns nil, nil if not found.
@@ -609,22 +643,21 @@ func UpsertRelation(ctx context.Context, pool *pgxpool.Pool, r *Relation) (*Rela
 // ListRelationsForEntity returns relations for an entity, optionally filtered by predicate.
 func ListRelationsForEntity(ctx context.Context, pool *pgxpool.Pool, entityID uuid.UUID, predicate string) ([]*Relation, error) {
 	q := New(pool)
-	// The generated query doesn't filter by predicate; we do it in Go for compatibility.
-	// TODO(sqlc): add a separate ListRelationsForEntityByPredicate query.
+	if predicate != "" {
+		rows, err := q.ListRelationsForEntityByPredicate(ctx, ListRelationsForEntityByPredicateParams{
+			SubjectID: entityID,
+			Predicate: predicate,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("db: list relations for entity by predicate: %w", err)
+		}
+		return rows, nil
+	}
 	rows, err := q.ListRelationsForEntity(ctx, entityID)
 	if err != nil {
 		return nil, fmt.Errorf("db: list relations for entity: %w", err)
 	}
-	if predicate == "" {
-		return rows, nil
-	}
-	filtered := make([]*Relation, 0, len(rows))
-	for _, r := range rows {
-		if r.Predicate == predicate {
-			filtered = append(filtered, r)
-		}
-	}
-	return filtered, nil
+	return rows, nil
 }
 
 // ListEntitiesByScope returns entities in a scope.
@@ -761,6 +794,12 @@ func SnapshotArtifactVersion(ctx context.Context, pool *pgxpool.Pool, h *Knowled
 		ChangedBy:  h.ChangedBy,
 		ChangeNote: h.ChangeNote,
 	})
+}
+
+// GetArtifactHistory returns the version history for a knowledge artifact.
+func GetArtifactHistory(ctx context.Context, pool *pgxpool.Pool, artifactID uuid.UUID) ([]*KnowledgeHistory, error) {
+	q := New(pool)
+	return q.GetArtifactHistory(ctx, artifactID)
 }
 
 // CreateEndorsement inserts a knowledge_endorsements row.
@@ -1190,10 +1229,6 @@ func CountSkillEndorsements(ctx context.Context, pool *pgxpool.Pool, skillID uui
 	return int(count), nil
 }
 
-// IncrementSkillEndorsementCount is a no-op placeholder; use CountSkillEndorsements instead.
-func IncrementSkillEndorsementCount(_ context.Context, _ *pgxpool.Pool, _ uuid.UUID) error {
-	return nil
-}
 
 // RecallSkillsByVector retrieves published skills by vector similarity.
 func RecallSkillsByVector(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, queryVec []float32, agentType string, limit int) ([]SkillScore, error) {

@@ -18,9 +18,6 @@ import (
 //   - Optionally capped by maxDepth (0 = no limit)
 //
 // If strictScope is true: returns only [scopeID].
-//
-// TODO(task-scope-depth): implement maxDepth filtering using ltree path label
-// counts when depth-bounded fan-out is required.
 func FanOutScopeIDs(ctx context.Context, pool *pgxpool.Pool, scopeID, principalID uuid.UUID, maxDepth int, strictScope bool) ([]uuid.UUID, error) {
 	if strictScope {
 		return []uuid.UUID{scopeID}, nil
@@ -31,13 +28,43 @@ func FanOutScopeIDs(ctx context.Context, pool *pgxpool.Pool, scopeID, principalI
 		return nil, fmt.Errorf("memory: fan-out ancestors: %w", err)
 	}
 
-	// Find the personal (user) scope for this principal.
+	// Apply maxDepth: filter out scopes beyond the depth limit.
+	// We do this by checking each scope's path depth from the DB.
+	if maxDepth > 0 && len(ancestors) > 0 {
+		ancestors, err = filterByDepth(ctx, pool, ancestors, maxDepth)
+		if err != nil {
+			return nil, fmt.Errorf("memory: fan-out depth filter: %w", err)
+		}
+	}
+
 	personal, err := personalScopeIDs(ctx, pool, principalID)
 	if err != nil {
 		return nil, fmt.Errorf("memory: fan-out personal scope: %w", err)
 	}
 
 	return deduplicateScopeIDs(append(ancestors, personal...)), nil
+}
+
+// filterByDepth returns only scope IDs whose ltree path depth <= maxDepth.
+func filterByDepth(ctx context.Context, pool *pgxpool.Pool, ids []uuid.UUID, maxDepth int) ([]uuid.UUID, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT id FROM scopes WHERE id = ANY($1) AND nlevel(path) <= $2`,
+		ids, maxDepth,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var filtered []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		filtered = append(filtered, id)
+	}
+	return filtered, rows.Err()
 }
 
 // ResolveScopeByExternalID finds a scope by kind and externalID.

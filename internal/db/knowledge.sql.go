@@ -167,6 +167,42 @@ func (q *Queries) GetArtifact(ctx context.Context, id uuid.UUID) (*KnowledgeArti
 	return &i, err
 }
 
+const getArtifactHistory = `-- name: GetArtifactHistory :many
+SELECT id, artifact_id, version, content, summary, changed_by, change_note, created_at
+FROM knowledge_history
+WHERE artifact_id = $1
+ORDER BY version DESC
+`
+
+func (q *Queries) GetArtifactHistory(ctx context.Context, artifactID uuid.UUID) ([]*KnowledgeHistory, error) {
+	rows, err := q.db.Query(ctx, getArtifactHistory, artifactID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*KnowledgeHistory{}
+	for rows.Next() {
+		var i KnowledgeHistory
+		if err := rows.Scan(
+			&i.ID,
+			&i.ArtifactID,
+			&i.Version,
+			&i.Content,
+			&i.Summary,
+			&i.ChangedBy,
+			&i.ChangeNote,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getEndorsementByEndorser = `-- name: GetEndorsementByEndorser :one
 SELECT id, artifact_id, endorser_id, note, created_at
 FROM knowledge_endorsements WHERE artifact_id=$1 AND endorser_id=$2

@@ -193,6 +193,10 @@ func (ro *Router) getArtifactHistory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid artifact id")
 		return
 	}
-	// TODO(task-history): implement knowledge history query in db layer.
-	writeJSON(w, http.StatusOK, map[string]any{"artifact_id": id, "history": []any{}})
+	history, err := db.GetArtifactHistory(r.Context(), ro.pool, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"artifact_id": id, "history": history})
 }

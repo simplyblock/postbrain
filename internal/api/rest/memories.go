@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -248,19 +249,76 @@ type summarizeMemoriesRequest struct {
 }
 
 // POST /v1/memories/summarize consolidates episodic memories in the given scope.
-// Full consolidation wiring is deferred; this endpoint accepts the request and
-// returns a stub response so the hook CLI can call it without error.
 func (ro *Router) handleSummarizeMemories(w http.ResponseWriter, req *http.Request) {
 	var input summarizeMemoriesRequest
 	if err := readJSON(req, &input); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	// TODO(task-rest): wire consolidation via memory.Consolidator.FindClusters + MergeCluster
+	if input.Scope == "" {
+		writeError(w, http.StatusBadRequest, "scope is required")
+		return
+	}
+
+	kind, externalID, err := parseScopeString(input.Scope)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	scope, err := db.GetScopeByExternalID(req.Context(), ro.pool, kind, externalID)
+	if err != nil || scope == nil {
+		writeError(w, http.StatusBadRequest, "scope not found")
+		return
+	}
+
+	if ro.consolidator == nil {
+		writeError(w, http.StatusServiceUnavailable, "consolidation not available")
+		return
+	}
+
+	clusters, err := ro.consolidator.FindClusters(req.Context(), scope.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if input.DryRun || len(clusters) == 0 {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"consolidated_count": 0,
+			"cluster_count":      len(clusters),
+			"dry_run":            input.DryRun,
+		})
+		return
+	}
+
+	// Merge all clusters using a simple concatenation summarizer.
+	var consolidated int
+	var lastMemID *uuid.UUID
+	for _, cluster := range clusters {
+		merged, err := ro.consolidator.MergeCluster(req.Context(), cluster, func(ctx context.Context, contents []string) (string, error) {
+			// Simple summarizer: join contents. Replace with LLM summarizer when available.
+			result := ""
+			for i, c := range contents {
+				if i > 0 {
+					result += " | "
+				}
+				result += c
+			}
+			return result, nil
+		})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		consolidated += len(cluster)
+		id := merged.ID
+		lastMemID = &id
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"consolidated_count": 0,
-		"result_memory_id":   nil,
-		"summary":            "consolidation not yet fully wired",
+		"consolidated_count": consolidated,
+		"result_memory_id":   lastMemID,
+		"cluster_count":      len(clusters),
 	})
 }
 

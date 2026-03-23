@@ -215,6 +215,14 @@ func (s *Store) embedContent(ctx context.Context, text string) ([]float32, *uuid
 	if err != nil {
 		return nil, nil, err
 	}
-	// TODO: resolve embedding_model_id from a models table; for now pass nil.
+	// Resolve the active model ID from the DB by the embedder's slug.
+	if s.pool != nil {
+		slug := s.svc.TextEmbedder().ModelSlug()
+		q := db.New(s.pool)
+		model, err := q.GetActiveTextModel(ctx)
+		if err == nil && model != nil && model.Slug == slug {
+			return vec, &model.ID, nil
+		}
+	}
 	return vec, nil, nil
 }

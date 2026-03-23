@@ -21,20 +21,21 @@ import (
 
 // Router holds all dependencies and builds the chi HTTP handler.
 type Router struct {
-	pool       *pgxpool.Pool
-	svc        *embedding.EmbeddingService
-	cfg        *config.Config
-	memStore   *memory.Store
-	knwStore   *knowledge.Store
-	sklStore   *skills.Store
-	knwLife    *knowledge.Lifecycle
-	sklLife    *skills.Lifecycle
-	knwColl    *knowledge.CollectionStore
-	knwProm    *knowledge.Promoter
-	membership *principals.MembershipStore
-	principals *principals.Store
-	sharing    *sharing.Store
-	graphStore *graph.Store
+	pool         *pgxpool.Pool
+	svc          *embedding.EmbeddingService
+	cfg          *config.Config
+	memStore     *memory.Store
+	knwStore     *knowledge.Store
+	sklStore     *skills.Store
+	knwLife      *knowledge.Lifecycle
+	sklLife      *skills.Lifecycle
+	knwColl      *knowledge.CollectionStore
+	knwProm      *knowledge.Promoter
+	membership   *principals.MembershipStore
+	principals   *principals.Store
+	sharing      *sharing.Store
+	graphStore   *graph.Store
+	consolidator *memory.Consolidator
 }
 
 // NewRouter creates a Router with all stores initialised.
@@ -56,6 +57,7 @@ func NewRouter(pool *pgxpool.Pool, svc *embedding.EmbeddingService, cfg *config.
 		r.principals = principals.NewStore(pool)
 		r.sharing = sharing.NewStore(pool)
 		r.graphStore = graph.NewStore(pool)
+		r.consolidator = memory.NewConsolidator(pool, svc)
 	}
 	return r
 }
@@ -71,12 +73,6 @@ func (ro *Router) Handler() http.Handler {
 
 	// Health endpoint (unauthenticated).
 	r.Get("/health", ro.handleHealth)
-
-	// Prometheus metrics (placeholder — served by the caller if configured).
-	// TODO(observability): expose prometheus metrics on /metrics.
-	r.Get("/metrics", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "metrics not configured"})
-	})
 
 	// All /v1 routes require bearer token authentication.
 	var authMW func(http.Handler) http.Handler

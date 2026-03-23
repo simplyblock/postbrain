@@ -28,6 +28,12 @@ SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory
 FROM relations WHERE subject_id=$1 OR object_id=$1
 ORDER BY created_at;
 
+-- name: ListRelationsForEntityByPredicate :many
+SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, created_at
+FROM relations
+WHERE (subject_id = $1 OR object_id = $1) AND predicate = $2
+ORDER BY created_at;
+
 -- name: ListEntitiesByScope :many
 SELECT id, scope_id, entity_type, name, canonical, meta,
        embedding, embedding_model_id, created_at, updated_at

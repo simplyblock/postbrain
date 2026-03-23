@@ -83,6 +83,12 @@ WHERE ka.status = 'published' AND ka.owner_scope_id = ANY($1::uuid[])
 ORDER BY ka.embedding <=> $3
 LIMIT $2;
 
+-- name: GetArtifactHistory :many
+SELECT id, artifact_id, version, content, summary, changed_by, change_note, created_at
+FROM knowledge_history
+WHERE artifact_id = $1
+ORDER BY version DESC;
+
 -- name: RecallArtifactsByFTS :many
 SELECT id, knowledge_type, owner_scope_id, author_id,
     visibility, status, published_at, deprecated_at, review_required,

@@ -39,9 +39,6 @@ const advisoryLockKey = int64(0x706f737462726169) // 8101067571501756777
 //  4. Returns an error if the schema is in a dirty state.
 //  5. Applies pending migrations with migrate.Up().
 //  6. Releases the advisory lock.
-//
-// TODO(task-infra): add an integration test that exercises CheckAndMigrate
-// against a real PostgreSQL instance spun up by testcontainers.
 func CheckAndMigrate(ctx context.Context, pool *pgxpool.Pool, autoMigrate bool) error {
 	m, conn, release, err := newMigrator(ctx, pool)
 	if err != nil {

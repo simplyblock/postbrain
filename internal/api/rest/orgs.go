@@ -17,8 +17,13 @@ type createPrincipalRequest struct {
 }
 
 func (ro *Router) listPrincipals(w http.ResponseWriter, r *http.Request) {
-	// TODO(task-principals): implement paginated list query in db layer.
-	writeJSON(w, http.StatusOK, map[string]any{"principals": []any{}})
+	pg := paginationFromRequest(r)
+	ps, err := ro.principals.List(r.Context(), pg.Limit, pg.Offset)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"principals": ps})
 }
 
 func (ro *Router) createPrincipal(w http.ResponseWriter, r *http.Request) {

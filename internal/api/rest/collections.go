@@ -3,6 +3,7 @@ package rest
 import (
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
@@ -78,11 +79,7 @@ func (ro *Router) listCollections(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ro *Router) getCollection(w http.ResponseWriter, r *http.Request) {
-	slug := r.PathValue("slug")
-	if slug == "" {
-		// chi stores it differently; fall back to URL param.
-		slug = r.URL.Query().Get("slug")
-	}
+	slug := chi.URLParam(r, "slug")
 	// Try to parse as UUID first, otherwise treat as slug.
 	id, err := uuidParam(r, "slug")
 	if err == nil {
@@ -98,9 +95,32 @@ func (ro *Router) getCollection(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, coll)
 		return
 	}
-	// Look up by slug (requires scope context).
-	// TODO: require scope query param for slug lookups.
-	writeError(w, http.StatusBadRequest, "provide collection UUID as path param")
+	// Look up by slug — requires ?scope=kind:external_id query param.
+	scopeStr := r.URL.Query().Get("scope")
+	if scopeStr == "" {
+		writeError(w, http.StatusBadRequest, "provide collection UUID as path param or add ?scope=kind:external_id for slug lookup")
+		return
+	}
+	kind, externalID, err := parseScopeString(scopeStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+	if err != nil || scope == nil {
+		writeError(w, http.StatusBadRequest, "scope not found")
+		return
+	}
+	coll, err := ro.knwColl.GetBySlug(r.Context(), scope.ID, slug)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if coll == nil {
+		writeError(w, http.StatusNotFound, "collection not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, coll)
 }
 
 type addCollectionItemRequest struct {
