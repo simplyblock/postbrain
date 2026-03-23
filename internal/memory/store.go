@@ -11,6 +11,7 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/graph"
 )
 
 // embeddingService is the subset of embedding.EmbeddingService used by this package.
@@ -57,6 +58,7 @@ type memoryDB interface {
 	SoftDeleteMemory(ctx context.Context, id uuid.UUID) error
 	UpsertEntity(ctx context.Context, e *db.Entity) (*db.Entity, error)
 	LinkMemoryToEntity(ctx context.Context, memoryID, entityID uuid.UUID, role string) error
+	UpsertRelation(ctx context.Context, r *db.Relation) (*db.Relation, error)
 }
 
 // poolMemoryDB wraps a real pgxpool.Pool to implement memoryDB.
@@ -86,6 +88,10 @@ func (p *poolMemoryDB) UpsertEntity(ctx context.Context, e *db.Entity) (*db.Enti
 
 func (p *poolMemoryDB) LinkMemoryToEntity(ctx context.Context, memoryID, entityID uuid.UUID, role string) error {
 	return db.LinkMemoryToEntity(ctx, p.pool, memoryID, entityID, role)
+}
+
+func (p *poolMemoryDB) UpsertRelation(ctx context.Context, r *db.Relation) (*db.Relation, error) {
+	return db.UpsertRelation(ctx, p.pool, r)
 }
 
 // Store provides memory CRUD and embedding operations.
@@ -200,7 +206,9 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 		return nil, fmt.Errorf("memory: create: %w", err)
 	}
 
-	// 7. Link entities.
+	// 7. Link explicit entities and auto-extracted entities.
+	linkedEntityIDs := make(map[uuid.UUID]struct{})
+
 	for _, canonical := range input.Entities {
 		entity := &db.Entity{
 			ScopeID:    input.ScopeID,
@@ -214,6 +222,36 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 		}
 		if err := s.creator.LinkMemoryToEntity(ctx, created.ID, ent.ID, "related"); err != nil {
 			return nil, fmt.Errorf("memory: link entity %q: %w", canonical, err)
+		}
+		linkedEntityIDs[ent.ID] = struct{}{}
+	}
+
+	for _, e := range graph.ExtractEntitiesFromMemory(input.Content, input.SourceRef) {
+		e.ScopeID = input.ScopeID
+		ent, err := s.creator.UpsertEntity(ctx, e)
+		if err != nil {
+			continue // best-effort; don't fail the write on extraction errors
+		}
+		_ = s.creator.LinkMemoryToEntity(ctx, created.ID, ent.ID, "related")
+		linkedEntityIDs[ent.ID] = struct{}{}
+	}
+
+	// 8. Create co_occurs_with relations between all entities linked to this memory.
+	entityIDs := make([]uuid.UUID, 0, len(linkedEntityIDs))
+	for id := range linkedEntityIDs {
+		entityIDs = append(entityIDs, id)
+	}
+	memID := created.ID
+	for i := 0; i < len(entityIDs); i++ {
+		for j := i + 1; j < len(entityIDs); j++ {
+			_, _ = s.creator.UpsertRelation(ctx, &db.Relation{
+				ScopeID:      input.ScopeID,
+				SubjectID:    entityIDs[i],
+				Predicate:    "co_occurs_with",
+				ObjectID:     entityIDs[j],
+				Confidence:   1.0,
+				SourceMemory: &memID,
+			})
 		}
 	}
 
