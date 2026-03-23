@@ -11,7 +11,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/knowledge"
+	"github.com/simplyblock/postbrain/internal/principals"
 )
 
 //go:embed web/templates
@@ -25,6 +28,7 @@ type Handler struct {
 	pool      *pgxpool.Pool
 	templates *template.Template
 	staticFS  fs.FS
+	knwLife   *knowledge.Lifecycle
 }
 
 // NewHandler creates a UI Handler with parsed templates.
@@ -45,7 +49,12 @@ func NewHandler(pool *pgxpool.Pool) (*Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Handler{pool: pool, templates: tmpl, staticFS: sub}, nil
+	h := &Handler{pool: pool, templates: tmpl, staticFS: sub}
+	if pool != nil {
+		membership := principals.NewMembershipStore(pool)
+		h.knwLife = knowledge.NewLifecycle(pool, membership)
+	}
+	return h, nil
 }
 
 // ServeHTTP routes /ui/* requests.
@@ -73,6 +82,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleMemoryDetail(w, r)
 	case r.URL.Path == "/ui/knowledge":
 		h.handleKnowledge(w, r)
+	case strings.HasSuffix(r.URL.Path, "/endorse") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
+		h.handleEndorseArtifact(w, r)
 	case strings.HasPrefix(r.URL.Path, "/ui/knowledge/"):
 		h.handleKnowledgeDetail(w, r)
 	case r.URL.Path == "/ui/collections":
@@ -456,6 +467,37 @@ func (h *Handler) handleCreateScope(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
+}
+
+// principalFromCookie resolves the principal ID from the pb_session cookie.
+// Returns uuid.Nil if the cookie is missing or invalid.
+func (h *Handler) principalFromCookie(r *http.Request) uuid.UUID {
+	cookie, err := r.Cookie(cookieName)
+	if err != nil || cookie.Value == "" || h.pool == nil {
+		return uuid.Nil
+	}
+	hash := auth.HashToken(cookie.Value)
+	token, err := auth.NewTokenStore(h.pool).Lookup(r.Context(), hash)
+	if err != nil || token == nil {
+		return uuid.Nil
+	}
+	return token.PrincipalID
+}
+
+// handleEndorseArtifact serves POST /ui/knowledge/{id}/endorse.
+func (h *Handler) handleEndorseArtifact(w http.ResponseWriter, r *http.Request) {
+	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/endorse")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		http.Error(w, "invalid artifact id", http.StatusBadRequest)
+		return
+	}
+	endorserID := h.principalFromCookie(r)
+	if _, err := h.knwLife.Endorse(r.Context(), id, endorserID, nil); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/ui/knowledge", http.StatusSeeOther)
 }
 
 // handleMetrics serves GET /ui/metrics.

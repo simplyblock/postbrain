@@ -9,7 +9,11 @@
     <td>{{.EndorsementCount}}</td>
     <td>{{timeAgo .UpdatedAt}}</td>
     <td>
-      {{if eq .Status "in_review"}}<button hx-post="/v1/knowledge/{{.ID}}/endorse" hx-swap="none">Endorse</button>{{end}}
+      {{if eq .Status "in_review"}}
+      <form method="POST" action="/ui/knowledge/{{.ID}}/endorse" style="display:inline">
+        <button type="submit">Endorse</button>
+      </form>
+      {{end}}
     </td>
   </tr>
   {{else}}
