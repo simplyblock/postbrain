@@ -33,4 +33,38 @@
   {{end}}
   </tbody>
 </table>
+
+<h2>Create Scope</h2>
+{{if .FormError}}<p style="color:red">{{.FormError}}</p>{{end}}
+<form method="POST" action="/ui/scopes">
+  <label>Kind
+    <select name="kind" required>
+      <option value="">— select —</option>
+      <option value="user">user</option>
+      <option value="project">project</option>
+      <option value="team">team</option>
+      <option value="department">department</option>
+      <option value="company">company</option>
+    </select>
+  </label>
+  <label>External ID<input type="text" name="external_id" placeholder="e.g. acme/api" required></label>
+  <label>Name<input type="text" name="name" placeholder="e.g. Acme API" required></label>
+  <label>Owner Principal
+    <select name="principal_id" required>
+      <option value="">— select —</option>
+      {{range .Principals}}
+      <option value="{{.ID}}">{{.DisplayName}} ({{.Kind}}: {{.Slug}})</option>
+      {{end}}
+    </select>
+  </label>
+  <label>Parent Scope (optional)
+    <select name="parent_id">
+      <option value="">— none —</option>
+      {{range .Scopes}}
+      <option value="{{.ID}}">{{.Kind}}: {{.ExternalID}}</option>
+      {{end}}
+    </select>
+  </label>
+  <button type="submit">Create Scope</button>
+</form>
 {{end}}

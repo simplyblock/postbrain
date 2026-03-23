@@ -87,6 +87,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleSkills(w, r)
 	case r.URL.Path == "/ui/principals":
 		h.handlePrincipals(w, r)
+	case r.URL.Path == "/ui/scopes" && r.Method == http.MethodPost:
+		h.handleCreateScope(w, r)
 	case r.URL.Path == "/ui/metrics":
 		h.handleMetrics(w, r)
 	default:
@@ -366,10 +368,16 @@ func (h *Handler) handleSkills(w http.ResponseWriter, r *http.Request) {
 
 // handlePrincipals serves GET /ui/principals.
 func (h *Handler) handlePrincipals(w http.ResponseWriter, r *http.Request) {
+	h.renderPrincipals(w, r, "")
+}
+
+// renderPrincipals renders the principals+scopes page with an optional form error.
+func (h *Handler) renderPrincipals(w http.ResponseWriter, r *http.Request, formError string) {
 	data := struct {
 		Principals []*db.Principal
 		Scopes     []*db.Scope
-	}{}
+		FormError  string
+	}{FormError: formError}
 
 	if h.pool != nil {
 		principals, err := db.ListPrincipals(r.Context(), h.pool, 50, 0)
@@ -383,6 +391,48 @@ func (h *Handler) handlePrincipals(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.render(w, r, "principals", "Principals", data)
+}
+
+// handleCreateScope serves POST /ui/scopes.
+func (h *Handler) handleCreateScope(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		h.renderPrincipals(w, r, "bad form data")
+		return
+	}
+	kind := r.FormValue("kind")
+	externalID := r.FormValue("external_id")
+	name := r.FormValue("name")
+	principalIDStr := r.FormValue("principal_id")
+	parentIDStr := r.FormValue("parent_id")
+
+	if kind == "" || externalID == "" || name == "" || principalIDStr == "" {
+		h.renderPrincipals(w, r, "kind, external_id, name and principal are required")
+		return
+	}
+	principalID, err := uuid.Parse(principalIDStr)
+	if err != nil {
+		h.renderPrincipals(w, r, "invalid principal id")
+		return
+	}
+	var parentID *uuid.UUID
+	if parentIDStr != "" {
+		pid, err := uuid.Parse(parentIDStr)
+		if err != nil {
+			h.renderPrincipals(w, r, "invalid parent scope id")
+			return
+		}
+		parentID = &pid
+	}
+
+	if h.pool == nil {
+		h.renderPrincipals(w, r, "service unavailable")
+		return
+	}
+	if _, err := db.CreateScope(r.Context(), h.pool, kind, externalID, name, parentID, principalID, nil); err != nil {
+		h.renderPrincipals(w, r, err.Error())
+		return
+	}
+	http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
 }
 
 // handleMetrics serves GET /ui/metrics.
