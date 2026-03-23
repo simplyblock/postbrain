@@ -4,7 +4,10 @@ INSERT INTO skills
  agent_types, body, parameters, visibility, status, published_at,
  deprecated_at, review_required, version, previous_version,
  embedding, embedding_model_id)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+VALUES ($1,$2,NULLIF($3, '00000000-0000-0000-0000-000000000000'::uuid),
+        $4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
+        NULLIF($16, '00000000-0000-0000-0000-000000000000'::uuid),
+        $17,$18)
 RETURNING id, scope_id, author_id, source_artifact_id,
     slug, name, description, agent_types, body, parameters,
     visibility, status, published_at, deprecated_at, review_required,
