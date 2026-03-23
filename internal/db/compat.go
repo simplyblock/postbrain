@@ -1200,8 +1200,34 @@ func GetPromotionRequest(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) 
 	return p, nil
 }
 
-// ListPendingPromotions returns pending promotion requests for a target scope.
+// ListPendingPromotions returns pending promotion requests.
+// When targetScopeID is the zero UUID, all pending promotions across all scopes are returned.
 func ListPendingPromotions(ctx context.Context, pool *pgxpool.Pool, targetScopeID uuid.UUID) ([]*PromotionRequest, error) {
+	if targetScopeID == (uuid.UUID{}) {
+		rows, err := pool.Query(ctx,
+			`SELECT id, memory_id, requested_by, target_scope_id, target_visibility,
+			        proposed_title, proposed_collection_id, status, reviewer_id, review_note,
+			        reviewed_at, result_artifact_id, created_at
+			 FROM promotion_requests WHERE status='pending' ORDER BY created_at`,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("db: list all pending promotions: %w", err)
+		}
+		defer rows.Close()
+		var ps []*PromotionRequest
+		for rows.Next() {
+			var p PromotionRequest
+			if err := rows.Scan(
+				&p.ID, &p.MemoryID, &p.RequestedBy, &p.TargetScopeID, &p.TargetVisibility,
+				&p.ProposedTitle, &p.ProposedCollectionID, &p.Status, &p.ReviewerID, &p.ReviewNote,
+				&p.ReviewedAt, &p.ResultArtifactID, &p.CreatedAt,
+			); err != nil {
+				return nil, fmt.Errorf("db: list all pending promotions scan: %w", err)
+			}
+			ps = append(ps, &p)
+		}
+		return ps, rows.Err()
+	}
 	q := New(pool)
 	ps, err := q.ListPendingPromotions(ctx, targetScopeID)
 	if err != nil {
