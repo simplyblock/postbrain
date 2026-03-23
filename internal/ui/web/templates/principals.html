@@ -40,6 +40,31 @@
   </tbody>
 </table>
 
+<h2>Memberships</h2>
+<table>
+  <thead><tr><th>Member</th><th>Parent</th><th>Role</th><th>Created</th><th></th></tr></thead>
+  <tbody>
+  {{range .Memberships}}
+  <tr>
+    <td>{{.MemberDisplayName}} <small>({{.MemberSlug}})</small></td>
+    <td>{{.ParentDisplayName}} <small>({{.ParentSlug}})</small></td>
+    <td>{{.Role}}</td>
+    <td>{{timeAgo .CreatedAt}}</td>
+    <td>
+      <form method="POST" action="/ui/memberships/delete" style="display:inline"
+            onsubmit="return confirm('Remove {{.MemberSlug}} from {{.ParentSlug}}?')">
+        <input type="hidden" name="member_id" value="{{.MemberID}}">
+        <input type="hidden" name="parent_id" value="{{.ParentID}}">
+        <button type="submit" class="secondary">Remove</button>
+      </form>
+    </td>
+  </tr>
+  {{else}}
+  <tr><td colspan="5">No memberships.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+
 <h2>Create Principal</h2>
 {{if .PrincipalFormError}}<p style="color:red">{{.PrincipalFormError}}</p>{{end}}
 <form method="POST" action="/ui/principals">
@@ -90,5 +115,35 @@
     </select>
   </label>
   <button type="submit">Create Scope</button>
+</form>
+
+<h2>Add Membership</h2>
+{{if .MembershipFormError}}<p style="color:red">{{.MembershipFormError}}</p>{{end}}
+<form method="POST" action="/ui/memberships">
+  <label>Member Principal
+    <select name="member_id" required>
+      <option value="">— select —</option>
+      {{range .Principals}}
+      <option value="{{.ID}}">{{.DisplayName}} ({{.Kind}}: {{.Slug}})</option>
+      {{end}}
+    </select>
+  </label>
+  <label>Parent Principal
+    <select name="parent_id" required>
+      <option value="">— select —</option>
+      {{range .Principals}}
+      <option value="{{.ID}}">{{.DisplayName}} ({{.Kind}}: {{.Slug}})</option>
+      {{end}}
+    </select>
+  </label>
+  <label>Role
+    <select name="role" required>
+      <option value="">— select —</option>
+      <option value="member">member</option>
+      <option value="owner">owner</option>
+      <option value="admin">admin</option>
+    </select>
+  </label>
+  <button type="submit">Add Membership</button>
 </form>
 {{end}}

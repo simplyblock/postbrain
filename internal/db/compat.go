@@ -29,6 +29,18 @@ type SkillParameter struct {
 // Membership is an alias for PrincipalMembership for backward compatibility.
 type Membership = PrincipalMembership
 
+// MembershipRow is a denormalised membership row with principal display names.
+type MembershipRow struct {
+	MemberID          uuid.UUID
+	MemberSlug        string
+	MemberDisplayName string
+	ParentID          uuid.UUID
+	ParentSlug        string
+	ParentDisplayName string
+	Role              string
+	CreatedAt         time.Time
+}
+
 // MemoryScore pairs a memory with its retrieval scores.
 type MemoryScore struct {
 	Memory    *Memory
@@ -150,6 +162,34 @@ func GetMemberships(ctx context.Context, pool *pgxpool.Pool, memberID uuid.UUID)
 func GetAllParentIDs(ctx context.Context, pool *pgxpool.Pool, memberID uuid.UUID) ([]uuid.UUID, error) {
 	q := New(pool)
 	return q.GetAllParentIDs(ctx, memberID)
+}
+
+// ListAllMemberships returns all memberships with member and parent display names.
+func ListAllMemberships(ctx context.Context, pool *pgxpool.Pool) ([]*MembershipRow, error) {
+	const query = `
+SELECT pm.member_id, mp.slug, mp.display_name,
+       pm.parent_id, pp.slug, pp.display_name,
+       pm.role, pm.created_at
+FROM principal_memberships pm
+JOIN principals mp ON mp.id = pm.member_id
+JOIN principals pp ON pp.id = pm.parent_id
+ORDER BY pm.created_at DESC`
+	rows, err := pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("db: list all memberships: %w", err)
+	}
+	defer rows.Close()
+	var items []*MembershipRow
+	for rows.Next() {
+		var r MembershipRow
+		if err := rows.Scan(&r.MemberID, &r.MemberSlug, &r.MemberDisplayName,
+			&r.ParentID, &r.ParentSlug, &r.ParentDisplayName,
+			&r.Role, &r.CreatedAt); err != nil {
+			return nil, fmt.Errorf("db: list all memberships scan: %w", err)
+		}
+		items = append(items, &r)
+	}
+	return items, rows.Err()
 }
 
 // ── Scopes ────────────────────────────────────────────────────────────────────

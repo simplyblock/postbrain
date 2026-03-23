@@ -104,6 +104,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleCreateScope(w, r)
 	case strings.HasSuffix(r.URL.Path, "/delete") && strings.HasPrefix(r.URL.Path, "/ui/scopes/") && r.Method == http.MethodPost:
 		h.handleDeleteScope(w, r)
+	case r.URL.Path == "/ui/memberships" && r.Method == http.MethodPost:
+		h.handleAddMembership(w, r)
+	case r.URL.Path == "/ui/memberships/delete" && r.Method == http.MethodPost:
+		h.handleDeleteMembership(w, r)
 	case r.URL.Path == "/ui/metrics":
 		h.handleMetrics(w, r)
 	default:
@@ -383,17 +387,19 @@ func (h *Handler) handleSkills(w http.ResponseWriter, r *http.Request) {
 
 // handlePrincipals serves GET /ui/principals.
 func (h *Handler) handlePrincipals(w http.ResponseWriter, r *http.Request) {
-	h.renderPrincipals(w, r, "", "")
+	h.renderPrincipals(w, r, "", "", "")
 }
 
 // renderPrincipals renders the principals+scopes page with optional form errors.
-func (h *Handler) renderPrincipals(w http.ResponseWriter, r *http.Request, principalErr, scopeErr string) {
+func (h *Handler) renderPrincipals(w http.ResponseWriter, r *http.Request, principalErr, scopeErr, membershipErr string) {
 	data := struct {
-		Principals         []*db.Principal
-		Scopes             []*db.Scope
-		PrincipalFormError string
-		ScopeFormError     string
-	}{PrincipalFormError: principalErr, ScopeFormError: scopeErr}
+		Principals          []*db.Principal
+		Scopes              []*db.Scope
+		Memberships         []*db.MembershipRow
+		PrincipalFormError  string
+		ScopeFormError      string
+		MembershipFormError string
+	}{PrincipalFormError: principalErr, ScopeFormError: scopeErr, MembershipFormError: membershipErr}
 
 	if h.pool != nil {
 		principals, err := db.ListPrincipals(r.Context(), h.pool, 50, 0)
@@ -403,6 +409,10 @@ func (h *Handler) renderPrincipals(w http.ResponseWriter, r *http.Request, princ
 		scopes, err := db.ListScopes(r.Context(), h.pool, 50, 0)
 		if err == nil {
 			data.Scopes = scopes
+		}
+		memberships, err := db.ListAllMemberships(r.Context(), h.pool)
+		if err == nil {
+			data.Memberships = memberships
 		}
 	}
 
@@ -415,15 +425,15 @@ func (h *Handler) handleDeleteScope(w http.ResponseWriter, r *http.Request) {
 	idStr := strings.TrimSuffix(trimmed, "/delete")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		h.renderPrincipals(w, r, "", "invalid scope id")
+		h.renderPrincipals(w, r, "", "invalid scope id", "")
 		return
 	}
 	if h.pool == nil {
-		h.renderPrincipals(w, r, "", "service unavailable")
+		h.renderPrincipals(w, r, "", "service unavailable", "")
 		return
 	}
 	if err := db.DeleteScope(r.Context(), h.pool, id); err != nil {
-		h.renderPrincipals(w, r, "", err.Error())
+		h.renderPrincipals(w, r, "", err.Error(), "")
 		return
 	}
 	http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
@@ -432,23 +442,23 @@ func (h *Handler) handleDeleteScope(w http.ResponseWriter, r *http.Request) {
 // handleCreatePrincipal serves POST /ui/principals.
 func (h *Handler) handleCreatePrincipal(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		h.renderPrincipals(w, r, "bad form data", "")
+		h.renderPrincipals(w, r, "bad form data", "", "")
 		return
 	}
 	kind := r.FormValue("kind")
 	slug := r.FormValue("slug")
 	displayName := r.FormValue("display_name")
 	if kind == "" || slug == "" || displayName == "" {
-		h.renderPrincipals(w, r, "kind, slug and display_name are required", "")
+		h.renderPrincipals(w, r, "kind, slug and display_name are required", "", "")
 		return
 	}
 	if h.pool == nil {
-		h.renderPrincipals(w, r, "service unavailable", "")
+		h.renderPrincipals(w, r, "service unavailable", "", "")
 		return
 	}
 	ps := principals.NewStore(h.pool)
 	if _, err := ps.Create(r.Context(), kind, slug, displayName, nil); err != nil {
-		h.renderPrincipals(w, r, err.Error(), "")
+		h.renderPrincipals(w, r, err.Error(), "", "")
 		return
 	}
 	http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
@@ -457,7 +467,7 @@ func (h *Handler) handleCreatePrincipal(w http.ResponseWriter, r *http.Request) 
 // handleCreateScope serves POST /ui/scopes.
 func (h *Handler) handleCreateScope(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		h.renderPrincipals(w, r, "", "bad form data")
+		h.renderPrincipals(w, r, "", "bad form data", "")
 		return
 	}
 	kind := r.FormValue("kind")
@@ -467,29 +477,93 @@ func (h *Handler) handleCreateScope(w http.ResponseWriter, r *http.Request) {
 	parentIDStr := r.FormValue("parent_id")
 
 	if kind == "" || externalID == "" || name == "" || principalIDStr == "" {
-		h.renderPrincipals(w, r, "", "kind, external_id, name and principal are required")
+		h.renderPrincipals(w, r, "", "kind, external_id, name and principal are required", "")
 		return
 	}
 	principalID, err := uuid.Parse(principalIDStr)
 	if err != nil {
-		h.renderPrincipals(w, r, "", "invalid principal id")
+		h.renderPrincipals(w, r, "", "invalid principal id", "")
 		return
 	}
 	var parentID *uuid.UUID
 	if parentIDStr != "" {
 		pid, err := uuid.Parse(parentIDStr)
 		if err != nil {
-			h.renderPrincipals(w, r, "", "invalid parent scope id")
+			h.renderPrincipals(w, r, "", "invalid parent scope id", "")
 			return
 		}
 		parentID = &pid
 	}
 	if h.pool == nil {
-		h.renderPrincipals(w, r, "", "service unavailable")
+		h.renderPrincipals(w, r, "", "service unavailable", "")
 		return
 	}
 	if _, err := db.CreateScope(r.Context(), h.pool, kind, externalID, name, parentID, principalID, nil); err != nil {
-		h.renderPrincipals(w, r, "", err.Error())
+		h.renderPrincipals(w, r, "", err.Error(), "")
+		return
+	}
+	http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
+}
+
+// handleAddMembership serves POST /ui/memberships.
+func (h *Handler) handleAddMembership(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		h.renderPrincipals(w, r, "", "", "bad form data")
+		return
+	}
+	memberIDStr := r.FormValue("member_id")
+	parentIDStr := r.FormValue("parent_id")
+	role := r.FormValue("role")
+	if memberIDStr == "" || parentIDStr == "" || role == "" {
+		h.renderPrincipals(w, r, "", "", "member, parent and role are required")
+		return
+	}
+	memberID, err := uuid.Parse(memberIDStr)
+	if err != nil {
+		h.renderPrincipals(w, r, "", "", "invalid member id")
+		return
+	}
+	parentID, err := uuid.Parse(parentIDStr)
+	if err != nil {
+		h.renderPrincipals(w, r, "", "", "invalid parent id")
+		return
+	}
+	if h.pool == nil {
+		h.renderPrincipals(w, r, "", "", "service unavailable")
+		return
+	}
+	ms := principals.NewMembershipStore(h.pool)
+	if err := ms.AddMembership(r.Context(), memberID, parentID, role, nil); err != nil {
+		h.renderPrincipals(w, r, "", "", err.Error())
+		return
+	}
+	http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
+}
+
+// handleDeleteMembership serves POST /ui/memberships/delete.
+func (h *Handler) handleDeleteMembership(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		h.renderPrincipals(w, r, "", "", "bad form data")
+		return
+	}
+	memberIDStr := r.FormValue("member_id")
+	parentIDStr := r.FormValue("parent_id")
+	memberID, err := uuid.Parse(memberIDStr)
+	if err != nil {
+		h.renderPrincipals(w, r, "", "", "invalid member id")
+		return
+	}
+	parentID, err := uuid.Parse(parentIDStr)
+	if err != nil {
+		h.renderPrincipals(w, r, "", "", "invalid parent id")
+		return
+	}
+	if h.pool == nil {
+		h.renderPrincipals(w, r, "", "", "service unavailable")
+		return
+	}
+	if err := db.DeleteMembership(r.Context(), h.pool, memberID, parentID); err != nil {
+		h.renderPrincipals(w, r, "", "", err.Error())
 		return
 	}
 	http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)

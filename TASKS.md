@@ -493,7 +493,7 @@ Technology: Go `html/template` + HTMX + Pico.css, all embedded via `//go:embed`.
 - [x] **Staleness Flags** (`web/templates/staleness.html`) — open flags table
 - [x] **Entity Graph** (`web/templates/graph.html`) — entity and relation tables for scope; data from `GET /v1/graph`
 - [x] **Skills Registry** (`web/templates/skills.html`) — published skills list
-- [x] **Principals & Scopes** (`web/templates/principals.html`) — principals table, scopes table with delete button, create-principal form (kind/slug/display_name), create-scope form (kind/external_id/name/owner/parent); `POST /ui/principals` and `POST /ui/scopes` routes wired in `ServeHTTP`
+- [x] **Principals & Scopes** (`web/templates/principals.html`) — principals table, scopes table with delete button, memberships table with remove button, create-principal form, create-scope form, add-membership form (member/parent/role dropdowns); `POST /ui/principals`, `POST /ui/scopes`, `POST /ui/memberships`, `POST /ui/memberships/delete` routes wired in `ServeHTTP`; `ListAllMemberships` query added to `db/compat.go`
 - [x] **Metrics** (`web/templates/metrics.html`) — Prometheus metrics reference page
 
 ### Testing
