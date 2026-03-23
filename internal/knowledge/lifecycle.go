@@ -169,6 +169,7 @@ func (l *Lifecycle) RetractToDraft(ctx context.Context, artifactID, callerID uui
 }
 
 // Endorse records an endorsement and auto-publishes when the review threshold is reached.
+// Scope admins bypass the self-endorsement guard and the in_review status requirement.
 func (l *Lifecycle) Endorse(ctx context.Context, artifactID, endorserID uuid.UUID, note *string) (*EndorseResult, error) {
 	artifact, err := l.dbOps.getArtifact(ctx, artifactID)
 	if err != nil {
@@ -177,11 +178,19 @@ func (l *Lifecycle) Endorse(ctx context.Context, artifactID, endorserID uuid.UUI
 	if artifact == nil {
 		return nil, ErrInvalidTransition
 	}
-	if artifact.AuthorID == endorserID {
-		return nil, ErrSelfEndorsement
+
+	isAdmin, err := l.membership.IsScopeAdmin(ctx, endorserID, artifact.OwnerScopeID)
+	if err != nil {
+		return nil, err
 	}
-	if artifact.Status != "in_review" {
-		return nil, ErrNotReviewable
+
+	if !isAdmin {
+		if artifact.AuthorID == endorserID {
+			return nil, ErrSelfEndorsement
+		}
+		if artifact.Status != "in_review" {
+			return nil, ErrNotReviewable
+		}
 	}
 
 	_, err = l.dbOps.createEndorsement(ctx, artifactID, endorserID, note)

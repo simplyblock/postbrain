@@ -175,6 +175,71 @@ func TestEndorse_AutoPublish(t *testing.T) {
 	}
 }
 
+// TestEndorse_AdminCanEndorseOwnArtifact verifies that a scope admin is not blocked
+// by the self-endorsement guard.
+func TestEndorse_AdminCanEndorseOwnArtifact(t *testing.T) {
+	t.Parallel()
+	authorID := uuid.New()
+	artifact := &db.KnowledgeArtifact{
+		ID:             uuid.New(),
+		AuthorID:       authorID,
+		OwnerScopeID:   uuid.New(),
+		Status:         "in_review",
+		ReviewRequired: 2, // needs 2 endorsements so it won't auto-publish here
+	}
+	lc, _ := newTestLifecycle(artifact, true /* is admin */)
+
+	_, err := lc.Endorse(context.Background(), artifact.ID, authorID, nil)
+	if err != nil {
+		t.Errorf("admin self-endorsement should be allowed, got %v", err)
+	}
+}
+
+// TestEndorse_AdminCanEndorseAnyStatus verifies that a scope admin can endorse
+// an artifact regardless of its current status.
+func TestEndorse_AdminCanEndorseAnyStatus(t *testing.T) {
+	t.Parallel()
+	for _, status := range []string{"draft", "published", "deprecated"} {
+		status := status
+		t.Run(status, func(t *testing.T) {
+			t.Parallel()
+			artifact := &db.KnowledgeArtifact{
+				ID:             uuid.New(),
+				AuthorID:       uuid.New(),
+				OwnerScopeID:   uuid.New(),
+				Status:         status,
+				ReviewRequired: 2,
+			}
+			lc, _ := newTestLifecycle(artifact, true /* is admin */)
+
+			_, err := lc.Endorse(context.Background(), artifact.ID, uuid.New(), nil)
+			if err != nil {
+				t.Errorf("admin should be able to endorse %s artifact, got %v", status, err)
+			}
+		})
+	}
+}
+
+// TestEndorse_NonAdminSelfEndorsementStillBlocked verifies the guard still applies
+// for non-admins.
+func TestEndorse_NonAdminSelfEndorsementStillBlocked(t *testing.T) {
+	t.Parallel()
+	authorID := uuid.New()
+	artifact := &db.KnowledgeArtifact{
+		ID:             uuid.New(),
+		AuthorID:       authorID,
+		OwnerScopeID:   uuid.New(),
+		Status:         "in_review",
+		ReviewRequired: 1,
+	}
+	lc, _ := newTestLifecycle(artifact, false /* not admin */)
+
+	_, err := lc.Endorse(context.Background(), artifact.ID, authorID, nil)
+	if !errors.Is(err, ErrSelfEndorsement) {
+		t.Errorf("expected ErrSelfEndorsement for non-admin, got %v", err)
+	}
+}
+
 // TestDeprecate_ForbiddenForNonAdmin verifies that a non-admin cannot deprecate an artifact.
 func TestDeprecate_ForbiddenForNonAdmin(t *testing.T) {
 	t.Parallel()
