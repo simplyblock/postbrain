@@ -62,7 +62,7 @@ func (ts *TokenStore) Lookup(ctx context.Context, hash string) (*db.Token, error
 		return nil, nil
 	}
 	// Check expiry.
-	if !t.ExpiresAt.IsZero() && t.ExpiresAt.Before(time.Now()) {
+	if t.ExpiresAt != nil && t.ExpiresAt.Before(time.Now()) {
 		return nil, nil
 	}
 	return t, nil
