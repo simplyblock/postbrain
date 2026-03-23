@@ -125,22 +125,22 @@ func GetPrincipalBySlug(ctx context.Context, pool *pgxpool.Pool, slug string) (*
 // ── Memberships ───────────────────────────────────────────────────────────────
 
 // CreateMembership inserts a membership record.
+// grantedBy may be nil; the column is nullable in the schema.
 func CreateMembership(ctx context.Context, pool *pgxpool.Pool, memberID, parentID uuid.UUID, role string, grantedBy *uuid.UUID) (*Membership, error) {
-	q := New(pool)
+	const q = `
+INSERT INTO principal_memberships (member_id, parent_id, role, granted_by)
+VALUES ($1, $2, $3, NULLIF($4, '00000000-0000-0000-0000-000000000000'::uuid))
+RETURNING member_id, parent_id, role, granted_by, created_at`
 	var gb uuid.UUID
 	if grantedBy != nil {
 		gb = *grantedBy
 	}
-	m, err := q.CreateMembership(ctx, CreateMembershipParams{
-		MemberID:  memberID,
-		ParentID:  parentID,
-		Role:      role,
-		GrantedBy: gb,
-	})
-	if err != nil {
+	row := pool.QueryRow(ctx, q, memberID, parentID, role, gb)
+	var m Membership
+	if err := row.Scan(&m.MemberID, &m.ParentID, &m.Role, &m.GrantedBy, &m.CreatedAt); err != nil {
 		return nil, err
 	}
-	return m, nil
+	return &m, nil
 }
 
 // DeleteMembership removes a direct membership.

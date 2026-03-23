@@ -532,8 +532,13 @@ func (h *Handler) handleAddMembership(w http.ResponseWriter, r *http.Request) {
 		h.renderPrincipals(w, r, "", "", "service unavailable")
 		return
 	}
+	grantedBy := h.principalFromCookie(r)
+	var grantedByPtr *uuid.UUID
+	if grantedBy != uuid.Nil {
+		grantedByPtr = &grantedBy
+	}
 	ms := principals.NewMembershipStore(h.pool)
-	if err := ms.AddMembership(r.Context(), memberID, parentID, role, nil); err != nil {
+	if err := ms.AddMembership(r.Context(), memberID, parentID, role, grantedByPtr); err != nil {
 		h.renderPrincipals(w, r, "", "", err.Error())
 		return
 	}
