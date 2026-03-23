@@ -25,3 +25,13 @@ go.work.sum
 # env file
 .env
 
+# Built binaries
+/postbrain
+/postbrain-hook
+
+# Local config overrides
+config.test.yaml
+
+# Claude Code worktrees
+.claude/worktrees/
+
