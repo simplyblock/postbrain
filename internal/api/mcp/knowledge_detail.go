@@ -7,6 +7,8 @@ import (
 
 	"github.com/google/uuid"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
+
+	"github.com/simplyblock/postbrain/internal/db"
 )
 
 // handleKnowledgeDetail returns the full content of a knowledge artifact by ID.
@@ -33,6 +35,8 @@ func (s *Server) handleKnowledgeDetail(ctx context.Context, req mcpgo.CallToolRe
 	if artifact == nil {
 		return mcpgo.NewToolResultError(fmt.Sprintf("knowledge_detail: artifact %s not found", idStr)), nil
 	}
+
+	go func() { _ = db.IncrementArtifactAccess(context.Background(), s.pool, artifact.ID) }()
 
 	payload, _ := json.Marshal(map[string]any{
 		"id":             artifact.ID.String(),

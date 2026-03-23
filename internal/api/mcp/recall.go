@@ -139,6 +139,8 @@ func (s *Server) handleRecall(ctx context.Context, req mcpgo.CallToolRequest) (*
 			return mcpgo.NewToolResultError(fmt.Sprintf("recall: knowledge recall failed: %v", err)), nil
 		}
 		for _, a := range arts {
+			aid := a.Artifact.ID
+			go func() { _ = db.IncrementArtifactAccess(context.Background(), s.pool, aid) }()
 			r := &retrieval.Result{
 				Layer:         retrieval.LayerKnowledge,
 				ID:            a.Artifact.ID,
