@@ -139,6 +139,9 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 	if err != nil {
 		return nil, fmt.Errorf("memory: embed text: %w", err)
 	}
+	if len(textVec) == 0 {
+		return nil, fmt.Errorf("memory: embed text: embedding service returned empty vector (is the model available?)")
+	}
 
 	// 3. Embed code if content_kind == "code" and a code embedder is available.
 	var codeVec []float32
@@ -220,6 +223,9 @@ func (s *Store) Update(ctx context.Context, id uuid.UUID, content string, import
 	textVec, err := s.svc.EmbedText(ctx, content)
 	if err != nil {
 		return nil, fmt.Errorf("memory: update embed text: %w", err)
+	}
+	if len(textVec) == 0 {
+		return nil, fmt.Errorf("memory: update embed text: embedding service returned empty vector (is the model available?)")
 	}
 
 	var codeVec []float32

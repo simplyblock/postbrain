@@ -246,6 +246,9 @@ func (s *Store) embedContent(ctx context.Context, text string) ([]float32, *uuid
 	if err != nil {
 		return nil, nil, err
 	}
+	if len(vec) == 0 {
+		return nil, nil, fmt.Errorf("embedding service returned empty vector (is the model available?)")
+	}
 	// Resolve the active model ID from the DB by the embedder's slug.
 	if s.pool != nil {
 		slug := s.svc.TextEmbedder().ModelSlug()
