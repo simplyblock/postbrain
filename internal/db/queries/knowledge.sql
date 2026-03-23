@@ -60,6 +60,17 @@ RETURNING id, artifact_id, endorser_id, note, created_at;
 SELECT id, artifact_id, endorser_id, note, created_at
 FROM knowledge_endorsements WHERE artifact_id=$1 AND endorser_id=$2;
 
+-- name: ListAllArtifacts :many
+SELECT id, knowledge_type, owner_scope_id, author_id,
+    visibility, status, published_at, deprecated_at, review_required,
+    title, content, summary, embedding, embedding_model_id, meta,
+    endorsement_count, access_count, last_accessed,
+    version, previous_version, source_memory_id, source_ref,
+    created_at, updated_at
+FROM knowledge_artifacts
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2;
+
 -- name: ListVisibleArtifacts :many
 SELECT id, knowledge_type, owner_scope_id, author_id,
     visibility, status, published_at, deprecated_at, review_required,

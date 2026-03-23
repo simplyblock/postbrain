@@ -222,7 +222,7 @@ func (h *Handler) handleKnowledge(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.pool != nil {
-		arts, err := db.ListVisibleArtifacts(r.Context(), h.pool, nil, 20, 0)
+		arts, err := db.ListAllArtifacts(r.Context(), h.pool, 20, 0)
 		if err == nil {
 			data.Artifacts = arts
 		}

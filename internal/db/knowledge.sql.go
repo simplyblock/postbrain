@@ -247,6 +247,68 @@ func (q *Queries) IncrementArtifactEndorsementCount(ctx context.Context, id uuid
 	return err
 }
 
+const listAllArtifacts = `-- name: ListAllArtifacts :many
+SELECT id, knowledge_type, owner_scope_id, author_id,
+    visibility, status, published_at, deprecated_at, review_required,
+    title, content, summary, embedding, embedding_model_id, meta,
+    endorsement_count, access_count, last_accessed,
+    version, previous_version, source_memory_id, source_ref,
+    created_at, updated_at
+FROM knowledge_artifacts
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListAllArtifactsParams struct {
+	Limit  int32
+	Offset int32
+}
+
+func (q *Queries) ListAllArtifacts(ctx context.Context, arg ListAllArtifactsParams) ([]*KnowledgeArtifact, error) {
+	rows, err := q.db.Query(ctx, listAllArtifacts, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*KnowledgeArtifact{}
+	for rows.Next() {
+		var i KnowledgeArtifact
+		if err := rows.Scan(
+			&i.ID,
+			&i.KnowledgeType,
+			&i.OwnerScopeID,
+			&i.AuthorID,
+			&i.Visibility,
+			&i.Status,
+			&i.PublishedAt,
+			&i.DeprecatedAt,
+			&i.ReviewRequired,
+			&i.Title,
+			&i.Content,
+			&i.Summary,
+			&i.Embedding,
+			&i.EmbeddingModelID,
+			&i.Meta,
+			&i.EndorsementCount,
+			&i.AccessCount,
+			&i.LastAccessed,
+			&i.Version,
+			&i.PreviousVersion,
+			&i.SourceMemoryID,
+			&i.SourceRef,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listVisibleArtifacts = `-- name: ListVisibleArtifacts :many
 SELECT id, knowledge_type, owner_scope_id, author_id,
     visibility, status, published_at, deprecated_at, review_required,

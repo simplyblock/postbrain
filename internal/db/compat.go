@@ -881,6 +881,15 @@ func GetEndorsementByEndorser(ctx context.Context, pool *pgxpool.Pool, artifactI
 	return e, err
 }
 
+// ListAllArtifacts returns all artifacts regardless of status or scope (admin view).
+func ListAllArtifacts(ctx context.Context, pool *pgxpool.Pool, limit, offset int) ([]*KnowledgeArtifact, error) {
+	q := New(pool)
+	return q.ListAllArtifacts(ctx, ListAllArtifactsParams{
+		Limit:  int32(limit),
+		Offset: int32(offset),
+	})
+}
+
 // ListVisibleArtifacts returns published artifacts visible to the given scope IDs.
 func ListVisibleArtifacts(ctx context.Context, pool *pgxpool.Pool, callerScopeIDs []uuid.UUID, limit, offset int) ([]*KnowledgeArtifact, error) {
 	q := New(pool)
