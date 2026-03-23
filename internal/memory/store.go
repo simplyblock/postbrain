@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	pgvector "github.com/pgvector/pgvector-go"
 
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/embedding"
@@ -174,17 +175,21 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 	}
 
 	// 6. Insert.
+	var expiresAtVal time.Time
+	if expiresAt != nil {
+		expiresAtVal = *expiresAt
+	}
 	m := &db.Memory{
 		MemoryType:    input.MemoryType,
 		ScopeID:       input.ScopeID,
 		AuthorID:      input.AuthorID,
 		Content:       input.Content,
-		Embedding:     textVec,
-		EmbeddingCode: codeVec,
+		Embedding:     pgvector.NewVector(textVec),
+		EmbeddingCode: pgvector.NewVector(codeVec),
 		ContentKind:   contentKind,
 		Meta:          input.Meta,
 		Importance:    input.Importance,
-		ExpiresAt:     expiresAt,
+		ExpiresAt:     expiresAtVal,
 		SourceRef:     input.SourceRef,
 	}
 	created, err := s.creator.CreateMemory(ctx, m)

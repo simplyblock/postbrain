@@ -91,7 +91,7 @@ func (s *Store) Recall(ctx context.Context, pool *pgxpool.Pool, input RecallInpu
 	// Score and filter.
 	var results []*ArtifactResult
 	for _, r := range merged {
-		imp := normalizeEndorsements(r.Artifact.EndorsementCount)
+		imp := normalizeEndorsements(int(r.Artifact.EndorsementCount))
 		r.Score = knowledgeCombinedScore(r.VecScore, r.BM25Score, imp, 1.0)
 		if r.Score < input.MinScore {
 			continue

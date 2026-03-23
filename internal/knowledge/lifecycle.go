@@ -205,7 +205,7 @@ func (l *Lifecycle) Endorse(ctx context.Context, artifactID, endorserID uuid.UUI
 	}
 
 	result := &EndorseResult{
-		EndorsementCount: fresh.EndorsementCount,
+		EndorsementCount: int(fresh.EndorsementCount),
 		Status:           fresh.Status,
 	}
 

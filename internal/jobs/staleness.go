@@ -126,7 +126,7 @@ func (j *ContradictionJob) processArtifact(ctx context.Context, artifact *db.Kno
 	}
 
 	// Pre-filter by topic overlap: cosine similarity > 0.6.
-	topicMatches := j.filterByTopicSimilarity(artifact.Embedding, memories)
+	topicMatches := j.filterByTopicSimilarity(artifact.Embedding.Slice(), memories)
 	if len(topicMatches) == 0 {
 		return nil
 	}
@@ -145,7 +145,7 @@ func (j *ContradictionJob) processArtifact(ctx context.Context, artifact *db.Kno
 	}
 	var survivors []survivor
 	for _, m := range topicMatches {
-		sim := retrieval.CosineSimilarity(negationVec, m.Embedding)
+		sim := retrieval.CosineSimilarity(negationVec, m.Embedding.Slice())
 		if sim > negationSimilarityThreshold {
 			survivors = append(survivors, survivor{mem: m, negSimScore: sim})
 		}
@@ -257,10 +257,10 @@ func (j *ContradictionJob) filterByTopicSimilarity(artifactEmbedding []float32, 
 	}
 	var result []*db.Memory
 	for _, m := range memories {
-		if len(m.Embedding) == 0 {
+		if len(m.Embedding.Slice()) == 0 {
 			continue
 		}
-		sim := retrieval.CosineSimilarity(artifactEmbedding, m.Embedding)
+		sim := retrieval.CosineSimilarity(artifactEmbedding, m.Embedding.Slice())
 		if sim > topicSimilarityThreshold {
 			result = append(result, m)
 		}

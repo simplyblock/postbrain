@@ -68,7 +68,7 @@ func syncInternal(ctx context.Context, sdb syncDB, scopeIDs []uuid.UUID, agentTy
 
 		// Check if the installed version differs from the registry version.
 		installedVersion := readInstalledVersion(skill.Slug, agentType, workdir)
-		if installedVersion != skill.Version {
+		if installedVersion != int(skill.Version) {
 			if _, err := Install(skill, agentType, workdir); err != nil {
 				return nil, fmt.Errorf("skills: sync update %s: %w", skill.Slug, err)
 			}

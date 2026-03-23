@@ -119,8 +119,9 @@ func (s *Server) handleRecall(ctx context.Context, req mcpgo.CallToolRequest) (*
 			if m.Memory.SourceRef != nil {
 				r.SourceRef = *m.Memory.SourceRef
 			}
-			if m.Memory.PromotedTo != nil {
-				r.PromotedTo = m.Memory.PromotedTo
+			if m.Memory.PromotedTo != (uuid.UUID{}) {
+				promotedTo := m.Memory.PromotedTo
+				r.PromotedTo = &promotedTo
 			}
 			allResults = append(allResults, r)
 		}
@@ -147,7 +148,7 @@ func (s *Server) handleRecall(ctx context.Context, req mcpgo.CallToolRequest) (*
 				KnowledgeType: a.Artifact.KnowledgeType,
 				Visibility:    a.Artifact.Visibility,
 				Status:        a.Artifact.Status,
-				Endorsements:  a.Artifact.EndorsementCount,
+				Endorsements:  int(a.Artifact.EndorsementCount),
 			})
 		}
 	}
@@ -173,7 +174,7 @@ func (s *Server) handleRecall(ctx context.Context, req mcpgo.CallToolRequest) (*
 				Name:            sk.Skill.Name,
 				Description:     sk.Skill.Description,
 				AgentTypes:      sk.Skill.AgentTypes,
-				InvocationCount: sk.Skill.InvocationCount,
+				InvocationCount: int(sk.Skill.InvocationCount),
 				Installed:       sk.Installed,
 			})
 		}

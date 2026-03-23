@@ -281,7 +281,7 @@ func runSkillSync(ctx context.Context, agentType, workdir string) error {
 			Description: sk.Description,
 			AgentTypes:  sk.AgentTypes,
 			Body:        sk.Body,
-			Version:     sk.Version,
+			Version:     int32(sk.Version),
 			Parameters:  sk.Parameters,
 		}
 

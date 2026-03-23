@@ -58,11 +58,11 @@ func (ts *TokenStore) Lookup(ctx context.Context, hash string) (*db.Token, error
 		return nil, nil
 	}
 	// Check revocation.
-	if t.RevokedAt != nil {
+	if !t.RevokedAt.IsZero() {
 		return nil, nil
 	}
 	// Check expiry.
-	if t.ExpiresAt != nil && t.ExpiresAt.Before(time.Now()) {
+	if !t.ExpiresAt.IsZero() && t.ExpiresAt.Before(time.Now()) {
 		return nil, nil
 	}
 	return t, nil
@@ -102,10 +102,10 @@ func (ts *TokenStore) UpdateLastUsed(pool *pgxpool.Pool, tokenID uuid.UUID) {
 // EnforceScopeAccess returns an error if the token's ScopeIDs is non-nil and
 // does not contain requestedScopeID. A nil ScopeIDs list grants access to all scopes.
 func EnforceScopeAccess(token *db.Token, requestedScopeID uuid.UUID) error {
-	if token.ScopeIDs == nil {
+	if token.ScopeIds == nil {
 		return nil
 	}
-	for _, id := range token.ScopeIDs {
+	for _, id := range token.ScopeIds {
 		if id == requestedScopeID {
 			return nil
 		}

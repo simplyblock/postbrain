@@ -113,7 +113,7 @@ func TestCreate_WorkingMemory_DefaultTTL(t *testing.T) {
 	}
 
 	created := mc.created.m
-	if created.ExpiresAt == nil {
+	if created.ExpiresAt.IsZero() {
 		t.Fatal("expected ExpiresAt to be set for working memory")
 	}
 	// Should be ~3600s from now.
@@ -143,7 +143,7 @@ func TestCreate_WorkingMemory_ExplicitTTL(t *testing.T) {
 	}
 
 	created := mc.created.m
-	if created.ExpiresAt == nil {
+	if created.ExpiresAt.IsZero() {
 		t.Fatal("expected ExpiresAt to be set")
 	}
 	expected := before.Add(7200 * time.Second)
@@ -171,8 +171,8 @@ func TestCreate_NonWorkingMemory_ExpiresAtNil(t *testing.T) {
 	}
 
 	created := mc.created.m
-	if created.ExpiresAt != nil {
-		t.Fatalf("expected ExpiresAt to be nil for semantic memory, got %v", created.ExpiresAt)
+	if !created.ExpiresAt.IsZero() {
+		t.Fatalf("expected ExpiresAt to be zero for semantic memory, got %v", created.ExpiresAt)
 	}
 }
 
@@ -199,7 +199,7 @@ func TestCreate_CodeContent_CodeEmbeddingCalled(t *testing.T) {
 	if created.ContentKind != "code" {
 		t.Fatalf("expected content_kind=code, got %q", created.ContentKind)
 	}
-	if len(created.EmbeddingCode) == 0 {
+	if len(created.EmbeddingCode.Slice()) == 0 {
 		t.Fatal("expected EmbeddingCode to be populated for code content")
 	}
 }

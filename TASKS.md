@@ -86,13 +86,14 @@
 - [x] `models.go` — shared DB model types: `Memory`, `Principal`, `Membership`, `Scope`, `Token`, `Skill`, `SkillEndorsement`, `SkillHistory`, `SkillParameter`, `KnowledgeArtifact`, `KnowledgeEndorsement`, `KnowledgeHistory`, `KnowledgeCollection`, `KnowledgeCollectionItem`, `StalenessFlag`, `PromotionRequest`
 - [x] `queries.go` — thin pgx query layer: `CreatePrincipal`, `GetPrincipalByID`, `GetPrincipalBySlug`, `CreateMembership`, `DeleteMembership`, `GetMemberships`, `GetAllParentIDs`, `CreateScope`, `GetScopeByID`, `GetScopeByExternalID`, `GetAncestorScopeIDs`, `CreateToken`, `LookupToken`, `RevokeToken`, `UpdateTokenLastUsed`; skill queries: `CreateSkill`, `GetSkill`, `GetSkillBySlug`, `UpdateSkillContent`, `UpdateSkillStatus`, `SnapshotSkillVersion`, `CreateSkillEndorsement`, `GetSkillEndorsementByEndorser`, `CountSkillEndorsements`, `RecallSkillsByVector`, `RecallSkillsByFTS`, `ListPublishedSkillsForAgent`; knowledge queries: `GetMemory`, `CreateArtifact`, `GetArtifact`, `UpdateArtifact`, `UpdateArtifactStatus`, `IncrementArtifactEndorsementCount`, `IncrementArtifactAccess`, `SnapshotArtifactVersion`, `CreateEndorsement`, `GetEndorsementByEndorser`, `ListVisibleArtifacts`, `RecallArtifactsByVector`, `RecallArtifactsByFTS`, `CreateCollection`, `GetCollection`, `GetCollectionBySlug`, `ListCollections`, `AddCollectionItem`, `RemoveCollectionItem`, `ListCollectionItems`, `InsertStalenessFlag`, `HasOpenStalenessFlag`, `UpdateStalenessFlag`, `CreatePromotionRequest`, `GetPromotionRequest`, `ListPendingPromotions`
 
-- [~] sqlc layer (DEFERRED) — all queries are implemented as direct pgx calls in `internal/db/queries.go`
-  instead of generated sqlc code. The sqlc `.sql` definition files and `sqlc.yaml` were skipped in
-  favour of hand-written pgx queries which work correctly today. sqlc migration is a future
-  refactoring task if type-safety or codegen becomes a priority.
-  - `db/queries/memories.sql`, `db/queries/knowledge.sql`, `db/queries/collections.sql`,
-    `db/queries/principals.sql`, `db/queries/scopes.sql`, `db/queries/sharing.sql`,
-    `db/queries/skills.sql`, `db/queries/promotions.sql`, `db/queries/graph.sql`, `sqlc.yaml`
+- [x] sqlc layer — migrated from hand-written pgx queries to sqlc-generated code.
+  `sqlc.yaml` and `internal/db/queries/*.sql` files define all queries. Generated files
+  (`*.sql.go`, `models.go`, `db.go`) replace the old `queries.go`. A `compat.go` shim
+  preserves the free-function API used by existing callers. Added `github.com/pgvector/pgvector-go`
+  for vector type support. All callers updated to handle `pgvector.Vector` and `int32`/`time.Time`
+  type changes. All 17 packages pass `go test ./...`.
+  - Generated: `db/models.go`, `db/db.go`, `db/*.sql.go`
+  - Added: `sqlc.yaml`, `internal/db/queries/`, `internal/db/compat.go`
 
 ### `internal/embedding` — Embedding Service
 

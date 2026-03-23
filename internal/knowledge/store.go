@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	pgvector "github.com/pgvector/pgvector-go"
 
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/embedding"
@@ -125,20 +126,28 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.KnowledgeArt
 		return nil, fmt.Errorf("knowledge: embed: %w", err)
 	}
 
+	var srcMemID uuid.UUID
+	if input.SourceMemoryID != nil {
+		srcMemID = *input.SourceMemoryID
+	}
+	var embModelID uuid.UUID
+	if modelID != nil {
+		embModelID = *modelID
+	}
 	artifact := &db.KnowledgeArtifact{
 		KnowledgeType:    input.KnowledgeType,
 		OwnerScopeID:     input.OwnerScopeID,
 		AuthorID:         input.AuthorID,
 		Visibility:       input.Visibility,
 		Status:           status,
-		ReviewRequired:   input.ReviewRequired,
+		ReviewRequired:   int32(input.ReviewRequired),
 		Title:            input.Title,
 		Content:          input.Content,
 		Summary:          input.Summary,
-		Embedding:        embeddingVec,
-		EmbeddingModelID: modelID,
+		Embedding:        pgvector.NewVector(embeddingVec),
+		EmbeddingModelID: embModelID,
 		Version:          1,
-		SourceMemoryID:   input.SourceMemoryID,
+		SourceMemoryID:   srcMemID,
 		SourceRef:        input.SourceRef,
 	}
 

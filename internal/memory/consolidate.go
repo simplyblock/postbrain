@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	pgvector "github.com/pgvector/pgvector-go"
 
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/embedding"
@@ -98,7 +99,7 @@ func (c *Consolidator) FindClusters(ctx context.Context, scopeID uuid.UUID) ([][
 	const threshold = 0.05
 	for i := 0; i < n; i++ {
 		for j := i + 1; j < n; j++ {
-			if cosineDist(candidates[i].Embedding, candidates[j].Embedding) <= threshold {
+			if cosineDist(candidates[i].Embedding.Slice(), candidates[j].Embedding.Slice()) <= threshold {
 				union(i, j)
 			}
 		}
@@ -160,7 +161,7 @@ func (c *Consolidator) MergeCluster(ctx context.Context, cluster []*db.Memory, s
 		ScopeID:    scopeID,
 		AuthorID:   authorID,
 		Content:    summary,
-		Embedding:  vec,
+		Embedding:  pgvector.NewVector(vec),
 		Importance: maxImportance,
 	}
 	created, err := cdb.CreateMemory(ctx, newMem)
@@ -179,8 +180,8 @@ func (c *Consolidator) MergeCluster(ctx context.Context, cluster []*db.Memory, s
 	resultID := created.ID
 	_, err = cdb.CreateConsolidation(ctx, &db.Consolidation{
 		ScopeID:   scopeID,
-		SourceIDs: sourceIDs,
-		ResultID:  &resultID,
+		SourceIds: sourceIDs,
+		ResultID:  resultID,
 		Strategy:  "merge",
 	})
 	if err != nil {

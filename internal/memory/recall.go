@@ -175,10 +175,10 @@ func (s *Store) Recall(ctx context.Context, input RecallInput) ([]*MemoryResult,
 		}
 
 		ref := m.LastAccessed
-		if ref == nil {
-			ref = &m.CreatedAt
+		if ref.IsZero() {
+			ref = m.CreatedAt
 		}
-		days := now.Sub(*ref).Hours() / 24
+		days := now.Sub(ref).Hours() / 24
 		λ := DecayLambda(m.MemoryType)
 		recency := math.Exp(-λ * days)
 

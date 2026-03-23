@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	pgvector "github.com/pgvector/pgvector-go"
 
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/embedding"
@@ -82,10 +83,14 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.Skill, error
 		return nil, fmt.Errorf("skills: embed: %w", err)
 	}
 
+	var srcArtID uuid.UUID
+	if input.SourceArtifactID != nil {
+		srcArtID = *input.SourceArtifactID
+	}
 	skill := &db.Skill{
 		ScopeID:          input.ScopeID,
 		AuthorID:         input.AuthorID,
-		SourceArtifactID: input.SourceArtifactID,
+		SourceArtifactID: srcArtID,
 		Slug:             input.Slug,
 		Name:             input.Name,
 		Description:      input.Description,
@@ -94,9 +99,9 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.Skill, error
 		Parameters:       paramsJSON,
 		Visibility:       input.Visibility,
 		Status:           "draft",
-		ReviewRequired:   input.ReviewRequired,
+		ReviewRequired:   int32(input.ReviewRequired),
 		Version:          1,
-		Embedding:        embeddingVec,
+		Embedding:        pgvector.NewVector(embeddingVec),
 	}
 
 	created, err := s.creator.createSkill(ctx, skill)
@@ -137,7 +142,7 @@ func (s *Store) Update(ctx context.Context, id uuid.UUID, callerID uuid.UUID, bo
 		return nil, fmt.Errorf("skills: embed: %w", err)
 	}
 
-	updated, err := db.UpdateSkillContent(ctx, s.pool, id, body, paramsJSON, embeddingVec, existing.EmbeddingModelID)
+	updated, err := db.UpdateSkillContent(ctx, s.pool, id, body, paramsJSON, embeddingVec, &existing.EmbeddingModelID)
 	if err != nil {
 		return nil, fmt.Errorf("skills: update content: %w", err)
 	}

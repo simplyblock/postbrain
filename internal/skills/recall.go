@@ -101,7 +101,7 @@ func (s *Store) Recall(ctx context.Context, svc *embedding.EmbeddingService, inp
 
 	var results []*SkillResult
 	for _, e := range byID {
-		importance := importanceFromInvocations(e.skill.InvocationCount)
+		importance := importanceFromInvocations(int(e.skill.InvocationCount))
 		score := computeSkillScore(e.vecScore, e.bm25, importance, 1.0)
 		if score < input.MinScore {
 			continue

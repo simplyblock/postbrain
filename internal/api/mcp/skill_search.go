@@ -90,7 +90,7 @@ func (s *Server) handleSkillSearch(ctx context.Context, req mcpgo.CallToolReques
 			AgentTypes:      r.Skill.AgentTypes,
 			Visibility:      r.Skill.Visibility,
 			Status:          r.Skill.Status,
-			InvocationCount: r.Skill.InvocationCount,
+			InvocationCount: int(r.Skill.InvocationCount),
 			Installed:       r.Installed,
 			Layer:           "skill",
 		})

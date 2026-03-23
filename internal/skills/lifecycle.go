@@ -144,7 +144,7 @@ func (l *Lifecycle) Endorse(ctx context.Context, skillID, endorserID uuid.UUID, 
 		Status:           skill.Status,
 	}
 
-	if count >= skill.ReviewRequired {
+	if count >= int(skill.ReviewRequired) {
 		now := time.Now().UTC()
 		if err := l.dbOps.updateSkillStatus(ctx, skillID, "published", &now, (*time.Time)(nil)); err != nil {
 			return nil, err

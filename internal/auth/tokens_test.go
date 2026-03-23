@@ -60,23 +60,23 @@ func TestGenerateToken_Uniqueness(t *testing.T) {
 	}
 }
 
-func TestEnforceScopeAccess_NilScopeIDs(t *testing.T) {
-	tok := &db.Token{ScopeIDs: nil}
+func TestEnforceScopeAccess_NilScopeIds(t *testing.T) {
+	tok := &db.Token{ScopeIds: nil}
 	if err := EnforceScopeAccess(tok, uuid.New()); err != nil {
-		t.Errorf("nil ScopeIDs should allow any scope, got: %v", err)
+		t.Errorf("nil ScopeIds should allow any scope, got: %v", err)
 	}
 }
 
 func TestEnforceScopeAccess_ScopeIDPresent(t *testing.T) {
 	id := uuid.New()
-	tok := &db.Token{ScopeIDs: []uuid.UUID{uuid.New(), id, uuid.New()}}
+	tok := &db.Token{ScopeIds: []uuid.UUID{uuid.New(), id, uuid.New()}}
 	if err := EnforceScopeAccess(tok, id); err != nil {
 		t.Errorf("scope present in list should be allowed, got: %v", err)
 	}
 }
 
 func TestEnforceScopeAccess_ScopeIDAbsent(t *testing.T) {
-	tok := &db.Token{ScopeIDs: []uuid.UUID{uuid.New(), uuid.New()}}
+	tok := &db.Token{ScopeIds: []uuid.UUID{uuid.New(), uuid.New()}}
 	if err := EnforceScopeAccess(tok, uuid.New()); err == nil {
 		t.Error("scope absent from non-nil list should be rejected")
 	}
