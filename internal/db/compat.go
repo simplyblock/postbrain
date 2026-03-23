@@ -459,7 +459,21 @@ func ListMemoriesByScope(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.U
 	return ms, nil
 }
 
+// nullVec returns the vector wrapped in pgvector.Vector when non-empty, or nil
+// (which pgx encodes as SQL NULL) when the slice is empty. This is necessary
+// because pgvector.NewVector(nil).Value() returns "[]" rather than NULL, which
+// PostgreSQL rejects with "vector must have at least 1 dimension".
+func nullVec(vec []float32) interface{} {
+	if len(vec) == 0 {
+		return nil
+	}
+	return pgvector.NewVector(vec)
+}
+
 // CreateMemory inserts a new memory record.
+// embedding_code is passed as nil (SQL NULL) when the code vector is empty,
+// bypassing the sqlc-generated params struct whose pgvector.Vector field
+// cannot represent NULL.
 func CreateMemory(ctx context.Context, pool *pgxpool.Pool, m *Memory) (*Memory, error) {
 	if m.Meta == nil {
 		m.Meta = []byte("{}")
@@ -471,28 +485,52 @@ func CreateMemory(ctx context.Context, pool *pgxpool.Pool, m *Memory) (*Memory, 
 		m.PromotionStatus = "none"
 	}
 
-	q := New(pool)
-	created, err := q.CreateMemory(ctx, CreateMemoryParams{
-		MemoryType:           m.MemoryType,
-		ScopeID:              m.ScopeID,
-		AuthorID:             m.AuthorID,
-		Content:              m.Content,
-		Summary:              m.Summary,
-		Embedding:            pgvector.NewVector(m.Embedding.Slice()),
-		EmbeddingModelID:     m.EmbeddingModelID,
-		EmbeddingCode:        pgvector.NewVector(m.EmbeddingCode.Slice()),
-		EmbeddingCodeModelID: m.EmbeddingCodeModelID,
-		ContentKind:          m.ContentKind,
-		Meta:                 m.Meta,
-		Column12:             m.Version,
-		Column13:             m.Confidence,
-		Column14:             m.Importance,
-		ExpiresAt:            m.ExpiresAt,
-		PromotionStatus:      m.PromotionStatus,
-		PromotedTo:           m.PromotedTo,
-		SourceRef:            m.SourceRef,
-	})
-	if err != nil {
+	version := m.Version
+	if version == 0 {
+		version = 1
+	}
+	confidence := m.Confidence
+	if confidence == 0 {
+		confidence = 1.0
+	}
+	importance := m.Importance
+	if importance == 0 {
+		importance = 0.5
+	}
+
+	const q = `
+INSERT INTO memories
+(memory_type, scope_id, author_id, content, summary,
+ embedding, embedding_model_id, embedding_code, embedding_code_model_id,
+ content_kind, meta, version, is_active, confidence, importance,
+ access_count, expires_at, promotion_status, promoted_to, source_ref)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,true,$13,$14,0,$15,$16,$17,$18)
+RETURNING id, memory_type, scope_id, author_id,
+    content, summary, embedding, embedding_model_id,
+    embedding_code, embedding_code_model_id, content_kind, meta,
+    version, is_active, confidence, importance, access_count, last_accessed,
+    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at`
+
+	row := pool.QueryRow(ctx, q,
+		m.MemoryType, m.ScopeID, m.AuthorID, m.Content, m.Summary,
+		pgvector.NewVector(m.Embedding.Slice()), m.EmbeddingModelID,
+		nullVec(m.EmbeddingCode.Slice()), m.EmbeddingCodeModelID,
+		m.ContentKind, m.Meta, version, confidence, importance,
+		m.ExpiresAt, m.PromotionStatus, m.PromotedTo, m.SourceRef,
+	)
+
+	created := &Memory{}
+	if err := row.Scan(
+		&created.ID, &created.MemoryType, &created.ScopeID, &created.AuthorID,
+		&created.Content, &created.Summary,
+		&created.Embedding, &created.EmbeddingModelID,
+		&created.EmbeddingCode, &created.EmbeddingCodeModelID,
+		&created.ContentKind, &created.Meta,
+		&created.Version, &created.IsActive, &created.Confidence, &created.Importance,
+		&created.AccessCount, &created.LastAccessed,
+		&created.ExpiresAt, &created.PromotionStatus, &created.PromotedTo,
+		&created.SourceRef, &created.CreatedAt, &created.UpdatedAt,
+	); err != nil {
 		return nil, fmt.Errorf("db: create memory: %w", err)
 	}
 	return created, nil
@@ -507,16 +545,38 @@ func UpdateMemoryContent(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, 
 	if codeModelID != nil {
 		codeModel = *codeModelID
 	}
-	q := New(pool)
-	m, err := q.UpdateMemoryContent(ctx, UpdateMemoryContentParams{
-		ID:                   id,
-		Content:              content,
-		Embedding:            pgvector.NewVector(embedding),
-		EmbeddingModelID:     textModel,
-		EmbeddingCode:        pgvector.NewVector(embeddingCode),
-		EmbeddingCodeModelID: codeModel,
-		ContentKind:          contentKind,
-	})
+
+	const q = `
+UPDATE memories
+SET content=$2, embedding=$3, embedding_model_id=$4,
+    embedding_code=$5, embedding_code_model_id=$6,
+    content_kind=$7, version=version+1, updated_at=now()
+WHERE id=$1
+RETURNING id, memory_type, scope_id, author_id,
+    content, summary, embedding, embedding_model_id,
+    embedding_code, embedding_code_model_id, content_kind, meta,
+    version, is_active, confidence, importance, access_count, last_accessed,
+    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at`
+
+	row := pool.QueryRow(ctx, q,
+		id, content,
+		pgvector.NewVector(embedding), textModel,
+		nullVec(embeddingCode), codeModel,
+		contentKind,
+	)
+
+	m := &Memory{}
+	err := row.Scan(
+		&m.ID, &m.MemoryType, &m.ScopeID, &m.AuthorID,
+		&m.Content, &m.Summary,
+		&m.Embedding, &m.EmbeddingModelID,
+		&m.EmbeddingCode, &m.EmbeddingCodeModelID,
+		&m.ContentKind, &m.Meta,
+		&m.Version, &m.IsActive, &m.Confidence, &m.Importance,
+		&m.AccessCount, &m.LastAccessed,
+		&m.ExpiresAt, &m.PromotionStatus, &m.PromotedTo,
+		&m.SourceRef, &m.CreatedAt, &m.UpdatedAt,
+	)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
