@@ -53,10 +53,11 @@ type MigrationsConfig struct {
 
 // JobsConfig controls which background jobs are enabled at startup.
 type JobsConfig struct {
-	ConsolidationEnabled bool `mapstructure:"consolidation_enabled"`
-	ContradictionEnabled bool `mapstructure:"contradiction_enabled"`
-	ReembedEnabled       bool `mapstructure:"reembed_enabled"`
-	AgeCheckEnabled      bool `mapstructure:"age_check_enabled"`
+	ConsolidationEnabled     bool `mapstructure:"consolidation_enabled"`
+	ContradictionEnabled     bool `mapstructure:"contradiction_enabled"`
+	ReembedEnabled           bool `mapstructure:"reembed_enabled"`
+	AgeCheckEnabled          bool `mapstructure:"age_check_enabled"`
+	BackfillSummariesEnabled bool `mapstructure:"backfill_summaries_enabled"`
 }
 
 // LoadDatabaseURL reads only the database URL from the config file at path
