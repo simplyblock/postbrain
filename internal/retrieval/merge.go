@@ -33,11 +33,13 @@ type Result struct {
 	CreatedAt  time.Time
 
 	// Knowledge fields (Layer == LayerKnowledge)
-	Title         string
-	KnowledgeType string
-	Visibility    string
-	Status        string
-	Endorsements  int
+	Title                string
+	KnowledgeType        string
+	Visibility           string
+	Status               string
+	Endorsements         int
+	Summary              string
+	FullContentAvailable bool
 
 	// Skill fields (Layer == LayerSkill)
 	Slug            string

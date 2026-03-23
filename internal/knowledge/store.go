@@ -111,9 +111,17 @@ type CreateInput struct {
 }
 
 // Create persists a new knowledge artifact, embedding its content.
+// If input.Summary is nil and the content exceeds 150 words, an extractive
+// summary is generated automatically.
 func (s *Store) Create(ctx context.Context, input CreateInput) (*db.KnowledgeArtifact, error) {
 	if input.ReviewRequired == 0 {
 		input.ReviewRequired = 1
+	}
+
+	if input.Summary == nil {
+		if sum := Summarize(input.Content, 150); sum != input.Content {
+			input.Summary = &sum
+		}
 	}
 
 	status := "draft"

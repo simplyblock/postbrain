@@ -139,17 +139,24 @@ func (s *Server) handleRecall(ctx context.Context, req mcpgo.CallToolRequest) (*
 			return mcpgo.NewToolResultError(fmt.Sprintf("recall: knowledge recall failed: %v", err)), nil
 		}
 		for _, a := range arts {
-			allResults = append(allResults, &retrieval.Result{
+			r := &retrieval.Result{
 				Layer:         retrieval.LayerKnowledge,
 				ID:            a.Artifact.ID,
 				Score:         a.Score,
 				Title:         a.Artifact.Title,
-				Content:       a.Artifact.Content,
 				KnowledgeType: a.Artifact.KnowledgeType,
 				Visibility:    a.Artifact.Visibility,
 				Status:        a.Artifact.Status,
 				Endorsements:  int(a.Artifact.EndorsementCount),
-			})
+			}
+			if a.Artifact.Summary != nil && *a.Artifact.Summary != "" {
+				r.Content = *a.Artifact.Summary
+				r.Summary = *a.Artifact.Summary
+				r.FullContentAvailable = true
+			} else {
+				r.Content = a.Artifact.Content
+			}
+			allResults = append(allResults, r)
 		}
 	}
 
@@ -183,45 +190,47 @@ func (s *Server) handleRecall(ctx context.Context, req mcpgo.CallToolRequest) (*
 	merged := retrieval.Merge(allResults, limit, minScore)
 
 	type resultJSON struct {
-		Layer           string   `json:"layer"`
-		ID              string   `json:"id"`
-		Score           float64  `json:"score"`
-		Content         string   `json:"content,omitempty"`
-		Title           string   `json:"title,omitempty"`
-		MemoryType      string   `json:"memory_type,omitempty"`
-		KnowledgeType   string   `json:"knowledge_type,omitempty"`
-		SourceRef       string   `json:"source_ref,omitempty"`
-		Visibility      string   `json:"visibility,omitempty"`
-		Status          string   `json:"status,omitempty"`
-		Endorsements    int      `json:"endorsements,omitempty"`
-		Slug            string   `json:"slug,omitempty"`
-		Name            string   `json:"name,omitempty"`
-		Description     string   `json:"description,omitempty"`
-		AgentTypes      []string `json:"agent_types,omitempty"`
-		InvocationCount int      `json:"invocation_count,omitempty"`
-		Installed       bool     `json:"installed,omitempty"`
+		Layer                string   `json:"layer"`
+		ID                   string   `json:"id"`
+		Score                float64  `json:"score"`
+		Content              string   `json:"content,omitempty"`
+		Title                string   `json:"title,omitempty"`
+		MemoryType           string   `json:"memory_type,omitempty"`
+		KnowledgeType        string   `json:"knowledge_type,omitempty"`
+		SourceRef            string   `json:"source_ref,omitempty"`
+		Visibility           string   `json:"visibility,omitempty"`
+		Status               string   `json:"status,omitempty"`
+		Endorsements         int      `json:"endorsements,omitempty"`
+		FullContentAvailable bool     `json:"full_content_available,omitempty"`
+		Slug                 string   `json:"slug,omitempty"`
+		Name                 string   `json:"name,omitempty"`
+		Description          string   `json:"description,omitempty"`
+		AgentTypes           []string `json:"agent_types,omitempty"`
+		InvocationCount      int      `json:"invocation_count,omitempty"`
+		Installed            bool     `json:"installed,omitempty"`
 	}
 
 	out := make([]resultJSON, 0, len(merged))
 	for _, r := range merged {
 		out = append(out, resultJSON{
-			Layer:           string(r.Layer),
-			ID:              r.ID.String(),
-			Score:           r.Score,
-			Content:         r.Content,
-			Title:           r.Title,
-			MemoryType:      r.MemoryType,
-			KnowledgeType:   r.KnowledgeType,
-			SourceRef:       r.SourceRef,
-			Visibility:      r.Visibility,
-			Status:          r.Status,
-			Endorsements:    r.Endorsements,
-			Slug:            r.Slug,
-			Name:            r.Name,
-			Description:     r.Description,
-			AgentTypes:      r.AgentTypes,
-			InvocationCount: r.InvocationCount,
-			Installed:       r.Installed,
+			Layer:                string(r.Layer),
+			ID:                   r.ID.String(),
+			Score:                r.Score,
+			Content:              r.Content,
+			Title:                r.Title,
+			MemoryType:           r.MemoryType,
+			KnowledgeType:        r.KnowledgeType,
+			SourceRef:            r.SourceRef,
+			Visibility:           r.Visibility,
+			Status:               r.Status,
+			Endorsements:         r.Endorsements,
+			FullContentAvailable: r.FullContentAvailable,
+			Slug:                 r.Slug,
+			Name:                 r.Name,
+			Description:          r.Description,
+			AgentTypes:           r.AgentTypes,
+			InvocationCount:      r.InvocationCount,
+			Installed:            r.Installed,
 		})
 	}
 

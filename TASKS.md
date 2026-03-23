@@ -367,6 +367,7 @@
 - [x] `skill_search.go` — delegates to `skills.Store.Recall`
 - [x] `skill_install.go` — delegates to `skills.Install`
 - [x] `skill_invoke.go` — delegates to `skills.Invoke`; returns expanded body
+- [x] `knowledge_detail.go` — returns full artifact content by ID; used when `recall` returns `full_content_available=true`
 - [x] `server_test.go` — 3+ table-driven tests (handleForget shape, handleRemember missing content, handleRecall layer filter)
 
 ### `internal/api/rest` — REST API

@@ -81,7 +81,7 @@ func withToolMetrics(toolName string, fn mcpserver.ToolHandlerFunc) mcpserver.To
 	}
 }
 
-// registerTools registers all 13 MCP tools.
+// registerTools registers all MCP tools.
 func (s *Server) registerTools() {
 	// remember
 	s.mcpServer.AddTool(mcpgo.NewTool("remember",
@@ -201,6 +201,12 @@ func (s *Server) registerTools() {
 		mcpgo.WithString("agent_type", mcpgo.Description("Agent type for filtering")),
 		mcpgo.WithObject("params", mcpgo.Description("Parameter map for substitution")),
 	), withToolMetrics("skill_invoke", s.handleSkillInvoke))
+
+	// knowledge_detail
+	s.mcpServer.AddTool(mcpgo.NewTool("knowledge_detail",
+		mcpgo.WithDescription("Retrieve the full content of a knowledge artifact by ID. Use when recall returns full_content_available=true and the summary is insufficient."),
+		mcpgo.WithString("artifact_id", mcpgo.Required(), mcpgo.Description("UUID of the knowledge artifact")),
+	), withToolMetrics("knowledge_detail", s.handleKnowledgeDetail))
 }
 
 // Handler returns an http.Handler that serves both the MCP Streamable HTTP
