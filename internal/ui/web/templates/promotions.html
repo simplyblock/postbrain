@@ -11,8 +11,12 @@
     <td>{{timeAgo .CreatedAt}}</td>
     <td>
       {{if eq .Status "pending"}}
-      <button hx-post="/v1/promotions/{{.ID}}/approve" hx-confirm="Approve this promotion?" hx-swap="none">Approve</button>
-      <button hx-post="/v1/promotions/{{.ID}}/reject" hx-confirm="Reject this promotion?" hx-swap="none">Reject</button>
+      <form method="POST" action="/ui/promotions/{{.ID}}/approve" style="display:inline" onsubmit="return confirm('Approve this promotion?')">
+        <button type="submit">Approve</button>
+      </form>
+      <form method="POST" action="/ui/promotions/{{.ID}}/reject" style="display:inline" onsubmit="return confirm('Reject this promotion?')">
+        <button type="submit">Reject</button>
+      </form>
       {{end}}
     </td>
   </tr>

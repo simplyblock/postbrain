@@ -34,6 +34,7 @@ type Handler struct {
 	staticFS  fs.FS
 	knwLife   *knowledge.Lifecycle
 	knwStore  *knowledge.Store
+	knwProm   *knowledge.Promoter
 }
 
 // NewHandler creates a UI Handler with parsed templates.
@@ -58,6 +59,7 @@ func NewHandler(pool *pgxpool.Pool, svc *embedding.EmbeddingService) (*Handler, 
 	if pool != nil {
 		membership := principals.NewMembershipStore(pool)
 		h.knwLife = knowledge.NewLifecycle(pool, membership)
+		h.knwProm = knowledge.NewPromoter(pool, svc)
 	}
 	if pool != nil && svc != nil {
 		h.knwStore = knowledge.NewStore(pool, svc)
@@ -100,6 +102,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleCollections(w, r)
 	case r.URL.Path == "/ui/promotions":
 		h.handlePromotions(w, r)
+	case strings.HasSuffix(r.URL.Path, "/approve") && strings.HasPrefix(r.URL.Path, "/ui/promotions/") && r.Method == http.MethodPost:
+		h.handleApprovePromotion(w, r)
+	case strings.HasSuffix(r.URL.Path, "/reject") && strings.HasPrefix(r.URL.Path, "/ui/promotions/") && r.Method == http.MethodPost:
+		h.handleRejectPromotion(w, r)
 	case r.URL.Path == "/ui/staleness":
 		h.handleStaleness(w, r)
 	case r.URL.Path == "/ui/graph":
@@ -322,6 +328,38 @@ func (h *Handler) handlePromotions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.render(w, r, "promotions", "Promotion Queue", data)
+}
+
+// handleApprovePromotion serves POST /ui/promotions/{id}/approve.
+func (h *Handler) handleApprovePromotion(w http.ResponseWriter, r *http.Request) {
+	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/promotions/"), "/approve")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		http.Error(w, "invalid promotion id", http.StatusBadRequest)
+		return
+	}
+	reviewerID := h.principalFromCookie(r)
+	if _, err := h.knwProm.Approve(r.Context(), id, reviewerID, reviewerID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/ui/promotions", http.StatusSeeOther)
+}
+
+// handleRejectPromotion serves POST /ui/promotions/{id}/reject.
+func (h *Handler) handleRejectPromotion(w http.ResponseWriter, r *http.Request) {
+	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/promotions/"), "/reject")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		http.Error(w, "invalid promotion id", http.StatusBadRequest)
+		return
+	}
+	reviewerID := h.principalFromCookie(r)
+	if err := h.knwProm.Reject(r.Context(), id, reviewerID, nil); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/ui/promotions", http.StatusSeeOther)
 }
 
 // handleStaleness serves GET /ui/staleness.
