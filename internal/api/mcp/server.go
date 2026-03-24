@@ -225,6 +225,15 @@ func (s *Server) registerTools() {
 		mcpgo.WithDescription("Close an agent session. Call when the agent session is ending (e.g. in a Stop hook)."),
 		mcpgo.WithString("session_id", mcpgo.Required(), mcpgo.Description("Session ID returned by session_begin")),
 	), withToolMetrics("session_end", s.handleSessionEnd))
+
+	// synthesize_topic
+	s.mcpServer.AddTool(mcpgo.NewTool("synthesize_topic",
+		mcpgo.WithDescription("Synthesise multiple published knowledge artifacts into a single topic digest artifact"),
+		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Owner scope as kind:external_id")),
+		mcpgo.WithArray("source_ids", mcpgo.Required(), mcpgo.Description("UUIDs of the source artifacts to synthesise (minimum 2, all must be published non-digest artifacts)")),
+		mcpgo.WithString("title", mcpgo.Description("Digest title; inferred from sources if omitted")),
+		mcpgo.WithBoolean("auto_review", mcpgo.Description("Move directly to in_review (default: false)")),
+	), withToolMetrics("synthesize_topic", s.handleSynthesizeTopic))
 }
 
 // Handler returns an http.Handler that serves both the MCP Streamable HTTP

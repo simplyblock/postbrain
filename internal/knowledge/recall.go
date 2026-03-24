@@ -107,5 +107,41 @@ func (s *Store) Recall(ctx context.Context, pool *pgxpool.Pool, input RecallInpu
 	if len(results) > input.Limit {
 		results = results[:input.Limit]
 	}
+
+	// Source suppression: remove artifacts covered by a published digest in the result set.
+	results, err = suppressDigestSources(ctx, pool, results)
+	if err != nil {
+		// Non-fatal: log and return unsuppressed results rather than failing recall.
+		_ = err
+	}
+
 	return results, nil
+}
+
+// suppressDigestSources removes source artifacts from results when a published
+// digest covering them is also present in the result set.
+func suppressDigestSources(ctx context.Context, pool *pgxpool.Pool, results []*ArtifactResult) ([]*ArtifactResult, error) {
+	// Collect IDs of digest-type artifacts in this result set.
+	var digestIDs []uuid.UUID
+	for _, r := range results {
+		if r.Artifact.KnowledgeType == "digest" {
+			digestIDs = append(digestIDs, r.Artifact.ID)
+		}
+	}
+	if len(digestIDs) == 0 {
+		return results, nil
+	}
+
+	suppressed, err := db.GetSuppressedSourceIDs(ctx, pool, digestIDs)
+	if err != nil || len(suppressed) == 0 {
+		return results, err
+	}
+
+	filtered := results[:0]
+	for _, r := range results {
+		if _, ok := suppressed[r.Artifact.ID]; !ok {
+			filtered = append(filtered, r)
+		}
+	}
+	return filtered, nil
 }

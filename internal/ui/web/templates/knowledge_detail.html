@@ -42,4 +42,37 @@
 
 <h2>Content</h2>
 <pre>{{.Artifact.Content}}</pre>
+
+{{if .Sources}}
+<h2>Sources</h2>
+<p class="muted">This digest was synthesised from the following artifacts. Originals remain published and are accessible directly.</p>
+<table>
+  <thead><tr><th>Title</th><th>Type</th><th>Status</th></tr></thead>
+  <tbody>
+  {{range .Sources}}
+  <tr>
+    <td><a href="/ui/knowledge/{{.ID}}">{{.Title}}</a></td>
+    <td>{{.KnowledgeType}}</td>
+    <td><span class="badge {{statusBadge .Status}}">{{.Status}}</span></td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+
+{{if .Digests}}
+<h2>Covered by</h2>
+<p class="muted">The following published digests synthesise this artifact. They will appear in recall results instead of this artifact.</p>
+<table>
+  <thead><tr><th>Title</th><th>Status</th></tr></thead>
+  <tbody>
+  {{range .Digests}}
+  <tr>
+    <td><a href="/ui/knowledge/{{.ID}}">{{.Title}}</a></td>
+    <td><span class="badge {{statusBadge .Status}}">{{.Status}}</span></td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
 {{end}}

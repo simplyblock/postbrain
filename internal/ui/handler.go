@@ -305,6 +305,8 @@ func (h *Handler) handleKnowledgeDetail(w http.ResponseWriter, r *http.Request) 
 
 	data := struct {
 		Artifact *db.KnowledgeArtifact
+		Sources  []*db.KnowledgeArtifact // populated when Artifact is a digest
+		Digests  []*db.KnowledgeArtifact // published digests covering this artifact
 	}{}
 
 	if h.pool != nil {
@@ -314,6 +316,12 @@ func (h *Handler) handleKnowledgeDetail(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		data.Artifact = art
+
+		if art.KnowledgeType == "digest" {
+			data.Sources, _ = db.ListDigestSources(r.Context(), h.pool, id)
+		} else {
+			data.Digests, _ = db.ListDigestsForSource(r.Context(), h.pool, id)
+		}
 	}
 
 	h.render(w, r, "knowledge_detail", "Knowledge", data)

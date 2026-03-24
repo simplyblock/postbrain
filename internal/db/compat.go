@@ -1738,3 +1738,183 @@ func GetScopesByIDs(ctx context.Context, pool *pgxpool.Pool, ids []uuid.UUID) ([
 	}
 	return scopes, rows.Err()
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Topic synthesis: digest sources + audit log
+// ─────────────────────────────────────────────────────────────────────────────
+
+// DigestLog is an audit record for a synthesis operation.
+type DigestLog struct {
+	ID            uuid.UUID
+	ScopeID       uuid.UUID
+	DigestID      uuid.UUID
+	SourceIDs     []uuid.UUID
+	Strategy      string
+	SynthesisedBy *uuid.UUID
+	CreatedAt     time.Time
+}
+
+// InsertDigestSources records which source artifacts a digest was synthesised from.
+func InsertDigestSources(ctx context.Context, pool *pgxpool.Pool, digestID uuid.UUID, sourceIDs []uuid.UUID) error {
+	if len(sourceIDs) == 0 {
+		return nil
+	}
+	batch := &pgx.Batch{}
+	for _, sid := range sourceIDs {
+		batch.Queue(
+			`INSERT INTO artifact_digest_sources (digest_id, source_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+			digestID, sid,
+		)
+	}
+	return pool.SendBatch(ctx, batch).Close()
+}
+
+// ListDigestSources returns the source artifacts for a given digest artifact.
+func ListDigestSources(ctx context.Context, pool *pgxpool.Pool, digestID uuid.UUID) ([]*KnowledgeArtifact, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT ka.id, ka.knowledge_type, ka.owner_scope_id, ka.author_id,
+		       ka.visibility, ka.status, ka.published_at, ka.deprecated_at,
+		       ka.review_required, ka.title, ka.content, ka.summary,
+		       ka.embedding, ka.embedding_model_id, ka.meta,
+		       ka.endorsement_count, ka.access_count, ka.last_accessed,
+		       ka.version, ka.previous_version, ka.source_memory_id, ka.source_ref,
+		       ka.created_at, ka.updated_at
+		FROM knowledge_artifacts ka
+		JOIN artifact_digest_sources ads ON ads.source_id = ka.id
+		WHERE ads.digest_id = $1
+		ORDER BY ads.added_at ASC`, digestID)
+	if err != nil {
+		return nil, fmt.Errorf("db: list digest sources: %w", err)
+	}
+	defer rows.Close()
+	return scanKnowledgeArtifactRows(rows)
+}
+
+// ListDigestsForSource returns published digests that cover a given source artifact.
+func ListDigestsForSource(ctx context.Context, pool *pgxpool.Pool, sourceID uuid.UUID) ([]*KnowledgeArtifact, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT ka.id, ka.knowledge_type, ka.owner_scope_id, ka.author_id,
+		       ka.visibility, ka.status, ka.published_at, ka.deprecated_at,
+		       ka.review_required, ka.title, ka.content, ka.summary,
+		       ka.embedding, ka.embedding_model_id, ka.meta,
+		       ka.endorsement_count, ka.access_count, ka.last_accessed,
+		       ka.version, ka.previous_version, ka.source_memory_id, ka.source_ref,
+		       ka.created_at, ka.updated_at
+		FROM knowledge_artifacts ka
+		JOIN artifact_digest_sources ads ON ads.digest_id = ka.id
+		WHERE ads.source_id = $1
+		  AND ka.status = 'published'
+		ORDER BY ka.created_at DESC`, sourceID)
+	if err != nil {
+		return nil, fmt.Errorf("db: list digests for source: %w", err)
+	}
+	defer rows.Close()
+	return scanKnowledgeArtifactRows(rows)
+}
+
+// GetSuppressedSourceIDs returns source artifact IDs that are covered by at
+// least one published digest in digestIDs. Used for post-recall suppression.
+func GetSuppressedSourceIDs(ctx context.Context, pool *pgxpool.Pool, digestIDs []uuid.UUID) (map[uuid.UUID]struct{}, error) {
+	if len(digestIDs) == 0 {
+		return nil, nil
+	}
+	rows, err := pool.Query(ctx, `
+		SELECT ads.source_id
+		FROM artifact_digest_sources ads
+		JOIN knowledge_artifacts ka ON ka.id = ads.digest_id
+		WHERE ads.digest_id = ANY($1)
+		  AND ka.status = 'published'`, digestIDs)
+	if err != nil {
+		return nil, fmt.Errorf("db: get suppressed source ids: %w", err)
+	}
+	defer rows.Close()
+	out := make(map[uuid.UUID]struct{})
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("db: get suppressed source ids scan: %w", err)
+		}
+		out[id] = struct{}{}
+	}
+	return out, rows.Err()
+}
+
+// ScopeInLineage reports whether scopeA and scopeB are in the same ltree
+// lineage (one is an ancestor or descendant of the other, or they are equal).
+func ScopeInLineage(ctx context.Context, pool *pgxpool.Pool, scopeA, scopeB uuid.UUID) (bool, error) {
+	if scopeA == scopeB {
+		return true, nil
+	}
+	var ok bool
+	err := pool.QueryRow(ctx, `
+		SELECT EXISTS (
+		    SELECT 1 FROM scopes a, scopes b
+		    WHERE a.id = $1 AND b.id = $2
+		      AND (a.path @> b.path OR b.path @> a.path)
+		)`, scopeA, scopeB).Scan(&ok)
+	if err != nil {
+		return false, fmt.Errorf("db: scope lineage check: %w", err)
+	}
+	return ok, nil
+}
+
+// FlagDigestsStaleness inserts a staleness_flags row for every published digest
+// that covers sourceID, skipping digests that already have an open flag with
+// the same signal (ON CONFLICT DO NOTHING via the partial unique index).
+func FlagDigestsStaleness(ctx context.Context, pool *pgxpool.Pool, sourceID uuid.UUID, signal string, confidence float64, evidence []byte) error {
+	if evidence == nil {
+		evidence = []byte("{}")
+	}
+	_, err := pool.Exec(ctx, `
+		INSERT INTO staleness_flags (artifact_id, signal, confidence, evidence)
+		SELECT ads.digest_id, $2, $3, $4
+		FROM artifact_digest_sources ads
+		JOIN knowledge_artifacts ka ON ka.id = ads.digest_id
+		WHERE ads.source_id = $1
+		  AND ka.status = 'published'
+		  AND NOT EXISTS (
+		      SELECT 1 FROM staleness_flags sf
+		      WHERE sf.artifact_id = ads.digest_id
+		        AND sf.signal = $2
+		        AND sf.status = 'open'
+		  )`,
+		sourceID, signal, confidence, evidence)
+	if err != nil {
+		return fmt.Errorf("db: flag digests staleness: %w", err)
+	}
+	return nil
+}
+
+// InsertDigestLog records a synthesis audit entry.
+func InsertDigestLog(ctx context.Context, pool *pgxpool.Pool, l *DigestLog) error {
+	_, err := pool.Exec(ctx, `
+		INSERT INTO knowledge_digest_log
+		    (scope_id, digest_id, source_ids, strategy, synthesised_by)
+		VALUES ($1, $2, $3, $4, $5)`,
+		l.ScopeID, l.DigestID, l.SourceIDs, l.Strategy, l.SynthesisedBy)
+	if err != nil {
+		return fmt.Errorf("db: insert digest log: %w", err)
+	}
+	return nil
+}
+
+// scanKnowledgeArtifactRows is a shared scanner for knowledge artifact SELECT results.
+func scanKnowledgeArtifactRows(rows pgx.Rows) ([]*KnowledgeArtifact, error) {
+	var out []*KnowledgeArtifact
+	for rows.Next() {
+		var a KnowledgeArtifact
+		if err := rows.Scan(
+			&a.ID, &a.KnowledgeType, &a.OwnerScopeID, &a.AuthorID,
+			&a.Visibility, &a.Status, &a.PublishedAt, &a.DeprecatedAt,
+			&a.ReviewRequired, &a.Title, &a.Content, &a.Summary,
+			&a.Embedding, &a.EmbeddingModelID, &a.Meta,
+			&a.EndorsementCount, &a.AccessCount, &a.LastAccessed,
+			&a.Version, &a.PreviousVersion, &a.SourceMemoryID, &a.SourceRef,
+			&a.CreatedAt, &a.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("db: scan knowledge artifact: %w", err)
+		}
+		out = append(out, &a)
+	}
+	return out, rows.Err()
+}
