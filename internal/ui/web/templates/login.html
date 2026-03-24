@@ -3,6 +3,6 @@
 <form method="POST" action="/ui/login">
   <label>Bearer Token<input type="password" name="token" required autofocus></label>
   <button type="submit">Sign in</button>
-  {{if .Error}}<p style="color:red">{{.Error}}</p>{{end}}
+  {{if .Error}}<div class="alert alert-error">{{.Error}}</div>{{end}}
 </form>
 {{end}}

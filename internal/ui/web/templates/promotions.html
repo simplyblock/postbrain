@@ -1,27 +1,33 @@
 {{define "promotions"}}
 <h1>Promotion Queue</h1>
 <table>
-  <thead><tr><th>Memory ID</th><th>Proposed Title</th><th>Status</th><th>Requested</th><th>Actions</th></tr></thead>
+  <thead>
+    <tr><th>Memory ID</th><th>Proposed Title</th><th>Status</th><th>Requested</th><th>Actions</th></tr>
+  </thead>
   <tbody>
   {{range .Promotions}}
   <tr>
-    <td><a href="/ui/memories/{{.MemoryID}}">{{.MemoryID}}</a></td>
+    <td><a href="/ui/memories/{{.MemoryID}}" class="mono">{{.MemoryID}}</a></td>
     <td>{{deref .ProposedTitle}}</td>
-    <td>{{.Status}}</td>
-    <td>{{timeAgo .CreatedAt}}</td>
+    <td><span class="badge {{statusBadge .Status}}">{{.Status}}</span></td>
+    <td class="muted">{{timeAgo .CreatedAt}}</td>
     <td>
       {{if eq .Status "pending"}}
-      <form method="POST" action="/ui/promotions/{{.ID}}/approve" style="display:inline" onsubmit="return confirm('Approve this promotion?')">
-        <button type="submit">Approve</button>
-      </form>
-      <form method="POST" action="/ui/promotions/{{.ID}}/reject" style="display:inline" onsubmit="return confirm('Reject this promotion?')">
-        <button type="submit">Reject</button>
-      </form>
+      <div class="actions">
+        <form method="POST" action="/ui/promotions/{{.ID}}/approve" style="display:inline"
+              onsubmit="return confirm('Approve this promotion?')">
+          <button type="submit">Approve</button>
+        </form>
+        <form method="POST" action="/ui/promotions/{{.ID}}/reject" style="display:inline"
+              onsubmit="return confirm('Reject this promotion?')">
+          <button type="submit" class="danger">Reject</button>
+        </form>
+      </div>
       {{end}}
     </td>
   </tr>
   {{else}}
-  <tr><td colspan="5">No pending promotions.</td></tr>
+  <tr><td colspan="5" class="muted">No pending promotions.</td></tr>
   {{end}}
   </tbody>
 </table>

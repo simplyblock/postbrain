@@ -10,19 +10,28 @@
 </head>
 <body>
 <nav>
-  <strong><a href="/ui">Postbrain</a></strong>
+  <a class="nav-brand" href="/ui">⬡ Postbrain</a>
+
+  <span class="nav-section">Memory</span>
   <a href="/ui/memories">Memories</a>
-  <a href="/ui/knowledge">Knowledge</a>
+  <a href="/ui/graph">Entity Graph</a>
+
+  <span class="nav-section">Knowledge</span>
+  <a href="/ui/knowledge">Artifacts</a>
   <a href="/ui/collections">Collections</a>
   <a href="/ui/promotions">Promotions</a>
   <a href="/ui/staleness">Staleness</a>
-  <a href="/ui/graph">Graph</a>
-  <a href="/ui/skills">Skills</a>
-  <a href="/ui/principals">Principals</a>
+
+  <span class="nav-section">Skills</span>
+  <a href="/ui/skills">Skills Registry</a>
+
+  <span class="nav-section">Admin</span>
+  <a href="/ui/principals">Principals &amp; Scopes</a>
+  <a href="/ui/tokens">Tokens</a>
   <a href="/ui/metrics">Metrics</a>
 </nav>
 <main>{{.Content}}</main>
-<footer><small>Postbrain — long-term memory for AI coding agents</small></footer>
+<footer>Postbrain — long-term memory for AI coding agents</footer>
 </body>
 </html>
 {{end}}
