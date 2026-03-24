@@ -52,10 +52,12 @@ func (s *Server) handleContext(ctx context.Context, req mcpgo.CallToolRequest) (
 	principalID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 
 	type contextBlock struct {
-		Layer   string `json:"layer"`
-		Type    string `json:"type,omitempty"`
-		Title   string `json:"title,omitempty"`
-		Content string `json:"content"`
+		Layer                string `json:"layer"`
+		Type                 string `json:"type,omitempty"`
+		Title                string `json:"title,omitempty"`
+		Content              string `json:"content"`
+		ID                   string `json:"id,omitempty"`
+		FullContentAvailable bool   `json:"full_content_available,omitempty"`
 	}
 
 	var blocks []contextBlock
@@ -72,15 +74,33 @@ func (s *Server) handleContext(ctx context.Context, req mcpgo.CallToolRequest) (
 		})
 		if err == nil {
 			for _, a := range arts {
-				tokens := estimateTokens(a.Artifact.Content)
+				content := a.Artifact.Content
+				fullContentAvailable := false
+				// Prefer summary if available.
+				if a.Artifact.Summary != nil && *a.Artifact.Summary != "" {
+					content = *a.Artifact.Summary
+					fullContentAvailable = true
+				}
+				tokens := estimateTokens(content)
 				if totalTokens+tokens > maxTokens {
-					continue // skip if exceeds budget
+					// Budget exhausted: include a one-line stub so the agent
+					// knows the artifact exists and can fetch it via knowledge_detail.
+					if a.Artifact.Summary != nil && *a.Artifact.Summary != "" {
+						content = *a.Artifact.Summary
+					} else {
+						// Extractive: first sentence / 120 chars.
+						content = extractLead(a.Artifact.Content, 120)
+					}
+					fullContentAvailable = true
+					tokens = estimateTokens(content)
 				}
 				blocks = append(blocks, contextBlock{
-					Layer:   "knowledge",
-					Type:    a.Artifact.KnowledgeType,
-					Title:   a.Artifact.Title,
-					Content: a.Artifact.Content,
+					Layer:                "knowledge",
+					Type:                 a.Artifact.KnowledgeType,
+					Title:                a.Artifact.Title,
+					Content:              content,
+					ID:                   a.Artifact.ID.String(),
+					FullContentAvailable: fullContentAvailable,
 				})
 				totalTokens += tokens
 			}
@@ -98,14 +118,22 @@ func (s *Server) handleContext(ctx context.Context, req mcpgo.CallToolRequest) (
 		})
 		if err == nil {
 			for _, m := range mems {
-				tokens := estimateTokens(m.Memory.Content)
+				content := m.Memory.Content
+				fullContentAvailable := false
+				tokens := estimateTokens(content)
 				if totalTokens+tokens > maxTokens {
-					continue
+					// Budget exhausted: include a lead stub so the agent
+					// knows the memory exists.
+					content = extractLead(m.Memory.Content, 120)
+					fullContentAvailable = true
+					tokens = estimateTokens(content)
 				}
 				blocks = append(blocks, contextBlock{
-					Layer:   "memory",
-					Type:    m.Memory.MemoryType,
-					Content: m.Memory.Content,
+					Layer:                "memory",
+					Type:                 m.Memory.MemoryType,
+					Content:              content,
+					ID:                   m.Memory.ID.String(),
+					FullContentAvailable: fullContentAvailable,
 				})
 				totalTokens += tokens
 			}
@@ -117,4 +145,21 @@ func (s *Server) handleContext(ctx context.Context, req mcpgo.CallToolRequest) (
 		"total_tokens":   totalTokens,
 	})
 	return mcpgo.NewToolResultText(string(payload)), nil
+}
+
+// extractLead returns the first sentence of text, capped at maxChars.
+// Used to produce a stub when the token budget is exhausted.
+func extractLead(text string, maxChars int) string {
+	for i, ch := range text {
+		if ch == '.' || ch == '\n' {
+			if i+1 <= maxChars {
+				return text[:i+1]
+			}
+			break
+		}
+	}
+	if len(text) <= maxChars {
+		return text
+	}
+	return text[:maxChars] + "…"
 }
