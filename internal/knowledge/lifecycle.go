@@ -36,6 +36,7 @@ type lifecycleDB interface {
 	incrementEndorsementCount(ctx context.Context, artifactID uuid.UUID) error
 	getArtifactAfterEndorse(ctx context.Context, id uuid.UUID) (*db.KnowledgeArtifact, error)
 	snapshotArtifactVersion(ctx context.Context, h *db.KnowledgeHistory) error
+	flagDigestsStaleness(ctx context.Context, sourceID uuid.UUID, signal string, confidence float64, evidence []byte) error
 }
 
 // poolLifecycleDB wraps a pgxpool.Pool to implement lifecycleDB.
@@ -80,6 +81,10 @@ func (p *poolLifecycleDB) getArtifactAfterEndorse(ctx context.Context, id uuid.U
 
 func (p *poolLifecycleDB) snapshotArtifactVersion(ctx context.Context, h *db.KnowledgeHistory) error {
 	return db.SnapshotArtifactVersion(ctx, p.pool, h)
+}
+
+func (p *poolLifecycleDB) flagDigestsStaleness(ctx context.Context, sourceID uuid.UUID, signal string, confidence float64, evidence []byte) error {
+	return db.FlagDigestsStaleness(ctx, p.pool, sourceID, signal, confidence, evidence)
 }
 
 // isUniqueViolation checks if the error is a PostgreSQL unique-constraint violation (23505).
@@ -245,6 +250,7 @@ func (l *Lifecycle) autoPublish(ctx context.Context, artifactID uuid.UUID, artif
 }
 
 // Deprecate transitions a published artifact to deprecated; requires scope admin.
+// Any published digest that covers this artifact receives a staleness flag.
 func (l *Lifecycle) Deprecate(ctx context.Context, artifactID, callerID uuid.UUID) error {
 	artifact, err := l.dbOps.getArtifact(ctx, artifactID)
 	if err != nil {
@@ -264,7 +270,13 @@ func (l *Lifecycle) Deprecate(ctx context.Context, artifactID, callerID uuid.UUI
 		return ErrForbidden
 	}
 	now := time.Now().UTC()
-	return l.dbOps.updateArtifactStatus(ctx, artifactID, "deprecated", (*time.Time)(nil), &now)
+	if err := l.dbOps.updateArtifactStatus(ctx, artifactID, "deprecated", (*time.Time)(nil), &now); err != nil {
+		return err
+	}
+	// Flag covering digests stale — non-fatal.
+	evidence := []byte(`{"signal":"source_deprecated"}`)
+	_ = l.dbOps.flagDigestsStaleness(ctx, artifactID, "source_modified", 0.9, evidence)
+	return nil
 }
 
 // Republish transitions a deprecated artifact back to published; requires scope admin.

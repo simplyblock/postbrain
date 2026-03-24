@@ -65,6 +65,10 @@ func (f *fakeLifecycleDB) snapshotArtifactVersion(_ context.Context, h *db.Knowl
 	return nil
 }
 
+func (f *fakeLifecycleDB) flagDigestsStaleness(_ context.Context, _ uuid.UUID, _ string, _ float64, _ []byte) error {
+	return nil
+}
+
 func newTestLifecycle(artifact *db.KnowledgeArtifact, isAdmin bool) (*Lifecycle, *fakeLifecycleDB) {
 	fdb := &fakeLifecycleDB{artifact: artifact}
 	lc := &Lifecycle{

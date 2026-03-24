@@ -199,6 +199,13 @@ func (s *Store) Update(ctx context.Context, id, callerID uuid.UUID, title, conte
 	if err != nil {
 		return nil, fmt.Errorf("knowledge: update: %w", err)
 	}
+
+	// Flag covering digests stale when a published source is updated — non-fatal.
+	if existing.Status == "published" && s.pool != nil {
+		evidence := []byte(`{"signal":"source_modified"}`)
+		_ = db.FlagDigestsStaleness(ctx, s.pool, id, "source_modified", 0.8, evidence)
+	}
+
 	return updated, nil
 }
 

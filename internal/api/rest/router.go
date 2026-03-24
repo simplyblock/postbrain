@@ -102,6 +102,7 @@ func (ro *Router) Handler() http.Handler {
 
 		// Knowledge endpoints.
 		r.Post("/knowledge/upload", ro.uploadKnowledge)
+		r.Post("/knowledge/synthesize", ro.synthesizeKnowledge)
 		r.Post("/knowledge", ro.createArtifact)
 		r.Get("/knowledge/search", ro.searchArtifacts)
 		r.Get("/knowledge/{id}", ro.getArtifact)
@@ -109,6 +110,8 @@ func (ro *Router) Handler() http.Handler {
 		r.Post("/knowledge/{id}/endorse", ro.endorseArtifact)
 		r.Post("/knowledge/{id}/deprecate", ro.deprecateArtifact)
 		r.Get("/knowledge/{id}/history", ro.getArtifactHistory)
+		r.Get("/knowledge/{id}/sources", ro.getArtifactSources)
+		r.Get("/knowledge/{id}/digests", ro.getArtifactDigests)
 
 		// Collections.
 		r.Post("/collections", ro.createCollection)

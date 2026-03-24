@@ -75,6 +75,8 @@ ACID-compliant database.
 │  │  · endorse       │  │  Service        │                               │
 │  │  · promote       │  │  (local/ext)    │                               │
 │  │  · collect       │  └─────────────────┘                               │
+│  │  · synthesize_   │                                                    │
+│  │    topic         │                                                    │
 │  │                  │                                                    │
 │  │  Skill tools:    │                                                    │
 │  │  · skill_search  │                                                    │
@@ -89,6 +91,7 @@ ACID-compliant database.
 │  principals  │  scopes  │  memories  │  knowledge_artifacts  │  skills    │
 │  entities    │  relations            │  collections                       │
 │  sharing_grants  │  staleness_flags  │  sessions  │  events               │
+│  artifact_digest_sources  │  knowledge_digest_log                         │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -2975,6 +2978,74 @@ any ancestor scope.
 
 ---
 
+## Topic Synthesis & Source Suppression
+
+When multiple published knowledge artifacts cover the same topic they create redundancy in
+recall results: the agent receives N overlapping documents, burns tokens on duplicated context,
+and must infer the synthesised view itself on every call. A *digest* artifact consolidates a
+topic cluster into a single curated document, and its source documents are suppressed from recall
+results whenever the digest is present.
+
+### Digest artifact
+
+A digest is a `knowledge_artifact` with `knowledge_type = "digest"`. It participates in the
+full lifecycle (draft → in_review → published). Only published digests suppress their sources
+in recall; a draft digest has no effect.
+
+Sources are tracked in `artifact_digest_sources (digest_id, source_id)`. This join table
+is indexed in both directions:
+- `PRIMARY KEY (digest_id, source_id)` — "which sources does this digest cover?"
+- `artifact_digest_sources_source_idx ON (source_id)` — "which digests cover this source?"
+
+Synthesis operations are audited in `knowledge_digest_log`.
+
+### Source suppression
+
+Suppression is applied post-scoring inside `knowledge.Store.Recall`. After the ranked result
+list is built:
+
+1. Collect all `digest`-type artifact IDs in the result set.
+2. Query `artifact_digest_sources` for their source IDs (one indexed lookup).
+3. Remove any result whose ID appears in the suppressed set.
+
+Sources remain `published` and are directly accessible via `knowledge_detail`. They are
+suppressed at query time only, not deprecated. The `context` MCP tool benefits automatically
+because it calls `Recall` internally.
+
+### Validation rules
+
+| Rule | Enforcement |
+|------|-------------|
+| Minimum 2 sources | `Synthesiser.Create` returns `ErrTooFewSources` |
+| All sources must be published | `ErrSourceNotPublished` |
+| Sources must not themselves be digests | `ErrDigestSource` |
+| Source scopes must be in the lineage of the digest scope (ancestors or descendants; siblings blocked) | `ltree` `@>` / `<@` check via `db.ScopeInLineage` |
+
+### Staleness propagation
+
+When a source artifact is updated or deprecated, `db.FlagDigestsStaleness` inserts a
+`staleness_flags` row (signal `source_modified`, confidence 0.8 for update / 0.9 for
+deprecation) for every published digest that covers it. Re-synthesis is not automatic;
+the staleness flag notifies editors and agents, who decide whether to re-synthesise.
+
+### API surface
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/knowledge/synthesize` | Create a digest from `source_ids[]` |
+| `GET`  | `/v1/knowledge/{id}/sources` | List source artifacts for a digest |
+| `GET`  | `/v1/knowledge/{id}/digests` | List digests that cover this artifact |
+| MCP    | `synthesize_topic` | Create a digest; returns draft artifact ID |
+
+### Planned: auto-cluster synthesis (Phase 4)
+
+A background `SynthesisClusterer` (analogous to `memory.Consolidator.FindClusters`) will
+cluster published artifacts per scope by cosine distance ≤ 0.15 and auto-draft digests for
+clusters of ≥ 3 members. The wider threshold (vs memory consolidation's 0.05) reflects the
+broader topic granularity of knowledge artifacts. This phase is not yet implemented.
+
+---
+
 ## PostgreSQL Extensions Reference
 
 All extensions are standard PostgreSQL contrib modules or well-established third-party packages. None require external
@@ -3229,6 +3300,7 @@ migrations/
 | **Web UI**                          | ✅ Resolved — see Web UI section below.                                                                                                                                                                                                                                                 |
 | **Knowledge staleness detection**   | ✅ Resolved — three signals: source_modified (hook-triggered), contradiction_detected (weekly LLM job with negation-embedding pre-filter), low_access_age (monthly pg_cron). `staleness_flags` table; annotated in recall/context responses; review queue at `GET /v1/knowledge/stale`. |
 | **Cross-company knowledge sharing** | Explicit opt-in mechanism for sharing `company`-visibility artifacts with partner companies (e.g., shared API contracts between API provider and consumer).                                                                                                                            |
+| **Topic synthesis auto-clustering** | ✅ Phases 1–3 resolved — `synthesize_topic` MCP tool, `POST /v1/knowledge/synthesize`, source suppression in recall, staleness flagging on source update/deprecation. Phase 4 (background auto-cluster job, cosine distance ≤ 0.15, clusters of ≥ 3) is still pending.              |
 | **Skill outcome tracking**          | v2: a `skill_invocations` table with an outcome/rating column so teams can see which skills consistently produce good results vs which get abandoned mid-run. The `events` table covers invocation counts for v1.                                                                      |
 | **Skill testing**                   | v2: a `skill_test_cases` table with input/expected-output pairs; a CI-style job that re-runs tests when a skill is updated and blocks publishing if tests regress.                                                                                                                     |
 | **Public skill marketplace**        | Opt-in registry of `company`-visibility skills that organisations choose to share publicly (e.g. open-source project contributors sharing their `/triage-issue` skill). Requires a federation/trust model.                                                                             |

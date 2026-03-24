@@ -212,6 +212,10 @@ recall(
 When a knowledge result has `full_content_available: true`, only the summary
 is returned. Use `knowledge_detail` to retrieve the full content.
 
+When multiple published artifacts cover the same topic, their sources are
+automatically suppressed from results if a *digest* artifact synthesised from
+them is also present. Digests are created with `synthesize_topic`.
+
 #### `forget`
 
 Deactivates (soft-delete) or permanently removes a memory.
@@ -334,6 +338,32 @@ promote(
 )
 → { "promotion_request_id", "status" }
 ```
+
+#### `synthesize_topic`
+
+Synthesises multiple published knowledge artifacts into a single topic *digest*
+artifact. The digest enters the normal lifecycle (draft → in_review → published);
+once published, its source artifacts are suppressed from `recall` results in favour
+of the digest.
+
+```
+synthesize_topic(
+  scope*,          # owner scope as kind:external_id
+  source_ids*,     # list of artifact UUIDs to synthesise (minimum 2,
+                   # all must be published; none may themselves be digests)
+  title,           # digest title; inferred from sources if omitted
+  auto_review,     # skip draft, go straight to in_review (default: false)
+)
+→ { "artifact_id", "title", "status", "source_count" }
+```
+
+Rules:
+- All source artifacts must be `published`.
+- Sources must not be digests themselves.
+- All source scopes must be in the lineage of the digest scope (ancestors or
+  descendants); sibling scopes are blocked.
+- Source artifacts remain published after synthesis; they are suppressed only
+  at recall time when a covering published digest is present.
 
 #### `collect`
 
@@ -559,7 +589,39 @@ skill_invoke(slug="deploy", scope,
 
 ---
 
-### 6. Recall and Retrieval
+### 6. Topic Synthesis
+
+When several published artifacts cover overlapping or complementary aspects of
+the same topic, synthesise them into a single digest to reduce recall noise and
+token usage:
+
+```
+1. synthesize_topic(
+       scope,
+       source_ids=["<id-1>", "<id-2>", "<id-3>"],
+       title="Authentication architecture overview",
+       auto_review=true,
+   )
+     → { artifact_id, status: "in_review", source_count: 3 }
+
+2. endorse(artifact_id)   # repeat until threshold is reached
+     → { status: "published", auto_published: true }
+```
+
+Once the digest is published, `recall` and `context` automatically return the
+digest instead of its individual sources. Source artifacts remain accessible
+directly via `knowledge_detail`.
+
+To inspect the relationship:
+
+```
+GET /v1/knowledge/{digest_id}/sources   → source artifacts
+GET /v1/knowledge/{source_id}/digests   → digests covering this artifact
+```
+
+---
+
+### 7. Recall and Retrieval
 
 For general semantic search across all layers:
 
@@ -586,7 +648,7 @@ knowledge_detail(artifact_id=id)
 
 ---
 
-### 7. Artifact Visibility Levels
+### 8. Artifact Visibility Levels
 
 Knowledge and skills follow a five-level visibility hierarchy:
 
@@ -618,7 +680,7 @@ postbrain/
 │   │   └── migrations/     # embedded SQL migration files (000001_…)
 │   ├── embedding/          # text and code embedding backends
 │   ├── memory/             # memory CRUD, hybrid retrieval, consolidation
-│   ├── knowledge/          # knowledge artifact CRUD, visibility, lifecycle
+│   ├── knowledge/          # knowledge artifact CRUD, visibility, lifecycle, synthesis
 │   ├── skills/             # skill registry, install, sync
 │   ├── retrieval/          # cross-layer merge and re-rank
 │   ├── graph/              # entity/relation store, Apache AGE sync
