@@ -96,6 +96,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleKnowledge(w, r)
 	case strings.HasSuffix(r.URL.Path, "/endorse") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
 		h.handleEndorseArtifact(w, r)
+	case strings.HasSuffix(r.URL.Path, "/review") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
+		h.handleKnowledgeReview(w, r)
+	case strings.HasSuffix(r.URL.Path, "/deprecate") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
+		h.handleKnowledgeDeprecate(w, r)
+	case strings.HasSuffix(r.URL.Path, "/republish") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
+		h.handleKnowledgeRepublish(w, r)
 	case strings.HasSuffix(r.URL.Path, "/history") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/"):
 		h.handleKnowledgeHistory(w, r)
 	case strings.HasPrefix(r.URL.Path, "/ui/knowledge/"):
@@ -263,6 +269,7 @@ func (h *Handler) handleKnowledge(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		Query       string
 		Artifacts   []*db.KnowledgeArtifact
+		Scopes      []*db.Scope
 		UploadError string
 	}{
 		Query:     q,
@@ -273,6 +280,10 @@ func (h *Handler) handleKnowledge(w http.ResponseWriter, r *http.Request) {
 		arts, err := db.ListAllArtifacts(r.Context(), h.pool, 20, 0)
 		if err == nil {
 			data.Artifacts = arts
+		}
+		scopes, err := db.ListScopes(r.Context(), h.pool, 200, 0)
+		if err == nil {
+			data.Scopes = scopes
 		}
 	}
 
@@ -777,7 +788,55 @@ func (h *Handler) handleEndorseArtifact(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/ui/knowledge", http.StatusSeeOther)
+	http.Redirect(w, r, r.Referer(), http.StatusSeeOther)
+}
+
+// handleKnowledgeReview serves POST /ui/knowledge/{id}/review.
+func (h *Handler) handleKnowledgeReview(w http.ResponseWriter, r *http.Request) {
+	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/review")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		http.Error(w, "invalid artifact id", http.StatusBadRequest)
+		return
+	}
+	callerID := h.principalFromCookie(r)
+	if err := h.knwLife.SubmitForReview(r.Context(), id, callerID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/ui/knowledge/"+id.String(), http.StatusSeeOther)
+}
+
+// handleKnowledgeDeprecate serves POST /ui/knowledge/{id}/deprecate.
+func (h *Handler) handleKnowledgeDeprecate(w http.ResponseWriter, r *http.Request) {
+	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/deprecate")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		http.Error(w, "invalid artifact id", http.StatusBadRequest)
+		return
+	}
+	callerID := h.principalFromCookie(r)
+	if err := h.knwLife.Deprecate(r.Context(), id, callerID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/ui/knowledge/"+id.String(), http.StatusSeeOther)
+}
+
+// handleKnowledgeRepublish serves POST /ui/knowledge/{id}/republish.
+func (h *Handler) handleKnowledgeRepublish(w http.ResponseWriter, r *http.Request) {
+	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/republish")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		http.Error(w, "invalid artifact id", http.StatusBadRequest)
+		return
+	}
+	callerID := h.principalFromCookie(r)
+	if err := h.knwLife.Republish(r.Context(), id, callerID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/ui/knowledge/"+id.String(), http.StatusSeeOther)
 }
 
 // handleMetrics serves GET /ui/metrics.

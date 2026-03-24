@@ -1,5 +1,9 @@
 {{define "knowledge"}}
-<h1>Knowledge</h1>
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+  <h1 style="margin:0">Knowledge</h1>
+  <button onclick="document.getElementById('dlg-upload').showModal()">+ Upload Document</button>
+</div>
+
 <form class="toolbar" hx-get="/ui/knowledge" hx-target="#results" hx-push-url="true">
   <input type="text" name="q" placeholder="Search…" value="{{.Query}}">
   <select name="status">
@@ -13,27 +17,40 @@
 </form>
 <div id="results">{{template "knowledge_rows" .}}</div>
 
-<h2>Upload Document</h2>
-{{if .UploadError}}<div class="alert alert-error">{{.UploadError}}</div>{{end}}
-<form method="POST" action="/ui/knowledge/upload" enctype="multipart/form-data">
-  <label>File (.txt, .md, .pdf, .docx)
-    <input type="file" name="file" accept=".txt,.md,.pdf,.docx" required>
-  </label>
-  <label>Scope
-    <input type="text" name="scope" placeholder="e.g. project:acme/api" required>
-  </label>
-  <label>Title (optional)
-    <input type="text" name="title" placeholder="defaults to filename">
-  </label>
-  <label>Type
-    <select name="knowledge_type">
-      <option value="reference">reference</option>
-      <option value="semantic">semantic</option>
-      <option value="episodic">episodic</option>
-      <option value="procedural">procedural</option>
-    </select>
-  </label>
-  <label><input type="checkbox" name="auto_review"> Submit for review immediately</label>
-  <button type="submit">Upload</button>
-</form>
+<!-- ── Dialog: Upload Document ────────────────────────────── -->
+<dialog id="dlg-upload">
+  <h2>Upload Document</h2>
+  {{if .UploadError}}<div class="alert alert-error">{{.UploadError}}</div>{{end}}
+  <form method="POST" action="/ui/knowledge/upload" enctype="multipart/form-data">
+    <label>File (.txt, .md, .pdf, .docx)
+      <input type="file" name="file" accept=".txt,.md,.pdf,.docx" required>
+    </label>
+    <label>Scope
+      <select name="scope" required>
+        <option value="">— select scope —</option>
+        {{range .Scopes}}
+        <option value="{{.Kind}}:{{.ExternalID}}">{{.Kind}}:{{.ExternalID}} — {{.Name}}</option>
+        {{end}}
+      </select>
+    </label>
+    <label>Title (optional)
+      <input type="text" name="title" placeholder="defaults to filename">
+    </label>
+    <label>Type
+      <select name="knowledge_type">
+        <option value="reference">reference</option>
+        <option value="semantic">semantic</option>
+        <option value="episodic">episodic</option>
+        <option value="procedural">procedural</option>
+      </select>
+    </label>
+    <label><input type="checkbox" name="auto_review"> Submit for review immediately</label>
+    <div class="dialog-footer">
+      <button type="button" class="secondary" onclick="document.getElementById('dlg-upload').close()">Cancel</button>
+      <button type="submit">Upload</button>
+    </div>
+  </form>
+</dialog>
+
+{{if .UploadError}}<script>document.getElementById('dlg-upload').showModal()</script>{{end}}
 {{end}}

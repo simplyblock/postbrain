@@ -1,12 +1,45 @@
 {{define "knowledge_detail"}}
-<h1>{{.Artifact.Title}}</h1>
-<a href="/ui/knowledge">&larr; Back</a> &nbsp;|&nbsp; <a href="/ui/knowledge/{{.Artifact.ID}}/history">Version history</a>
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem">
+  <div>
+    <h1 style="margin-bottom:0.25rem">{{.Artifact.Title}}</h1>
+    <p style="margin:0"><a href="/ui/knowledge">&larr; Back</a> &nbsp;|&nbsp; <a href="/ui/knowledge/{{.Artifact.ID}}/history">Version history</a></p>
+  </div>
+  <div class="actions" style="padding-top:0.5rem;flex-shrink:0">
+    {{if eq .Artifact.Status "draft"}}
+    <form method="POST" action="/ui/knowledge/{{.Artifact.ID}}/review" style="display:inline">
+      <button type="submit">Submit for Review</button>
+    </form>
+    {{end}}
+    {{if eq .Artifact.Status "in_review"}}
+    <form method="POST" action="/ui/knowledge/{{.Artifact.ID}}/endorse" style="display:inline">
+      <button type="submit">Endorse</button>
+    </form>
+    {{end}}
+    {{if eq .Artifact.Status "published"}}
+    <form method="POST" action="/ui/knowledge/{{.Artifact.ID}}/deprecate" style="display:inline"
+          onsubmit="return confirm('Deprecate this artifact?')">
+      <button type="submit" class="secondary">Deprecate</button>
+    </form>
+    {{end}}
+    {{if eq .Artifact.Status "deprecated"}}
+    <form method="POST" action="/ui/knowledge/{{.Artifact.ID}}/republish" style="display:inline">
+      <button type="submit">Republish</button>
+    </form>
+    {{end}}
+  </div>
+</div>
+
 <table>
   <tr><th>Status</th><td><span class="badge {{statusBadge .Artifact.Status}}">{{.Artifact.Status}}</span></td></tr>
   <tr><th>Type</th><td>{{.Artifact.KnowledgeType}}</td></tr>
-  <tr><th>Endorsements</th><td>{{.Artifact.EndorsementCount}}</td></tr>
+  <tr><th>Visibility</th><td>{{.Artifact.Visibility}}</td></tr>
+  <tr><th>Endorsements</th><td>{{.Artifact.EndorsementCount}} / {{.Artifact.ReviewRequired}} required</td></tr>
   <tr><th>Published</th><td>{{derefTime .Artifact.PublishedAt}}</td></tr>
+  {{if .Artifact.DeprecatedAt}}<tr><th>Deprecated</th><td>{{derefTime .Artifact.DeprecatedAt}}</td></tr>{{end}}
 </table>
+
+{{if .Artifact.Summary}}<p class="muted">{{deref .Artifact.Summary}}</p>{{end}}
+
 <h2>Content</h2>
 <pre>{{.Artifact.Content}}</pre>
 {{end}}
