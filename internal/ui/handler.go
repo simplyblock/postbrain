@@ -96,6 +96,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleKnowledge(w, r)
 	case strings.HasSuffix(r.URL.Path, "/endorse") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
 		h.handleEndorseArtifact(w, r)
+	case strings.HasSuffix(r.URL.Path, "/history") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/"):
+		h.handleKnowledgeHistory(w, r)
 	case strings.HasPrefix(r.URL.Path, "/ui/knowledge/"):
 		h.handleKnowledgeDetail(w, r)
 	case r.URL.Path == "/ui/collections":
@@ -114,6 +116,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleGraph(w, r)
 	case r.URL.Path == "/ui/skills":
 		h.handleSkills(w, r)
+	case strings.HasSuffix(r.URL.Path, "/history") && strings.HasPrefix(r.URL.Path, "/ui/skills/"):
+		h.handleSkillHistory(w, r)
+	case strings.HasPrefix(r.URL.Path, "/ui/skills/"):
+		h.handleSkillDetail(w, r)
 	case r.URL.Path == "/ui/principals" && r.Method == http.MethodPost:
 		h.handleCreatePrincipal(w, r)
 	case r.URL.Path == "/ui/principals":
@@ -296,6 +302,34 @@ func (h *Handler) handleKnowledgeDetail(w http.ResponseWriter, r *http.Request) 
 	h.render(w, r, "knowledge_detail", "Knowledge", data)
 }
 
+// handleKnowledgeHistory serves GET /ui/knowledge/{id}/history.
+func (h *Handler) handleKnowledgeHistory(w http.ResponseWriter, r *http.Request) {
+	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/history")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	data := struct {
+		Artifact *db.KnowledgeArtifact
+		History  []*db.KnowledgeHistory
+	}{}
+
+	if h.pool != nil {
+		art, err := db.GetArtifact(r.Context(), h.pool, id)
+		if err != nil || art == nil {
+			http.NotFound(w, r)
+			return
+		}
+		data.Artifact = art
+		history, _ := db.GetArtifactHistory(r.Context(), h.pool, id)
+		data.History = history
+	}
+
+	h.render(w, r, "knowledge_history", "Knowledge History", data)
+}
+
 // handleCollections serves GET /ui/collections.
 func (h *Handler) handleCollections(w http.ResponseWriter, r *http.Request) {
 	data := struct {
@@ -465,6 +499,59 @@ func (h *Handler) handleSkills(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.render(w, r, "skills", "Skills", data)
+}
+
+// handleSkillDetail serves GET /ui/skills/{id}.
+func (h *Handler) handleSkillDetail(w http.ResponseWriter, r *http.Request) {
+	idStr := strings.TrimPrefix(r.URL.Path, "/ui/skills/")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	data := struct {
+		Skill *db.Skill
+	}{}
+
+	if h.pool != nil {
+		skill, err := db.GetSkill(r.Context(), h.pool, id)
+		if err != nil || skill == nil {
+			http.NotFound(w, r)
+			return
+		}
+		data.Skill = skill
+	}
+
+	h.render(w, r, "skill_detail", "Skill", data)
+}
+
+// handleSkillHistory serves GET /ui/skills/{id}/history.
+func (h *Handler) handleSkillHistory(w http.ResponseWriter, r *http.Request) {
+	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/skills/"), "/history")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	data := struct {
+		Skill   *db.Skill
+		History []*db.SkillHistory
+	}{}
+
+	if h.pool != nil {
+		skill, err := db.GetSkill(r.Context(), h.pool, id)
+		if err != nil || skill == nil {
+			http.NotFound(w, r)
+			return
+		}
+		data.Skill = skill
+		history, _ := db.GetSkillHistory(r.Context(), h.pool, id)
+		data.History = history
+	}
+
+	h.render(w, r, "skill_history", "Skill History", data)
 }
 
 // handlePrincipals serves GET /ui/principals.

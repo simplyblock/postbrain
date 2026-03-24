@@ -1,6 +1,6 @@
 {{define "knowledge_detail"}}
 <h1>{{.Artifact.Title}}</h1>
-<a href="/ui/knowledge">← Back</a>
+<a href="/ui/knowledge">&larr; Back</a> &nbsp;|&nbsp; <a href="/ui/knowledge/{{.Artifact.ID}}/history">Version history</a>
 <table>
   <tr><th>Status</th><td><span class="badge {{statusBadge .Artifact.Status}}">{{.Artifact.Status}}</span></td></tr>
   <tr><th>Type</th><td>{{.Artifact.KnowledgeType}}</td></tr>

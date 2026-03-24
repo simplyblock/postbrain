@@ -1,0 +1,19 @@
+{{define "knowledge_history"}}
+<h1>History: {{.Artifact.Title}}</h1>
+<p><a href="/ui/knowledge/{{.Artifact.ID}}">&larr; Back to artifact</a></p>
+<table>
+  <thead><tr><th>Version</th><th>Summary</th><th>Change Note</th><th>When</th></tr></thead>
+  <tbody>
+  {{range .History}}
+  <tr>
+    <td>v{{.Version}}</td>
+    <td>{{deref .Summary}}</td>
+    <td>{{deref .ChangeNote}}</td>
+    <td>{{timeAgo .CreatedAt}}</td>
+  </tr>
+  {{else}}
+  <tr><td colspan="4">No history recorded.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}

@@ -495,13 +495,28 @@ Technology: Go `html/template` + HTMX + Pico.css, all embedded via `//go:embed`.
 - [x] **Memory Detail** (`web/templates/memory_detail.html`) — full content, metadata, promote button
 - [x] **Knowledge Browser** (`web/templates/knowledge.html` + `knowledge_rows.html` partial) — filter by status; inline endorse buttons; HTMX row swap; document upload form (.txt/.md/.pdf/.docx)
 - [x] **Knowledge Detail** (`web/templates/knowledge_detail.html`) — content pane, endorsement count
-- [x] **Collections** (`web/templates/collections.html`) — collection list
-- [x] **Promotion Queue** (`web/templates/promotions.html`) — pending requests table; approve/reject buttons
+- [x] **Collections** (`web/templates/collections.html`) — collection list; links use UUID (`/ui/collections/{id}`)
+- [x] **Collection Detail** (`web/templates/collection_detail.html`) — artifact table with links to knowledge detail; back link; route `GET /ui/collections/{id}`
+- [x] **Promotion Queue** (`web/templates/promotions.html`) — pending requests table; approve/reject via `POST /ui/promotions/{id}/approve|reject` (cookie-auth plain forms, redirect back)
 - [x] **Staleness Flags** (`web/templates/staleness.html`) — open flags table
 - [x] **Entity Graph** (`web/templates/graph.html`) — entity and relation tables for scope; data from `GET /v1/graph`
 - [x] **Skills Registry** (`web/templates/skills.html`) — published skills list
 - [x] **Principals & Scopes** (`web/templates/principals.html`) — principals table, scopes table with delete button, memberships table with remove button, create-principal form, create-scope form, add-membership form (member/parent/role dropdowns); `POST /ui/principals`, `POST /ui/scopes`, `POST /ui/memberships`, `POST /ui/memberships/delete` routes wired in `ServeHTTP`; `ListAllMemberships` query added to `db/compat.go`
 - [x] **Metrics** (`web/templates/metrics.html`) — Prometheus metrics reference page
+
+#### Missing / Planned Screens
+
+- [x] **Skill Detail** (`web/templates/skill_detail.html`) — full skill body, parameters table, invocation count, last invoked; endorse button; route `GET /ui/skills/{id}`
+- [x] **Skill History** (`web/templates/skill_history.html`) — version changelog table; route `GET /ui/skills/{id}/history`; backed by `db.GetSkillHistory` (hand-written compat query)
+- [x] **Knowledge History** (`web/templates/knowledge_history.html`) — version timeline; diff viewer; route `GET /ui/knowledge/{id}/history`; backed by `GET /v1/knowledge/{id}/history`
+- [ ] **Staleness Flag Resolution** — add resolve/dismiss action to existing `promotions.html` staleness view; `POST /ui/staleness/{id}/resolve` and `/dismiss` with optional review note; backed by `db.ResolveStalenessFlag`
+- [ ] **Token Management** (`web/templates/tokens.html`) — list tokens with name, last used, expiry, scopes; create-token form (name, scope selection, expiry); revoke button; route `GET /ui/tokens`; backed by `auth.TokenStore`
+- [ ] **Sharing Grants** (`web/templates/sharing.html`) — list active grants (what, to whom, expiry, can-reshare); create-grant form (select artifact, grantee scope, reshare policy, expiry); revoke button; route `GET /ui/sharing`; backed by `GET /v1/sharing/grants`
+- [ ] **Session List** (`web/templates/sessions.html`) — list sessions with scope, principal, start time, duration (or "active"); route `GET /ui/sessions`; backed by `sessions` table
+- [ ] **Session Detail** (`web/templates/session_detail.html`) — session metadata; chronological event log (event type, payload, timestamp) from `events` table; route `GET /ui/sessions/{id}`
+- [ ] **Consolidation History** (`web/templates/consolidations.html`) — list consolidation records per scope; source memory IDs, result memory link, strategy, reason; route `GET /ui/consolidations`; backed by `consolidations` table
+- [ ] **Entity Detail** (`web/templates/entity_detail.html`) — entity name, type, canonical, linked memories, outgoing/incoming relations; route `GET /ui/graph/entities/{id}`; backed by `db.GetEntity`, `db.ListRelationsByScope`
+- [ ] **Embedding Models** (`web/templates/models.html`) — list registered embedding models (slug, dimensions, content type, active flag); route `GET /ui/models`; backed by `db.GetActiveTextModel` / `embedding_models` table
 
 ### Testing
 

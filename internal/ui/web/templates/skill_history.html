@@ -1,0 +1,18 @@
+{{define "skill_history"}}
+<h1>History: {{.Skill.Name}}</h1>
+<p><a href="/ui/skills/{{.Skill.ID}}">&larr; Back to skill</a></p>
+<table>
+  <thead><tr><th>Version</th><th>Change Note</th><th>When</th></tr></thead>
+  <tbody>
+  {{range .History}}
+  <tr>
+    <td>v{{.Version}}</td>
+    <td>{{deref .ChangeNote}}</td>
+    <td>{{timeAgo .CreatedAt}}</td>
+  </tr>
+  {{else}}
+  <tr><td colspan="3">No history recorded.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
