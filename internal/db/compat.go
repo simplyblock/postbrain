@@ -1352,6 +1352,29 @@ func SnapshotSkillVersion(ctx context.Context, pool *pgxpool.Pool, h *SkillHisto
 	})
 }
 
+// GetSkillHistory returns the version history for a skill, ordered descending by version.
+func GetSkillHistory(ctx context.Context, pool *pgxpool.Pool, skillID uuid.UUID) ([]*SkillHistory, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT id, skill_id, version, body, parameters, changed_by, change_note, created_at
+		 FROM skill_history WHERE skill_id=$1 ORDER BY version DESC`,
+		skillID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("db: get skill history: %w", err)
+	}
+	defer rows.Close()
+	var items []*SkillHistory
+	for rows.Next() {
+		var h SkillHistory
+		if err := rows.Scan(&h.ID, &h.SkillID, &h.Version, &h.Body, &h.Parameters,
+			&h.ChangedBy, &h.ChangeNote, &h.CreatedAt); err != nil {
+			return nil, fmt.Errorf("db: get skill history scan: %w", err)
+		}
+		items = append(items, &h)
+	}
+	return items, rows.Err()
+}
+
 // CreateSkillEndorsement inserts a skill_endorsements row.
 func CreateSkillEndorsement(ctx context.Context, pool *pgxpool.Pool, skillID, endorserID uuid.UUID, note *string) (*SkillEndorsement, error) {
 	q := New(pool)

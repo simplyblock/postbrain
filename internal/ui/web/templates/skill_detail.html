@@ -1,0 +1,26 @@
+{{define "skill_detail"}}
+<h1>{{.Skill.Name}}</h1>
+<p>
+  <a href="/ui/skills">&larr; Back to Skills</a>
+  &nbsp;|&nbsp;
+  <a href="/ui/skills/{{.Skill.ID}}/history">Version history</a>
+</p>
+<table>
+  <tr><th>Slug</th><td><code>{{.Skill.Slug}}</code></td></tr>
+  <tr><th>Status</th><td><span class="badge {{statusBadge .Skill.Status}}">{{.Skill.Status}}</span></td></tr>
+  <tr><th>Version</th><td>v{{.Skill.Version}}</td></tr>
+  <tr><th>Agent Types</th><td>{{join .Skill.AgentTypes ", "}}</td></tr>
+  <tr><th>Visibility</th><td>{{.Skill.Visibility}}</td></tr>
+  <tr><th>Invocations</th><td>{{.Skill.InvocationCount}}</td></tr>
+  <tr><th>Last Invoked</th><td>{{derefTime .Skill.LastInvokedAt}}</td></tr>
+  <tr><th>Published</th><td>{{derefTime .Skill.PublishedAt}}</td></tr>
+</table>
+
+{{if .Skill.Description}}
+<h2>Description</h2>
+<p>{{.Skill.Description}}</p>
+{{end}}
+
+<h2>Body</h2>
+<pre>{{.Skill.Body}}</pre>
+{{end}}
