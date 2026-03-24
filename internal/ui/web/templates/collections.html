@@ -6,12 +6,12 @@
   {{range .Collections}}
   <tr>
     <td><a href="/ui/collections/{{.ID}}">{{.Name}}</a></td>
-    <td>{{.Slug}}</td>
+    <td class="mono muted">{{.Slug}}</td>
     <td>{{.Visibility}}</td>
-    <td>{{timeAgo .CreatedAt}}</td>
+    <td class="muted">{{timeAgo .CreatedAt}}</td>
   </tr>
   {{else}}
-  <tr><td colspan="4">No collections.</td></tr>
+  <tr><td colspan="4" class="muted">No collections.</td></tr>
   {{end}}
   </tbody>
 </table>

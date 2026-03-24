@@ -5,13 +5,13 @@
   <tbody>
   {{range .Flags}}
   <tr>
-    <td><a href="/ui/knowledge/{{.ArtifactID}}">{{.ArtifactID}}</a></td>
-    <td>{{.Signal}}</td>
-    <td>{{.Status}}</td>
-    <td>{{timeAgo .FlaggedAt}}</td>
+    <td><a href="/ui/knowledge/{{.ArtifactID}}" class="mono">{{.ArtifactID}}</a></td>
+    <td><code>{{.Signal}}</code></td>
+    <td><span class="badge badge-warn">{{.Status}}</span></td>
+    <td class="muted">{{timeAgo .FlaggedAt}}</td>
   </tr>
   {{else}}
-  <tr><td colspan="4">No open staleness flags.</td></tr>
+  <tr><td colspan="4" class="muted">No open staleness flags.</td></tr>
   {{end}}
   </tbody>
 </table>

@@ -1,20 +1,30 @@
 {{define "knowledge"}}
 <h1>Knowledge</h1>
-<form hx-get="/ui/knowledge" hx-target="#results" hx-push-url="true">
+<form class="toolbar" hx-get="/ui/knowledge" hx-target="#results" hx-push-url="true">
   <input type="text" name="q" placeholder="Search…" value="{{.Query}}">
-  <select name="status"><option value="">All statuses</option><option>draft</option><option>in_review</option><option>published</option><option>deprecated</option></select>
+  <select name="status">
+    <option value="">All statuses</option>
+    <option>draft</option>
+    <option>in_review</option>
+    <option>published</option>
+    <option>deprecated</option>
+  </select>
   <button type="submit">Search</button>
 </form>
 <div id="results">{{template "knowledge_rows" .}}</div>
 
 <h2>Upload Document</h2>
-{{if .UploadError}}<p style="color:red">{{.UploadError}}</p>{{end}}
+{{if .UploadError}}<div class="alert alert-error">{{.UploadError}}</div>{{end}}
 <form method="POST" action="/ui/knowledge/upload" enctype="multipart/form-data">
   <label>File (.txt, .md, .pdf, .docx)
     <input type="file" name="file" accept=".txt,.md,.pdf,.docx" required>
   </label>
-  <label>Scope<input type="text" name="scope" placeholder="e.g. project:noctarius/test" required></label>
-  <label>Title (optional)<input type="text" name="title" placeholder="defaults to filename"></label>
+  <label>Scope
+    <input type="text" name="scope" placeholder="e.g. project:acme/api" required>
+  </label>
+  <label>Title (optional)
+    <input type="text" name="title" placeholder="defaults to filename">
+  </label>
   <label>Type
     <select name="knowledge_type">
       <option value="reference">reference</option>
