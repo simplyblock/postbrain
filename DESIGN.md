@@ -3295,6 +3295,7 @@ internal/ui/
 | Skill Detail        | `GET /ui/skills/{id}`    | Full skill body, parameters, invocation count/last invoked; link to history                                         |
 | Skill History       | `GET /ui/skills/{id}/history` | Version changelog; backed by `skill_history` table via `db.GetSkillHistory`                                   |
 | Knowledge History   | `GET /ui/knowledge/{id}/history` | Version timeline; backed by `GET /v1/knowledge/{id}/history`; linked from knowledge detail page            |
+| Token Management    | `GET /ui/tokens`         | List all tokens (name, scopes, last used, expiry, status); create-token form (name, scope multi-select, expiry); revoke button; raw token shown once on creation |
 | Principals & Scopes | `GET /ui/principals`     | Scope hierarchy tree; membership table; add / remove member forms                                                   |
 | Metrics             | `GET /ui/metrics`        | Prometheus metric cards: tool p99, recall results by layer, job durations                                           |
 | Login               | `GET /ui/login`          | Token input form; sets `pb_session` cookie; redirects to `/ui`                                                      |
@@ -3304,7 +3305,6 @@ internal/ui/
 | Page                    | Route                           | Description                                                                                                    |
 |-------------------------|---------------------------------|----------------------------------------------------------------------------------------------------------------|
 | Staleness Resolution    | `POST /ui/staleness/{id}/resolve\|dismiss` | Resolve or dismiss a staleness flag with optional review note; extends existing staleness page     |
-| Token Management        | `GET /ui/tokens`                | List tokens (name, scopes, last used, expiry); create-token form; revoke button; backed by `auth.TokenStore`   |
 | Sharing Grants          | `GET /ui/sharing`               | List active grants with grantee/expiry/reshare; create-grant form; revoke button; backed by `sharing_grants`   |
 | Session List            | `GET /ui/sessions`              | Sessions with scope, principal, duration; active sessions highlighted; backed by `sessions` table              |
 | Session Detail          | `GET /ui/sessions/{id}`         | Session metadata + chronological event log from `events` table; event type, payload, timestamp                 |

@@ -132,6 +132,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleAddMembership(w, r)
 	case r.URL.Path == "/ui/memberships/delete" && r.Method == http.MethodPost:
 		h.handleDeleteMembership(w, r)
+	case r.URL.Path == "/ui/tokens" && r.Method == http.MethodPost:
+		h.handleCreateToken(w, r)
+	case strings.HasSuffix(r.URL.Path, "/revoke") && strings.HasPrefix(r.URL.Path, "/ui/tokens/") && r.Method == http.MethodPost:
+		h.handleRevokeToken(w, r)
+	case r.URL.Path == "/ui/tokens":
+		h.handleTokens(w, r)
 	case r.URL.Path == "/ui/metrics":
 		h.handleMetrics(w, r)
 	default:

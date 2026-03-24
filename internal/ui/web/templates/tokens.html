@@ -1,0 +1,60 @@
+{{define "tokens"}}
+<h1>Token Management</h1>
+
+{{if .NewToken}}
+<div style="background:#d4edda;border:1px solid #c3e6cb;padding:1rem;margin-bottom:1rem;border-radius:4px">
+  <strong>Token created.</strong> Copy it now — it will not be shown again.<br>
+  <code style="word-break:break-all">{{.NewToken}}</code>
+</div>
+{{end}}
+
+{{if .FormError}}
+<p style="color:red">{{.FormError}}</p>
+{{end}}
+
+<h2>Create Token</h2>
+<form method="POST" action="/ui/tokens">
+  <label>Name <input type="text" name="name" required placeholder="e.g. claude-code-laptop"></label>
+  <label>Expires (optional) <input type="date" name="expires_at"></label>
+  <fieldset>
+    <legend>Scopes (leave all unchecked for unrestricted access)</legend>
+    {{range .Scopes}}
+    <label><input type="checkbox" name="scope_ids" value="{{.ID}}"> {{.Kind}}:{{.ExternalID}} — {{.Name}}</label><br>
+    {{end}}
+  </fieldset>
+  <button type="submit">Create Token</button>
+</form>
+
+<h2>Existing Tokens</h2>
+<table>
+  <thead>
+    <tr><th>Name</th><th>Scopes</th><th>Last Used</th><th>Expires</th><th>Status</th><th>Actions</th></tr>
+  </thead>
+  <tbody>
+  {{range .Tokens}}
+  <tr>
+    <td>{{.Name}}</td>
+    <td>
+      {{if .ScopeIds}}{{len .ScopeIds}} scope(s){{else}}<em>unrestricted</em>{{end}}
+    </td>
+    <td>{{derefTime .LastUsedAt}}</td>
+    <td>{{derefTime .ExpiresAt}}</td>
+    <td>
+      {{if .RevokedAt}}<span style="color:red">revoked</span>
+      {{else}}<span style="color:green">active</span>{{end}}
+    </td>
+    <td>
+      {{if eq .RevokedAt nil}}
+      <form method="POST" action="/ui/tokens/{{.ID}}/revoke" style="display:inline"
+            onsubmit="return confirm('Revoke this token?')">
+        <button type="submit">Revoke</button>
+      </form>
+      {{end}}
+    </td>
+  </tr>
+  {{else}}
+  <tr><td colspan="6">No tokens.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
