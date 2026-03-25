@@ -745,16 +745,35 @@ func LinkMemoryToEntity(ctx context.Context, pool *pgxpool.Pool, memoryID, entit
 	return nil
 }
 
+// LinkArtifactToEntity inserts an artifact_entities row.
+func LinkArtifactToEntity(ctx context.Context, pool *pgxpool.Pool, artifactID, entityID uuid.UUID, role string) error {
+	q := New(pool)
+	var rolePtr *string
+	if role != "" {
+		rolePtr = &role
+	}
+	err := q.LinkArtifactToEntity(ctx, LinkArtifactToEntityParams{
+		ArtifactID: artifactID,
+		EntityID:   entityID,
+		Role:       rolePtr,
+	})
+	if err != nil {
+		return fmt.Errorf("db: link artifact to entity: %w", err)
+	}
+	return nil
+}
+
 // UpsertRelation inserts or updates a relation.
 func UpsertRelation(ctx context.Context, pool *pgxpool.Pool, r *Relation) (*Relation, error) {
 	q := New(pool)
 	result, err := q.UpsertRelation(ctx, UpsertRelationParams{
-		ScopeID:      r.ScopeID,
-		SubjectID:    r.SubjectID,
-		Predicate:    r.Predicate,
-		ObjectID:     r.ObjectID,
-		Confidence:   r.Confidence,
-		SourceMemory: r.SourceMemory,
+		ScopeID:        r.ScopeID,
+		SubjectID:      r.SubjectID,
+		Predicate:      r.Predicate,
+		ObjectID:       r.ObjectID,
+		Confidence:     r.Confidence,
+		SourceMemory:   r.SourceMemory,
+		SourceArtifact: r.SourceArtifact,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("db: upsert relation: %w", err)

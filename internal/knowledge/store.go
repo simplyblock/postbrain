@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/graph"
 )
 
 // Sentinel errors for the knowledge store.
@@ -111,8 +113,9 @@ type CreateInput struct {
 	Summary        *string
 	SourceMemoryID *uuid.UUID
 	SourceRef      *string
-	AutoReview     bool // if true: status = "in_review"; else "draft"
-	ReviewRequired int  // default 1 if 0
+	AutoReview     bool // if true and !AutoPublish: status = "in_review"
+	AutoPublish    bool // if true: status = "published", skips review
+	ReviewRequired int  // default 1 if 0; ignored when AutoPublish is true
 }
 
 // Create persists a new knowledge artifact, embedding its content.
@@ -130,8 +133,16 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.KnowledgeArt
 	}
 
 	status := "draft"
-	if input.AutoReview {
+	if input.AutoPublish {
+		status = "published"
+	} else if input.AutoReview {
 		status = "in_review"
+	}
+
+	var publishedAt *time.Time
+	if input.AutoPublish {
+		now := time.Now()
+		publishedAt = &now
 	}
 
 	embeddingVec, modelID, err := s.embedContent(ctx, input.Content)
@@ -146,6 +157,7 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.KnowledgeArt
 		AuthorID:         input.AuthorID,
 		Visibility:       input.Visibility,
 		Status:           status,
+		PublishedAt:      publishedAt,
 		ReviewRequired:   int32(input.ReviewRequired),
 		Title:            input.Title,
 		Content:          input.Content,
@@ -161,6 +173,12 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.KnowledgeArt
 	if err != nil {
 		return nil, fmt.Errorf("knowledge: create: %w", err)
 	}
+
+	// Best-effort: extract entities and relations from the artifact content.
+	if s.pool != nil {
+		s.extractAndLinkEntities(ctx, created.ID, input.OwnerScopeID, input.Content, input.SourceRef)
+	}
+
 	return created, nil
 }
 
@@ -206,7 +224,48 @@ func (s *Store) Update(ctx context.Context, id, callerID uuid.UUID, title, conte
 		_ = db.FlagDigestsStaleness(ctx, s.pool, id, "source_modified", 0.8, evidence)
 	}
 
+	// Re-extract entities from updated content — best-effort, non-fatal.
+	if s.pool != nil {
+		s.extractAndLinkEntities(ctx, id, existing.OwnerScopeID, content, existing.SourceRef)
+	}
+
 	return updated, nil
+}
+
+// extractAndLinkEntities runs heuristic entity extraction on artifact content,
+// upserts each entity, links it to the artifact, and creates co_occurs_with
+// relations between all co-extracted entities. All errors are silently dropped —
+// graph population is best-effort and must never block a write.
+func (s *Store) extractAndLinkEntities(ctx context.Context, artifactID, scopeID uuid.UUID, content string, sourceRef *string) {
+	entities := graph.ExtractEntitiesFromMemory(content, sourceRef)
+	if len(entities) == 0 {
+		return
+	}
+
+	linkedIDs := make([]uuid.UUID, 0, len(entities))
+	for _, e := range entities {
+		e.ScopeID = scopeID
+		upserted, err := db.UpsertEntity(ctx, s.pool, e)
+		if err != nil {
+			continue
+		}
+		_ = db.LinkArtifactToEntity(ctx, s.pool, artifactID, upserted.ID, "related")
+		linkedIDs = append(linkedIDs, upserted.ID)
+	}
+
+	artID := artifactID
+	for i := 0; i < len(linkedIDs); i++ {
+		for j := i + 1; j < len(linkedIDs); j++ {
+			_, _ = db.UpsertRelation(ctx, s.pool, &db.Relation{
+				ScopeID:        scopeID,
+				SubjectID:      linkedIDs[i],
+				Predicate:      "co_occurs_with",
+				ObjectID:       linkedIDs[j],
+				Confidence:     1.0,
+				SourceArtifact: &artID,
+			})
+		}
+	}
 }
 
 // GetByID retrieves a knowledge artifact by ID. Returns nil, nil if not found.

@@ -188,14 +188,15 @@ type PromotionRequest struct {
 }
 
 type Relation struct {
-	ID           uuid.UUID
-	ScopeID      uuid.UUID
-	SubjectID    uuid.UUID
-	Predicate    string
-	ObjectID     uuid.UUID
-	Confidence   float64
-	SourceMemory *uuid.UUID
-	CreatedAt    time.Time
+	ID             uuid.UUID
+	ScopeID        uuid.UUID
+	SubjectID      uuid.UUID
+	Predicate      string
+	ObjectID       uuid.UUID
+	Confidence     float64
+	SourceMemory   *uuid.UUID
+	SourceArtifact *uuid.UUID
+	CreatedAt      time.Time
 }
 
 type Scope struct {
