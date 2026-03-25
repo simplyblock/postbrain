@@ -3,7 +3,6 @@ package ingest
 
 import (
 	"archive/zip"
-	"bufio"
 	"bytes"
 	"encoding/xml"
 	"errors"
@@ -62,43 +61,102 @@ func extractPDF(data []byte) (string, error) {
 }
 
 // parsePDFContentStream extracts human-readable text from a raw PDF content
-// stream by scanning for the text-showing operators Tj, TJ, ' and ".
-// It handles literal strings ( ) and hex strings < >.
+// stream by tokenising the entire stream and tracking string operands that
+// precede the text-showing operators Tj, TJ, ' and ".
+//
+// Two common failure modes of a line-based approach are avoided:
+//   - strings and their operator on different lines  →  handled by full-stream scan
+//   - TJ arrays interleaving strings with kerning numbers  →  numbers are skipped
+//     without discarding already-collected string operands
 func parsePDFContentStream(stream []byte) string {
 	var out strings.Builder
-	sc := bufio.NewScanner(bytes.NewReader(stream))
-	sc.Buffer(make([]byte, 1<<20), 1<<20)
+	var pending []string // string operands accumulated before the next operator
 
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" {
+	data := strings.TrimSpace(string(stream))
+	for data != "" {
+		c := data[0]
+
+		// Literal string ( … )
+		if c == '(' {
+			s, tail, ok := nextPDFString(data)
+			if ok {
+				pending = append(pending, s)
+				data = strings.TrimSpace(tail)
+			} else {
+				data = data[1:]
+			}
 			continue
 		}
 
-		// Collect all string operands on this line, then check the operator.
-		var strs []string
-		rest := line
-		for {
-			s, tail, ok := nextPDFString(rest)
-			if !ok {
-				break
+		// Hex string < … >  (but not dictionary << … >>)
+		if c == '<' && (len(data) < 2 || data[1] != '<') {
+			s, tail, ok := nextPDFString(data)
+			if ok {
+				pending = append(pending, s)
+				data = strings.TrimSpace(tail)
+			} else {
+				data = data[1:]
 			}
-			strs = append(strs, s)
-			rest = strings.TrimSpace(tail)
+			continue
 		}
 
-		op := strings.TrimSpace(rest)
-		switch op {
+		// Dictionary << … >> — skip to matching >>
+		if c == '<' && len(data) >= 2 && data[1] == '<' {
+			end := strings.Index(data[2:], ">>")
+			if end >= 0 {
+				data = strings.TrimSpace(data[end+4:])
+			} else {
+				data = ""
+			}
+			continue
+		}
+
+		// Array brackets — just consume; inner strings are picked up naturally
+		if c == '[' || c == ']' {
+			data = data[1:]
+			continue
+		}
+
+		// Comment — skip to end of line
+		if c == '%' {
+			end := strings.IndexAny(data, "\r\n")
+			if end < 0 {
+				data = ""
+			} else {
+				data = data[end+1:]
+			}
+			continue
+		}
+
+		// Whitespace
+		if c == ' ' || c == '\t' || c == '\r' || c == '\n' {
+			data = strings.TrimLeft(data, " \t\r\n")
+			continue
+		}
+
+		// Read a bare token (operator, number, name starting with /)
+		i := strings.IndexAny(data, " \t\r\n([<]>%")
+		var token string
+		if i < 0 {
+			token, data = data, ""
+		} else {
+			token, data = data[:i], strings.TrimSpace(data[i:])
+		}
+		if token == "" {
+			continue
+		}
+
+		switch token {
 		case "Tj", "'", "\"":
-			if len(strs) > 0 {
+			if len(pending) > 0 {
 				if out.Len() > 0 {
 					out.WriteByte(' ')
 				}
-				out.WriteString(strs[len(strs)-1])
+				out.WriteString(pending[len(pending)-1])
+				pending = pending[:0]
 			}
 		case "TJ":
-			// strs already contains the array elements in order.
-			for _, s := range strs {
+			for _, s := range pending {
 				if s != "" {
 					if out.Len() > 0 {
 						out.WriteByte(' ')
@@ -106,9 +164,40 @@ func parsePDFContentStream(stream []byte) string {
 					out.WriteString(s)
 				}
 			}
+			pending = pending[:0]
+		default:
+			// Numbers and PDF names (/Foo) sit between strings in TJ arrays
+			// or as operator arguments — leave pending intact.
+			// Any other alphabetic operator marks the end of a text operand group.
+			if !isPDFNumberOrName(token) {
+				pending = pending[:0]
+			}
 		}
 	}
 	return strings.TrimSpace(out.String())
+}
+
+// isPDFNumberOrName returns true for tokens that can appear between string
+// operands without ending the operand group: numeric values and PDF names (/Foo).
+func isPDFNumberOrName(s string) bool {
+	if s == "" {
+		return false
+	}
+	if s[0] == '/' {
+		return true
+	}
+	for i, c := range s {
+		switch {
+		case c >= '0' && c <= '9':
+		case c == '.' || c == '-' || c == '+':
+			if (c == '-' || c == '+') && i != 0 {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // nextPDFString parses the first PDF string literal from s.
