@@ -110,7 +110,7 @@ func (q *Queries) ListEntitiesByScope(ctx context.Context, arg ListEntitiesBySco
 }
 
 const listRelationsByScope = `-- name: ListRelationsByScope :many
-SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, created_at
+SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact, created_at
 FROM relations
 WHERE scope_id=$1
 ORDER BY created_at
@@ -140,6 +140,7 @@ func (q *Queries) ListRelationsByScope(ctx context.Context, arg ListRelationsByS
 			&i.ObjectID,
 			&i.Confidence,
 			&i.SourceMemory,
+			&i.SourceArtifact,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -153,7 +154,7 @@ func (q *Queries) ListRelationsByScope(ctx context.Context, arg ListRelationsByS
 }
 
 const listRelationsForEntity = `-- name: ListRelationsForEntity :many
-SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, created_at
+SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact, created_at
 FROM relations WHERE subject_id=$1 OR object_id=$1
 ORDER BY created_at
 `
@@ -175,6 +176,7 @@ func (q *Queries) ListRelationsForEntity(ctx context.Context, subjectID uuid.UUI
 			&i.ObjectID,
 			&i.Confidence,
 			&i.SourceMemory,
+			&i.SourceArtifact,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -188,7 +190,7 @@ func (q *Queries) ListRelationsForEntity(ctx context.Context, subjectID uuid.UUI
 }
 
 const listRelationsForEntityByPredicate = `-- name: ListRelationsForEntityByPredicate :many
-SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, created_at
+SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact, created_at
 FROM relations
 WHERE (subject_id = $1 OR object_id = $1) AND predicate = $2
 ORDER BY created_at
@@ -216,6 +218,7 @@ func (q *Queries) ListRelationsForEntityByPredicate(ctx context.Context, arg Lis
 			&i.ObjectID,
 			&i.Confidence,
 			&i.SourceMemory,
+			&i.SourceArtifact,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -276,20 +279,22 @@ func (q *Queries) UpsertEntity(ctx context.Context, arg UpsertEntityParams) (*En
 }
 
 const upsertRelation = `-- name: UpsertRelation :one
-INSERT INTO relations (scope_id, subject_id, predicate, object_id, confidence, source_memory)
-VALUES ($1,$2,$3,$4,$5,$6)
+INSERT INTO relations (scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact)
+VALUES ($1,$2,$3,$4,$5,$6,$7)
 ON CONFLICT (scope_id, subject_id, predicate, object_id)
-DO UPDATE SET confidence=EXCLUDED.confidence, source_memory=EXCLUDED.source_memory
-RETURNING id, scope_id, subject_id, predicate, object_id, confidence, source_memory, created_at
+DO UPDATE SET confidence=EXCLUDED.confidence, source_memory=EXCLUDED.source_memory,
+              source_artifact=EXCLUDED.source_artifact
+RETURNING id, scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact, created_at
 `
 
 type UpsertRelationParams struct {
-	ScopeID      uuid.UUID
-	SubjectID    uuid.UUID
-	Predicate    string
-	ObjectID     uuid.UUID
-	Confidence   float64
-	SourceMemory *uuid.UUID
+	ScopeID        uuid.UUID
+	SubjectID      uuid.UUID
+	Predicate      string
+	ObjectID       uuid.UUID
+	Confidence     float64
+	SourceMemory   *uuid.UUID
+	SourceArtifact *uuid.UUID
 }
 
 func (q *Queries) UpsertRelation(ctx context.Context, arg UpsertRelationParams) (*Relation, error) {
@@ -300,6 +305,7 @@ func (q *Queries) UpsertRelation(ctx context.Context, arg UpsertRelationParams) 
 		arg.ObjectID,
 		arg.Confidence,
 		arg.SourceMemory,
+		arg.SourceArtifact,
 	)
 	var i Relation
 	err := row.Scan(
@@ -310,7 +316,23 @@ func (q *Queries) UpsertRelation(ctx context.Context, arg UpsertRelationParams) 
 		&i.ObjectID,
 		&i.Confidence,
 		&i.SourceMemory,
+		&i.SourceArtifact,
 		&i.CreatedAt,
 	)
 	return &i, err
+}
+
+const linkArtifactToEntity = `-- name: LinkArtifactToEntity :exec
+INSERT INTO artifact_entities (artifact_id, entity_id, role) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING
+`
+
+type LinkArtifactToEntityParams struct {
+	ArtifactID uuid.UUID
+	EntityID   uuid.UUID
+	Role       *string
+}
+
+func (q *Queries) LinkArtifactToEntity(ctx context.Context, arg LinkArtifactToEntityParams) error {
+	_, err := q.db.Exec(ctx, linkArtifactToEntity, arg.ArtifactID, arg.EntityID, arg.Role)
+	return err
 }
