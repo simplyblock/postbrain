@@ -763,6 +763,12 @@ func LinkArtifactToEntity(ctx context.Context, pool *pgxpool.Pool, artifactID, e
 	return nil
 }
 
+// DeleteArtifactEntityLinks removes all artifact_entities rows for the given artifact.
+func DeleteArtifactEntityLinks(ctx context.Context, pool *pgxpool.Pool, artifactID uuid.UUID) error {
+	q := New(pool)
+	return q.DeleteArtifactEntityLinks(ctx, artifactID)
+}
+
 // UpsertRelation inserts or updates a relation.
 func UpsertRelation(ctx context.Context, pool *pgxpool.Pool, r *Relation) (*Relation, error) {
 	q := New(pool)
@@ -778,7 +784,17 @@ func UpsertRelation(ctx context.Context, pool *pgxpool.Pool, r *Relation) (*Rela
 	if err != nil {
 		return nil, fmt.Errorf("db: upsert relation: %w", err)
 	}
-	return result, nil
+	return &Relation{
+		ID:             result.ID,
+		ScopeID:        result.ScopeID,
+		SubjectID:      result.SubjectID,
+		Predicate:      result.Predicate,
+		ObjectID:       result.ObjectID,
+		Confidence:     result.Confidence,
+		SourceMemory:   result.SourceMemory,
+		SourceArtifact: result.SourceArtifact,
+		CreatedAt:      result.CreatedAt,
+	}, nil
 }
 
 // ListRelationsForEntity returns relations for an entity, optionally filtered by predicate.
@@ -792,13 +808,41 @@ func ListRelationsForEntity(ctx context.Context, pool *pgxpool.Pool, entityID uu
 		if err != nil {
 			return nil, fmt.Errorf("db: list relations for entity by predicate: %w", err)
 		}
-		return rows, nil
+		out := make([]*Relation, len(rows))
+		for i, r := range rows {
+			out[i] = &Relation{
+				ID:             r.ID,
+				ScopeID:        r.ScopeID,
+				SubjectID:      r.SubjectID,
+				Predicate:      r.Predicate,
+				ObjectID:       r.ObjectID,
+				Confidence:     r.Confidence,
+				SourceMemory:   r.SourceMemory,
+				SourceArtifact: r.SourceArtifact,
+				CreatedAt:      r.CreatedAt,
+			}
+		}
+		return out, nil
 	}
 	rows, err := q.ListRelationsForEntity(ctx, entityID)
 	if err != nil {
 		return nil, fmt.Errorf("db: list relations for entity: %w", err)
 	}
-	return rows, nil
+	out := make([]*Relation, len(rows))
+	for i, r := range rows {
+		out[i] = &Relation{
+			ID:             r.ID,
+			ScopeID:        r.ScopeID,
+			SubjectID:      r.SubjectID,
+			Predicate:      r.Predicate,
+			ObjectID:       r.ObjectID,
+			Confidence:     r.Confidence,
+			SourceMemory:   r.SourceMemory,
+			SourceArtifact: r.SourceArtifact,
+			CreatedAt:      r.CreatedAt,
+		}
+	}
+	return out, nil
 }
 
 // ListEntitiesByScope returns entities in a scope.
@@ -827,7 +871,21 @@ func ListRelationsByScope(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.
 	if err != nil {
 		return nil, fmt.Errorf("db: list relations by scope: %w", err)
 	}
-	return rs, nil
+	out := make([]*Relation, len(rs))
+	for i, r := range rs {
+		out[i] = &Relation{
+			ID:             r.ID,
+			ScopeID:        r.ScopeID,
+			SubjectID:      r.SubjectID,
+			Predicate:      r.Predicate,
+			ObjectID:       r.ObjectID,
+			Confidence:     r.Confidence,
+			SourceMemory:   r.SourceMemory,
+			SourceArtifact: r.SourceArtifact,
+			CreatedAt:      r.CreatedAt,
+		}
+	}
+	return out, nil
 }
 
 // ── Knowledge artifacts ───────────────────────────────────────────────────────

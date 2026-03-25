@@ -11,6 +11,18 @@ import (
 	pgvector_go "github.com/pgvector/pgvector-go"
 )
 
+type ArtifactDigestSource struct {
+	DigestID uuid.UUID
+	SourceID uuid.UUID
+	AddedAt  time.Time
+}
+
+type ArtifactEntity struct {
+	ArtifactID uuid.UUID
+	EntityID   uuid.UUID
+	Role       *string
+}
+
 type Consolidation struct {
 	ID        uuid.UUID
 	ScopeID   uuid.UUID
@@ -99,6 +111,16 @@ type KnowledgeCollectionItem struct {
 	Position     int32
 	AddedBy      uuid.UUID
 	AddedAt      time.Time
+}
+
+type KnowledgeDigestLog struct {
+	ID            uuid.UUID
+	ScopeID       uuid.UUID
+	DigestID      uuid.UUID
+	SourceIds     []uuid.UUID
+	Strategy      string
+	SynthesisedBy *uuid.UUID
+	CreatedAt     time.Time
 }
 
 type KnowledgeEndorsement struct {
@@ -195,8 +217,8 @@ type Relation struct {
 	ObjectID       uuid.UUID
 	Confidence     float64
 	SourceMemory   *uuid.UUID
-	SourceArtifact *uuid.UUID
 	CreatedAt      time.Time
+	SourceArtifact *uuid.UUID
 }
 
 type Scope struct {

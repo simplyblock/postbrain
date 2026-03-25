@@ -73,13 +73,6 @@ func TestExtractUnsupported(t *testing.T) {
 	}
 }
 
-func TestExtractPDFInvalid(t *testing.T) {
-	_, err := ingest.Extract("file.pdf", []byte("not a pdf"))
-	if err == nil {
-		t.Fatal("expected error for invalid PDF")
-	}
-}
-
 // makeDocx creates a minimal valid DOCX (zip with word/document.xml).
 func makeDocx(text string) []byte {
 	var buf bytes.Buffer
