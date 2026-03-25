@@ -37,6 +37,7 @@ type lifecycleDB interface {
 	getArtifactAfterEndorse(ctx context.Context, id uuid.UUID) (*db.KnowledgeArtifact, error)
 	snapshotArtifactVersion(ctx context.Context, h *db.KnowledgeHistory) error
 	flagDigestsStaleness(ctx context.Context, sourceID uuid.UUID, signal string, confidence float64, evidence []byte) error
+	deleteArtifactEntityLinks(ctx context.Context, artifactID uuid.UUID) error
 }
 
 // poolLifecycleDB wraps a pgxpool.Pool to implement lifecycleDB.
@@ -85,6 +86,10 @@ func (p *poolLifecycleDB) snapshotArtifactVersion(ctx context.Context, h *db.Kno
 
 func (p *poolLifecycleDB) flagDigestsStaleness(ctx context.Context, sourceID uuid.UUID, signal string, confidence float64, evidence []byte) error {
 	return db.FlagDigestsStaleness(ctx, p.pool, sourceID, signal, confidence, evidence)
+}
+
+func (p *poolLifecycleDB) deleteArtifactEntityLinks(ctx context.Context, artifactID uuid.UUID) error {
+	return db.DeleteArtifactEntityLinks(ctx, p.pool, artifactID)
 }
 
 // isUniqueViolation checks if the error is a PostgreSQL unique-constraint violation (23505).
@@ -273,6 +278,8 @@ func (l *Lifecycle) Deprecate(ctx context.Context, artifactID, callerID uuid.UUI
 	if err := l.dbOps.updateArtifactStatus(ctx, artifactID, "deprecated", (*time.Time)(nil), &now); err != nil {
 		return err
 	}
+	// Remove artifact→entity links from the graph — non-fatal.
+	_ = l.dbOps.deleteArtifactEntityLinks(ctx, artifactID)
 	// Flag covering digests stale — non-fatal.
 	evidence := []byte(`{"signal":"source_deprecated"}`)
 	_ = l.dbOps.flagDigestsStaleness(ctx, artifactID, "source_modified", 0.9, evidence)

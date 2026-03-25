@@ -21,11 +21,12 @@ func (f *fakeLifecycleMembership) IsScopeAdmin(_ context.Context, _, _ uuid.UUID
 
 // fakeLifecycleDB implements lifecycleDB for unit tests.
 type fakeLifecycleDB struct {
-	artifact      *db.KnowledgeArtifact
-	statusUpdated string
-	snapshotted   bool
-	endorsed      bool
-	uniqueViolate bool // if true, CreateEndorsement returns a 23505 error
+	artifact               *db.KnowledgeArtifact
+	statusUpdated          string
+	snapshotted            bool
+	endorsed               bool
+	uniqueViolate          bool // if true, CreateEndorsement returns a 23505 error
+	entityLinksDeleted     bool
 }
 
 func (f *fakeLifecycleDB) getArtifact(_ context.Context, _ uuid.UUID) (*db.KnowledgeArtifact, error) {
@@ -66,6 +67,11 @@ func (f *fakeLifecycleDB) snapshotArtifactVersion(_ context.Context, h *db.Knowl
 }
 
 func (f *fakeLifecycleDB) flagDigestsStaleness(_ context.Context, _ uuid.UUID, _ string, _ float64, _ []byte) error {
+	return nil
+}
+
+func (f *fakeLifecycleDB) deleteArtifactEntityLinks(_ context.Context, _ uuid.UUID) error {
+	f.entityLinksDeleted = true
 	return nil
 }
 
@@ -257,6 +263,24 @@ func TestDeprecate_ForbiddenForNonAdmin(t *testing.T) {
 	err := lc.Deprecate(context.Background(), artifact.ID, uuid.New())
 	if !errors.Is(err, ErrForbidden) {
 		t.Errorf("expected ErrForbidden, got %v", err)
+	}
+}
+
+// TestDeprecate_RemovesEntityLinks verifies that deprecating an artifact removes its graph links.
+func TestDeprecate_RemovesEntityLinks(t *testing.T) {
+	t.Parallel()
+	artifact := &db.KnowledgeArtifact{
+		ID:           uuid.New(),
+		OwnerScopeID: uuid.New(),
+		Status:       "published",
+	}
+	lc, fdb := newTestLifecycle(artifact, true /* admin */)
+
+	if err := lc.Deprecate(context.Background(), artifact.ID, uuid.New()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !fdb.entityLinksDeleted {
+		t.Error("expected artifact entity links to be deleted on deprecation")
 	}
 }
 

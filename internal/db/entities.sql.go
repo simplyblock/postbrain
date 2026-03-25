@@ -7,10 +7,20 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	pgvector_go "github.com/pgvector/pgvector-go"
 )
+
+const deleteArtifactEntityLinks = `-- name: DeleteArtifactEntityLinks :exec
+DELETE FROM artifact_entities WHERE artifact_id = $1
+`
+
+func (q *Queries) DeleteArtifactEntityLinks(ctx context.Context, artifactID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteArtifactEntityLinks, artifactID)
+	return err
+}
 
 const getEntityByCanonical = `-- name: GetEntityByCanonical :one
 SELECT id, scope_id, entity_type, name, canonical, meta,
@@ -40,6 +50,21 @@ func (q *Queries) GetEntityByCanonical(ctx context.Context, arg GetEntityByCanon
 		&i.UpdatedAt,
 	)
 	return &i, err
+}
+
+const linkArtifactToEntity = `-- name: LinkArtifactToEntity :exec
+INSERT INTO artifact_entities (artifact_id, entity_id, role) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING
+`
+
+type LinkArtifactToEntityParams struct {
+	ArtifactID uuid.UUID
+	EntityID   uuid.UUID
+	Role       *string
+}
+
+func (q *Queries) LinkArtifactToEntity(ctx context.Context, arg LinkArtifactToEntityParams) error {
+	_, err := q.db.Exec(ctx, linkArtifactToEntity, arg.ArtifactID, arg.EntityID, arg.Role)
+	return err
 }
 
 const linkMemoryToEntity = `-- name: LinkMemoryToEntity :exec
@@ -123,15 +148,27 @@ type ListRelationsByScopeParams struct {
 	Offset  int32
 }
 
-func (q *Queries) ListRelationsByScope(ctx context.Context, arg ListRelationsByScopeParams) ([]*Relation, error) {
+type ListRelationsByScopeRow struct {
+	ID             uuid.UUID
+	ScopeID        uuid.UUID
+	SubjectID      uuid.UUID
+	Predicate      string
+	ObjectID       uuid.UUID
+	Confidence     float64
+	SourceMemory   *uuid.UUID
+	SourceArtifact *uuid.UUID
+	CreatedAt      time.Time
+}
+
+func (q *Queries) ListRelationsByScope(ctx context.Context, arg ListRelationsByScopeParams) ([]*ListRelationsByScopeRow, error) {
 	rows, err := q.db.Query(ctx, listRelationsByScope, arg.ScopeID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []*Relation{}
+	items := []*ListRelationsByScopeRow{}
 	for rows.Next() {
-		var i Relation
+		var i ListRelationsByScopeRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ScopeID,
@@ -159,15 +196,27 @@ FROM relations WHERE subject_id=$1 OR object_id=$1
 ORDER BY created_at
 `
 
-func (q *Queries) ListRelationsForEntity(ctx context.Context, subjectID uuid.UUID) ([]*Relation, error) {
+type ListRelationsForEntityRow struct {
+	ID             uuid.UUID
+	ScopeID        uuid.UUID
+	SubjectID      uuid.UUID
+	Predicate      string
+	ObjectID       uuid.UUID
+	Confidence     float64
+	SourceMemory   *uuid.UUID
+	SourceArtifact *uuid.UUID
+	CreatedAt      time.Time
+}
+
+func (q *Queries) ListRelationsForEntity(ctx context.Context, subjectID uuid.UUID) ([]*ListRelationsForEntityRow, error) {
 	rows, err := q.db.Query(ctx, listRelationsForEntity, subjectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []*Relation{}
+	items := []*ListRelationsForEntityRow{}
 	for rows.Next() {
-		var i Relation
+		var i ListRelationsForEntityRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ScopeID,
@@ -201,15 +250,27 @@ type ListRelationsForEntityByPredicateParams struct {
 	Predicate string
 }
 
-func (q *Queries) ListRelationsForEntityByPredicate(ctx context.Context, arg ListRelationsForEntityByPredicateParams) ([]*Relation, error) {
+type ListRelationsForEntityByPredicateRow struct {
+	ID             uuid.UUID
+	ScopeID        uuid.UUID
+	SubjectID      uuid.UUID
+	Predicate      string
+	ObjectID       uuid.UUID
+	Confidence     float64
+	SourceMemory   *uuid.UUID
+	SourceArtifact *uuid.UUID
+	CreatedAt      time.Time
+}
+
+func (q *Queries) ListRelationsForEntityByPredicate(ctx context.Context, arg ListRelationsForEntityByPredicateParams) ([]*ListRelationsForEntityByPredicateRow, error) {
 	rows, err := q.db.Query(ctx, listRelationsForEntityByPredicate, arg.SubjectID, arg.Predicate)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []*Relation{}
+	items := []*ListRelationsForEntityByPredicateRow{}
 	for rows.Next() {
-		var i Relation
+		var i ListRelationsForEntityByPredicateRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ScopeID,
@@ -297,7 +358,19 @@ type UpsertRelationParams struct {
 	SourceArtifact *uuid.UUID
 }
 
-func (q *Queries) UpsertRelation(ctx context.Context, arg UpsertRelationParams) (*Relation, error) {
+type UpsertRelationRow struct {
+	ID             uuid.UUID
+	ScopeID        uuid.UUID
+	SubjectID      uuid.UUID
+	Predicate      string
+	ObjectID       uuid.UUID
+	Confidence     float64
+	SourceMemory   *uuid.UUID
+	SourceArtifact *uuid.UUID
+	CreatedAt      time.Time
+}
+
+func (q *Queries) UpsertRelation(ctx context.Context, arg UpsertRelationParams) (*UpsertRelationRow, error) {
 	row := q.db.QueryRow(ctx, upsertRelation,
 		arg.ScopeID,
 		arg.SubjectID,
@@ -307,7 +380,7 @@ func (q *Queries) UpsertRelation(ctx context.Context, arg UpsertRelationParams) 
 		arg.SourceMemory,
 		arg.SourceArtifact,
 	)
-	var i Relation
+	var i UpsertRelationRow
 	err := row.Scan(
 		&i.ID,
 		&i.ScopeID,
@@ -320,19 +393,4 @@ func (q *Queries) UpsertRelation(ctx context.Context, arg UpsertRelationParams) 
 		&i.CreatedAt,
 	)
 	return &i, err
-}
-
-const linkArtifactToEntity = `-- name: LinkArtifactToEntity :exec
-INSERT INTO artifact_entities (artifact_id, entity_id, role) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING
-`
-
-type LinkArtifactToEntityParams struct {
-	ArtifactID uuid.UUID
-	EntityID   uuid.UUID
-	Role       *string
-}
-
-func (q *Queries) LinkArtifactToEntity(ctx context.Context, arg LinkArtifactToEntityParams) error {
-	_, err := q.db.Exec(ctx, linkArtifactToEntity, arg.ArtifactID, arg.EntityID, arg.Role)
-	return err
 }

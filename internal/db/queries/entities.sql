@@ -16,20 +16,27 @@ FROM entities WHERE scope_id=$1 AND entity_type=$2 AND canonical=$3;
 -- name: LinkMemoryToEntity :exec
 INSERT INTO memory_entities (memory_id, entity_id, role) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING;
 
+-- name: LinkArtifactToEntity :exec
+INSERT INTO artifact_entities (artifact_id, entity_id, role) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING;
+
+-- name: DeleteArtifactEntityLinks :exec
+DELETE FROM artifact_entities WHERE artifact_id = $1;
+
 -- name: UpsertRelation :one
-INSERT INTO relations (scope_id, subject_id, predicate, object_id, confidence, source_memory)
-VALUES ($1,$2,$3,$4,$5,$6)
+INSERT INTO relations (scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact)
+VALUES ($1,$2,$3,$4,$5,$6,$7)
 ON CONFLICT (scope_id, subject_id, predicate, object_id)
-DO UPDATE SET confidence=EXCLUDED.confidence, source_memory=EXCLUDED.source_memory
-RETURNING id, scope_id, subject_id, predicate, object_id, confidence, source_memory, created_at;
+DO UPDATE SET confidence=EXCLUDED.confidence, source_memory=EXCLUDED.source_memory,
+              source_artifact=EXCLUDED.source_artifact
+RETURNING id, scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact, created_at;
 
 -- name: ListRelationsForEntity :many
-SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, created_at
+SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact, created_at
 FROM relations WHERE subject_id=$1 OR object_id=$1
 ORDER BY created_at;
 
 -- name: ListRelationsForEntityByPredicate :many
-SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, created_at
+SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact, created_at
 FROM relations
 WHERE (subject_id = $1 OR object_id = $1) AND predicate = $2
 ORDER BY created_at;
@@ -43,7 +50,7 @@ ORDER BY name
 LIMIT $3 OFFSET $4;
 
 -- name: ListRelationsByScope :many
-SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, created_at
+SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact, created_at
 FROM relations
 WHERE scope_id=$1
 ORDER BY created_at
