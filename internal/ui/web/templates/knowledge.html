@@ -22,8 +22,8 @@
   <h2>Upload Document</h2>
   {{if .UploadError}}<div class="alert alert-error">{{.UploadError}}</div>{{end}}
   <form method="POST" action="/ui/knowledge/upload" enctype="multipart/form-data">
-    <label>File (.txt, .md, .pdf, .docx)
-      <input type="file" name="file" accept=".txt,.md,.pdf,.docx" required>
+    <label>File (.txt, .md, .pdf, .docx, .pptx, .xlsx, .xls, .png, .jpg, .jpeg, .gif, .bmp, .webp)
+      <input type="file" name="file" accept=".txt,.md,.pdf,.docx,.pptx,.xlsx,.xls,.png,.jpg,.jpeg,.gif,.bmp,.webp" required>
     </label>
     <label>Scope
       <select name="scope" required>

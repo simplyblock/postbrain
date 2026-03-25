@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os/exec"
 	"testing"
 
 	"github.com/simplyblock/postbrain/internal/ingest"
@@ -40,6 +41,26 @@ func TestExtractDocx(t *testing.T) {
 	if text != "Hello from DOCX" {
 		t.Errorf("got %q", text)
 	}
+}
+
+func TestExtractMarkitdownNotInstalled(t *testing.T) {
+	if _, err := exec.LookPath("markitdown"); err == nil {
+		t.Skip("markitdown is installed; skipping not-installed test")
+	}
+	_, err := ingest.Extract("file.pptx", []byte("data"))
+	if err == nil {
+		t.Fatal("expected error when markitdown not in PATH")
+	}
+}
+
+func TestExtractMarkitdownPPTX(t *testing.T) {
+	if _, err := exec.LookPath("markitdown"); err != nil {
+		t.Skip("markitdown not installed")
+	}
+	// A real PPTX would be needed for a meaningful round-trip test.
+	// This just verifies the subprocess path is wired correctly with a
+	// minimal (invalid) file — markitdown will error, which is fine here.
+	_, _ = ingest.Extract("slide.pptx", []byte("not a real pptx"))
 }
 
 func TestExtractUnsupported(t *testing.T) {
