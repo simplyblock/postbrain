@@ -44,7 +44,13 @@
         <option value="procedural">procedural</option>
       </select>
     </label>
-    <label><input type="checkbox" name="auto_review"> Submit for review immediately</label>
+    <label>After upload
+      <select name="workflow">
+        <option value="draft">Save as draft</option>
+        <option value="review">Submit for review</option>
+        <option value="publish">Publish immediately</option>
+      </select>
+    </label>
     <div class="dialog-footer">
       <button type="button" class="secondary" onclick="document.getElementById('dlg-upload').close()">Cancel</button>
       <button type="submit">Upload</button>

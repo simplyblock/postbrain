@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 
@@ -103,8 +104,21 @@ func (e *OpenAIEmbedder) EmbedBatch(ctx context.Context, texts []string) ([][]fl
 	return results, nil
 }
 
+// openAIMaxBytes is a conservative byte-length guard (≈8 000 tokens × ~4 bytes/token).
+// The real limit is token-based but a byte check catches obviously oversized inputs
+// before they hit the API and return an opaque 400.
+const openAIMaxBytes = 32_000
+
 // embedBatchOnce makes a single POST request to the OpenAI embeddings endpoint.
 func (e *OpenAIEmbedder) embedBatchOnce(ctx context.Context, texts []string) ([][]float32, error) {
+	for i, t := range texts {
+		if t == "" {
+			return nil, fmt.Errorf("openai: input[%d] is empty", i)
+		}
+		if len(t) > openAIMaxBytes {
+			return nil, fmt.Errorf("openai: input[%d] too long (%d bytes, max ~%d)", i, len(t), openAIMaxBytes)
+		}
+	}
 	if e.cfg.RequestTimeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, e.cfg.RequestTimeout)
@@ -131,7 +145,8 @@ func (e *OpenAIEmbedder) embedBatchOnce(ctx context.Context, texts []string) ([]
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("openai: unexpected status %d", resp.StatusCode)
+		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("openai: unexpected status %d: %s", resp.StatusCode, bytes.TrimSpace(errBody))
 	}
 
 	var result openAIResponse

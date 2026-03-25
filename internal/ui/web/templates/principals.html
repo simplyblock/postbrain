@@ -1,5 +1,5 @@
 {{define "principals"}}
-<h1>Principals &amp; Scopes</h1>
+<h1>Principals</h1>
 
 <!-- ── Principals ─────────────────────────────────────────── -->
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem">
@@ -19,35 +19,6 @@
   </tr>
   {{else}}
   <tr><td colspan="4" class="muted">No principals.</td></tr>
-  {{end}}
-  </tbody>
-</table>
-
-<!-- ── Scopes ─────────────────────────────────────────────── -->
-<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem">
-  <h2 style="margin:0">Scopes</h2>
-  <button onclick="document.getElementById('dlg-scope').showModal()">+ New Scope</button>
-</div>
-{{if .ScopeFormError}}<div class="alert alert-error">{{.ScopeFormError}}</div>{{end}}
-<table>
-  <thead><tr><th>Kind</th><th>External ID</th><th>Name</th><th>Path</th><th>Created</th><th></th></tr></thead>
-  <tbody>
-  {{range .Scopes}}
-  <tr>
-    <td>{{.Kind}}</td>
-    <td class="mono">{{.ExternalID}}</td>
-    <td>{{.Name}}</td>
-    <td><code>{{.Path}}</code></td>
-    <td class="muted">{{timeAgo .CreatedAt}}</td>
-    <td>
-      <form method="POST" action="/ui/scopes/{{.ID}}/delete" style="display:inline"
-            onsubmit="return confirm('Delete scope {{.ExternalID}}?')">
-        <button type="submit" class="danger">Delete</button>
-      </form>
-    </td>
-  </tr>
-  {{else}}
-  <tr><td colspan="6" class="muted">No scopes.</td></tr>
   {{end}}
   </tbody>
 </table>
@@ -109,49 +80,6 @@
   </form>
 </dialog>
 
-<!-- ── Dialog: Create Scope ───────────────────────────────── -->
-<dialog id="dlg-scope">
-  <h2>Create Scope</h2>
-  <form method="POST" action="/ui/scopes">
-    <label>Kind
-      <select name="kind" required>
-        <option value="">— select —</option>
-        <option value="user">user</option>
-        <option value="project">project</option>
-        <option value="team">team</option>
-        <option value="department">department</option>
-        <option value="company">company</option>
-      </select>
-    </label>
-    <label>External ID
-      <input type="text" name="external_id" placeholder="e.g. acme/api" required>
-    </label>
-    <label>Name
-      <input type="text" name="name" placeholder="e.g. Acme API" required>
-    </label>
-    <label>Owner Principal
-      <select name="principal_id" required>
-        <option value="">— select —</option>
-        {{range .Principals}}
-        <option value="{{.ID}}">{{.DisplayName}} ({{.Kind}}: {{.Slug}})</option>
-        {{end}}
-      </select>
-    </label>
-    <label>Parent Scope (optional)
-      <select name="parent_id">
-        <option value="">— none —</option>
-        {{range .Scopes}}
-        <option value="{{.ID}}">{{.Kind}}: {{.ExternalID}}</option>
-        {{end}}
-      </select>
-    </label>
-    <div class="dialog-footer">
-      <button type="button" class="secondary" onclick="document.getElementById('dlg-scope').close()">Cancel</button>
-      <button type="submit">Create</button>
-    </div>
-  </form>
-</dialog>
-
 <!-- ── Dialog: Add Membership ─────────────────────────────── -->
 <dialog id="dlg-membership">
   <h2>Add Membership</h2>
@@ -189,6 +117,5 @@
 
 <!-- Re-open dialog if form error on redirect-back -->
 {{if .PrincipalFormError}}<script>document.getElementById('dlg-principal').showModal()</script>{{end}}
-{{if .ScopeFormError}}<script>document.getElementById('dlg-scope').showModal()</script>{{end}}
 {{if .MembershipFormError}}<script>document.getElementById('dlg-membership').showModal()</script>{{end}}
 {{end}}
