@@ -1,34 +1,126 @@
 {{define "graph"}}
-<h1>Entity Graph</h1>
-<p>Showing {{len .Entities}} entities and {{len .Relations}} relations for scope <code>{{.ScopeID}}</code>.</p>
-<table>
-  <thead><tr><th>Entity</th><th>Type</th><th>Relations</th></tr></thead>
-  <tbody>
-  {{range .Entities}}
-  <tr>
-    <td>{{.Name}}</td>
-    <td>{{.EntityType}}</td>
-    <td>{{index $.RelationCounts .ID}}</td>
-  </tr>
-  {{else}}
-  <tr><td colspan="3">No entities in this scope.</td></tr>
-  {{end}}
-  </tbody>
-</table>
-<h2>Relations</h2>
-<table>
-  <thead><tr><th>Subject</th><th>Predicate</th><th>Object</th><th>Confidence</th></tr></thead>
-  <tbody>
-  {{range .Relations}}
-  <tr>
-    <td>{{index $.EntityNames .SubjectID}}</td>
-    <td>{{.Predicate}}</td>
-    <td>{{index $.EntityNames .ObjectID}}</td>
-    <td>{{printf "%.2f" .Confidence}}</td>
-  </tr>
-  {{else}}
-  <tr><td colspan="4">No relations.</td></tr>
-  {{end}}
-  </tbody>
-</table>
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+  <h1 style="margin:0">Entity Graph</h1>
+  <form class="toolbar" method="GET" action="/ui/graph" style="margin:0">
+    <select name="scope_id" onchange="this.form.submit()">
+      {{range .Scopes}}
+      <option value="{{.ID}}"{{if eq $.ScopeID (printf "%s" .ID)}} selected{{end}}>{{.Kind}}:{{.ExternalID}} — {{.Name}}</option>
+      {{end}}
+    </select>
+  </form>
+</div>
+<p class="muted">{{.NodeCount}} entities · {{.EdgeCount}} relations</p>
+
+<div id="graph-container" style="width:100%;height:72vh;border:1px solid var(--border);border-radius:var(--border-radius);overflow:hidden;background:var(--card-background-color)"></div>
+
+<div id="tooltip" style="position:fixed;display:none;background:var(--card-background-color);border:1px solid var(--border);border-radius:var(--border-radius);padding:0.4rem 0.7rem;font-size:0.85rem;pointer-events:none;z-index:100;max-width:220px"></div>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+(function () {
+  const raw = {{.GraphJSON}};
+  if (!raw || !raw.nodes || raw.nodes.length === 0) return;
+
+  const nodes = raw.nodes.map(d => ({...d}));
+  const links = raw.links.map(d => ({...d}));
+
+  // ── colour by entity type ──────────────────────────────────
+  const types = [...new Set(nodes.map(n => n.type))].sort();
+  const palette = d3.schemeTableau10;
+  const colour = d => palette[types.indexOf(d.type) % palette.length];
+
+  // ── SVG setup ─────────────────────────────────────────────
+  const container = document.getElementById("graph-container");
+  const W = container.clientWidth, H = container.clientHeight;
+
+  const svg = d3.select(container).append("svg")
+    .attr("width", W).attr("height", H);
+
+  // zoom/pan
+  const g = svg.append("g");
+  svg.call(d3.zoom().scaleExtent([0.1, 8]).on("zoom", e => g.attr("transform", e.transform)));
+
+  // arrow marker
+  svg.append("defs").append("marker")
+    .attr("id", "arrow")
+    .attr("viewBox", "0 -4 8 8")
+    .attr("refX", 18).attr("refY", 0)
+    .attr("markerWidth", 6).attr("markerHeight", 6)
+    .attr("orient", "auto")
+    .append("path")
+    .attr("d", "M0,-4L8,0L0,4")
+    .attr("fill", "#999");
+
+  // ── simulation ────────────────────────────────────────────
+  const sim = d3.forceSimulation(nodes)
+    .force("link",   d3.forceLink(links).id(d => d.id).distance(90).strength(0.4))
+    .force("charge", d3.forceManyBody().strength(-200))
+    .force("center", d3.forceCenter(W / 2, H / 2))
+    .force("x",      d3.forceX(W / 2).strength(0.04))
+    .force("y",      d3.forceY(H / 2).strength(0.04))
+    .force("collide",d3.forceCollide(22));
+
+  // ── edges ─────────────────────────────────────────────────
+  const link = g.append("g").attr("stroke", "#999").attr("stroke-opacity", 0.5)
+    .selectAll("line").data(links).join("line")
+    .attr("stroke-width", d => 1 + d.confidence)
+    .attr("marker-end", "url(#arrow)");
+
+  // edge labels (only show if < 200 edges to keep it readable)
+  const linkLabel = links.length < 200
+    ? g.append("g").attr("font-size", 9).attr("fill", "#888").attr("text-anchor", "middle")
+        .selectAll("text").data(links).join("text").text(d => d.predicate)
+    : null;
+
+  // ── nodes ─────────────────────────────────────────────────
+  const tooltip = document.getElementById("tooltip");
+
+  const node = g.append("g").attr("stroke", "#fff").attr("stroke-width", 1.5)
+    .selectAll("circle").data(nodes).join("circle")
+    .attr("r", 10)
+    .attr("fill", colour)
+    .on("mouseover", (event, d) => {
+      tooltip.style.display = "block";
+      tooltip.innerHTML = `<strong>${d.name}</strong><br><span style="opacity:.7">${d.type}</span>`;
+    })
+    .on("mousemove", event => {
+      tooltip.style.left = (event.clientX + 14) + "px";
+      tooltip.style.top  = (event.clientY - 28) + "px";
+    })
+    .on("mouseout", () => { tooltip.style.display = "none"; })
+    .call(d3.drag()
+      .on("start", (event, d) => { if (!event.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on("drag",  (event, d) => { d.fx = event.x; d.fy = event.y; })
+      .on("end",   (event, d) => { if (!event.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }));
+
+  // node labels
+  const label = g.append("g").attr("font-size", 11).attr("fill", "currentColor")
+    .attr("pointer-events", "none")
+    .selectAll("text").data(nodes).join("text")
+    .attr("dy", "0.35em").attr("x", 13)
+    .text(d => d.name.length > 22 ? d.name.slice(0, 20) + "…" : d.name);
+
+  // ── legend ────────────────────────────────────────────────
+  const legend = svg.append("g").attr("transform", "translate(14,14)");
+  types.forEach((t, i) => {
+    const row = legend.append("g").attr("transform", `translate(0,${i * 18})`);
+    row.append("circle").attr("r", 6).attr("cx", 6).attr("cy", 6).attr("fill", palette[i % palette.length]);
+    row.append("text").attr("x", 16).attr("y", 10).attr("font-size", 11).attr("fill", "currentColor").text(t);
+  });
+
+  // ── tick ──────────────────────────────────────────────────
+  sim.on("tick", () => {
+    link
+      .attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+      .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+
+    if (linkLabel) linkLabel
+      .attr("x", d => (d.source.x + d.target.x) / 2)
+      .attr("y", d => (d.source.y + d.target.y) / 2);
+
+    node.attr("cx", d => d.x).attr("cy", d => d.y);
+    label.attr("x", d => d.x + 13).attr("y", d => d.y);
+  });
+})();
+</script>
 {{end}}
