@@ -2,105 +2,74 @@
 package ingest
 
 import (
-	"archive/zip"
-	"bytes"
-	"encoding/xml"
-	"errors"
-	"fmt"
-	"io"
-	"path/filepath"
-	"strings"
-
-	dslipakpdf "github.com/dslipak/pdf"
+    "errors"
+    "fmt"
+    "os"
+    "os/exec"
+    "path/filepath"
+    "strings"
 )
 
 // ErrUnsupportedFormat is returned when the file extension is not supported.
 var ErrUnsupportedFormat = errors.New("ingest: unsupported file format")
 
+// markitdownExts lists file extensions delegated to the markitdown CLI.
+var markitdownExts = map[string]bool{
+    ".pptx": true,
+    ".docx": true,
+    ".xlsx": true,
+    ".xls":  true,
+    ".png":  true,
+    ".jpg":  true,
+    ".jpeg": true,
+    ".gif":  true,
+    ".bmp":  true,
+    ".webp": true,
+    ".pdf":  true,
+}
+
 // Extract extracts plain text from file data based on the filename extension.
-// Supported extensions: .txt, .md, .pdf, .docx
+// Supported natively: .txt, .md, .pdf, .docx
+// Delegated to markitdown CLI: .pptx, .xlsx, .xls, .png, .jpg, .jpeg, .gif, .bmp, .webp
 func Extract(filename string, data []byte) (string, error) {
-	ext := strings.ToLower(filepath.Ext(filename))
-	switch ext {
-	case ".txt", ".md":
-		return string(data), nil
-	case ".pdf":
-		return extractPDF(data)
-	case ".docx":
-		return extractDOCX(data)
-	default:
-		return "", fmt.Errorf("%w: %s", ErrUnsupportedFormat, ext)
-	}
+    ext := strings.ToLower(filepath.Ext(filename))
+    switch ext {
+    case ".txt", ".md":
+        return string(data), nil
+    default:
+        if markitdownExts[ext] {
+            return extractViaMarkitdown(data, ext)
+        }
+        return "", fmt.Errorf("%w: %s", ErrUnsupportedFormat, ext)
+    }
 }
 
-func extractPDF(data []byte) (string, error) {
-	r, err := dslipakpdf.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		return "", fmt.Errorf("ingest: open pdf: %w", err)
-	}
-	var buf strings.Builder
-	for i := 1; i <= r.NumPage(); i++ {
-		text, err := r.Page(i).GetPlainText(nil)
-		if err != nil || text == "" {
-			continue
-		}
-		if buf.Len() > 0 {
-			buf.WriteByte('\n')
-		}
-		buf.WriteString(text)
-	}
-	return strings.TrimSpace(buf.String()), nil
-}
+// extractViaMarkitdown writes data to a temp file and invokes the markitdown
+// CLI, returning its stdout as markdown text.
+func extractViaMarkitdown(data []byte, ext string) (string, error) {
+    tmp, err := os.CreateTemp("", "postbrain-*"+ext)
+    if err != nil {
+        return "", fmt.Errorf("ingest: markitdown temp file: %w", err)
+    }
+    defer os.Remove(tmp.Name())
 
-func extractDOCX(data []byte) (string, error) {
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		return "", fmt.Errorf("ingest: open docx: %w", err)
-	}
-	for _, f := range zr.File {
-		if f.Name != "word/document.xml" {
-			continue
-		}
-		rc, err := f.Open()
-		if err != nil {
-			return "", fmt.Errorf("ingest: open document.xml: %w", err)
-		}
-		defer rc.Close()
-		content, err := io.ReadAll(rc)
-		if err != nil {
-			return "", fmt.Errorf("ingest: read document.xml: %w", err)
-		}
-		return extractDocxText(content), nil
-	}
-	return "", fmt.Errorf("ingest: word/document.xml not found in docx archive")
-}
+    if _, err := tmp.Write(data); err != nil {
+        tmp.Close()
+        return "", fmt.Errorf("ingest: markitdown write temp: %w", err)
+    }
+    tmp.Close()
 
-// extractDocxText walks the XML token stream and collects text from <w:t> elements,
-// inserting newlines between <w:p> paragraphs.
-func extractDocxText(xmlData []byte) string {
-	dec := xml.NewDecoder(bytes.NewReader(xmlData))
-	var buf strings.Builder
-	inT := false
-	for {
-		tok, err := dec.Token()
-		if err != nil {
-			break
-		}
-		switch t := tok.(type) {
-		case xml.StartElement:
-			if t.Name.Local == "p" && buf.Len() > 0 {
-				buf.WriteByte('\n')
-			}
-			inT = t.Name.Local == "t"
-		case xml.EndElement:
-			if t.Name.Local == "t" {
-				inT = false
-			}
-		case xml.CharData:
-			if inT {
-				buf.Write(t)
-			}
-		}
-	}
-	return strings.TrimSpace(buf.String())
+    out, err := exec.Command("markitdown", tmp.Name()).Output()
+    if err != nil {
+        var exitErr *exec.ExitError
+        if errors.As(err, &exitErr) {
+            return "", fmt.Errorf("ingest: markitdown: %w: %s", err, exitErr.Stderr)
+        }
+        if errors.Is(err, exec.ErrNotFound) {
+            return "", fmt.Errorf("ingest: markitdown not found in PATH; install with: pip install markitdown")
+        }
+        return "", fmt.Errorf("ingest: markitdown: %w", err)
+    }
+
+    return strings.TrimSpace(string(out)), nil
 }
