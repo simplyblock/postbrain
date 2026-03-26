@@ -3,6 +3,7 @@
 package knowledge
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -305,11 +306,17 @@ func (s *Store) linkExtractedEntities(ctx context.Context, artifactID, scopeID u
 		siblings, err := db.ListEntitiesByCanonical(ctx, s.pool, scopeID, e.Canonical, e.EntityType)
 		if err == nil {
 			for _, sib := range siblings {
+				// Always store with the lesser ID as subject to avoid
+				// creating both (A→B) and (B→A) for the same pair.
+				subj, obj := upserted.ID, sib.ID
+				if bytes.Compare(subj[:], obj[:]) > 0 {
+					subj, obj = obj, subj
+				}
 				_, _ = db.UpsertRelation(ctx, s.pool, &db.Relation{
 					ScopeID:    scopeID,
-					SubjectID:  upserted.ID,
+					SubjectID:  subj,
 					Predicate:  "same_as",
-					ObjectID:   sib.ID,
+					ObjectID:   obj,
 					Confidence: 1.0,
 				})
 			}
