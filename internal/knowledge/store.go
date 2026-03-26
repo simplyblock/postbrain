@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,6 +29,7 @@ var (
 type embeddingService interface {
 	EmbedText(ctx context.Context, text string) ([]float32, error)
 	Summarize(ctx context.Context, text string) (string, error)
+	Analyze(ctx context.Context, text string) (*embedding.DocumentAnalysis, error)
 	TextEmbedder() embeddingIface
 }
 
@@ -49,6 +52,10 @@ func (a *embeddingServiceAdapter) EmbedText(ctx context.Context, text string) ([
 
 func (a *embeddingServiceAdapter) Summarize(ctx context.Context, text string) (string, error) {
 	return a.svc.Summarize(ctx, text)
+}
+
+func (a *embeddingServiceAdapter) Analyze(ctx context.Context, text string) (*embedding.DocumentAnalysis, error) {
+	return a.svc.Analyze(ctx, text)
 }
 
 func (a *embeddingServiceAdapter) TextEmbedder() embeddingIface {
@@ -126,10 +133,9 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.KnowledgeArt
 		input.ReviewRequired = 1
 	}
 
-	if input.Summary == nil {
-		if sum := s.summarizeContent(ctx, input.Content); sum != "" {
-			input.Summary = &sum
-		}
+	summary, entities := s.analyzeContent(ctx, input.Content, input.SourceRef)
+	if input.Summary == nil && summary != "" {
+		input.Summary = &summary
 	}
 
 	status := "draft"
@@ -174,10 +180,8 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.KnowledgeArt
 		return nil, fmt.Errorf("knowledge: create: %w", err)
 	}
 
-	// Best-effort: extract entities and relations from the artifact content.
-	if s.pool != nil {
-		s.extractAndLinkEntities(ctx, created.ID, input.OwnerScopeID, input.Content, input.SourceRef)
-	}
+	// Best-effort: link extracted entities and their co-occurrence relations.
+	s.linkExtractedEntities(ctx, created.ID, input.OwnerScopeID, entities)
 
 	return created, nil
 }
@@ -225,20 +229,64 @@ func (s *Store) Update(ctx context.Context, id, callerID uuid.UUID, title, conte
 	}
 
 	// Re-extract entities from updated content — best-effort, non-fatal.
-	if s.pool != nil {
-		s.extractAndLinkEntities(ctx, id, existing.OwnerScopeID, content, existing.SourceRef)
-	}
+	_, entities := s.analyzeContent(ctx, content, existing.SourceRef)
+	s.linkExtractedEntities(ctx, id, existing.OwnerScopeID, entities)
 
 	return updated, nil
 }
 
-// extractAndLinkEntities runs heuristic entity extraction on artifact content,
-// upserts each entity, links it to the artifact, and creates co_occurs_with
-// relations between all co-extracted entities. All errors are silently dropped —
-// graph population is best-effort and must never block a write.
-func (s *Store) extractAndLinkEntities(ctx context.Context, artifactID, scopeID uuid.UUID, content string, sourceRef *string) {
-	entities := graph.ExtractEntitiesFromMemory(content, sourceRef)
-	if len(entities) == 0 {
+// analyzeContent attempts a combined LLM summarize+extract call. On success it
+// returns the generated summary and the LLM-extracted entities. When no LLM
+// is configured, or when the call fails, it falls back to extractive
+// summarization (knowledge.Summarize) and heuristic entity extraction
+// (graph.ExtractEntitiesFromMemory). All errors from the LLM path are silently
+// swallowed so a missing or misbehaving model never blocks a write.
+func (s *Store) analyzeContent(ctx context.Context, content string, sourceRef *string) (string, []*db.Entity) {
+	if s.svc != nil {
+		analysis, err := s.svc.Analyze(ctx, content)
+		if err != nil {
+			slog.Warn("knowledge: analyze failed, falling back to heuristics", "error", err)
+		} else if analysis != nil && analysis.Summary != "" {
+			entities := make([]*db.Entity, 0, len(analysis.Entities))
+			for _, e := range analysis.Entities {
+				if e.Type == "" || e.Canonical == "" {
+					continue
+				}
+				name := strings.ToLower(e.Name)
+				if name == "" {
+					name = strings.ToLower(e.Canonical)
+				}
+				entities = append(entities, &db.Entity{
+					EntityType: e.Type,
+					Name:       name,
+					Canonical:  strings.ToLower(e.Canonical),
+				})
+			}
+			return analysis.Summary, entities
+		}
+	}
+
+	// Fallback: summarize and extract separately.
+	var summary string
+	if s.svc != nil {
+		if sum, err := s.svc.Summarize(ctx, content); err == nil {
+			summary = sum
+		}
+	}
+	if summary == "" {
+		if sum := Summarize(content, 150); sum != content {
+			summary = sum
+		}
+	}
+	return summary, graph.ExtractEntitiesFromMemory(content, sourceRef)
+}
+
+// linkExtractedEntities upserts each entity into the graph, links it to the
+// artifact, and creates co_occurs_with relations between all co-extracted
+// entities. All errors are silently dropped — graph population is best-effort
+// and must never block a write.
+func (s *Store) linkExtractedEntities(ctx context.Context, artifactID, scopeID uuid.UUID, entities []*db.Entity) {
+	if len(entities) == 0 || s.pool == nil {
 		return
 	}
 
@@ -275,24 +323,6 @@ func (s *Store) GetByID(ctx context.Context, id uuid.UUID) (*db.KnowledgeArtifac
 		return nil, fmt.Errorf("knowledge: get by id: %w", err)
 	}
 	return a, nil
-}
-
-// summarizeContent attempts an AI-generated summary via the embedding service.
-// Falls back to extractive summarization when no generation model is configured
-// or when the AI call fails. Returns an empty string only if the content is
-// already short enough not to need a summary.
-func (s *Store) summarizeContent(ctx context.Context, content string) string {
-	if s.svc != nil {
-		if sum, err := s.svc.Summarize(ctx, content); err == nil && sum != "" {
-			return sum
-		}
-	}
-	// Extractive fallback.
-	sum := Summarize(content, 150)
-	if sum == content {
-		return "" // already short; no summary needed
-	}
-	return sum
 }
 
 // embedContent embeds text and returns the vector plus the model ID (if any).

@@ -125,24 +125,26 @@ func ExtractEntitiesFromMemory(content string, sourceRef *string) []*db.Entity {
 		if idx := strings.LastIndex(rest, ":"); idx != -1 {
 			rest = rest[:idx]
 		}
-		if rest != "" && !seen[rest] {
-			seen[rest] = true
+		canon := strings.ToLower(rest)
+		if canon != "" && !seen[canon] {
+			seen[canon] = true
 			entities = append(entities, &db.Entity{
 				EntityType: "file",
-				Name:       rest,
-				Canonical:  rest,
+				Name:       canon,
+				Canonical:  canon,
 			})
 		}
 	}
 
 	// PR entities from content.
 	for _, match := range prPattern.FindAllString(content, -1) {
-		if !seen[match] {
-			seen[match] = true
+		canon := strings.ToLower(match)
+		if !seen[canon] {
+			seen[canon] = true
 			entities = append(entities, &db.Entity{
 				EntityType: "pr",
-				Name:       match,
-				Canonical:  match,
+				Name:       canon,
+				Canonical:  canon,
 			})
 		}
 	}
@@ -153,12 +155,13 @@ func ExtractEntitiesFromMemory(content string, sourceRef *string) []*db.Entity {
 		if conceptCount >= 10 {
 			break
 		}
-		if !seen[match] {
-			seen[match] = true
+		canon := strings.ToLower(match)
+		if !seen[canon] {
+			seen[canon] = true
 			entities = append(entities, &db.Entity{
 				EntityType: "concept",
-				Name:       match,
-				Canonical:  match,
+				Name:       canon,
+				Canonical:  canon,
 			})
 			conceptCount++
 		}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/embedding"
 )
 
 // fakeEmbedder implements embeddingService for unit tests.
@@ -21,6 +22,10 @@ func (f *fakeEmbedder) EmbedText(_ context.Context, _ string) ([]float32, error)
 
 func (f *fakeEmbedder) Summarize(_ context.Context, _ string) (string, error) {
 	return "", nil // no AI summarizer in unit tests; extractive fallback is used
+}
+
+func (f *fakeEmbedder) Analyze(_ context.Context, _ string) (*embedding.DocumentAnalysis, error) {
+	return nil, nil // no AI analysis in unit tests; heuristic fallback is used
 }
 
 func (f *fakeEmbedder) TextEmbedder() embeddingIface {

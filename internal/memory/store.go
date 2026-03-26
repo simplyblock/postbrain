@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -210,6 +211,7 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 	linkedEntityIDs := make(map[uuid.UUID]struct{})
 
 	for _, canonical := range input.Entities {
+		canonical = strings.ToLower(canonical)
 		entity := &db.Entity{
 			ScopeID:    input.ScopeID,
 			EntityType: "concept",

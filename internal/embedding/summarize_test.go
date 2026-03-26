@@ -49,7 +49,7 @@ func TestOllamaSummarizer_Summarize(t *testing.T) {
 func TestOpenAISummarizer_Summarize(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/chat/completions" {
+		if r.URL.Path != "/chat/completions" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
 		var req struct {
@@ -113,5 +113,140 @@ func TestEmbeddingService_SummarizeDelegates(t *testing.T) {
 	}
 	if got != "delegated summary" {
 		t.Errorf("got %q", got)
+	}
+}
+
+func TestOllamaSummarizer_Analyze(t *testing.T) {
+	t.Parallel()
+	analysis := map[string]any{
+		"summary": "A document about authentication.",
+		"entities": []map[string]any{
+			{"type": "concept", "name": "Authentication", "canonical": "authentication"},
+			{"type": "technology", "name": "PostgreSQL", "canonical": "postgresql"},
+			{"type": "tag", "name": "security", "canonical": "security"},
+		},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Format string `json:"format"`
+			Prompt string `json:"prompt"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode body: %v", err)
+		}
+		if req.Format != "json" {
+			t.Errorf("expected format=json, got %q", req.Format)
+		}
+		if !strings.Contains(req.Prompt, "entities") {
+			t.Errorf("expected analyze prompt, got: %q", req.Prompt)
+		}
+		raw, _ := json.Marshal(analysis)
+		json.NewEncoder(w).Encode(map[string]any{"response": string(raw)})
+	}))
+	defer srv.Close()
+
+	cfg := &config.EmbeddingConfig{OllamaURL: srv.URL}
+	s := NewOllamaSummarizer(cfg, "llama3")
+	got, err := s.Analyze(context.Background(), "Document about auth and PostgreSQL.")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Summary != "A document about authentication." {
+		t.Errorf("unexpected summary: %q", got.Summary)
+	}
+	if len(got.Entities) != 3 {
+		t.Errorf("expected 3 entities, got %d", len(got.Entities))
+	}
+	if got.Entities[0].Type != "concept" || got.Entities[0].Canonical != "authentication" {
+		t.Errorf("unexpected first entity: %+v", got.Entities[0])
+	}
+}
+
+func TestOpenAISummarizer_Analyze(t *testing.T) {
+	t.Parallel()
+	analysis := map[string]any{
+		"summary": "An article about distributed systems.",
+		"entities": []map[string]any{
+			{"type": "topic", "name": "Distributed Systems", "canonical": "distributed_systems"},
+			{"type": "technology", "name": "Kafka", "canonical": "kafka"},
+			{"type": "person", "name": "Leslie Lamport", "canonical": "leslie_lamport"},
+		},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			ResponseFormat map[string]string `json:"response_format"`
+			Messages       []struct {
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode body: %v", err)
+		}
+		if req.ResponseFormat["type"] != "json_object" {
+			t.Errorf("expected response_format json_object, got %v", req.ResponseFormat)
+		}
+		if len(req.Messages) == 0 || !strings.Contains(req.Messages[0].Content, "entities") {
+			t.Errorf("expected analyze prompt in message")
+		}
+		raw, _ := json.Marshal(analysis)
+		json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]any{"content": string(raw)}},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	cfg := &config.EmbeddingConfig{OpenAIAPIKey: "test-key"}
+	s := NewOpenAISummarizer(cfg, "gpt-4o-mini", srv.URL)
+	got, err := s.Analyze(context.Background(), "Article about distributed systems.")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Summary != "An article about distributed systems." {
+		t.Errorf("unexpected summary: %q", got.Summary)
+	}
+	if len(got.Entities) != 3 {
+		t.Errorf("expected 3 entities, got %d", len(got.Entities))
+	}
+	if got.Entities[2].Type != "person" || got.Entities[2].Canonical != "leslie_lamport" {
+		t.Errorf("unexpected third entity: %+v", got.Entities[2])
+	}
+}
+
+func TestEmbeddingService_AnalyzeNoModel(t *testing.T) {
+	t.Parallel()
+	svc := &EmbeddingService{} // no summarizer configured
+	got, err := svc.Analyze(context.Background(), "Some text.")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil analysis when no summarizer configured, got %+v", got)
+	}
+}
+
+func TestEmbeddingService_AnalyzeDelegates(t *testing.T) {
+	t.Parallel()
+	analysis := map[string]any{
+		"summary":  "Delegated analysis.",
+		"entities": []map[string]any{{"type": "tag", "name": "test", "canonical": "test"}},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := json.Marshal(analysis)
+		json.NewEncoder(w).Encode(map[string]any{"response": string(raw)})
+	}))
+	defer srv.Close()
+
+	cfg := &config.EmbeddingConfig{OllamaURL: srv.URL}
+	svc := &EmbeddingService{
+		summarizer: NewOllamaSummarizer(cfg, "llama3"),
+	}
+	got, err := svc.Analyze(context.Background(), "text")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got == nil || got.Summary != "Delegated analysis." {
+		t.Errorf("unexpected result: %+v", got)
 	}
 }
