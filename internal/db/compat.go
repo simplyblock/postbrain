@@ -845,6 +845,22 @@ func ListRelationsForEntity(ctx context.Context, pool *pgxpool.Pool, entityID uu
 	return out, nil
 }
 
+// ListEntitiesByCanonical returns all entities in a scope that share a canonical
+// but have a different entity_type than excludeType. Used to find siblings for
+// same_as relation creation.
+func ListEntitiesByCanonical(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, canonical, excludeType string) ([]*Entity, error) {
+	q := New(pool)
+	es, err := q.ListEntitiesByCanonical(ctx, ListEntitiesByCanonicalParams{
+		ScopeID:    scopeID,
+		Canonical:  canonical,
+		EntityType: excludeType,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("db: list entities by canonical: %w", err)
+	}
+	return es, nil
+}
+
 // ListEntitiesByScope returns entities in a scope.
 func ListEntitiesByScope(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, entityType string, limit, offset int) ([]*Entity, error) {
 	q := New(pool)

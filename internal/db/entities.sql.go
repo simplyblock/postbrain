@@ -82,6 +82,50 @@ func (q *Queries) LinkMemoryToEntity(ctx context.Context, arg LinkMemoryToEntity
 	return err
 }
 
+const listEntitiesByCanonical = `-- name: ListEntitiesByCanonical :many
+SELECT id, scope_id, entity_type, name, canonical, meta,
+       embedding, embedding_model_id, created_at, updated_at
+FROM entities
+WHERE scope_id=$1 AND canonical=$2 AND entity_type != $3
+`
+
+type ListEntitiesByCanonicalParams struct {
+	ScopeID    uuid.UUID
+	Canonical  string
+	EntityType string
+}
+
+func (q *Queries) ListEntitiesByCanonical(ctx context.Context, arg ListEntitiesByCanonicalParams) ([]*Entity, error) {
+	rows, err := q.db.Query(ctx, listEntitiesByCanonical, arg.ScopeID, arg.Canonical, arg.EntityType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*Entity{}
+	for rows.Next() {
+		var i Entity
+		if err := rows.Scan(
+			&i.ID,
+			&i.ScopeID,
+			&i.EntityType,
+			&i.Name,
+			&i.Canonical,
+			&i.Meta,
+			&i.Embedding,
+			&i.EmbeddingModelID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEntitiesByScope = `-- name: ListEntitiesByScope :many
 SELECT id, scope_id, entity_type, name, canonical, meta,
        embedding, embedding_model_id, created_at, updated_at

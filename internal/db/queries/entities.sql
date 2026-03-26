@@ -41,6 +41,12 @@ FROM relations
 WHERE (subject_id = $1 OR object_id = $1) AND predicate = $2
 ORDER BY created_at;
 
+-- name: ListEntitiesByCanonical :many
+SELECT id, scope_id, entity_type, name, canonical, meta,
+       embedding, embedding_model_id, created_at, updated_at
+FROM entities
+WHERE scope_id=$1 AND canonical=$2 AND entity_type != $3;
+
 -- name: ListEntitiesByScope :many
 SELECT id, scope_id, entity_type, name, canonical, meta,
        embedding, embedding_model_id, created_at, updated_at

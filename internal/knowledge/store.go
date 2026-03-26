@@ -299,6 +299,21 @@ func (s *Store) linkExtractedEntities(ctx context.Context, artifactID, scopeID u
 		}
 		_ = db.LinkArtifactToEntity(ctx, s.pool, artifactID, upserted.ID, "related")
 		linkedIDs = append(linkedIDs, upserted.ID)
+
+		// Connect to sibling entities that share the same canonical but a
+		// different type (e.g. concept:postgresql ↔ technology:postgresql).
+		siblings, err := db.ListEntitiesByCanonical(ctx, s.pool, scopeID, e.Canonical, e.EntityType)
+		if err == nil {
+			for _, sib := range siblings {
+				_, _ = db.UpsertRelation(ctx, s.pool, &db.Relation{
+					ScopeID:    scopeID,
+					SubjectID:  upserted.ID,
+					Predicate:  "same_as",
+					ObjectID:   sib.ID,
+					Confidence: 1.0,
+				})
+			}
+		}
 	}
 
 	artID := artifactID
