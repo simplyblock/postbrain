@@ -51,7 +51,7 @@ func TestExtractEntitiesFromMemory_PascalCase(t *testing.T) {
 	for _, e := range entities {
 		types[e.Canonical] = true
 	}
-	if !types["UserRepository"] && !types["AuthService"] {
+	if !types["userrepository"] && !types["authservice"] {
 		t.Fatalf("expected concept entities for PascalCase words, got %+v", entities)
 	}
 }

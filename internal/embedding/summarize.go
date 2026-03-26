@@ -12,9 +12,38 @@ import (
 
 const summarizePrompt = "Summarize the following document in 3-5 sentences, capturing the main topic and key points. Output only the summary text with no preamble.\n\nDocument:\n"
 
-// Summarizer generates a human-readable text summary of a document.
+const analyzePrompt = `Analyze the following document and return a JSON object with exactly two fields:
+
+"summary": a 3-5 sentence summary capturing the main topic and key points.
+
+"entities": an array of up to 20 objects extracted from the document. Each object has:
+  "type": one of concept | technology | topic | person | file | pr | tag
+  "name": human-readable display name
+  "canonical": lowercase normalized identifier (use underscores for spaces; for pr use "pr:N"; for file use the path as-is)
+
+Output only raw JSON — no markdown, no code fences, no preamble.
+
+Document:
+`
+
+// AnalysedEntity is a single entity extracted by the LLM during document analysis.
+type AnalysedEntity struct {
+	Type      string `json:"type"`      // concept|technology|topic|person|file|pr|tag
+	Name      string `json:"name"`
+	Canonical string `json:"canonical"`
+}
+
+// DocumentAnalysis is the structured result of a combined summarize+extract LLM call.
+type DocumentAnalysis struct {
+	Summary  string           `json:"summary"`
+	Entities []AnalysedEntity `json:"entities"`
+}
+
+// Summarizer generates a human-readable text summary of a document and can
+// also perform a combined analysis that extracts entities alongside the summary.
 type Summarizer interface {
 	Summarize(ctx context.Context, text string) (string, error)
+	Analyze(ctx context.Context, text string) (*DocumentAnalysis, error)
 }
 
 // OllamaSummarizer calls the Ollama /api/generate endpoint to produce summaries.
@@ -71,6 +100,56 @@ func (s *OllamaSummarizer) Summarize(ctx context.Context, text string) (string, 
 	return result.Response, nil
 }
 
+// Analyze sends the document to Ollama with JSON mode enabled and returns a
+// combined summary and entity list.
+func (s *OllamaSummarizer) Analyze(ctx context.Context, text string) (*DocumentAnalysis, error) {
+	if s.cfg.RequestTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.cfg.RequestTimeout)
+		defer cancel()
+	}
+
+	body, err := json.Marshal(map[string]any{
+		"model":  s.modelSlug,
+		"prompt": analyzePrompt + text,
+		"stream": false,
+		"format": "json",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("ollama analyze: marshal: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		s.cfg.OllamaURL+"/api/generate", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("ollama analyze: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("ollama analyze: do request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ollama analyze: unexpected status %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Response string `json:"response"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("ollama analyze: decode response: %w", err)
+	}
+
+	var analysis DocumentAnalysis
+	if err := json.Unmarshal([]byte(result.Response), &analysis); err != nil {
+		return nil, fmt.Errorf("ollama analyze: parse JSON: %w", err)
+	}
+	return &analysis, nil
+}
+
 // OpenAISummarizer calls the OpenAI-compatible /v1/chat/completions endpoint to produce summaries.
 type OpenAISummarizer struct {
 	cfg       *config.EmbeddingConfig
@@ -107,7 +186,7 @@ func (s *OpenAISummarizer) Summarize(ctx context.Context, text string) (string, 
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		s.baseURL+"/v1/chat/completions", bytes.NewReader(body))
+		s.baseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("openai summarize: build request: %w", err)
 	}
@@ -138,4 +217,64 @@ func (s *OpenAISummarizer) Summarize(ctx context.Context, text string) (string, 
 		return "", fmt.Errorf("openai summarize: no choices returned")
 	}
 	return result.Choices[0].Message.Content, nil
+}
+
+// Analyze sends the document to the OpenAI chat completions endpoint using
+// JSON mode and returns a combined summary and entity list.
+func (s *OpenAISummarizer) Analyze(ctx context.Context, text string) (*DocumentAnalysis, error) {
+	if s.cfg.RequestTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.cfg.RequestTimeout)
+		defer cancel()
+	}
+
+	body, err := json.Marshal(map[string]any{
+		"model": s.modelSlug,
+		"messages": []map[string]string{
+			{"role": "user", "content": analyzePrompt + text},
+		},
+		"max_tokens":      1000,
+		"response_format": map[string]string{"type": "json_object"},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("openai analyze: marshal: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		s.baseURL+"/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("openai analyze: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+s.cfg.OpenAIAPIKey)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("openai analyze: do request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("openai analyze: unexpected status %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("openai analyze: decode response: %w", err)
+	}
+	if len(result.Choices) == 0 {
+		return nil, fmt.Errorf("openai analyze: no choices returned")
+	}
+
+	var analysis DocumentAnalysis
+	if err := json.Unmarshal([]byte(result.Choices[0].Message.Content), &analysis); err != nil {
+		return nil, fmt.Errorf("openai analyze: parse JSON: %w", err)
+	}
+	return &analysis, nil
 }

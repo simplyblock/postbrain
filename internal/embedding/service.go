@@ -72,6 +72,16 @@ func (s *EmbeddingService) Summarize(ctx context.Context, text string) (string, 
 	return s.summarizer.Summarize(ctx, text)
 }
 
+// Analyze performs a combined summarize+entity-extraction call using the
+// configured summary model. Returns nil, nil when no summary model is configured,
+// allowing callers to fall back to heuristic extraction.
+func (s *EmbeddingService) Analyze(ctx context.Context, text string) (*DocumentAnalysis, error) {
+	if s.summarizer == nil {
+		return nil, nil
+	}
+	return s.summarizer.Analyze(ctx, text)
+}
+
 // TextEmbedder returns the underlying text Embedder.
 func (s *EmbeddingService) TextEmbedder() Embedder { return s.text }
 
