@@ -10,7 +10,7 @@ import (
 func TestScoreFormula(t *testing.T) {
 	t.Parallel()
 
-	// Scoring: vec=0.50, bm25=0.20, importance=0.20, recency=0.10
+	// Scoring: vec=0.50, bm25=0.10, trgm=0.10, importance=0.20, recency=0.10
 	// importance = min(1.0, invocationCount / 100.0)
 	// recency weight = 1.0 (fixed for skills)
 
@@ -19,14 +19,14 @@ func TestScoreFormula(t *testing.T) {
 	}
 	vecScore := 0.8
 	bm25Score := 0.6
+	trgmScore := 0.0
 	invocations := skill.InvocationCount
 
 	importance := math.Min(1.0, float64(invocations)/100.0)
 	recency := 1.0
 
-	got := computeSkillScore(vecScore, bm25Score, importance, recency)
-	want := 0.50*vecScore + 0.20*bm25Score + 0.20*importance + 0.10*recency
-	// want = 0.40 + 0.12 + 0.10 + 0.10 = 0.72
+	got := computeSkillScore(vecScore, bm25Score, trgmScore, importance, recency)
+	want := 0.50*vecScore + 0.10*bm25Score + 0.10*trgmScore + 0.20*importance + 0.10*recency
 
 	if math.Abs(got-want) > 1e-9 {
 		t.Errorf("score mismatch: got %f, want %f", got, want)
@@ -45,8 +45,8 @@ func TestScoreFormula_MaxImportance(t *testing.T) {
 func TestScoreFormula_ZeroInvocations(t *testing.T) {
 	t.Parallel()
 	importance := math.Min(1.0, float64(0)/100.0)
-	score := computeSkillScore(0.5, 0.3, importance, 1.0)
-	want := 0.50*0.5 + 0.20*0.3 + 0.20*0.0 + 0.10*1.0
+	score := computeSkillScore(0.5, 0.3, 0.0, importance, 1.0)
+	want := 0.50*0.5 + 0.10*0.3 + 0.10*0.0 + 0.20*0.0 + 0.10*1.0
 	if math.Abs(score-want) > 1e-9 {
 		t.Errorf("score mismatch: got %f, want %f", score, want)
 	}

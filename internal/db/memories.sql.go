@@ -535,6 +535,100 @@ func (q *Queries) RecallMemoriesByFTS(ctx context.Context, arg RecallMemoriesByF
 	return items, nil
 }
 
+const recallMemoriesByTrigram = `-- name: RecallMemoriesByTrigram :many
+SELECT id, memory_type, scope_id, author_id,
+    content, summary, embedding, embedding_model_id,
+    embedding_code, embedding_code_model_id, content_kind, meta,
+    version, is_active, confidence, importance, access_count, last_accessed,
+    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at,
+    similarity(content, $3) AS trgm_score
+FROM memories
+WHERE is_active = true AND scope_id = ANY($1::uuid[])
+  AND similarity(content, $3) > 0.1
+ORDER BY trgm_score DESC
+LIMIT $2
+`
+
+type RecallMemoriesByTrigramParams struct {
+	Column1    []uuid.UUID
+	Limit      int32
+	Similarity string
+}
+
+type RecallMemoriesByTrigramRow struct {
+	ID                   uuid.UUID
+	MemoryType           string
+	ScopeID              uuid.UUID
+	AuthorID             uuid.UUID
+	Content              string
+	Summary              *string
+	Embedding            *pgvector_go.Vector
+	EmbeddingModelID     *uuid.UUID
+	EmbeddingCode        *pgvector_go.Vector
+	EmbeddingCodeModelID *uuid.UUID
+	ContentKind          string
+	Meta                 []byte
+	Version              int32
+	IsActive             bool
+	Confidence           float64
+	Importance           float64
+	AccessCount          int32
+	LastAccessed         *time.Time
+	ExpiresAt            *time.Time
+	PromotionStatus      string
+	PromotedTo           *uuid.UUID
+	SourceRef            *string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+	TrgmScore            float32
+}
+
+func (q *Queries) RecallMemoriesByTrigram(ctx context.Context, arg RecallMemoriesByTrigramParams) ([]*RecallMemoriesByTrigramRow, error) {
+	rows, err := q.db.Query(ctx, recallMemoriesByTrigram, arg.Column1, arg.Limit, arg.Similarity)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*RecallMemoriesByTrigramRow{}
+	for rows.Next() {
+		var i RecallMemoriesByTrigramRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.MemoryType,
+			&i.ScopeID,
+			&i.AuthorID,
+			&i.Content,
+			&i.Summary,
+			&i.Embedding,
+			&i.EmbeddingModelID,
+			&i.EmbeddingCode,
+			&i.EmbeddingCodeModelID,
+			&i.ContentKind,
+			&i.Meta,
+			&i.Version,
+			&i.IsActive,
+			&i.Confidence,
+			&i.Importance,
+			&i.AccessCount,
+			&i.LastAccessed,
+			&i.ExpiresAt,
+			&i.PromotionStatus,
+			&i.PromotedTo,
+			&i.SourceRef,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.TrgmScore,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const recallMemoriesByVector = `-- name: RecallMemoriesByVector :many
 SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,

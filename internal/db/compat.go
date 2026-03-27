@@ -46,6 +46,7 @@ type MemoryScore struct {
 	Memory    *Memory
 	VecScore  float64
 	BM25Score float64
+	TrgmScore float64
 }
 
 // ArtifactScore pairs a knowledge artifact with its retrieval scores.
@@ -53,6 +54,7 @@ type ArtifactScore struct {
 	Artifact  *KnowledgeArtifact
 	VecScore  float64
 	BM25Score float64
+	TrgmScore float64
 }
 
 // SkillScore pairs a skill with its retrieval score.
@@ -659,6 +661,28 @@ func RecallMemoriesByFTS(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uui
 	return results, nil
 }
 
+// RecallMemoriesByTrigram performs trigram similarity recall.
+func RecallMemoriesByTrigram(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, query string, limit int) ([]MemoryScore, error) {
+	q := New(pool)
+	rows, err := q.RecallMemoriesByTrigram(ctx, RecallMemoriesByTrigramParams{
+		Column1:    scopeIDs,
+		Limit:      int32(limit),
+		Similarity: query,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("db: recall memories by trigram: %w", err)
+	}
+	results := make([]MemoryScore, len(rows))
+	for i, r := range rows {
+		mem := memoryFromRecallByTrigramRow(r)
+		results[i] = MemoryScore{
+			Memory:    mem,
+			TrgmScore: float64(r.TrgmScore),
+		}
+	}
+	return results, nil
+}
+
 // ListConsolidationCandidates returns low-importance, low-access memories.
 func ListConsolidationCandidates(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID) ([]*Memory, error) {
 	q := New(pool)
@@ -877,13 +901,9 @@ func ListEntitiesByScope(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.U
 }
 
 // ListRelationsByScope returns all relations in a scope.
-func ListRelationsByScope(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, limit, offset int) ([]*Relation, error) {
+func ListRelationsByScope(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID) ([]*Relation, error) {
 	q := New(pool)
-	rs, err := q.ListRelationsByScope(ctx, ListRelationsByScopeParams{
-		ScopeID: scopeID,
-		Limit:   int32(limit),
-		Offset:  int32(offset),
-	})
+	rs, err := q.ListRelationsByScope(ctx, scopeID)
 	if err != nil {
 		return nil, fmt.Errorf("db: list relations by scope: %w", err)
 	}
@@ -1102,6 +1122,28 @@ func RecallArtifactsByFTS(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uu
 		results[i] = ArtifactScore{
 			Artifact:  art,
 			BM25Score: float64(r.Bm25Score),
+		}
+	}
+	return results, nil
+}
+
+// RecallArtifactsByTrigram retrieves published artifacts via trigram similarity.
+func RecallArtifactsByTrigram(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, query string, limit int) ([]ArtifactScore, error) {
+	q := New(pool)
+	rows, err := q.RecallArtifactsByTrigram(ctx, RecallArtifactsByTrigramParams{
+		Column1:    scopeIDs,
+		Limit:      int32(limit),
+		Similarity: query,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("db: recall artifacts by trigram: %w", err)
+	}
+	results := make([]ArtifactScore, len(rows))
+	for i, r := range rows {
+		art := artifactFromRecallByTrigramRow(r)
+		results[i] = ArtifactScore{
+			Artifact:  art,
+			TrgmScore: float64(r.TrgmScore),
 		}
 	}
 	return results, nil
@@ -1560,6 +1602,29 @@ func RecallSkillsByFTS(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.
 	return results, nil
 }
 
+// RecallSkillsByTrigram retrieves published skills via trigram similarity.
+func RecallSkillsByTrigram(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, query, agentType string, limit int) ([]SkillScore, error) {
+	q := New(pool)
+	rows, err := q.RecallSkillsByTrigram(ctx, RecallSkillsByTrigramParams{
+		Similarity: query,
+		Column2:    scopeIDs,
+		Column3:    agentType,
+		Limit:      int32(limit),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("db: recall skills by trigram: %w", err)
+	}
+	results := make([]SkillScore, len(rows))
+	for i, r := range rows {
+		skill := skillFromRecallByTrigramRow(r)
+		results[i] = SkillScore{
+			Skill: skill,
+			Score: float64(r.Score),
+		}
+	}
+	return results, nil
+}
+
 // ListPublishedSkillsForAgent returns all published skills for the given agent type.
 func ListPublishedSkillsForAgent(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, agentType string) ([]*Skill, error) {
 	q := New(pool)
@@ -1777,6 +1842,95 @@ func skillFromRecallByVectorRow(r *RecallSkillsByVectorRow) *Skill {
 
 // skillFromRecallByFTSRow converts a RecallSkillsByFTSRow to a *Skill.
 func skillFromRecallByFTSRow(r *RecallSkillsByFTSRow) *Skill {
+	return &Skill{
+		ID:               r.ID,
+		ScopeID:          r.ScopeID,
+		AuthorID:         r.AuthorID,
+		SourceArtifactID: r.SourceArtifactID,
+		Slug:             r.Slug,
+		Name:             r.Name,
+		Description:      r.Description,
+		AgentTypes:       r.AgentTypes,
+		Body:             r.Body,
+		Parameters:       r.Parameters,
+		Visibility:       r.Visibility,
+		Status:           r.Status,
+		PublishedAt:      r.PublishedAt,
+		DeprecatedAt:     r.DeprecatedAt,
+		ReviewRequired:   r.ReviewRequired,
+		Version:          r.Version,
+		PreviousVersion:  r.PreviousVersion,
+		Embedding:        r.Embedding,
+		EmbeddingModelID: r.EmbeddingModelID,
+		InvocationCount:  r.InvocationCount,
+		LastInvokedAt:    r.LastInvokedAt,
+		CreatedAt:        r.CreatedAt,
+		UpdatedAt:        r.UpdatedAt,
+	}
+}
+
+// memoryFromRecallByTrigramRow converts a RecallMemoriesByTrigramRow to a *Memory.
+func memoryFromRecallByTrigramRow(r *RecallMemoriesByTrigramRow) *Memory {
+	return &Memory{
+		ID:                   r.ID,
+		MemoryType:           r.MemoryType,
+		ScopeID:              r.ScopeID,
+		AuthorID:             r.AuthorID,
+		Content:              r.Content,
+		Summary:              r.Summary,
+		Embedding:            r.Embedding,
+		EmbeddingModelID:     r.EmbeddingModelID,
+		EmbeddingCode:        r.EmbeddingCode,
+		EmbeddingCodeModelID: r.EmbeddingCodeModelID,
+		ContentKind:          r.ContentKind,
+		Meta:                 r.Meta,
+		Version:              r.Version,
+		IsActive:             r.IsActive,
+		Confidence:           r.Confidence,
+		Importance:           r.Importance,
+		AccessCount:          r.AccessCount,
+		LastAccessed:         r.LastAccessed,
+		ExpiresAt:            r.ExpiresAt,
+		PromotionStatus:      r.PromotionStatus,
+		PromotedTo:           r.PromotedTo,
+		SourceRef:            r.SourceRef,
+		CreatedAt:            r.CreatedAt,
+		UpdatedAt:            r.UpdatedAt,
+	}
+}
+
+// artifactFromRecallByTrigramRow converts a RecallArtifactsByTrigramRow to a *KnowledgeArtifact.
+func artifactFromRecallByTrigramRow(r *RecallArtifactsByTrigramRow) *KnowledgeArtifact {
+	return &KnowledgeArtifact{
+		ID:               r.ID,
+		KnowledgeType:    r.KnowledgeType,
+		OwnerScopeID:     r.OwnerScopeID,
+		AuthorID:         r.AuthorID,
+		Visibility:       r.Visibility,
+		Status:           r.Status,
+		PublishedAt:      r.PublishedAt,
+		DeprecatedAt:     r.DeprecatedAt,
+		ReviewRequired:   r.ReviewRequired,
+		Title:            r.Title,
+		Content:          r.Content,
+		Summary:          r.Summary,
+		Embedding:        r.Embedding,
+		EmbeddingModelID: r.EmbeddingModelID,
+		Meta:             r.Meta,
+		EndorsementCount: r.EndorsementCount,
+		AccessCount:      r.AccessCount,
+		LastAccessed:     r.LastAccessed,
+		Version:          r.Version,
+		PreviousVersion:  r.PreviousVersion,
+		SourceMemoryID:   r.SourceMemoryID,
+		SourceRef:        r.SourceRef,
+		CreatedAt:        r.CreatedAt,
+		UpdatedAt:        r.UpdatedAt,
+	}
+}
+
+// skillFromRecallByTrigramRow converts a RecallSkillsByTrigramRow to a *Skill.
+func skillFromRecallByTrigramRow(r *RecallSkillsByTrigramRow) *Skill {
 	return &Skill{
 		ID:               r.ID,
 		ScopeID:          r.ScopeID,

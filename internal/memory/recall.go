@@ -35,6 +35,7 @@ type MemoryResult struct {
 type recallDB interface {
 	RecallMemoriesByVector(ctx context.Context, scopeIDs []uuid.UUID, queryVec []float32, limit int) ([]db.MemoryScore, error)
 	RecallMemoriesByFTS(ctx context.Context, scopeIDs []uuid.UUID, query string, limit int) ([]db.MemoryScore, error)
+	RecallMemoriesByTrigram(ctx context.Context, scopeIDs []uuid.UUID, query string, limit int) ([]db.MemoryScore, error)
 	RecallMemoriesByCodeVector(ctx context.Context, scopeIDs []uuid.UUID, queryVec []float32, limit int) ([]db.MemoryScore, error)
 	IncrementMemoryAccess(ctx context.Context, id uuid.UUID) error
 }
@@ -50,6 +51,10 @@ func (p *poolRecallDB) RecallMemoriesByVector(ctx context.Context, scopeIDs []uu
 
 func (p *poolRecallDB) RecallMemoriesByFTS(ctx context.Context, scopeIDs []uuid.UUID, query string, limit int) ([]db.MemoryScore, error) {
 	return db.RecallMemoriesByFTS(ctx, p.pool, scopeIDs, query, limit)
+}
+
+func (p *poolRecallDB) RecallMemoriesByTrigram(ctx context.Context, scopeIDs []uuid.UUID, query string, limit int) ([]db.MemoryScore, error) {
+	return db.RecallMemoriesByTrigram(ctx, p.pool, scopeIDs, query, limit)
 }
 
 func (p *poolRecallDB) RecallMemoriesByCodeVector(ctx context.Context, scopeIDs []uuid.UUID, queryVec []float32, limit int) ([]db.MemoryScore, error) {
@@ -77,9 +82,9 @@ func DecayLambda(memoryType string) float64 {
 
 // combinedScore computes the weighted combined score.
 //
-//	score = 0.50*vecScore + 0.20*bm25Score + 0.20*importance + 0.10*recencyDecay
-func combinedScore(vecScore, bm25Score, importance, recencyDecay float64) float64 {
-	return 0.50*vecScore + 0.20*bm25Score + 0.20*importance + 0.10*recencyDecay
+//	score = 0.50*vec + 0.10*bm25 + 0.10*trgm + 0.20*importance + 0.10*recency
+func combinedScore(vecScore, bm25Score, trgmScore, importance, recencyDecay float64) float64 {
+	return 0.50*vecScore + 0.10*bm25Score + 0.10*trgmScore + 0.20*importance + 0.10*recencyDecay
 }
 
 // Recall retrieves memories across multiple scopes using hybrid search.
@@ -161,6 +166,18 @@ func (s *Store) Recall(ctx context.Context, input RecallInput) ([]*MemoryResult,
 				merged[r.Memory.ID] = &r
 			}
 		}
+		trgmRows, err := rdb.RecallMemoriesByTrigram(ctx, scopeIDs, input.Query, input.Limit*2)
+		if err != nil {
+			return nil, err
+		}
+		for i := range trgmRows {
+			r := trgmRows[i]
+			if existing, ok := merged[r.Memory.ID]; ok {
+				existing.TrgmScore = r.TrgmScore
+			} else {
+				merged[r.Memory.ID] = &r
+			}
+		}
 	}
 
 	// 4. Compute combined scores and build results.
@@ -184,7 +201,7 @@ func (s *Store) Recall(ctx context.Context, input RecallInput) ([]*MemoryResult,
 		λ := DecayLambda(m.MemoryType)
 		recency := math.Exp(-λ * days)
 
-		score := combinedScore(ms.VecScore, ms.BM25Score, m.Importance, recency)
+		score := combinedScore(ms.VecScore, ms.BM25Score, ms.TrgmScore, m.Importance, recency)
 
 		// 6. Filter by MinScore.
 		if score < input.MinScore {
