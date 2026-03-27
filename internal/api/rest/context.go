@@ -54,9 +54,9 @@ func (ro *Router) getContext(w http.ResponseWriter, r *http.Request) {
 
 	if ro.knwStore != nil {
 		arts, err := ro.knwStore.Recall(r.Context(), ro.pool, knowledge.RecallInput{
-			Query:    query,
-			ScopeIDs: []uuid.UUID{scope.ID},
-			Limit:    50,
+			Query:   query,
+			ScopeID: scope.ID,
+			Limit:   50,
 		})
 		if err == nil {
 			for _, a := range arts {

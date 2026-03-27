@@ -80,7 +80,7 @@ func (ro *Router) searchArtifacts(w http.ResponseWriter, r *http.Request) {
 	scopeStr := q.Get("scope")
 	pg := paginationFromRequest(r)
 
-	var scopeIDs []uuid.UUID
+	var scopeID uuid.UUID
 	if scopeStr != "" {
 		kind, externalID, err := parseScopeString(scopeStr)
 		if err != nil {
@@ -92,13 +92,13 @@ func (ro *Router) searchArtifacts(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "scope not found")
 			return
 		}
-		scopeIDs = []uuid.UUID{scope.ID}
+		scopeID = scope.ID
 	}
 
 	results, err := ro.knwStore.Recall(r.Context(), ro.pool, knowledge.RecallInput{
-		Query:    query,
-		ScopeIDs: scopeIDs,
-		Limit:    pg.Limit,
+		Query:   query,
+		ScopeID: scopeID,
+		Limit:   pg.Limit,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())

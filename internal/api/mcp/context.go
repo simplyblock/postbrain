@@ -68,9 +68,9 @@ func (s *Server) handleContext(ctx context.Context, req mcpgo.CallToolRequest) (
 	// Knowledge first (published artifacts relevant to query).
 	if s.knwStore != nil {
 		arts, err := s.knwStore.Recall(ctx, s.pool, knowledge.RecallInput{
-			Query:    query,
-			ScopeIDs: []uuid.UUID{scope.ID},
-			Limit:    50,
+			Query:   query,
+			ScopeID: scope.ID,
+			Limit:   50,
 		})
 		if err == nil {
 			for _, a := range arts {
