@@ -14,7 +14,7 @@ import (
 // RecallInput holds parameters for knowledge artifact recall.
 type RecallInput struct {
 	Query    string
-	ScopeIDs []uuid.UUID
+	ScopeID  uuid.UUID // visibility fan-out is resolved in SQL via the scope's ltree path
 	Limit    int
 	MinScore float64
 }
@@ -61,7 +61,7 @@ func (s *Store) Recall(ctx context.Context, pool *pgxpool.Pool, input RecallInpu
 
 	// Vector recall.
 	if len(embeddingVec) > 0 {
-		vecRows, err := db.RecallArtifactsByVector(ctx, pool, input.ScopeIDs, embeddingVec, input.Limit*2)
+		vecRows, err := db.RecallArtifactsByVector(ctx, pool, input.ScopeID, embeddingVec, input.Limit*2)
 		if err != nil {
 			return nil, fmt.Errorf("knowledge: recall by vector: %w", err)
 		}
@@ -74,7 +74,7 @@ func (s *Store) Recall(ctx context.Context, pool *pgxpool.Pool, input RecallInpu
 	}
 
 	// FTS recall.
-	ftsRows, err := db.RecallArtifactsByFTS(ctx, pool, input.ScopeIDs, input.Query, input.Limit*2)
+	ftsRows, err := db.RecallArtifactsByFTS(ctx, pool, input.ScopeID, input.Query, input.Limit*2)
 	if err != nil {
 		return nil, fmt.Errorf("knowledge: recall by fts: %w", err)
 	}
@@ -90,7 +90,7 @@ func (s *Store) Recall(ctx context.Context, pool *pgxpool.Pool, input RecallInpu
 	}
 
 	// Trigram recall.
-	trgmRows, err := db.RecallArtifactsByTrigram(ctx, pool, input.ScopeIDs, input.Query, input.Limit*2)
+	trgmRows, err := db.RecallArtifactsByTrigram(ctx, pool, input.ScopeID, input.Query, input.Limit*2)
 	if err != nil {
 		return nil, fmt.Errorf("knowledge: recall by trigram: %w", err)
 	}

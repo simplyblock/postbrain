@@ -130,7 +130,7 @@ func (s *Server) handleRecall(ctx context.Context, req mcpgo.CallToolRequest) (*
 	if activeLayers[retrieval.LayerKnowledge] && s.knwStore != nil {
 		arts, err := s.knwStore.Recall(ctx, s.pool, knowledge.RecallInput{
 			Query:    query,
-			ScopeIDs: []uuid.UUID{scopeID},
+			ScopeID:  scopeID,
 			Limit:    limit * 2,
 			MinScore: minScore,
 		})

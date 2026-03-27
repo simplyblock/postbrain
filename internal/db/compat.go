@@ -1083,11 +1083,12 @@ func ListVisibleArtifacts(ctx context.Context, pool *pgxpool.Pool, callerScopeID
 	return as, nil
 }
 
-// RecallArtifactsByVector retrieves published artifacts by vector similarity.
-func RecallArtifactsByVector(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, queryVec []float32, limit int) ([]ArtifactScore, error) {
+// RecallArtifactsByVector retrieves published artifacts by vector similarity,
+// resolving visibility (project/team/department/company/grants) from scopeID.
+func RecallArtifactsByVector(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, queryVec []float32, limit int) ([]ArtifactScore, error) {
 	q := New(pool)
 	rows, err := q.RecallArtifactsByVector(ctx, RecallArtifactsByVectorParams{
-		Column1:   scopeIDs,
+		ScopeID:   scopeID,
 		Limit:     int32(limit),
 		Embedding: vecPtr(queryVec),
 	})
@@ -1105,11 +1106,12 @@ func RecallArtifactsByVector(ctx context.Context, pool *pgxpool.Pool, scopeIDs [
 	return results, nil
 }
 
-// RecallArtifactsByFTS retrieves published artifacts via full-text search.
-func RecallArtifactsByFTS(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, query string, limit int) ([]ArtifactScore, error) {
+// RecallArtifactsByFTS retrieves published artifacts via full-text search,
+// resolving visibility (project/team/department/company/grants) from scopeID.
+func RecallArtifactsByFTS(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, query string, limit int) ([]ArtifactScore, error) {
 	q := New(pool)
 	rows, err := q.RecallArtifactsByFTS(ctx, RecallArtifactsByFTSParams{
-		Column1:        scopeIDs,
+		ScopeID:        scopeID,
 		Limit:          int32(limit),
 		PlaintoTsquery: query,
 	})
@@ -1127,11 +1129,12 @@ func RecallArtifactsByFTS(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uu
 	return results, nil
 }
 
-// RecallArtifactsByTrigram retrieves published artifacts via trigram similarity.
-func RecallArtifactsByTrigram(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, query string, limit int) ([]ArtifactScore, error) {
+// RecallArtifactsByTrigram retrieves published artifacts via trigram similarity,
+// resolving visibility (project/team/department/company/grants) from scopeID.
+func RecallArtifactsByTrigram(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, query string, limit int) ([]ArtifactScore, error) {
 	q := New(pool)
 	rows, err := q.RecallArtifactsByTrigram(ctx, RecallArtifactsByTrigramParams{
-		Column1:    scopeIDs,
+		ScopeID:    scopeID,
 		Limit:      int32(limit),
 		Similarity: query,
 	})
