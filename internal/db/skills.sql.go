@@ -409,6 +409,106 @@ func (q *Queries) RecallSkillsByFTS(ctx context.Context, arg RecallSkillsByFTSPa
 	return items, nil
 }
 
+const recallSkillsByTrigram = `-- name: RecallSkillsByTrigram :many
+SELECT id, scope_id, author_id, source_artifact_id,
+    slug, name, description, agent_types, body, parameters,
+    visibility, status, published_at, deprecated_at, review_required,
+    version, previous_version, embedding, embedding_model_id,
+    invocation_count, last_invoked_at, created_at, updated_at,
+    similarity(description || ' ' || body, $1) AS score
+FROM skills
+WHERE status = 'published'
+  AND scope_id = ANY($2::uuid[])
+  AND ($3 = 'any' OR 'any' = ANY(agent_types) OR $3 = ANY(agent_types))
+  AND similarity(description || ' ' || body, $1) > 0.1
+ORDER BY score DESC
+LIMIT $4
+`
+
+type RecallSkillsByTrigramParams struct {
+	Similarity string
+	Column2    []uuid.UUID
+	Column3    interface{}
+	Limit      int32
+}
+
+type RecallSkillsByTrigramRow struct {
+	ID               uuid.UUID
+	ScopeID          uuid.UUID
+	AuthorID         uuid.UUID
+	SourceArtifactID *uuid.UUID
+	Slug             string
+	Name             string
+	Description      string
+	AgentTypes       []string
+	Body             string
+	Parameters       []byte
+	Visibility       string
+	Status           string
+	PublishedAt      *time.Time
+	DeprecatedAt     *time.Time
+	ReviewRequired   int32
+	Version          int32
+	PreviousVersion  *uuid.UUID
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
+	InvocationCount  int32
+	LastInvokedAt    *time.Time
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	Score            float32
+}
+
+func (q *Queries) RecallSkillsByTrigram(ctx context.Context, arg RecallSkillsByTrigramParams) ([]*RecallSkillsByTrigramRow, error) {
+	rows, err := q.db.Query(ctx, recallSkillsByTrigram,
+		arg.Similarity,
+		arg.Column2,
+		arg.Column3,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*RecallSkillsByTrigramRow{}
+	for rows.Next() {
+		var i RecallSkillsByTrigramRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ScopeID,
+			&i.AuthorID,
+			&i.SourceArtifactID,
+			&i.Slug,
+			&i.Name,
+			&i.Description,
+			&i.AgentTypes,
+			&i.Body,
+			&i.Parameters,
+			&i.Visibility,
+			&i.Status,
+			&i.PublishedAt,
+			&i.DeprecatedAt,
+			&i.ReviewRequired,
+			&i.Version,
+			&i.PreviousVersion,
+			&i.Embedding,
+			&i.EmbeddingModelID,
+			&i.InvocationCount,
+			&i.LastInvokedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Score,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const recallSkillsByVector = `-- name: RecallSkillsByVector :many
 SELECT id, scope_id, author_id, source_artifact_id,
     slug, name, description, agent_types, body, parameters,

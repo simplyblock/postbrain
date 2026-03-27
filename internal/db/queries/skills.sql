@@ -92,6 +92,21 @@ WHERE status = 'published'
 ORDER BY score DESC
 LIMIT $4;
 
+-- name: RecallSkillsByTrigram :many
+SELECT id, scope_id, author_id, source_artifact_id,
+    slug, name, description, agent_types, body, parameters,
+    visibility, status, published_at, deprecated_at, review_required,
+    version, previous_version, embedding, embedding_model_id,
+    invocation_count, last_invoked_at, created_at, updated_at,
+    similarity(description || ' ' || body, $1) AS score
+FROM skills
+WHERE status = 'published'
+  AND scope_id = ANY($2::uuid[])
+  AND ($3 = 'any' OR 'any' = ANY(agent_types) OR $3 = ANY(agent_types))
+  AND similarity(description || ' ' || body, $1) > 0.1
+ORDER BY score DESC
+LIMIT $4;
+
 -- name: ListPublishedSkillsForAgent :many
 SELECT id, scope_id, author_id, source_artifact_id,
     slug, name, description, agent_types, body, parameters,

@@ -24,13 +24,14 @@ type ArtifactResult struct {
 	Artifact  *db.KnowledgeArtifact
 	VecScore  float64
 	BM25Score float64
+	TrgmScore float64
 	Score     float64 // combined, with +0.1 institutional trust boost
 }
 
 // knowledgeCombinedScore computes the combined score for a knowledge artifact.
-// w_vec=0.50, w_bm25=0.20, w_imp=0.20 (normalized endorsements), w_rec=0.10, +0.1 boost.
-func knowledgeCombinedScore(vecScore, bm25Score, importance, recency float64) float64 {
-	return 0.50*vecScore + 0.20*bm25Score + 0.20*importance + 0.10*recency + 0.10
+// w_vec=0.50, w_bm25=0.10, w_trgm=0.10, w_imp=0.20 (normalized endorsements), w_rec=0.10, +0.1 boost.
+func knowledgeCombinedScore(vecScore, bm25Score, trgmScore, importance, recency float64) float64 {
+	return 0.50*vecScore + 0.10*bm25Score + 0.10*trgmScore + 0.20*importance + 0.10*recency + 0.10
 }
 
 // normalizeEndorsements maps an endorsement count to [0, 1].
@@ -88,11 +89,27 @@ func (s *Store) Recall(ctx context.Context, pool *pgxpool.Pool, input RecallInpu
 		}
 	}
 
+	// Trigram recall.
+	trgmRows, err := db.RecallArtifactsByTrigram(ctx, pool, input.ScopeIDs, input.Query, input.Limit*2)
+	if err != nil {
+		return nil, fmt.Errorf("knowledge: recall by trigram: %w", err)
+	}
+	for _, row := range trgmRows {
+		if existing, ok := merged[row.Artifact.ID]; ok {
+			existing.TrgmScore = row.TrgmScore
+		} else {
+			merged[row.Artifact.ID] = &ArtifactResult{
+				Artifact:  row.Artifact,
+				TrgmScore: row.TrgmScore,
+			}
+		}
+	}
+
 	// Score and filter.
 	var results []*ArtifactResult
 	for _, r := range merged {
 		imp := normalizeEndorsements(int(r.Artifact.EndorsementCount))
-		r.Score = knowledgeCombinedScore(r.VecScore, r.BM25Score, imp, 1.0)
+		r.Score = knowledgeCombinedScore(r.VecScore, r.BM25Score, r.TrgmScore, imp, 1.0)
 		if r.Score < input.MinScore {
 			continue
 		}

@@ -102,6 +102,19 @@ WHERE is_active = true AND scope_id = ANY($1::uuid[])
 ORDER BY bm25_score DESC
 LIMIT $2;
 
+-- name: RecallMemoriesByTrigram :many
+SELECT id, memory_type, scope_id, author_id,
+    content, summary, embedding, embedding_model_id,
+    embedding_code, embedding_code_model_id, content_kind, meta,
+    version, is_active, confidence, importance, access_count, last_accessed,
+    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at,
+    similarity(content, $3) AS trgm_score
+FROM memories
+WHERE is_active = true AND scope_id = ANY($1::uuid[])
+  AND similarity(content, $3) > 0.1
+ORDER BY trgm_score DESC
+LIMIT $2;
+
 -- name: ListConsolidationCandidates :many
 SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,

@@ -118,3 +118,18 @@ WHERE status = 'published'
   AND to_tsvector('postbrain_fts', content) @@ plainto_tsquery('postbrain_fts', $3)
 ORDER BY bm25_score DESC
 LIMIT $2;
+
+-- name: RecallArtifactsByTrigram :many
+SELECT id, knowledge_type, owner_scope_id, author_id,
+    visibility, status, published_at, deprecated_at, review_required,
+    title, content, summary, embedding, embedding_model_id, meta,
+    endorsement_count, access_count, last_accessed,
+    version, previous_version, source_memory_id, source_ref,
+    created_at, updated_at,
+    similarity(content, $3) AS trgm_score
+FROM knowledge_artifacts
+WHERE status = 'published'
+  AND owner_scope_id = ANY($1::uuid[])
+  AND similarity(content, $3) > 0.1
+ORDER BY trgm_score DESC
+LIMIT $2;

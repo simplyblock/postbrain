@@ -31,10 +31,10 @@ type SkillResult struct {
 }
 
 // computeSkillScore applies the hybrid scoring formula for skills.
-// vec=0.50, bm25=0.20, importance=0.20, recency=0.10
+// vec=0.50, bm25=0.10, trgm=0.10, importance=0.20, recency=0.10
 // Skills have no decay; recency weight is fixed at 1.0.
-func computeSkillScore(vecScore, bm25Score, importance, recency float64) float64 {
-	return 0.50*vecScore + 0.20*bm25Score + 0.20*importance + 0.10*recency
+func computeSkillScore(vecScore, bm25Score, trgmScore, importance, recency float64) float64 {
+	return 0.50*vecScore + 0.10*bm25Score + 0.10*trgmScore + 0.20*importance + 0.10*recency
 }
 
 // importanceFromInvocations normalizes invocation count: 100+ invocations = max (1.0).
@@ -69,11 +69,18 @@ func (s *Store) Recall(ctx context.Context, svc *embedding.EmbeddingService, inp
 		return nil, err
 	}
 
-	// Merge by skill ID: track best vec and bm25 scores per skill.
+	// Trigram recall.
+	trgmResults, err := db.RecallSkillsByTrigram(ctx, s.pool, input.ScopeIDs, input.Query, input.AgentType, input.Limit*2)
+	if err != nil {
+		return nil, err
+	}
+
+	// Merge by skill ID: track best vec, bm25, and trgm scores per skill.
 	type entry struct {
 		skill    *db.Skill
 		vecScore float64
 		bm25     float64
+		trgm     float64
 	}
 	byID := make(map[uuid.UUID]*entry)
 
@@ -98,11 +105,20 @@ func (s *Store) Recall(ctx context.Context, svc *embedding.EmbeddingService, inp
 			byID[r.Skill.ID] = &entry{skill: r.Skill, bm25: r.Score}
 		}
 	}
+	for _, r := range trgmResults {
+		if e, ok := byID[r.Skill.ID]; ok {
+			if r.Score > e.trgm {
+				e.trgm = r.Score
+			}
+		} else {
+			byID[r.Skill.ID] = &entry{skill: r.Skill, trgm: r.Score}
+		}
+	}
 
 	var results []*SkillResult
 	for _, e := range byID {
 		importance := importanceFromInvocations(int(e.skill.InvocationCount))
-		score := computeSkillScore(e.vecScore, e.bm25, importance, 1.0)
+		score := computeSkillScore(e.vecScore, e.bm25, e.trgm, importance, 1.0)
 		if score < input.MinScore {
 			continue
 		}

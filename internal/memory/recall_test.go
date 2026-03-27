@@ -42,11 +42,12 @@ func TestDecayLambda_Unknown(t *testing.T) {
 func TestCombinedScore_Formula(t *testing.T) {
 	vecScore := 0.8
 	bm25Score := 0.6
+	trgmScore := 0.5
 	importance := 0.7
 	recencyDecay := 0.9
 
-	expected := 0.50*vecScore + 0.20*bm25Score + 0.20*importance + 0.10*recencyDecay
-	got := combinedScore(vecScore, bm25Score, importance, recencyDecay)
+	expected := 0.50*vecScore + 0.10*bm25Score + 0.10*trgmScore + 0.20*importance + 0.10*recencyDecay
+	got := combinedScore(vecScore, bm25Score, trgmScore, importance, recencyDecay)
 
 	if math.Abs(got-expected) > 1e-9 {
 		t.Fatalf("expected %v, got %v", expected, got)
@@ -58,9 +59,11 @@ func TestCombinedScore_Formula(t *testing.T) {
 type mockRecallDB struct {
 	vecResults  []db.MemoryScore
 	ftsResults  []db.MemoryScore
+	trgmResults []db.MemoryScore
 	codeResults []db.MemoryScore
 	vecCalled   int
 	ftsCalled   int
+	trgmCalled  int
 	codeCalled  int
 }
 
@@ -72,6 +75,11 @@ func (m *mockRecallDB) RecallMemoriesByVector(_ context.Context, _ []uuid.UUID, 
 func (m *mockRecallDB) RecallMemoriesByFTS(_ context.Context, _ []uuid.UUID, _ string, _ int) ([]db.MemoryScore, error) {
 	m.ftsCalled++
 	return m.ftsResults, nil
+}
+
+func (m *mockRecallDB) RecallMemoriesByTrigram(_ context.Context, _ []uuid.UUID, _ string, _ int) ([]db.MemoryScore, error) {
+	m.trgmCalled++
+	return m.trgmResults, nil
 }
 
 func (m *mockRecallDB) RecallMemoriesByCodeVector(_ context.Context, _ []uuid.UUID, _ []float32, _ int) ([]db.MemoryScore, error) {

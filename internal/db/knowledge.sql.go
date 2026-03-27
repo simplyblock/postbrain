@@ -471,6 +471,102 @@ func (q *Queries) RecallArtifactsByFTS(ctx context.Context, arg RecallArtifactsB
 	return items, nil
 }
 
+const recallArtifactsByTrigram = `-- name: RecallArtifactsByTrigram :many
+SELECT id, knowledge_type, owner_scope_id, author_id,
+    visibility, status, published_at, deprecated_at, review_required,
+    title, content, summary, embedding, embedding_model_id, meta,
+    endorsement_count, access_count, last_accessed,
+    version, previous_version, source_memory_id, source_ref,
+    created_at, updated_at,
+    similarity(content, $3) AS trgm_score
+FROM knowledge_artifacts
+WHERE status = 'published'
+  AND owner_scope_id = ANY($1::uuid[])
+  AND similarity(content, $3) > 0.1
+ORDER BY trgm_score DESC
+LIMIT $2
+`
+
+type RecallArtifactsByTrigramParams struct {
+	Column1    []uuid.UUID
+	Limit      int32
+	Similarity string
+}
+
+type RecallArtifactsByTrigramRow struct {
+	ID               uuid.UUID
+	KnowledgeType    string
+	OwnerScopeID     uuid.UUID
+	AuthorID         uuid.UUID
+	Visibility       string
+	Status           string
+	PublishedAt      *time.Time
+	DeprecatedAt     *time.Time
+	ReviewRequired   int32
+	Title            string
+	Content          string
+	Summary          *string
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
+	Meta             []byte
+	EndorsementCount int32
+	AccessCount      int32
+	LastAccessed     *time.Time
+	Version          int32
+	PreviousVersion  *uuid.UUID
+	SourceMemoryID   *uuid.UUID
+	SourceRef        *string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	TrgmScore        float32
+}
+
+func (q *Queries) RecallArtifactsByTrigram(ctx context.Context, arg RecallArtifactsByTrigramParams) ([]*RecallArtifactsByTrigramRow, error) {
+	rows, err := q.db.Query(ctx, recallArtifactsByTrigram, arg.Column1, arg.Limit, arg.Similarity)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*RecallArtifactsByTrigramRow{}
+	for rows.Next() {
+		var i RecallArtifactsByTrigramRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.KnowledgeType,
+			&i.OwnerScopeID,
+			&i.AuthorID,
+			&i.Visibility,
+			&i.Status,
+			&i.PublishedAt,
+			&i.DeprecatedAt,
+			&i.ReviewRequired,
+			&i.Title,
+			&i.Content,
+			&i.Summary,
+			&i.Embedding,
+			&i.EmbeddingModelID,
+			&i.Meta,
+			&i.EndorsementCount,
+			&i.AccessCount,
+			&i.LastAccessed,
+			&i.Version,
+			&i.PreviousVersion,
+			&i.SourceMemoryID,
+			&i.SourceRef,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.TrgmScore,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const recallArtifactsByVector = `-- name: RecallArtifactsByVector :many
 SELECT id, knowledge_type, owner_scope_id, author_id,
     visibility, status, published_at, deprecated_at, review_required,
