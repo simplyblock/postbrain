@@ -679,6 +679,25 @@ CREATE TABLE memory_entities
 );
 
 -- ─────────────────────────────────────────
+-- Knowledge artifact ↔ Entity links
+-- (migration 000007)
+-- ─────────────────────────────────────────
+--
+-- Mirrors memory_entities for the knowledge layer.
+-- When a knowledge artifact is created or updated, the analyzeContent
+-- helper extracts entities and links each with role = 'related'.
+
+CREATE TABLE artifact_entities
+(
+    artifact_id UUID NOT NULL REFERENCES knowledge_artifacts (id) ON DELETE CASCADE,
+    entity_id   UUID NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
+    role        TEXT CHECK (role IN ('subject', 'object', 'context', 'related')),
+    PRIMARY KEY (artifact_id, entity_id)
+);
+
+CREATE INDEX artifact_entities_entity_idx ON artifact_entities (entity_id);
+
+-- ─────────────────────────────────────────
 -- Entity ↔ Entity relations (knowledge graph)
 -- ─────────────────────────────────────────
 
@@ -689,9 +708,12 @@ CREATE TABLE relations
     subject_id    UUID        NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
     predicate     TEXT        NOT NULL, -- "owns", "depends_on", "implements", "authored_by", …
     object_id     UUID        NOT NULL REFERENCES entities (id) ON DELETE CASCADE,
-    confidence    FLOAT       NOT NULL DEFAULT 1.0,
-    source_memory UUID        REFERENCES memories (id) ON DELETE SET NULL,
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    confidence      FLOAT       NOT NULL DEFAULT 1.0,
+    source_memory   UUID        REFERENCES memories (id) ON DELETE SET NULL,
+    -- source_artifact: provenance back to the knowledge artifact that originated
+    -- this relation (migration 000007). Mirrors source_memory for the knowledge layer.
+    source_artifact UUID        REFERENCES knowledge_artifacts (id) ON DELETE SET NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (scope_id, subject_id, predicate, object_id)
 );
 
@@ -766,7 +788,8 @@ CREATE TABLE knowledge_artifacts
     id                 UUID PRIMARY KEY     DEFAULT uuidv7(),
 
     -- Classification
-    knowledge_type     TEXT        NOT NULL CHECK (knowledge_type IN ('semantic', 'episodic', 'procedural', 'reference')),
+    -- 'digest' added in migration 000006 (synthesis layer)
+    knowledge_type     TEXT        NOT NULL CHECK (knowledge_type IN ('semantic', 'episodic', 'procedural', 'reference', 'digest')),
     owner_scope_id     UUID        NOT NULL REFERENCES scopes (id) ON DELETE CASCADE,
     author_id          UUID        NOT NULL REFERENCES principals (id),
 
@@ -1788,12 +1811,13 @@ For agents or scripts that cannot use MCP:
 
 **Other:**
 
-| Method  | Path               | Description                    |
-|---------|--------------------|--------------------------------|
-| `POST`  | `/v1/sessions`     | Start a session                |
-| `PATCH` | `/v1/sessions/:id` | End a session                  |
-| `GET`   | `/v1/entities`     | List or search entities        |
-| `GET`   | `/v1/graph`        | Traverse entity relation graph |
+| Method  | Path                 | Description                                                          |
+|---------|----------------------|----------------------------------------------------------------------|
+| `POST`  | `/v1/sessions`       | Start a session                                                      |
+| `PATCH` | `/v1/sessions/:id`   | End a session                                                        |
+| `GET`   | `/v1/entities`       | List or search entities (`?scope_id=&type=&limit=&offset=`) — ✅ implemented |
+| `GET`   | `/v1/graph`          | Returns `{entities, relations}` for a scope — ✅ implemented         |
+| `POST`  | `/v1/graph/query`    | Cypher traversal query (requires AGE) — returns 501 until AGE available |
 
 All endpoints accept and return `application/json`. Authentication is via a Bearer token issued per principal.
 
@@ -1842,6 +1866,12 @@ calling agent type and reachable by visibility. Returns up to `limit × 2` candi
 memories or knowledge).
 
 All passes also run a parallel BM25 full-text query (`to_tsquery`) for keyword boost.
+
+Each layer also runs a **trigram similarity pass** using `similarity(content, $query)` (pg_trgm). This
+surfaces results for partial-word queries and typos that neither HNSW nor BM25 catches well — for
+example, a query for "paymt" will miss BM25 keyword matches but score above threshold via trigram
+similarity. The `trgm_score` from this pass is an additional signal blended into the final score by
+the Go merge layer.
 
 ### Step 2 — Per-layer scoring
 
@@ -1910,15 +1940,21 @@ Combined score formula:
 ```
 score = w_vec  * vector_score
       + w_bm25 * bm25_score
+      + w_trgm * trgm_score
       + w_imp  * importance
       + w_rec  * recency_decay
 
 Default weights:
   w_vec  = 0.50
   w_bm25 = 0.20
-  w_imp  = 0.20
-  w_rec  = 0.10
+  w_trgm = 0.10   -- trigram similarity (pg_trgm); benefits partial-word and typo queries
+  w_imp  = 0.15
+  w_rec  = 0.05
 ```
+
+`trgm_score` = `similarity(content, query_text)` (range 0–1 via pg_trgm). It is computed as a
+separate SQL pass alongside the BM25 pass and surfaced as a column in the candidate result set.
+The Go merge layer combines all five signals into the final score.
 
 These weights are configurable per-query via the `weights` parameter (not exposed in MVP;
 hardcoded defaults apply). Results are sorted by `score DESC`.
@@ -2280,7 +2316,11 @@ postbrain/
 │   ├── 000004_multi_model_embeddings.up.sql
 │   ├── 000004_multi_model_embeddings.down.sql
 │   ├── 000005_skills.up.sql
-│   └── 000005_skills.down.sql
+│   ├── 000005_skills.down.sql
+│   ├── 000006_synthesis.up.sql      # artifact_digest_sources, knowledge_digest_log, digest knowledge_type
+│   ├── 000006_synthesis.down.sql
+│   ├── 000007_artifact_graph.up.sql # artifact_entities join table, source_artifact on relations
+│   └── 000007_artifact_graph.down.sql
 ├── config.example.yaml
 ├── docker-compose.yml
 ├── Makefile
@@ -2346,6 +2386,66 @@ Each function catches a different class of duplicate: `pg_trgm`'s `similarity()`
 PaymentSvc" vs "payment-service"), `levenshtein` for typos and abbreviations, `metaphone` for phonetic variants across
 languages. Candidates above threshold are merged Go-side: relations and memory links are re-pointed to the canonical
 entity, the duplicate is deleted.
+
+**Real-time `same_as` linking (complementary mechanism)**
+
+The background batch job above handles cross-type duplicates detected after the fact. A complementary
+real-time mechanism runs on every entity upsert in the knowledge store:
+
+```go
+// knowledge/store.go — runs immediately after an entity is upserted
+siblings, err := db.ListEntitiesByCanonical(ctx, pool, scopeID, e.Canonical, e.EntityType)
+for _, sibling := range siblings {
+    db.UpsertRelation(ctx, pool, &db.Relation{
+        ScopeID:    scopeID,
+        SubjectID:  min(upserted.ID, sibling.ID),  // normalised order: lower UUID always subject
+        Predicate:  "same_as",
+        ObjectID:   max(upserted.ID, sibling.ID),
+        Confidence: 1.0,
+    })
+}
+```
+
+When an entity is upserted, all other entities in the same scope that share the same `canonical` name
+but have a **different** `entity_type` are connected with a `same_as` relation. This links, for example,
+a `"stripe"` entity of type `"service"` with a `"stripe"` entity of type `"concept"` written by a
+different pass.
+
+**Normalised subject/object ordering:** subject and object UUIDs are sorted so the lower UUID is always
+in `subject_id`. This prevents creating both `A→B` and `B→A` duplicates. The `same_as` relation is
+therefore symmetric by convention: consumers should treat both directions as equivalent.
+
+`same_as` is a first-class predicate in the D3.js graph visualisation: it renders as an orange dashed
+edge with a shorter link distance and higher spring strength, making same-canonical clusters visually
+distinct from semantic relations.
+
+#### LLM-Based Entity Extraction on Knowledge Artifact Write
+
+When a knowledge artifact is created or updated, the `analyzeContent` helper in
+`internal/knowledge/store.go` runs a two-tier extraction pipeline:
+
+```
+analyzeContent(ctx, content, sourceRef):
+  1. If an LLM service (embedding.Service) is configured:
+       - Call LLM with a structured prompt requesting JSON:
+         {summary, entities: [{name, type, canonical}]}
+       - Parse response; use LLM-generated summary and entity list.
+  2. Fallback (no LLM configured, or LLM call fails):
+       - Extractive summary via knowledge.Summarize (sentence scoring)
+       - Heuristic entity extraction via graph.ExtractEntitiesFromMemory
+         (file paths, PR patterns, PascalCase concepts)
+  3. All LLM errors are silently swallowed — a missing or misbehaving model
+     never blocks a write.
+```
+
+The LLM path produces richer, typed entities with canonical forms. The heuristic fallback
+mirrors the regex-based extraction used for memory writes; memory writes always use the
+heuristic path. Only knowledge artifact writes benefit from the LLM path.
+
+After extraction, each entity is upserted into the `entities` table and linked via
+`artifact_entities` with role `'related'`. If entities with the same canonical name exist
+in the scope (different type), `same_as` relations are created immediately (see
+*Real-time `same_as` linking* above).
 
 #### Decay scoring
 
@@ -2530,20 +2630,36 @@ Postbrain uses `golang-migrate` with SQL migration files embedded directly in th
 external file dependencies at runtime — the binary carries everything it needs to bring any database up to the current
 schema version.
 
+**Migration version reference:**
+
+| Version | File                           | Purpose                                                                         |
+|---------|--------------------------------|---------------------------------------------------------------------------------|
+| 1       | `000001_initial_schema`        | Principals, scopes, memories, entities, relations, sessions, events             |
+| 2       | `000002_knowledge_layer`       | Knowledge artifacts, collections, endorsements, history, sharing, promotions    |
+| 3       | `000003_age_graph`             | AGE graph schema (optional overlay for multi-hop traversal)                     |
+| 4       | `000004_multi_model_embeddings`| `embedding_models` registry; `embedding_code` column on memories                |
+| 5       | `000005_skills`                | Skills, skill endorsements, skill version history                               |
+| 6       | `000006_synthesis`             | `artifact_digest_sources`, `knowledge_digest_log`; `'digest'` knowledge_type    |
+| 7       | `000007_artifact_graph`        | `artifact_entities` join table; `source_artifact` column on `relations`         |
+
 **Migration files** follow the `golang-migrate` naming convention:
 
 ```
 migrations/
-  000001_initial_schema.up.sql
+  000001_initial_schema.up.sql          # principals, scopes, memories, entities, relations, sessions, events
   000001_initial_schema.down.sql
-  000002_knowledge_layer.up.sql
+  000002_knowledge_layer.up.sql         # knowledge_artifacts, collections, endorsements, history, sharing, promotions
   000002_knowledge_layer.down.sql
-  000003_age_graph.up.sql
+  000003_age_graph.up.sql               # AGE graph schema (optional overlay)
   000003_age_graph.down.sql
-  000004_multi_model_embeddings.up.sql
+  000004_multi_model_embeddings.up.sql  # embedding_models, embedding_code column on memories
   000004_multi_model_embeddings.down.sql
-  000005_skills.up.sql
+  000005_skills.up.sql                  # skills, skill_endorsements, skill_history
   000005_skills.down.sql
+  000006_synthesis.up.sql               # artifact_digest_sources, knowledge_digest_log, digest knowledge_type value
+  000006_synthesis.down.sql
+  000007_artifact_graph.up.sql          # artifact_entities join table, source_artifact column on relations
+  000007_artifact_graph.down.sql
 ```
 
 `golang-migrate` maintains a `schema_migrations` table with a single row: `(version BIGINT, dirty BOOLEAN)`.
@@ -2559,7 +2675,7 @@ var migrationsFS embed.FS
 
 // ExpectedVersion is baked into the binary at compile time.
 // It must equal the highest migration number in migrations/.
-const ExpectedVersion = 5
+const ExpectedVersion = 7
 ```
 
 **Startup flow:**
@@ -2747,8 +2863,8 @@ The `/health` endpoint reports the current schema version so deployment systems 
 ```jsonc
 {
   "status":         "ok",
-  "schema_version": 5,
-  "expected_version": 5,
+  "schema_version": 7,
+  "expected_version": 7,
   "schema_dirty":   false
 }
 ```
@@ -3351,26 +3467,27 @@ internal/ui/
 
 ### Pages
 
-| Page                | Route                    | Description                                                                                                         |
-|---------------------|--------------------------|---------------------------------------------------------------------------------------------------------------------|
-| Overview            | `GET /ui`                | Server health, schema version, active memory count per scope, job status summary                                    |
-| Memory Browser      | `GET /ui/memories`       | Search bar + scope selector; paginated results with type, importance, age; soft-delete button; HTMX infinite scroll |
-| Memory Detail       | `GET /ui/memories/{id}`  | Full content, metadata, entity links, promote button                                                                |
-| Knowledge Browser   | `GET /ui/knowledge`      | Filterable list (status, scope, visibility); inline endorse / deprecate actions                                     |
-| Knowledge Detail    | `GET /ui/knowledge/{id}` | Content, history timeline, endorsers, open staleness flags                                                          |
-| Collections         | `GET /ui/collections`    | Collection list; links use UUID                                                                                     |
-| Collection Detail   | `GET /ui/collections/{id}` | Artifact table with links to knowledge detail; back link                                                          |
-| Promotion Queue     | `GET /ui/promotions`     | Pending promotion requests; approve/reject via `POST /ui/promotions/{id}/approve\|reject` (cookie-auth, redirect)  |
-| Staleness Flags     | `GET /ui/staleness`      | Open flags grouped by artifact; dismiss (resolve) button                                                            |
-| Entity Graph        | `GET /ui/graph`          | D3.js force-directed graph of entities and relations; scope-filtered; node search                                   |
-| Skills Registry     | `GET /ui/skills`         | Published skills list; links to skill detail                                                                        |
-| Skill Detail        | `GET /ui/skills/{id}`    | Full skill body, parameters, invocation count/last invoked; link to history                                         |
-| Skill History       | `GET /ui/skills/{id}/history` | Version changelog; backed by `skill_history` table via `db.GetSkillHistory`                                   |
-| Knowledge History   | `GET /ui/knowledge/{id}/history` | Version timeline; backed by `GET /v1/knowledge/{id}/history`; linked from knowledge detail page            |
-| Token Management    | `GET /ui/tokens`         | List all tokens (name, scopes, last used, expiry, status); create-token form (name, scope multi-select, expiry); revoke button; raw token shown once on creation |
-| Principals & Scopes | `GET /ui/principals`     | Scope hierarchy tree; membership table; add / remove member forms                                                   |
-| Metrics             | `GET /ui/metrics`        | Prometheus metric cards: tool p99, recall results by layer, job durations                                           |
-| Login               | `GET /ui/login`          | Token input form; sets `pb_session` cookie; redirects to `/ui`                                                      |
+| Page              | Route                    | Description                                                                                                         |
+|-------------------|--------------------------|---------------------------------------------------------------------------------------------------------------------|
+| Overview          | `GET /ui`                | Server health, schema version, active memory count per scope, job status summary                                    |
+| Memory Browser    | `GET /ui/memories`       | Search bar + scope selector; paginated results with type, importance, age; soft-delete button; HTMX infinite scroll |
+| Memory Detail     | `GET /ui/memories/{id}`  | Full content, metadata, entity links, promote button                                                                |
+| Knowledge Browser | `GET /ui/knowledge`      | Filterable list (status, scope, visibility); inline endorse / deprecate actions                                     |
+| Knowledge Detail  | `GET /ui/knowledge/{id}` | Content, history timeline, endorsers, open staleness flags                                                          |
+| Collections       | `GET /ui/collections`    | Collection list; links use UUID                                                                                     |
+| Collection Detail | `GET /ui/collections/{id}` | Artifact table with links to knowledge detail; back link                                                          |
+| Promotion Queue   | `GET /ui/promotions`     | Pending promotion requests; approve/reject via `POST /ui/promotions/{id}/approve\|reject` (cookie-auth, redirect)  |
+| Staleness Flags   | `GET /ui/staleness`      | Open flags grouped by artifact; dismiss (resolve) button                                                            |
+| Entity Graph      | `GET /ui/graph`          | D3.js force-directed graph of entities and relations; scope-filtered; node search                                   |
+| Skills Registry   | `GET /ui/skills`         | Published skills list; links to skill detail                                                                        |
+| Skill Detail      | `GET /ui/skills/{id}`    | Full skill body, parameters, invocation count/last invoked; link to history                                         |
+| Skill History     | `GET /ui/skills/{id}/history` | Version changelog; backed by `skill_history` table via `db.GetSkillHistory`                                   |
+| Knowledge History | `GET /ui/knowledge/{id}/history` | Version timeline; backed by `GET /v1/knowledge/{id}/history`; linked from knowledge detail page            |
+| Token Management  | `GET /ui/tokens`         | List all tokens (name, scopes, last used, expiry, status); create-token form (name, scope multi-select, expiry); revoke button; raw token shown once on creation |
+| Principals        | `GET /ui/principals`     | Scope hierarchy tree; membership table; add / remove member forms                                                   |
+| Scopes            | `GET /ui/scopes`         | Flat list of all scopes with external ID, ltree path, and delete button                                             |
+| Metrics           | `GET /ui/metrics`        | Prometheus metric cards: tool p99, recall results by layer, job durations                                           |
+| Login             | `GET /ui/login`          | Token input form; sets `pb_session` cookie; redirects to `/ui`                                                      |
 
 **Planned / not yet implemented:**
 
@@ -3393,8 +3510,9 @@ reloads. Each template has a `_partial` variant (e.g. `memories_rows.html`) retu
 
 ### Dependency on graph REST endpoint
 
-The entity graph page requires `GET /v1/entities` and `GET /v1/graph` — the `internal/api/rest/graph.go` handler that is
-currently deferred. The graph page must be implemented after `graph.go` is complete.
+The entity graph page requires `GET /v1/entities` and `GET /v1/graph`. Both endpoints are implemented
+in `internal/api/rest/graph.go`. `GET /v1/graph/query` (Cypher traversal) returns 501 until AGE is
+available; the graph page uses only the two GET endpoints and is fully functional.
 
 ### Authentication model
 
