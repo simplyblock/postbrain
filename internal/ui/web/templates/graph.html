@@ -40,20 +40,28 @@
   const g = svg.append("g");
   svg.call(d3.zoom().scaleExtent([0.1, 8]).on("zoom", e => g.attr("transform", e.transform)));
 
-  // arrow marker
-  svg.append("defs").append("marker")
+  // arrow markers
+  const defs = svg.append("defs");
+  defs.append("marker")
     .attr("id", "arrow")
     .attr("viewBox", "0 -4 8 8")
     .attr("refX", 18).attr("refY", 0)
     .attr("markerWidth", 6).attr("markerHeight", 6)
     .attr("orient", "auto")
-    .append("path")
-    .attr("d", "M0,-4L8,0L0,4")
-    .attr("fill", "#999");
+    .append("path").attr("d", "M0,-4L8,0L0,4").attr("fill", "#999");
+  defs.append("marker")
+    .attr("id", "arrow-same")
+    .attr("viewBox", "0 -4 8 8")
+    .attr("refX", 18).attr("refY", 0)
+    .attr("markerWidth", 6).attr("markerHeight", 6)
+    .attr("orient", "auto")
+    .append("path").attr("d", "M0,-4L8,0L0,4").attr("fill", "#f80");
 
   // ── simulation ────────────────────────────────────────────
   const sim = d3.forceSimulation(nodes)
-    .force("link",   d3.forceLink(links).id(d => d.id).distance(90).strength(0.4))
+    .force("link",   d3.forceLink(links).id(d => d.id)
+      .distance(d => d.predicate === "same_as" ? 15 : 90)
+      .strength(d  => d.predicate === "same_as" ? 1.0 : 0.4))
     .force("charge", d3.forceManyBody().strength(-200))
     .force("center", d3.forceCenter(W / 2, H / 2))
     .force("x",      d3.forceX(W / 2).strength(0.04))
@@ -61,10 +69,12 @@
     .force("collide",d3.forceCollide(22));
 
   // ── edges ─────────────────────────────────────────────────
-  const link = g.append("g").attr("stroke", "#999").attr("stroke-opacity", 0.5)
+  const link = g.append("g").attr("stroke-opacity", 0.6)
     .selectAll("line").data(links).join("line")
-    .attr("stroke-width", d => 1 + d.confidence)
-    .attr("marker-end", "url(#arrow)");
+    .attr("stroke",       d => d.predicate === "same_as" ? "#f80" : "#999")
+    .attr("stroke-width", d => d.predicate === "same_as" ? 2 : 1 + d.confidence)
+    .attr("stroke-dasharray", d => d.predicate === "same_as" ? "5,3" : null)
+    .attr("marker-end",   d => d.predicate === "same_as" ? "url(#arrow-same)" : "url(#arrow)");
 
   // edge labels (only show if < 200 edges to keep it readable)
   const linkLabel = links.length < 200

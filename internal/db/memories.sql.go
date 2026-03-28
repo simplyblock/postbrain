@@ -392,7 +392,7 @@ type RecallMemoriesByCodeVectorRow struct {
 	SourceRef            *string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
-	VecScore             int32
+	VecScore             float32
 }
 
 func (q *Queries) RecallMemoriesByCodeVector(ctx context.Context, arg RecallMemoriesByCodeVectorParams) ([]*RecallMemoriesByCodeVectorRow, error) {
@@ -673,7 +673,7 @@ type RecallMemoriesByVectorRow struct {
 	SourceRef            *string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
-	VecScore             int32
+	VecScore             float32
 }
 
 func (q *Queries) RecallMemoriesByVector(ctx context.Context, arg RecallMemoriesByVectorParams) ([]*RecallMemoriesByVectorRow, error) {

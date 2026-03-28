@@ -68,7 +68,7 @@ func (ro *Router) getGraph(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to list entities")
 		return
 	}
-	relations, err := db.ListRelationsByScope(r.Context(), ro.pool, scopeID, pg.Limit, pg.Offset)
+	relations, err := db.ListRelationsByScope(r.Context(), ro.pool, scopeID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list relations")
 		return

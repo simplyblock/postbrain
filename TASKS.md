@@ -7,7 +7,7 @@
 - [x] Database schema (all tables, indexes, triggers, pg_cron jobs)
 - [x] MCP tool specifications (remember, recall, forget, context, summarize, publish, endorse, promote, collect, skill_search, skill_install, skill_invoke)
 - [x] REST API specification (all endpoints, pagination)
-- [x] Hybrid retrieval strategy (HNSW ANN + BM25 FTS + scoring formula)
+- [x] Hybrid retrieval strategy (HNSW ANN + BM25 FTS + pg_trgm trigram similarity + scoring formula)
 - [x] Knowledge visibility and sharing model
 - [x] Promotion workflow (memory → knowledge → skill)
 - [x] Staleness detection (3 signals: source_modified, contradiction_detected, low_access_age)
@@ -82,6 +82,10 @@
 - [x] `migrations/000004_skills.down.sql`
 - [x] `migrations/000005_age_graph.up.sql` — AGE graph setup wrapped in DO/EXCEPTION (no-op if absent)
 - [x] `migrations/000005_age_graph.down.sql`
+- [x] `migrations/000006_synthesis.up.sql` — `artifact_digest_sources (digest_id, source_id)` join table (bidirectional indexes), `knowledge_digest_log` audit table, `digest` added to `knowledge_type` enum
+- [x] `migrations/000006_synthesis.down.sql`
+- [x] `migrations/000007_artifact_graph.up.sql` — `artifact_entities (artifact_id, entity_id, role)` join table linking knowledge artifacts to entities; `source_artifact UUID` column on `relations` for knowledge-artifact provenance
+- [x] `migrations/000007_artifact_graph.down.sql`
 
 - [x] `models.go` — shared DB model types: `Memory`, `Principal`, `Membership`, `Scope`, `Token`, `Skill`, `SkillEndorsement`, `SkillHistory`, `SkillParameter`, `KnowledgeArtifact`, `KnowledgeEndorsement`, `KnowledgeHistory`, `KnowledgeCollection`, `KnowledgeCollectionItem`, `StalenessFlag`, `PromotionRequest`
 - [x] `queries.go` — thin pgx query layer: `CreatePrincipal`, `GetPrincipalByID`, `GetPrincipalBySlug`, `CreateMembership`, `DeleteMembership`, `GetMemberships`, `GetAllParentIDs`, `CreateScope`, `GetScopeByID`, `GetScopeByExternalID`, `GetAncestorScopeIDs`, `CreateToken`, `LookupToken`, `RevokeToken`, `UpdateTokenLastUsed`; skill queries: `CreateSkill`, `GetSkill`, `GetSkillBySlug`, `UpdateSkillContent`, `UpdateSkillStatus`, `SnapshotSkillVersion`, `CreateSkillEndorsement`, `GetSkillEndorsementByEndorser`, `CountSkillEndorsements`, `RecallSkillsByVector`, `RecallSkillsByFTS`, `ListPublishedSkillsForAgent`; knowledge queries: `GetMemory`, `CreateArtifact`, `GetArtifact`, `UpdateArtifact`, `UpdateArtifactStatus`, `IncrementArtifactEndorsementCount`, `IncrementArtifactAccess`, `SnapshotArtifactVersion`, `CreateEndorsement`, `GetEndorsementByEndorser`, `ListVisibleArtifacts`, `RecallArtifactsByVector`, `RecallArtifactsByFTS`, `CreateCollection`, `GetCollection`, `GetCollectionBySlug`, `ListCollections`, `AddCollectionItem`, `RemoveCollectionItem`, `ListCollectionItems`, `InsertStalenessFlag`, `HasOpenStalenessFlag`, `UpdateStalenessFlag`, `CreatePromotionRequest`, `GetPromotionRequest`, `ListPendingPromotions`
@@ -176,8 +180,8 @@
     2. Based on `search_mode`:
        - `"text"`: ANN query on `embedding` column only
        - `"code"`: ANN query on `embedding_code` column
-       - `"hybrid"` (default): both vector AND FTS; merge by ID
-    3. Apply combined score formula: `0.50*vec + 0.20*bm25 + 0.20*importance + 0.10*recency_decay`
+       - `"hybrid"` (default): HNSW vector + BM25 FTS + pg_trgm trigram similarity; merge by ID
+    3. Apply combined score formula: `0.50*vec + 0.20*bm25 + 0.20*importance + 0.10*recency_decay`; trigram score (`similarity(content, query)`) blended in as additional signal
        - `recency_decay = exp(-λ * days_since_last_access)` where λ from memory_type (exported as `DecayLambda`)
     4. Deduplicate by `id`; apply `min_score` filter; sort DESC; truncate to `limit`
     5. Increment `access_count` + set `last_accessed` for returned rows (async, non-blocking goroutines)
@@ -306,7 +310,11 @@
   - `UpsertRelation(ctx, scopeID, subjectID, predicate, objectID, confidence, sourceMemoryID) (*Relation, error)`
   - `LinkMemoryToEntity(ctx, memoryID, entityID, role string)` — validates role; ErrInvalidRole for invalid values
   - `ListRelationsForEntity(ctx, entityID, predicate string)` — predicate="" means all
-  - `ExtractEntitiesFromMemory(content string, sourceRef *string) []*Entity` — file: paths, pr:NNN, PascalCase concepts
+  - `ExtractEntitiesFromMemory(content string, sourceRef *string) []*Entity` — file: paths, pr:NNN, PascalCase concepts (heuristic fallback)
+- [x] `internal/knowledge/store.go` — `analyzeContent` helper: attempts LLM-based combined summarise+entity-extract call (JSON: `{summary, entities[{name,type,canonical}]}`); falls back silently to extractive summary (`knowledge.Summarize`) + heuristic entity extraction (`graph.ExtractEntitiesFromMemory`); LLM errors never block writes
+- [x] `internal/knowledge/store.go` — `artifact_entities` linking: for each extracted entity, calls `db.LinkArtifactToEntity` with role `"related"`; connects same-canonical entities in the same scope with `same_as` relations (subject/object order normalised to lower UUID first to prevent duplicates)
+- [x] `internal/db/compat.go` — `ListEntitiesByCanonical`, `LinkArtifactToEntity` helper functions supporting the same_as linking path
+
 - [ ] `age_sync.go` — (optional, skipped if AGE unavailable):
   - `SyncEntityToAGE(ctx, pool, entity *Entity) error` — MERGE vertex by id property
   - `SyncRelationToAGE(ctx, pool, rel *Relation) error` — MERGE edge by (subject, predicate, object)
@@ -390,7 +398,7 @@
 - [x] `helpers.go` — `writeJSON`, `writeError`, `readJSON`, `uuidParam`, `paginationFromRequest`
 - [x] `router_test.go` — GET /health 200, POST /v1/memories no auth 401, invalid token 401
 - [x] `upload.go` + `upload_test.go` — `POST /v1/knowledge/upload` multipart file upload; text extraction via `internal/ingest`; 401 test; supports .txt, .md, .pdf, .docx
-- [ ] `graph.go` — `GET /v1/entities`, `GET /v1/graph`, `POST /v1/graph/query` (deferred: requires AGE layer)
+- [x] `graph.go` — `GET /v1/entities?scope_id=&type=&limit=&offset=` and `GET /v1/graph?scope_id=` implemented; `POST /v1/graph/query` returns 501 (AGE unavailable — deferred)
 
 ### `cmd/postbrain` — Server Binary
 
@@ -502,6 +510,7 @@ Technology: Go `html/template` + HTMX + Pico.css, all embedded via `//go:embed`.
 - [x] **Entity Graph** (`web/templates/graph.html`) — entity and relation tables for scope; data from `GET /v1/graph`
 - [x] **Skills Registry** (`web/templates/skills.html`) — published skills list
 - [x] **Principals & Scopes** (`web/templates/principals.html`) — principals table, scopes table with delete button, memberships table with remove button, create-principal form, create-scope form, add-membership form (member/parent/role dropdowns); `POST /ui/principals`, `POST /ui/scopes`, `POST /ui/memberships`, `POST /ui/memberships/delete` routes wired in `ServeHTTP`; `ListAllMemberships` query added to `db/compat.go`
+- [x] **Scopes** (`web/templates/scopes.html`) — flat list of all scopes with external ID, ltree path, and delete button; route `GET /ui/scopes`
 - [x] **Metrics** (`web/templates/metrics.html`) — Prometheus metrics reference page
 
 #### Missing / Planned Screens

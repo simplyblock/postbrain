@@ -183,14 +183,7 @@ SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory
 FROM relations
 WHERE scope_id=$1
 ORDER BY created_at
-LIMIT $2 OFFSET $3
 `
-
-type ListRelationsByScopeParams struct {
-	ScopeID uuid.UUID
-	Limit   int32
-	Offset  int32
-}
 
 type ListRelationsByScopeRow struct {
 	ID             uuid.UUID
@@ -204,8 +197,8 @@ type ListRelationsByScopeRow struct {
 	CreatedAt      time.Time
 }
 
-func (q *Queries) ListRelationsByScope(ctx context.Context, arg ListRelationsByScopeParams) ([]*ListRelationsByScopeRow, error) {
-	rows, err := q.db.Query(ctx, listRelationsByScope, arg.ScopeID, arg.Limit, arg.Offset)
+func (q *Queries) ListRelationsByScope(ctx context.Context, scopeID uuid.UUID) ([]*ListRelationsByScopeRow, error) {
+	rows, err := q.db.Query(ctx, listRelationsByScope, scopeID)
 	if err != nil {
 		return nil, err
 	}

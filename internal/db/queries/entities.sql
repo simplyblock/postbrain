@@ -59,5 +59,4 @@ LIMIT $3 OFFSET $4;
 SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact, created_at
 FROM relations
 WHERE scope_id=$1
-ORDER BY created_at
-LIMIT $2 OFFSET $3;
+ORDER BY created_at;
