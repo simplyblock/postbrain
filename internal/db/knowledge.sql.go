@@ -390,8 +390,7 @@ WHERE ka.status = 'published'
   AND to_tsvector('postbrain_fts', ka.content) @@ plainto_tsquery('postbrain_fts', $3)
   AND (
     (ka.visibility = 'project'    AND ka.owner_scope_id = $1)
-    OR (ka.visibility = 'team'       AND s.kind = 'team'       AND s.path @> qs.path)
-    OR (ka.visibility = 'department' AND s.kind = 'department' AND s.path @> qs.path)
+    OR (ka.visibility IN ('team', 'department') AND s.path @> qs.path)
     OR (ka.visibility = 'company'    AND s.kind = 'company')
     OR  ka.id IN (
           SELECT sg.artifact_id FROM sharing_grants sg
@@ -500,8 +499,7 @@ WHERE ka.status = 'published'
   AND similarity(ka.content, $3) > 0.1
   AND (
     (ka.visibility = 'project'    AND ka.owner_scope_id = $1)
-    OR (ka.visibility = 'team'       AND s.kind = 'team'       AND s.path @> qs.path)
-    OR (ka.visibility = 'department' AND s.kind = 'department' AND s.path @> qs.path)
+    OR (ka.visibility IN ('team', 'department') AND s.path @> qs.path)
     OR (ka.visibility = 'company'    AND s.kind = 'company')
     OR  ka.id IN (
           SELECT sg.artifact_id FROM sharing_grants sg
@@ -609,8 +607,7 @@ JOIN scopes s ON ka.owner_scope_id = s.id, qs
 WHERE ka.status = 'published'
   AND (
     (ka.visibility = 'project'    AND ka.owner_scope_id = $1)
-    OR (ka.visibility = 'team'       AND s.kind = 'team'       AND s.path @> qs.path)
-    OR (ka.visibility = 'department' AND s.kind = 'department' AND s.path @> qs.path)
+    OR (ka.visibility IN ('team', 'department') AND s.path @> qs.path)
     OR (ka.visibility = 'company'    AND s.kind = 'company')
     OR  ka.id IN (
           SELECT sg.artifact_id FROM sharing_grants sg
@@ -655,7 +652,7 @@ type RecallArtifactsByVectorRow struct {
 	SourceRef        *string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
-	VecScore         int32
+	VecScore         float32
 }
 
 func (q *Queries) RecallArtifactsByVector(ctx context.Context, arg RecallArtifactsByVectorParams) ([]*RecallArtifactsByVectorRow, error) {

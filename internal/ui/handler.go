@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -206,28 +207,50 @@ func (h *Handler) handleOverview(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "health", "Overview", data)
 }
 
+const memoriesPageSize = 50
+
 // handleMemories serves GET /ui/memories.
 func (h *Handler) handleMemories(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 	scopeID := r.URL.Query().Get("scope_id")
+	offset := 0
+	if c := r.URL.Query().Get("cursor"); c != "" {
+		if v, err := strconv.Atoi(c); err == nil && v > 0 {
+			offset = v
+		}
+	}
 
 	data := struct {
 		Query      string
 		ScopeID    string
+		Scopes     []*db.Scope
 		Memories   []*db.Memory
 		NextCursor string
 	}{
-		Query:    q,
-		ScopeID:  scopeID,
-		Memories: nil,
+		Query:   q,
+		ScopeID: scopeID,
 	}
 
-	if h.pool != nil && scopeID != "" {
-		sid, err := uuid.Parse(scopeID)
+	if h.pool != nil {
+		scopes, err := db.ListScopes(r.Context(), h.pool, 100, 0)
 		if err == nil {
-			mems, err := db.ListMemoriesByScope(r.Context(), h.pool, sid, 20, 0)
-			if err == nil {
-				data.Memories = mems
+			data.Scopes = scopes
+		}
+		if scopeID == "" && len(data.Scopes) > 0 {
+			scopeID = data.Scopes[0].ID.String()
+			data.ScopeID = scopeID
+		}
+		if scopeID != "" {
+			if sid, err := uuid.Parse(scopeID); err == nil {
+				mems, err := db.ListMemoriesByScope(r.Context(), h.pool, sid, memoriesPageSize+1, offset)
+				if err == nil {
+					if len(mems) > memoriesPageSize {
+						data.Memories = mems[:memoriesPageSize]
+						data.NextCursor = strconv.Itoa(offset + memoriesPageSize)
+					} else {
+						data.Memories = mems
+					}
+				}
 			}
 		}
 	}
@@ -533,12 +556,20 @@ func (h *Handler) handleGraph(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			rels, err := db.ListRelationsByScope(r.Context(), h.pool, sid, 1000, 0)
-			if err == nil {
+			nodeIDs := make(map[string]bool, len(nodes))
+			for _, n := range nodes {
+				nodeIDs[n.ID] = true
+			}
+
+			if rels, err := db.ListRelationsByScope(r.Context(), h.pool, sid); err == nil {
 				for _, rel := range rels {
+					src, tgt := rel.SubjectID.String(), rel.ObjectID.String()
+					if !nodeIDs[src] || !nodeIDs[tgt] {
+						continue // skip dangling relations
+					}
 					links = append(links, graphLink{
-						Source:     rel.SubjectID.String(),
-						Target:     rel.ObjectID.String(),
+						Source:     src,
+						Target:     tgt,
 						Predicate:  rel.Predicate,
 						Confidence: rel.Confidence,
 					})
