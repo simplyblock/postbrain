@@ -70,6 +70,22 @@ Store facts, decisions, observations, and working notes.
 | `entities` | — | Canonical entity names to link (array of strings) |
 | `expires_in` | — | TTL in seconds; only for `working` memories |
 
+**Always populate `entities`.** Each item is an object with `name` (canonical, lowercase) and `type`. Extract entities from the content you are storing:
+
+| `type` | examples |
+|---|---|
+| `technology` | `postgresql`, `pgvector`, `redis`, `go`, `react` |
+| `service` | `auth-service`, `billing-api`, `postbrain` |
+| `file` | `src/auth.go`, `internal/db/compat.go` |
+| `person` | `alice`, `bob` (or use `@alice` in content for auto-extraction) |
+| `pr` | `pr:123` (auto-extracted from content) |
+| `decision` | `use-jwt-for-sessions`, `migrate-to-postgres` |
+| `concept` | `embedding`, `scope-hierarchy`, `staleness` |
+
+Example: `[{"name":"postgresql","type":"technology"},{"name":"src/auth.go","type":"file"},{"name":"alice","type":"person"}]`
+
+The server also auto-extracts `file:path`, `pr:NNN`, and `@mention` patterns from content, but explicit entities are preferred for precision.
+
 **Memory type guidance:**
 - `working` — temporary scratchpad (set `expires_in`); things like "currently editing X"
 - `episodic` — what happened: tool calls, file edits, decisions made this session

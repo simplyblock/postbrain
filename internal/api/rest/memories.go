@@ -12,14 +12,29 @@ import (
 	"github.com/simplyblock/postbrain/internal/memory"
 )
 
+type entityRequest struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
 type createMemoryRequest struct {
-	Content    string   `json:"content"`
-	MemoryType string   `json:"memory_type"`
-	Scope      string   `json:"scope"`
-	Importance float64  `json:"importance"`
-	SourceRef  *string  `json:"source_ref"`
-	Entities   []string `json:"entities"`
-	ExpiresIn  *int     `json:"expires_in"`
+	Content    string          `json:"content"`
+	MemoryType string          `json:"memory_type"`
+	Scope      string          `json:"scope"`
+	Importance float64         `json:"importance"`
+	SourceRef  *string         `json:"source_ref"`
+	Entities   []entityRequest `json:"entities"`
+	ExpiresIn  *int            `json:"expires_in"`
+}
+
+func entityRequestsToInput(reqs []entityRequest) []memory.EntityInput {
+	out := make([]memory.EntityInput, 0, len(reqs))
+	for _, e := range reqs {
+		if e.Name != "" {
+			out = append(out, memory.EntityInput{Name: e.Name, Type: e.Type})
+		}
+	}
+	return out
 }
 
 func (ro *Router) createMemory(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +85,7 @@ func (ro *Router) createMemory(w http.ResponseWriter, r *http.Request) {
 		AuthorID:   principalID,
 		Importance: importance,
 		SourceRef:  body.SourceRef,
-		Entities:   body.Entities,
+		Entities:   entityRequestsToInput(body.Entities),
 		ExpiresIn:  body.ExpiresIn,
 	})
 	if err != nil {

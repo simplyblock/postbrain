@@ -38,6 +38,10 @@ type lifecycleDB interface {
 	snapshotArtifactVersion(ctx context.Context, h *db.KnowledgeHistory) error
 	flagDigestsStaleness(ctx context.Context, sourceID uuid.UUID, signal string, confidence float64, evidence []byte) error
 	deleteArtifactEntityLinks(ctx context.Context, artifactID uuid.UUID) error
+	nullPreviousVersionRefs(ctx context.Context, id uuid.UUID) error
+	nullPromotionRequestArtifactRef(ctx context.Context, id uuid.UUID) error
+	resetPromotedMemoryStatus(ctx context.Context, id uuid.UUID) error
+	deleteArtifact(ctx context.Context, id uuid.UUID) error
 }
 
 // poolLifecycleDB wraps a pgxpool.Pool to implement lifecycleDB.
@@ -90,6 +94,22 @@ func (p *poolLifecycleDB) flagDigestsStaleness(ctx context.Context, sourceID uui
 
 func (p *poolLifecycleDB) deleteArtifactEntityLinks(ctx context.Context, artifactID uuid.UUID) error {
 	return db.DeleteArtifactEntityLinks(ctx, p.pool, artifactID)
+}
+
+func (p *poolLifecycleDB) nullPreviousVersionRefs(ctx context.Context, id uuid.UUID) error {
+	return db.NullPreviousVersionRefs(ctx, p.pool, id)
+}
+
+func (p *poolLifecycleDB) nullPromotionRequestArtifactRef(ctx context.Context, id uuid.UUID) error {
+	return db.NullPromotionRequestArtifactRef(ctx, p.pool, id)
+}
+
+func (p *poolLifecycleDB) resetPromotedMemoryStatus(ctx context.Context, id uuid.UUID) error {
+	return db.ResetPromotedMemoryStatus(ctx, p.pool, id)
+}
+
+func (p *poolLifecycleDB) deleteArtifact(ctx context.Context, id uuid.UUID) error {
+	return db.DeleteArtifact(ctx, p.pool, id)
 }
 
 // isUniqueViolation checks if the error is a PostgreSQL unique-constraint violation (23505).
@@ -306,6 +326,56 @@ func (l *Lifecycle) Republish(ctx context.Context, artifactID, callerID uuid.UUI
 		return ErrForbidden
 	}
 	return l.dbOps.updateArtifactStatus(ctx, artifactID, "published", artifact.PublishedAt, (*time.Time)(nil))
+}
+
+// Delete permanently removes an artifact and all cascade-dependent data.
+// It requires the caller to be a scope admin.
+// Before deletion, it:
+//   - Flags all covering published digests as stale (must run before CASCADE removes artifact_digest_sources)
+//   - Nulls self-referential previous_version FKs (NO ACTION constraint)
+//   - Nulls promotion_requests.result_artifact_id FKs (NO ACTION constraint)
+//   - Resets memories.promotion_status for memories promoted to this artifact
+//   - Removes artifact→entity graph links
+//
+// The DELETE then cascades to: artifact_entities, collection_items, endorsements,
+// knowledge_history, sharing_grants, staleness_flags, artifact_digest_sources, knowledge_digest_log.
+func (l *Lifecycle) Delete(ctx context.Context, artifactID, callerID uuid.UUID) error {
+	artifact, err := l.dbOps.getArtifact(ctx, artifactID)
+	if err != nil {
+		return err
+	}
+	if artifact == nil {
+		return ErrInvalidTransition
+	}
+	ok, err := l.membership.IsScopeAdmin(ctx, callerID, artifact.OwnerScopeID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrForbidden
+	}
+
+	// Flag digests stale BEFORE the DELETE cascades away artifact_digest_sources.
+	evidence := []byte(`{"signal":"source_deleted"}`)
+	_ = l.dbOps.flagDigestsStaleness(ctx, artifactID, "source_deleted", 1.0, evidence)
+
+	// Remove entity links from the knowledge graph (non-fatal).
+	_ = l.dbOps.deleteArtifactEntityLinks(ctx, artifactID)
+
+	// Break NO ACTION FK: previous_version self-reference.
+	if err := l.dbOps.nullPreviousVersionRefs(ctx, artifactID); err != nil {
+		return err
+	}
+	// Break NO ACTION FK: promotion_requests.result_artifact_id.
+	if err := l.dbOps.nullPromotionRequestArtifactRef(ctx, artifactID); err != nil {
+		return err
+	}
+	// Reset memory promotion_status before SET NULL clears promoted_to.
+	if err := l.dbOps.resetPromotedMemoryStatus(ctx, artifactID); err != nil {
+		return err
+	}
+
+	return l.dbOps.deleteArtifact(ctx, artifactID)
 }
 
 // EmergencyRollback transitions any non-draft artifact back to draft; requires scope admin.

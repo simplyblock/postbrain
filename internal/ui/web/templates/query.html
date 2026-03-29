@@ -1,0 +1,81 @@
+{{define "query"}}
+<h1>Query Playground</h1>
+
+<form class="toolbar" method="GET" action="/ui/query">
+  <input type="text" name="q" placeholder="Enter query…" value="{{.Query}}" style="flex:1" autofocus>
+
+  <select name="scope_id">
+    {{range .Scopes}}
+    <option value="{{.ID}}"{{if eq .ID.String $.ScopeID}} selected{{end}}>{{.ExternalID}} ({{.Kind}})</option>
+    {{end}}
+  </select>
+
+  <select name="search_mode">
+    <option value="hybrid"{{if eq .SearchMode "hybrid"}} selected{{end}}>hybrid</option>
+    <option value="text"{{if eq .SearchMode "text"}} selected{{end}}>text</option>
+    <option value="code"{{if eq .SearchMode "code"}} selected{{end}}>code</option>
+  </select>
+
+  <input type="number" name="limit" value="{{.Limit}}" min="1" max="100" style="width:5rem" title="Result limit">
+
+  <label style="display:inline-flex;align-items:center;gap:.25rem">
+    <input type="checkbox" name="layer_memory" value="1"{{if index .Layers "memory"}} checked{{end}}> memory
+  </label>
+  <label style="display:inline-flex;align-items:center;gap:.25rem">
+    <input type="checkbox" name="layer_knowledge" value="1"{{if index .Layers "knowledge"}} checked{{end}}> knowledge
+  </label>
+  <label style="display:inline-flex;align-items:center;gap:.25rem">
+    <input type="checkbox" name="layer_skill" value="1"{{if index .Layers "skill"}} checked{{end}}> skill
+  </label>
+
+  <button type="submit">Run</button>
+</form>
+
+{{if .Error}}
+<div class="alert alert-error" style="margin-top:1rem">{{.Error}}</div>
+{{end}}
+
+{{if .Ran}}
+<p style="margin:.75rem 0;color:var(--pico-muted-color)">{{len .Results}} result(s) for <strong>{{.Query}}</strong></p>
+
+{{if .Results}}
+<table>
+  <thead>
+    <tr>
+      <th style="width:3rem">#</th>
+      <th style="width:5rem">Score</th>
+      <th style="width:5rem">Layer</th>
+      <th style="width:7rem">Type</th>
+      <th>Content</th>
+      <th style="width:7rem">Meta</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range $i, $r := .Results}}
+    <tr>
+      <td>{{add1 $i}}</td>
+      <td><code>{{printf "%.3f" $r.Score}}</code></td>
+      <td><span class="badge badge-{{$r.Layer}}">{{$r.Layer}}</span></td>
+      <td>
+        {{if $r.MemoryType}}<code>{{$r.MemoryType}}</code>{{end}}
+        {{if $r.KnowledgeType}}<code>{{$r.KnowledgeType}}</code>{{end}}
+      </td>
+      <td>
+        {{if $r.Title}}<strong><a href="/ui/knowledge/{{$r.ID}}">{{$r.Title}}</a></strong><br>{{end}}
+        <span style="white-space:pre-wrap">{{truncate $r.Content 400}}</span>
+        {{if $r.SourceRef}}<br><small style="color:var(--pico-muted-color)">{{$r.SourceRef}}</small>{{end}}
+      </td>
+      <td style="font-size:.8rem;color:var(--pico-muted-color)">
+        {{if $r.Status}}{{$r.Status}}<br>{{end}}
+        {{if $r.Visibility}}{{$r.Visibility}}<br>{{end}}
+        {{if $r.Endorsements}}⭐ {{$r.Endorsements}}{{end}}
+      </td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{else}}
+<p style="color:var(--pico-muted-color)">No results.</p>
+{{end}}
+{{end}}
+{{end}}

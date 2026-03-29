@@ -793,6 +793,31 @@ func DeleteArtifactEntityLinks(ctx context.Context, pool *pgxpool.Pool, artifact
 	return q.DeleteArtifactEntityLinks(ctx, artifactID)
 }
 
+// DeleteArtifact permanently removes a knowledge artifact by ID.
+// Callers must pre-null any NO ACTION FK references before calling this.
+func DeleteArtifact(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error {
+	q := New(pool)
+	return q.DeleteArtifact(ctx, id)
+}
+
+// NullPreviousVersionRefs clears self-referential previous_version FK pointing at id.
+func NullPreviousVersionRefs(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error {
+	q := New(pool)
+	return q.NullPreviousVersionRefs(ctx, &id)
+}
+
+// NullPromotionRequestArtifactRef clears result_artifact_id FK in promotion_requests.
+func NullPromotionRequestArtifactRef(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error {
+	q := New(pool)
+	return q.NullPromotionRequestArtifactRef(ctx, &id)
+}
+
+// ResetPromotedMemoryStatus clears promotion_status on memories whose promoted_to points at id.
+func ResetPromotedMemoryStatus(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error {
+	q := New(pool)
+	return q.ResetPromotedMemoryStatus(ctx, &id)
+}
+
 // UpsertRelation inserts or updates a relation.
 func UpsertRelation(ctx context.Context, pool *pgxpool.Pool, r *Relation) (*Relation, error) {
 	q := New(pool)
@@ -1088,9 +1113,9 @@ func ListVisibleArtifacts(ctx context.Context, pool *pgxpool.Pool, callerScopeID
 func RecallArtifactsByVector(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, queryVec []float32, limit int) ([]ArtifactScore, error) {
 	q := New(pool)
 	rows, err := q.RecallArtifactsByVector(ctx, RecallArtifactsByVectorParams{
-		ScopeID:   scopeID,
-		Limit:     int32(limit),
-		Embedding: vecPtr(queryVec),
+		OwnerScopeID: scopeID,
+		Limit:        int32(limit),
+		Embedding:    vecPtr(queryVec),
 	})
 	if err != nil {
 		return nil, err
@@ -1111,7 +1136,7 @@ func RecallArtifactsByVector(ctx context.Context, pool *pgxpool.Pool, scopeID uu
 func RecallArtifactsByFTS(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, query string, limit int) ([]ArtifactScore, error) {
 	q := New(pool)
 	rows, err := q.RecallArtifactsByFTS(ctx, RecallArtifactsByFTSParams{
-		ScopeID:        scopeID,
+		OwnerScopeID:   scopeID,
 		Limit:          int32(limit),
 		PlaintoTsquery: query,
 	})
@@ -1134,9 +1159,9 @@ func RecallArtifactsByFTS(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.
 func RecallArtifactsByTrigram(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, query string, limit int) ([]ArtifactScore, error) {
 	q := New(pool)
 	rows, err := q.RecallArtifactsByTrigram(ctx, RecallArtifactsByTrigramParams{
-		ScopeID:    scopeID,
-		Limit:      int32(limit),
-		Similarity: query,
+		OwnerScopeID: scopeID,
+		Limit:        int32(limit),
+		Similarity:   query,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("db: recall artifacts by trigram: %w", err)

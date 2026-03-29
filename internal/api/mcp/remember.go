@@ -65,11 +65,20 @@ func (s *Server) handleRemember(ctx context.Context, req mcpgo.CallToolRequest) 
 		sourceRef = &v
 	}
 
-	var entities []string
+	var entities []memory.EntityInput
 	if v, ok := args["entities"].([]any); ok {
 		for _, e := range v {
-			if s, ok := e.(string); ok && s != "" {
-				entities = append(entities, s)
+			switch val := e.(type) {
+			case map[string]any:
+				name, _ := val["name"].(string)
+				typ, _ := val["type"].(string)
+				if name != "" {
+					entities = append(entities, memory.EntityInput{Name: name, Type: typ})
+				}
+			case string:
+				if val != "" {
+					entities = append(entities, memory.EntityInput{Name: val})
+				}
 			}
 		}
 	}

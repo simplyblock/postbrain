@@ -148,6 +148,18 @@ WHERE ka.status = 'published'
 ORDER BY bm25_score DESC
 LIMIT $2;
 
+-- name: DeleteArtifact :exec
+DELETE FROM knowledge_artifacts WHERE id = $1;
+
+-- name: NullPreviousVersionRefs :exec
+UPDATE knowledge_artifacts SET previous_version = NULL WHERE previous_version = $1;
+
+-- name: NullPromotionRequestArtifactRef :exec
+UPDATE promotion_requests SET result_artifact_id = NULL WHERE result_artifact_id = $1;
+
+-- name: ResetPromotedMemoryStatus :exec
+UPDATE memories SET promotion_status = NULL WHERE promoted_to = $1;
+
 -- name: RecallArtifactsByTrigram :many
 -- $1 = scope_id (visibility resolution fans out automatically)
 WITH qs AS (SELECT path FROM scopes WHERE id = $1)

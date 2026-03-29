@@ -128,6 +128,15 @@ func (q *Queries) CreateEndorsement(ctx context.Context, arg CreateEndorsementPa
 	return &i, err
 }
 
+const deleteArtifact = `-- name: DeleteArtifact :exec
+DELETE FROM knowledge_artifacts WHERE id = $1
+`
+
+func (q *Queries) DeleteArtifact(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteArtifact, id)
+	return err
+}
+
 const getArtifact = `-- name: GetArtifact :one
 SELECT id, knowledge_type, owner_scope_id, author_id,
     visibility, status, published_at, deprecated_at, review_required,
@@ -374,6 +383,24 @@ func (q *Queries) ListVisibleArtifacts(ctx context.Context, arg ListVisibleArtif
 	return items, nil
 }
 
+const nullPreviousVersionRefs = `-- name: NullPreviousVersionRefs :exec
+UPDATE knowledge_artifacts SET previous_version = NULL WHERE previous_version = $1
+`
+
+func (q *Queries) NullPreviousVersionRefs(ctx context.Context, previousVersion *uuid.UUID) error {
+	_, err := q.db.Exec(ctx, nullPreviousVersionRefs, previousVersion)
+	return err
+}
+
+const nullPromotionRequestArtifactRef = `-- name: NullPromotionRequestArtifactRef :exec
+UPDATE promotion_requests SET result_artifact_id = NULL WHERE result_artifact_id = $1
+`
+
+func (q *Queries) NullPromotionRequestArtifactRef(ctx context.Context, resultArtifactID *uuid.UUID) error {
+	_, err := q.db.Exec(ctx, nullPromotionRequestArtifactRef, resultArtifactID)
+	return err
+}
+
 const recallArtifactsByFTS = `-- name: RecallArtifactsByFTS :many
 WITH qs AS (SELECT path FROM scopes WHERE id = $1)
 SELECT ka.id, ka.knowledge_type, ka.owner_scope_id, ka.author_id,
@@ -405,7 +432,7 @@ LIMIT $2
 `
 
 type RecallArtifactsByFTSParams struct {
-	ScopeID        uuid.UUID
+	OwnerScopeID   uuid.UUID
 	Limit          int32
 	PlaintoTsquery string
 }
@@ -438,8 +465,9 @@ type RecallArtifactsByFTSRow struct {
 	Bm25Score        float32
 }
 
+// $1 = scope_id (visibility resolution fans out automatically)
 func (q *Queries) RecallArtifactsByFTS(ctx context.Context, arg RecallArtifactsByFTSParams) ([]*RecallArtifactsByFTSRow, error) {
-	rows, err := q.db.Query(ctx, recallArtifactsByFTS, arg.ScopeID, arg.Limit, arg.PlaintoTsquery)
+	rows, err := q.db.Query(ctx, recallArtifactsByFTS, arg.OwnerScopeID, arg.Limit, arg.PlaintoTsquery)
 	if err != nil {
 		return nil, err
 	}
@@ -514,9 +542,9 @@ LIMIT $2
 `
 
 type RecallArtifactsByTrigramParams struct {
-	ScopeID    uuid.UUID
-	Limit      int32
-	Similarity string
+	OwnerScopeID uuid.UUID
+	Limit        int32
+	Similarity   string
 }
 
 type RecallArtifactsByTrigramRow struct {
@@ -547,8 +575,9 @@ type RecallArtifactsByTrigramRow struct {
 	TrgmScore        float32
 }
 
+// $1 = scope_id (visibility resolution fans out automatically)
 func (q *Queries) RecallArtifactsByTrigram(ctx context.Context, arg RecallArtifactsByTrigramParams) ([]*RecallArtifactsByTrigramRow, error) {
-	rows, err := q.db.Query(ctx, recallArtifactsByTrigram, arg.ScopeID, arg.Limit, arg.Similarity)
+	rows, err := q.db.Query(ctx, recallArtifactsByTrigram, arg.OwnerScopeID, arg.Limit, arg.Similarity)
 	if err != nil {
 		return nil, err
 	}
@@ -622,9 +651,9 @@ LIMIT $2
 `
 
 type RecallArtifactsByVectorParams struct {
-	ScopeID   uuid.UUID
-	Limit     int32
-	Embedding *pgvector_go.Vector
+	OwnerScopeID uuid.UUID
+	Limit        int32
+	Embedding    *pgvector_go.Vector
 }
 
 type RecallArtifactsByVectorRow struct {
@@ -652,11 +681,12 @@ type RecallArtifactsByVectorRow struct {
 	SourceRef        *string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
-	VecScore         float32
+	VecScore         int32
 }
 
+// $1 = scope_id (the queried scope; visibility resolution fans out automatically)
 func (q *Queries) RecallArtifactsByVector(ctx context.Context, arg RecallArtifactsByVectorParams) ([]*RecallArtifactsByVectorRow, error) {
-	rows, err := q.db.Query(ctx, recallArtifactsByVector, arg.ScopeID, arg.Limit, arg.Embedding)
+	rows, err := q.db.Query(ctx, recallArtifactsByVector, arg.OwnerScopeID, arg.Limit, arg.Embedding)
 	if err != nil {
 		return nil, err
 	}
@@ -699,6 +729,15 @@ func (q *Queries) RecallArtifactsByVector(ctx context.Context, arg RecallArtifac
 		return nil, err
 	}
 	return items, nil
+}
+
+const resetPromotedMemoryStatus = `-- name: ResetPromotedMemoryStatus :exec
+UPDATE memories SET promotion_status = NULL WHERE promoted_to = $1
+`
+
+func (q *Queries) ResetPromotedMemoryStatus(ctx context.Context, promotedTo *uuid.UUID) error {
+	_, err := q.db.Exec(ctx, resetPromotedMemoryStatus, promotedTo)
+	return err
 }
 
 const snapshotArtifactVersion = `-- name: SnapshotArtifactVersion :exec
