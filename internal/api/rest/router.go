@@ -107,6 +107,7 @@ func (ro *Router) Handler() http.Handler {
 		r.Get("/knowledge/search", ro.searchArtifacts)
 		r.Get("/knowledge/{id}", ro.getArtifact)
 		r.Patch("/knowledge/{id}", ro.updateArtifact)
+		r.Delete("/knowledge/{id}", ro.deleteArtifact)
 		r.Post("/knowledge/{id}/endorse", ro.endorseArtifact)
 		r.Post("/knowledge/{id}/deprecate", ro.deprecateArtifact)
 		r.Get("/knowledge/{id}/history", ro.getArtifactHistory)

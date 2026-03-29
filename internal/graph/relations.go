@@ -102,6 +102,12 @@ func (s *Store) ListRelationsForEntity(ctx context.Context, entityID uuid.UUID, 
 // prPattern matches "pr:NNN" patterns.
 var prPattern = regexp.MustCompile(`\bpr:\d+\b`)
 
+// filePattern matches "file:path/to/file" patterns (with optional trailing :line).
+var filePattern = regexp.MustCompile(`\bfile:[^\s,;'")\]]+`)
+
+// atPersonPattern matches "@name" or "@first.last" mentions.
+var atPersonPattern = regexp.MustCompile(`@([A-Za-z][A-Za-z0-9._-]+)`)
+
 // pascalPattern matches PascalCase words (two or more words capitalised).
 // Matches words starting with an uppercase letter followed by at least one lowercase,
 // then at least one uppercase letter (e.g. UserRepository, AuthService).
@@ -112,11 +118,25 @@ var pascalPattern = regexp.MustCompile(`\b[A-Z][a-z]+[A-Za-z]*[A-Z][A-Za-z]*\b`)
 //
 // Heuristics:
 //   - If sourceRef starts with "file:": extract the file path as a "file" entity.
+//   - Extract "file:path" patterns from content as "file" entities.
 //   - Extract "pr:NNN" patterns as "pr" entities.
+//   - Extract "@mention" patterns as "person" entities.
 //   - Extract PascalCase words from content as "concept" entities (limit 10 unique).
 func ExtractEntitiesFromMemory(content string, sourceRef *string) []*db.Entity {
 	var entities []*db.Entity
 	seen := make(map[string]bool)
+
+	addEntity := func(entityType, canon string) {
+		if canon == "" || seen[canon] {
+			return
+		}
+		seen[canon] = true
+		entities = append(entities, &db.Entity{
+			EntityType: entityType,
+			Name:       canon,
+			Canonical:  canon,
+		})
+	}
 
 	// File entity from sourceRef.
 	if sourceRef != nil && strings.HasPrefix(*sourceRef, "file:") {
@@ -125,28 +145,29 @@ func ExtractEntitiesFromMemory(content string, sourceRef *string) []*db.Entity {
 		if idx := strings.LastIndex(rest, ":"); idx != -1 {
 			rest = rest[:idx]
 		}
-		canon := strings.ToLower(rest)
-		if canon != "" && !seen[canon] {
-			seen[canon] = true
-			entities = append(entities, &db.Entity{
-				EntityType: "file",
-				Name:       canon,
-				Canonical:  canon,
-			})
+		addEntity("file", strings.ToLower(rest))
+	}
+
+	// File entities from content ("file:path/to/file" or "file:path:line").
+	for _, match := range filePattern.FindAllString(content, -1) {
+		rest := match[len("file:"):]
+		// Strip trailing :<line> if present.
+		if idx := strings.LastIndex(rest, ":"); idx != -1 {
+			if _, err := fmt.Sscanf(rest[idx+1:], "%d", new(int)); err == nil {
+				rest = rest[:idx]
+			}
 		}
+		addEntity("file", strings.ToLower(rest))
 	}
 
 	// PR entities from content.
 	for _, match := range prPattern.FindAllString(content, -1) {
-		canon := strings.ToLower(match)
-		if !seen[canon] {
-			seen[canon] = true
-			entities = append(entities, &db.Entity{
-				EntityType: "pr",
-				Name:       canon,
-				Canonical:  canon,
-			})
-		}
+		addEntity("pr", strings.ToLower(match))
+	}
+
+	// Person entities from @mention patterns.
+	for _, match := range atPersonPattern.FindAllStringSubmatch(content, -1) {
+		addEntity("person", strings.ToLower(match[1]))
 	}
 
 	// Concept entities from PascalCase words.
@@ -157,12 +178,7 @@ func ExtractEntitiesFromMemory(content string, sourceRef *string) []*db.Entity {
 		}
 		canon := strings.ToLower(match)
 		if !seen[canon] {
-			seen[canon] = true
-			entities = append(entities, &db.Entity{
-				EntityType: "concept",
-				Name:       canon,
-				Canonical:  canon,
-			})
+			addEntity("concept", canon)
 			conceptCount++
 		}
 	}

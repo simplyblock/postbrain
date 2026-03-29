@@ -187,6 +187,27 @@ func (ro *Router) deprecateArtifact(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"artifact_id": id, "status": "deprecated"})
 }
 
+func (ro *Router) deleteArtifact(w http.ResponseWriter, r *http.Request) {
+	id, err := uuidParam(r, "id")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid artifact id")
+		return
+	}
+	callerID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
+	if err := ro.knwLife.Delete(r.Context(), id, callerID); err != nil {
+		switch err {
+		case knowledge.ErrForbidden:
+			writeError(w, http.StatusForbidden, "caller is not a scope admin")
+		case knowledge.ErrInvalidTransition:
+			writeError(w, http.StatusNotFound, "artifact not found")
+		default:
+			writeError(w, http.StatusInternalServerError, err.Error())
+		}
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (ro *Router) getArtifactHistory(w http.ResponseWriter, r *http.Request) {
 	id, err := uuidParam(r, "id")
 	if err != nil {

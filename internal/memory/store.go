@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -113,6 +114,12 @@ func NewStore(pool *pgxpool.Pool, svc *embedding.EmbeddingService) *Store {
 	}
 }
 
+// EntityInput carries an explicitly named entity with its type for use in CreateInput.
+type EntityInput struct {
+	Name string // canonical name, e.g. "postgresql", "src/auth.go"
+	Type string // entity_type: concept|technology|file|person|service|pr|decision|…
+}
+
 // CreateInput holds the fields required to create a new memory.
 type CreateInput struct {
 	Content    string
@@ -121,8 +128,8 @@ type CreateInput struct {
 	AuthorID   uuid.UUID
 	Importance float64 // 0–1, default 0.5
 	SourceRef  *string
-	Entities   []string // entity canonical names to link
-	ExpiresIn  *int     // seconds; meaningful only for working memory
+	Entities   []EntityInput // explicit entities to link
+	ExpiresIn  *int          // seconds; meaningful only for working memory
 	Meta       []byte
 }
 
@@ -210,11 +217,18 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 	// 7. Link explicit entities and auto-extracted entities.
 	linkedEntityIDs := make(map[uuid.UUID]struct{})
 
-	for _, canonical := range input.Entities {
-		canonical = strings.ToLower(canonical)
+	for _, ei := range input.Entities {
+		canonical := strings.ToLower(ei.Name)
+		if canonical == "" {
+			continue
+		}
+		entityType := ei.Type
+		if entityType == "" {
+			entityType = "concept"
+		}
 		entity := &db.Entity{
 			ScopeID:    input.ScopeID,
-			EntityType: "concept",
+			EntityType: entityType,
 			Name:       canonical,
 			Canonical:  canonical,
 		}
@@ -225,6 +239,7 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 		if err := s.creator.LinkMemoryToEntity(ctx, created.ID, ent.ID, "related"); err != nil {
 			return nil, fmt.Errorf("memory: link entity %q: %w", canonical, err)
 		}
+		s.linkSameAs(ctx, input.ScopeID, ent.ID, entity.Canonical, entity.EntityType)
 		linkedEntityIDs[ent.ID] = struct{}{}
 	}
 
@@ -235,6 +250,7 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 			continue // best-effort; don't fail the write on extraction errors
 		}
 		_ = s.creator.LinkMemoryToEntity(ctx, created.ID, ent.ID, "related")
+		s.linkSameAs(ctx, input.ScopeID, ent.ID, e.Canonical, e.EntityType)
 		linkedEntityIDs[ent.ID] = struct{}{}
 	}
 
@@ -294,6 +310,29 @@ func (s *Store) HardDelete(ctx context.Context, id uuid.UUID) error {
 		return fmt.Errorf("memory: hard delete: pool is nil")
 	}
 	return db.HardDeleteMemory(ctx, s.pool, id)
+}
+
+// linkSameAs connects entID to all sibling entities in scope that share the
+// same canonical string but a different entity_type, mirroring the logic in
+// knowledge/store.go. Non-fatal: errors are silently ignored.
+func (s *Store) linkSameAs(ctx context.Context, scopeID, entID uuid.UUID, canonical, entityType string) {
+	siblings, err := db.ListEntitiesByCanonical(ctx, s.pool, scopeID, canonical, entityType)
+	if err != nil {
+		return
+	}
+	for _, sib := range siblings {
+		subj, obj := entID, sib.ID
+		if bytes.Compare(subj[:], obj[:]) > 0 {
+			subj, obj = obj, subj
+		}
+		_, _ = db.UpsertRelation(ctx, s.pool, &db.Relation{
+			ScopeID:    scopeID,
+			SubjectID:  subj,
+			Predicate:  "same_as",
+			ObjectID:   obj,
+			Confidence: 1.0,
+		})
+	}
 }
 
 // safeDeref returns "" if s is nil, else *s.

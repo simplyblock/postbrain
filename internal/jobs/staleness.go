@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	pgvector "github.com/pgvector/pgvector-go"
 
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/embedding"
@@ -109,6 +110,12 @@ func (j *ContradictionJob) fetchArtifactBatch(ctx context.Context, offset int) (
 			return nil, err
 		}
 		a.Summary = summary
+		if embText != nil {
+			var v pgvector.Vector
+			if err := v.Scan(*embText); err == nil {
+				a.Embedding = &v
+			}
+		}
 		artifacts = append(artifacts, &a)
 	}
 	return artifacts, rows.Err()
@@ -126,6 +133,10 @@ func (j *ContradictionJob) processArtifact(ctx context.Context, artifact *db.Kno
 	}
 
 	// Pre-filter by topic overlap: cosine similarity > 0.6.
+	// Skip artifacts with no embedding — without a vector we can't compare topics.
+	if artifact.Embedding == nil {
+		return nil
+	}
 	topicMatches := j.filterByTopicSimilarity(artifact.Embedding.Slice(), memories)
 	if len(topicMatches) == 0 {
 		return nil
@@ -244,6 +255,18 @@ func (j *ContradictionJob) fetchRecentMemories(ctx context.Context, scopeID uuid
 		if err != nil {
 			return nil, err
 		}
+		if embText != nil {
+			var v pgvector.Vector
+			if err := v.Scan(*embText); err == nil {
+				m.Embedding = &v
+			}
+		}
+		if embCodeText != nil {
+			var v pgvector.Vector
+			if err := v.Scan(*embCodeText); err == nil {
+				m.EmbeddingCode = &v
+			}
+		}
 		memories = append(memories, &m)
 	}
 	return memories, rows.Err()
@@ -257,7 +280,7 @@ func (j *ContradictionJob) filterByTopicSimilarity(artifactEmbedding []float32, 
 	}
 	var result []*db.Memory
 	for _, m := range memories {
-		if len(m.Embedding.Slice()) == 0 {
+		if m.Embedding == nil || len(m.Embedding.Slice()) == 0 {
 			continue
 		}
 		sim := retrieval.CosineSimilarity(artifactEmbedding, m.Embedding.Slice())

@@ -20,7 +20,9 @@ import (
 	"github.com/simplyblock/postbrain/internal/embedding"
 	"github.com/simplyblock/postbrain/internal/ingest"
 	"github.com/simplyblock/postbrain/internal/knowledge"
+	"github.com/simplyblock/postbrain/internal/memory"
 	"github.com/simplyblock/postbrain/internal/principals"
+	"github.com/simplyblock/postbrain/internal/retrieval"
 )
 
 //go:embed web/templates
@@ -37,6 +39,8 @@ type Handler struct {
 	knwLife   *knowledge.Lifecycle
 	knwStore  *knowledge.Store
 	knwProm   *knowledge.Promoter
+	memStore  *memory.Store
+	svc       *embedding.EmbeddingService
 }
 
 // NewHandler creates a UI Handler with parsed templates.
@@ -48,6 +52,7 @@ func NewHandler(pool *pgxpool.Pool, svc *embedding.EmbeddingService) (*Handler, 
 		"derefTime":   derefTime,
 		"statusBadge": statusBadge,
 		"join":        strings.Join,
+		"add1":        func(i int) int { return i + 1 },
 	}
 	tmpl, err := template.New("").Funcs(funcMap).ParseFS(templatesFS, "web/templates/*.html")
 	if err != nil {
@@ -65,6 +70,8 @@ func NewHandler(pool *pgxpool.Pool, svc *embedding.EmbeddingService) (*Handler, 
 	}
 	if pool != nil && svc != nil {
 		h.knwStore = knowledge.NewStore(pool, svc)
+		h.memStore = memory.NewStore(pool, svc)
+		h.svc = svc
 	}
 	return h, nil
 }
@@ -104,6 +111,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleKnowledgeDeprecate(w, r)
 	case strings.HasSuffix(r.URL.Path, "/republish") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
 		h.handleKnowledgeRepublish(w, r)
+	case strings.HasSuffix(r.URL.Path, "/delete") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
+		h.handleKnowledgeDelete(w, r)
 	case strings.HasSuffix(r.URL.Path, "/history") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/"):
 		h.handleKnowledgeHistory(w, r)
 	case strings.HasPrefix(r.URL.Path, "/ui/knowledge/"):
@@ -150,6 +159,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleTokens(w, r)
 	case r.URL.Path == "/ui/metrics":
 		h.handleMetrics(w, r)
+	case r.URL.Path == "/ui/query":
+		h.handleQuery(w, r)
 	default:
 		http.NotFound(w, r)
 	}
@@ -945,6 +956,170 @@ func (h *Handler) handleKnowledgeRepublish(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	http.Redirect(w, r, "/ui/knowledge/"+id.String(), http.StatusSeeOther)
+}
+
+// handleKnowledgeDelete serves POST /ui/knowledge/{id}/delete.
+func (h *Handler) handleKnowledgeDelete(w http.ResponseWriter, r *http.Request) {
+	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/delete")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		http.Error(w, "invalid artifact id", http.StatusBadRequest)
+		return
+	}
+	callerID := h.principalFromCookie(r)
+	if err := h.knwLife.Delete(r.Context(), id, callerID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/ui/knowledge", http.StatusSeeOther)
+}
+
+// handleQuery serves GET /ui/query — the recall playground.
+func (h *Handler) handleQuery(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	scopes, _ := db.ListScopes(ctx, h.pool, 200, 0)
+
+	type queryResult struct {
+		Layer         string
+		ID            string
+		Score         float64
+		Title         string
+		Content       string
+		MemoryType    string
+		KnowledgeType string
+		SourceRef     string
+		Status        string
+		Visibility    string
+		Endorsements  int
+	}
+
+	data := struct {
+		Title      string
+		Content    template.HTML
+		Scopes     []*db.Scope
+		Query      string
+		ScopeID    string
+		Layers     map[string]bool
+		SearchMode string
+		Limit      int
+		Results    []queryResult
+		Ran        bool
+		Error      string
+	}{
+		Title:      "Query Playground",
+		Scopes:     scopes,
+		Layers:     map[string]bool{"memory": true, "knowledge": true, "skill": true},
+		SearchMode: "hybrid",
+		Limit:      10,
+	}
+
+	if r.Method == http.MethodGet && r.URL.Query().Get("q") != "" {
+		data.Query = r.URL.Query().Get("q")
+		data.ScopeID = r.URL.Query().Get("scope_id")
+		data.SearchMode = r.URL.Query().Get("search_mode")
+		if data.SearchMode == "" {
+			data.SearchMode = "hybrid"
+		}
+		if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 {
+			data.Limit = l
+		}
+		// Layers from checkboxes.
+		data.Layers = map[string]bool{
+			"memory":    r.URL.Query().Get("layer_memory") == "1",
+			"knowledge": r.URL.Query().Get("layer_knowledge") == "1",
+			"skill":     r.URL.Query().Get("layer_skill") == "1",
+		}
+		// Default: all layers if none checked.
+		if !data.Layers["memory"] && !data.Layers["knowledge"] && !data.Layers["skill"] {
+			data.Layers = map[string]bool{"memory": true, "knowledge": true, "skill": true}
+		}
+
+		scopeID, err := uuid.Parse(data.ScopeID)
+		if err != nil && len(scopes) > 0 {
+			scopeID = scopes[0].ID
+			data.ScopeID = scopeID.String()
+		}
+
+		var allResults []*retrieval.Result
+
+		if data.Layers["memory"] && h.memStore != nil {
+			mems, err := h.memStore.Recall(ctx, memory.RecallInput{
+				Query:      data.Query,
+				ScopeID:    scopeID,
+				SearchMode: data.SearchMode,
+				Limit:      data.Limit * 2,
+			})
+			if err != nil {
+				data.Error = "memory recall: " + err.Error()
+			} else {
+				for _, m := range mems {
+					r := &retrieval.Result{
+						Layer:      retrieval.LayerMemory,
+						ID:         m.Memory.ID,
+						Score:      m.Score,
+						Content:    m.Memory.Content,
+						MemoryType: m.Memory.MemoryType,
+					}
+					if m.Memory.SourceRef != nil {
+						r.SourceRef = *m.Memory.SourceRef
+					}
+					allResults = append(allResults, r)
+				}
+			}
+		}
+
+		if data.Layers["knowledge"] && h.knwStore != nil {
+			arts, err := h.knwStore.Recall(ctx, h.pool, knowledge.RecallInput{
+				Query:   data.Query,
+				ScopeID: scopeID,
+				Limit:   data.Limit * 2,
+			})
+			if err != nil && data.Error == "" {
+				data.Error = "knowledge recall: " + err.Error()
+			} else {
+				for _, a := range arts {
+					content := a.Artifact.Content
+					if a.Artifact.Summary != nil && *a.Artifact.Summary != "" {
+						content = *a.Artifact.Summary
+					}
+					allResults = append(allResults, &retrieval.Result{
+						Layer:         retrieval.LayerKnowledge,
+						ID:            a.Artifact.ID,
+						Score:         a.Score,
+						Title:         a.Artifact.Title,
+						Content:       content,
+						KnowledgeType: a.Artifact.KnowledgeType,
+						Visibility:    a.Artifact.Visibility,
+						Status:        a.Artifact.Status,
+						Endorsements:  int(a.Artifact.EndorsementCount),
+					})
+				}
+			}
+		}
+
+		merged := retrieval.Merge(allResults, data.Limit, 0)
+		for _, res := range merged {
+			data.Results = append(data.Results, queryResult{
+				Layer:         string(res.Layer),
+				ID:            res.ID.String(),
+				Score:         res.Score,
+				Title:         res.Title,
+				Content:       res.Content,
+				MemoryType:    res.MemoryType,
+				KnowledgeType: res.KnowledgeType,
+				SourceRef:     res.SourceRef,
+				Status:        res.Status,
+				Visibility:    res.Visibility,
+				Endorsements:  res.Endorsements,
+			})
+		}
+		data.Ran = true
+	} else if len(scopes) > 0 {
+		data.ScopeID = scopes[0].ID.String()
+	}
+
+	h.render(w, r, "query", "Query Playground", data)
 }
 
 // handleMetrics serves GET /ui/metrics.

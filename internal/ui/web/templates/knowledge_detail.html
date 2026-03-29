@@ -26,6 +26,10 @@
       <button type="submit">Republish</button>
     </form>
     {{end}}
+    <form method="POST" action="/ui/knowledge/{{.Artifact.ID}}/delete" style="display:inline"
+          onsubmit="return confirm('Permanently delete this artifact? This cannot be undone.')">
+      <button type="submit" class="danger">Delete</button>
+    </form>
   </div>
 </div>
 
