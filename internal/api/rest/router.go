@@ -175,6 +175,10 @@ func (ro *Router) Handler() http.Handler {
 		r.Get("/entities", ro.listEntities)
 		r.Get("/graph", ro.getGraph)
 		r.Post("/graph/query", ro.queryCypher)
+		r.Get("/graph/callers", ro.getCallers)
+		r.Get("/graph/callees", ro.getCallees)
+		r.Get("/graph/deps", ro.getDeps)
+		r.Get("/graph/dependents", ro.getDependents)
 	})
 
 	return r

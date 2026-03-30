@@ -1,3 +1,16 @@
+-- name: ListMemoriesForEntity :many
+-- Returns active memories linked to a given entity, most recent first.
+SELECT m.id, m.memory_type, m.scope_id, m.author_id,
+    m.content, m.summary, m.embedding, m.embedding_model_id,
+    m.embedding_code, m.embedding_code_model_id, m.content_kind, m.meta,
+    m.version, m.is_active, m.confidence, m.importance, m.access_count, m.last_accessed,
+    m.expires_at, m.promotion_status, m.promoted_to, m.source_ref, m.created_at, m.updated_at
+FROM memories m
+JOIN memory_entities me ON me.memory_id = m.id
+WHERE me.entity_id = $1 AND m.is_active = true
+ORDER BY m.created_at DESC
+LIMIT $2;
+
 -- name: GetMemory :one
 SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,

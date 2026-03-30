@@ -65,6 +65,25 @@ ORDER BY created_at;
 -- Used by incremental re-index to invalidate stale edges before re-extraction.
 DELETE FROM relations WHERE scope_id = $1 AND source_file = $2;
 
+-- name: GetEntityByID :one
+SELECT id, scope_id, entity_type, name, canonical, meta,
+       embedding, embedding_model_id, created_at, updated_at
+FROM entities WHERE id = $1;
+
+-- name: ListOutgoingRelations :many
+-- Relations where this entity is the subject, optionally filtered by predicate.
+SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact, source_file, created_at
+FROM relations
+WHERE scope_id = $1 AND subject_id = $2 AND ($3 = '' OR predicate = $3)
+ORDER BY confidence DESC, created_at;
+
+-- name: ListIncomingRelations :many
+-- Relations where this entity is the object, optionally filtered by predicate.
+SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact, source_file, created_at
+FROM relations
+WHERE scope_id = $1 AND object_id = $2 AND ($3 = '' OR predicate = $3)
+ORDER BY confidence DESC, created_at;
+
 -- name: FindEntitiesBySuffix :many
 -- Heuristic resolution: match call/type targets against entities whose
 -- canonical name equals $2, ends with ".$2", or ends with "::$2".

@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/graph"
 )
 
 // listEntities handles GET /v1/entities?scope_id=<uuid>&type=<string>&limit=N&offset=N.
@@ -109,4 +110,135 @@ func (ro *Router) getGraph(w http.ResponseWriter, r *http.Request) {
 // Returns {"error": "AGE unavailable"} with 501 (AGE not yet implemented).
 func (ro *Router) queryCypher(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusNotImplemented, "AGE unavailable")
+}
+
+type traversalNeighbourJSON struct {
+	ID         uuid.UUID `json:"id"`
+	Name       string    `json:"name"`
+	Canonical  string    `json:"canonical"`
+	Type       string    `json:"type"`
+	Predicate  string    `json:"predicate"`
+	Direction  string    `json:"direction"`
+	Confidence float64   `json:"confidence"`
+	SourceFile *string   `json:"source_file,omitempty"`
+}
+
+type traversalResultJSON struct {
+	ID         uuid.UUID                `json:"id"`
+	Name       string                   `json:"name"`
+	Canonical  string                   `json:"canonical"`
+	Type       string                   `json:"type"`
+	Neighbours []traversalNeighbourJSON `json:"neighbours"`
+}
+
+func traversalResult(res *graph.TraversalResult) traversalResultJSON {
+	out := traversalResultJSON{
+		ID:         res.Entity.ID,
+		Name:       res.Entity.Name,
+		Canonical:  res.Entity.Canonical,
+		Type:       res.Entity.EntityType,
+		Neighbours: make([]traversalNeighbourJSON, 0, len(res.Neighbours)),
+	}
+	for _, n := range res.Neighbours {
+		out.Neighbours = append(out.Neighbours, traversalNeighbourJSON{
+			ID:         n.Entity.ID,
+			Name:       n.Entity.Name,
+			Canonical:  n.Entity.Canonical,
+			Type:       n.Entity.EntityType,
+			Predicate:  n.Predicate,
+			Direction:  n.Direction,
+			Confidence: n.Confidence,
+			SourceFile: n.SourceFile,
+		})
+	}
+	return out
+}
+
+func scopeAndSymbol(r *http.Request) (uuid.UUID, string, bool) {
+	scopeStr := r.URL.Query().Get("scope_id")
+	symbol := r.URL.Query().Get("symbol")
+	if scopeStr == "" || symbol == "" {
+		return uuid.UUID{}, "", false
+	}
+	id, err := uuid.Parse(scopeStr)
+	if err != nil {
+		return uuid.UUID{}, "", false
+	}
+	return id, symbol, true
+}
+
+// getCallers handles GET /v1/graph/callers?scope_id=&symbol=
+func (ro *Router) getCallers(w http.ResponseWriter, r *http.Request) {
+	scopeID, symbol, ok := scopeAndSymbol(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "scope_id and symbol are required")
+		return
+	}
+	res, err := graph.Callers(r.Context(), ro.pool, scopeID, symbol)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if res == nil {
+		writeError(w, http.StatusNotFound, "symbol not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, traversalResult(res))
+}
+
+// getCallees handles GET /v1/graph/callees?scope_id=&symbol=
+func (ro *Router) getCallees(w http.ResponseWriter, r *http.Request) {
+	scopeID, symbol, ok := scopeAndSymbol(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "scope_id and symbol are required")
+		return
+	}
+	res, err := graph.Callees(r.Context(), ro.pool, scopeID, symbol)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if res == nil {
+		writeError(w, http.StatusNotFound, "symbol not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, traversalResult(res))
+}
+
+// getDeps handles GET /v1/graph/deps?scope_id=&symbol=
+func (ro *Router) getDeps(w http.ResponseWriter, r *http.Request) {
+	scopeID, symbol, ok := scopeAndSymbol(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "scope_id and symbol are required")
+		return
+	}
+	res, err := graph.Dependencies(r.Context(), ro.pool, scopeID, symbol)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if res == nil {
+		writeError(w, http.StatusNotFound, "symbol not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, traversalResult(res))
+}
+
+// getDependents handles GET /v1/graph/dependents?scope_id=&symbol=
+func (ro *Router) getDependents(w http.ResponseWriter, r *http.Request) {
+	scopeID, symbol, ok := scopeAndSymbol(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "scope_id and symbol are required")
+		return
+	}
+	res, err := graph.Dependents(r.Context(), ro.pool, scopeID, symbol)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if res == nil {
+		writeError(w, http.StatusNotFound, "symbol not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, traversalResult(res))
 }

@@ -121,6 +121,30 @@ func (q *Queries) GetEntityByCanonical(ctx context.Context, arg GetEntityByCanon
 	return &i, err
 }
 
+const getEntityByID = `-- name: GetEntityByID :one
+SELECT id, scope_id, entity_type, name, canonical, meta,
+       embedding, embedding_model_id, created_at, updated_at
+FROM entities WHERE id = $1
+`
+
+func (q *Queries) GetEntityByID(ctx context.Context, id uuid.UUID) (*Entity, error) {
+	row := q.db.QueryRow(ctx, getEntityByID, id)
+	var i Entity
+	err := row.Scan(
+		&i.ID,
+		&i.ScopeID,
+		&i.EntityType,
+		&i.Name,
+		&i.Canonical,
+		&i.Meta,
+		&i.Embedding,
+		&i.EmbeddingModelID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
 const linkArtifactToEntity = `-- name: LinkArtifactToEntity :exec
 INSERT INTO artifact_entities (artifact_id, entity_id, role) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING
 `
@@ -236,6 +260,122 @@ func (q *Queries) ListEntitiesByScope(ctx context.Context, arg ListEntitiesBySco
 			&i.EmbeddingModelID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listIncomingRelations = `-- name: ListIncomingRelations :many
+SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact, source_file, created_at
+FROM relations
+WHERE scope_id = $1 AND object_id = $2 AND ($3 = '' OR predicate = $3)
+ORDER BY confidence DESC, created_at
+`
+
+type ListIncomingRelationsParams struct {
+	ScopeID  uuid.UUID
+	ObjectID uuid.UUID
+	Column3  interface{}
+}
+
+type ListIncomingRelationsRow struct {
+	ID             uuid.UUID
+	ScopeID        uuid.UUID
+	SubjectID      uuid.UUID
+	Predicate      string
+	ObjectID       uuid.UUID
+	Confidence     float64
+	SourceMemory   *uuid.UUID
+	SourceArtifact *uuid.UUID
+	SourceFile     *string
+	CreatedAt      time.Time
+}
+
+// Relations where this entity is the object, optionally filtered by predicate.
+func (q *Queries) ListIncomingRelations(ctx context.Context, arg ListIncomingRelationsParams) ([]*ListIncomingRelationsRow, error) {
+	rows, err := q.db.Query(ctx, listIncomingRelations, arg.ScopeID, arg.ObjectID, arg.Column3)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*ListIncomingRelationsRow{}
+	for rows.Next() {
+		var i ListIncomingRelationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ScopeID,
+			&i.SubjectID,
+			&i.Predicate,
+			&i.ObjectID,
+			&i.Confidence,
+			&i.SourceMemory,
+			&i.SourceArtifact,
+			&i.SourceFile,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOutgoingRelations = `-- name: ListOutgoingRelations :many
+SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact, source_file, created_at
+FROM relations
+WHERE scope_id = $1 AND subject_id = $2 AND ($3 = '' OR predicate = $3)
+ORDER BY confidence DESC, created_at
+`
+
+type ListOutgoingRelationsParams struct {
+	ScopeID   uuid.UUID
+	SubjectID uuid.UUID
+	Column3   interface{}
+}
+
+type ListOutgoingRelationsRow struct {
+	ID             uuid.UUID
+	ScopeID        uuid.UUID
+	SubjectID      uuid.UUID
+	Predicate      string
+	ObjectID       uuid.UUID
+	Confidence     float64
+	SourceMemory   *uuid.UUID
+	SourceArtifact *uuid.UUID
+	SourceFile     *string
+	CreatedAt      time.Time
+}
+
+// Relations where this entity is the subject, optionally filtered by predicate.
+func (q *Queries) ListOutgoingRelations(ctx context.Context, arg ListOutgoingRelationsParams) ([]*ListOutgoingRelationsRow, error) {
+	rows, err := q.db.Query(ctx, listOutgoingRelations, arg.ScopeID, arg.SubjectID, arg.Column3)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*ListOutgoingRelationsRow{}
+	for rows.Next() {
+		var i ListOutgoingRelationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ScopeID,
+			&i.SubjectID,
+			&i.Predicate,
+			&i.ObjectID,
+			&i.Confidence,
+			&i.SourceMemory,
+			&i.SourceArtifact,
+			&i.SourceFile,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

@@ -53,6 +53,11 @@ type Result struct {
 	// Used during deduplication: if the knowledge artifact is also in the result set,
 	// the memory result is dropped.
 	PromotedTo *uuid.UUID
+
+	// GraphContext marks results that were added via graph-neighbour augmentation
+	// rather than direct retrieval. Agents can use this to distinguish primary
+	// hits from contextual supporting evidence.
+	GraphContext bool
 }
 
 // RecallInput holds parameters for the multi-layer recall.

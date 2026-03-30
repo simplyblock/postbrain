@@ -348,6 +348,70 @@ func (q *Queries) ListMemoriesByScope(ctx context.Context, arg ListMemoriesBySco
 	return items, nil
 }
 
+const listMemoriesForEntity = `-- name: ListMemoriesForEntity :many
+SELECT m.id, m.memory_type, m.scope_id, m.author_id,
+    m.content, m.summary, m.embedding, m.embedding_model_id,
+    m.embedding_code, m.embedding_code_model_id, m.content_kind, m.meta,
+    m.version, m.is_active, m.confidence, m.importance, m.access_count, m.last_accessed,
+    m.expires_at, m.promotion_status, m.promoted_to, m.source_ref, m.created_at, m.updated_at
+FROM memories m
+JOIN memory_entities me ON me.memory_id = m.id
+WHERE me.entity_id = $1 AND m.is_active = true
+ORDER BY m.created_at DESC
+LIMIT $2
+`
+
+type ListMemoriesForEntityParams struct {
+	EntityID uuid.UUID
+	Limit    int32
+}
+
+// Returns active memories linked to a given entity, most recent first.
+func (q *Queries) ListMemoriesForEntity(ctx context.Context, arg ListMemoriesForEntityParams) ([]*Memory, error) {
+	rows, err := q.db.Query(ctx, listMemoriesForEntity, arg.EntityID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*Memory{}
+	for rows.Next() {
+		var i Memory
+		if err := rows.Scan(
+			&i.ID,
+			&i.MemoryType,
+			&i.ScopeID,
+			&i.AuthorID,
+			&i.Content,
+			&i.Summary,
+			&i.Embedding,
+			&i.EmbeddingModelID,
+			&i.EmbeddingCode,
+			&i.EmbeddingCodeModelID,
+			&i.ContentKind,
+			&i.Meta,
+			&i.Version,
+			&i.IsActive,
+			&i.Confidence,
+			&i.Importance,
+			&i.AccessCount,
+			&i.LastAccessed,
+			&i.ExpiresAt,
+			&i.PromotionStatus,
+			&i.PromotedTo,
+			&i.SourceRef,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const recallMemoriesByCodeVector = `-- name: RecallMemoriesByCodeVector :many
 SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,

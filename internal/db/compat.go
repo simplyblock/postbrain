@@ -1002,6 +1002,92 @@ func FindEntitiesBySuffix(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.
 	return es, nil
 }
 
+// GetEntityByID retrieves an entity by its UUID. Returns nil, nil if not found.
+func GetEntityByID(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*Entity, error) {
+	q := New(pool)
+	e, err := q.GetEntityByID(ctx, id)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("db: get entity by id: %w", err)
+	}
+	return e, nil
+}
+
+// ListOutgoingRelations returns relations where the entity is the subject,
+// optionally filtered by predicate (empty string = all predicates).
+func ListOutgoingRelations(ctx context.Context, pool *pgxpool.Pool, scopeID, entityID uuid.UUID, predicate string) ([]*Relation, error) {
+	q := New(pool)
+	rows, err := q.ListOutgoingRelations(ctx, ListOutgoingRelationsParams{
+		ScopeID:   scopeID,
+		SubjectID: entityID,
+		Column3:   predicate,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("db: list outgoing relations: %w", err)
+	}
+	out := make([]*Relation, len(rows))
+	for i, r := range rows {
+		out[i] = &Relation{
+			ID:             r.ID,
+			ScopeID:        r.ScopeID,
+			SubjectID:      r.SubjectID,
+			Predicate:      r.Predicate,
+			ObjectID:       r.ObjectID,
+			Confidence:     r.Confidence,
+			SourceMemory:   r.SourceMemory,
+			SourceArtifact: r.SourceArtifact,
+			SourceFile:     r.SourceFile,
+			CreatedAt:      r.CreatedAt,
+		}
+	}
+	return out, nil
+}
+
+// ListIncomingRelations returns relations where the entity is the object,
+// optionally filtered by predicate (empty string = all predicates).
+func ListIncomingRelations(ctx context.Context, pool *pgxpool.Pool, scopeID, entityID uuid.UUID, predicate string) ([]*Relation, error) {
+	q := New(pool)
+	rows, err := q.ListIncomingRelations(ctx, ListIncomingRelationsParams{
+		ScopeID:  scopeID,
+		ObjectID: entityID,
+		Column3:  predicate,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("db: list incoming relations: %w", err)
+	}
+	out := make([]*Relation, len(rows))
+	for i, r := range rows {
+		out[i] = &Relation{
+			ID:             r.ID,
+			ScopeID:        r.ScopeID,
+			SubjectID:      r.SubjectID,
+			Predicate:      r.Predicate,
+			ObjectID:       r.ObjectID,
+			Confidence:     r.Confidence,
+			SourceMemory:   r.SourceMemory,
+			SourceArtifact: r.SourceArtifact,
+			SourceFile:     r.SourceFile,
+			CreatedAt:      r.CreatedAt,
+		}
+	}
+	return out, nil
+}
+
+// ListMemoriesForEntity returns active memories linked to a given entity.
+func ListMemoriesForEntity(ctx context.Context, pool *pgxpool.Pool, entityID uuid.UUID, limit int) ([]*Memory, error) {
+	q := New(pool)
+	rows, err := q.ListMemoriesForEntity(ctx, ListMemoriesForEntityParams{
+		EntityID: entityID,
+		Limit:    int32(limit),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("db: list memories for entity: %w", err)
+	}
+	return rows, nil
+}
+
 // ListRelationsByScope returns all relations in a scope.
 func ListRelationsByScope(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID) ([]*Relation, error) {
 	q := New(pool)
