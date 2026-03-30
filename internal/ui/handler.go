@@ -2,27 +2,28 @@
 package ui
 
 import (
-	"embed"
-	"encoding/json"
-	"html/template"
-	"io"
-	"io/fs"
-	"net/http"
-	"path/filepath"
-	"strconv"
-	"strings"
+    "embed"
+    "encoding/json"
+    "html/template"
+    "io"
+    "io/fs"
+    "net/http"
+    "path/filepath"
+    "strconv"
+    "strings"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
+    "github.com/google/uuid"
+    "github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
-	"github.com/simplyblock/postbrain/internal/ingest"
-	"github.com/simplyblock/postbrain/internal/knowledge"
-	"github.com/simplyblock/postbrain/internal/memory"
-	"github.com/simplyblock/postbrain/internal/principals"
-	"github.com/simplyblock/postbrain/internal/retrieval"
+    "github.com/simplyblock/postbrain/internal/auth"
+    "github.com/simplyblock/postbrain/internal/codegraph"
+    "github.com/simplyblock/postbrain/internal/db"
+    "github.com/simplyblock/postbrain/internal/embedding"
+    "github.com/simplyblock/postbrain/internal/ingest"
+    "github.com/simplyblock/postbrain/internal/knowledge"
+    "github.com/simplyblock/postbrain/internal/memory"
+    "github.com/simplyblock/postbrain/internal/principals"
+    "github.com/simplyblock/postbrain/internal/retrieval"
 )
 
 //go:embed web/templates
@@ -33,1177 +34,1315 @@ var staticFS embed.FS
 
 // Handler holds all dependencies for the UI.
 type Handler struct {
-	pool      *pgxpool.Pool
-	templates *template.Template
-	staticFS  fs.FS
-	knwLife   *knowledge.Lifecycle
-	knwStore  *knowledge.Store
-	knwProm   *knowledge.Promoter
-	memStore  *memory.Store
-	svc       *embedding.EmbeddingService
+    pool      *pgxpool.Pool
+    templates *template.Template
+    staticFS  fs.FS
+    knwLife   *knowledge.Lifecycle
+    knwStore  *knowledge.Store
+    knwProm   *knowledge.Promoter
+    memStore  *memory.Store
+    svc       *embedding.EmbeddingService
+    syncer    *codegraph.Syncer
 }
 
 // NewHandler creates a UI Handler with parsed templates.
 func NewHandler(pool *pgxpool.Pool, svc *embedding.EmbeddingService) (*Handler, error) {
-	funcMap := template.FuncMap{
-		"truncate":    truncate,
-		"timeAgo":     timeAgo,
-		"deref":       derefString,
-		"derefTime":   derefTime,
-		"statusBadge": statusBadge,
-		"join":        strings.Join,
-		"add1":        func(i int) int { return i + 1 },
-	}
-	tmpl, err := template.New("").Funcs(funcMap).ParseFS(templatesFS, "web/templates/*.html")
-	if err != nil {
-		return nil, err
-	}
-	sub, err := fs.Sub(staticFS, "web/static")
-	if err != nil {
-		return nil, err
-	}
-	h := &Handler{pool: pool, templates: tmpl, staticFS: sub}
-	if pool != nil {
-		membership := principals.NewMembershipStore(pool)
-		h.knwLife = knowledge.NewLifecycle(pool, membership)
-		h.knwProm = knowledge.NewPromoter(pool, svc)
-	}
-	if pool != nil && svc != nil {
-		h.knwStore = knowledge.NewStore(pool, svc)
-		h.memStore = memory.NewStore(pool, svc)
-		h.svc = svc
-	}
-	return h, nil
+    funcMap := template.FuncMap{
+        "truncate":    truncate,
+        "timeAgo":     timeAgo,
+        "deref":       derefString,
+        "derefTime":   derefTime,
+        "statusBadge": statusBadge,
+        "join":        strings.Join,
+        "add1":        func(i int) int { return i + 1 },
+        "slice": func(s string, i, j int) string {
+            if j > len(s) {
+                j = len(s)
+            }
+            return s[i:j]
+        },
+    }
+    tmpl, err := template.New("").Funcs(funcMap).ParseFS(templatesFS, "web/templates/*.html")
+    if err != nil {
+        return nil, err
+    }
+    sub, err := fs.Sub(staticFS, "web/static")
+    if err != nil {
+        return nil, err
+    }
+    h := &Handler{pool: pool, templates: tmpl, staticFS: sub, syncer: codegraph.NewSyncer()}
+    if pool != nil {
+        membership := principals.NewMembershipStore(pool)
+        h.knwLife = knowledge.NewLifecycle(pool, membership)
+        h.knwProm = knowledge.NewPromoter(pool, svc)
+    }
+    if pool != nil && svc != nil {
+        h.knwStore = knowledge.NewStore(pool, svc)
+        h.memStore = memory.NewStore(pool, svc)
+        h.svc = svc
+    }
+    return h, nil
 }
 
 // ServeHTTP routes /ui/* requests.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Serve static files.
-	if strings.HasPrefix(r.URL.Path, "/ui/static/") {
-		http.StripPrefix("/ui/static/", http.FileServer(http.FS(h.staticFS))).ServeHTTP(w, r)
-		return
-	}
-	// Login form and POST.
-	if r.URL.Path == "/ui/login" {
-		h.handleLogin(w, r)
-		return
-	}
-	// Auth check for all other routes.
-	if !h.authenticated(w, r) {
-		return
-	}
-	switch {
-	case r.URL.Path == "/ui" || r.URL.Path == "/ui/":
-		h.handleOverview(w, r)
-	case r.URL.Path == "/ui/memories":
-		h.handleMemories(w, r)
-	case strings.HasPrefix(r.URL.Path, "/ui/memories/"):
-		h.handleMemoryDetail(w, r)
-	case r.URL.Path == "/ui/knowledge/upload" && r.Method == http.MethodPost:
-		h.handleUploadKnowledge(w, r)
-	case r.URL.Path == "/ui/knowledge":
-		h.handleKnowledge(w, r)
-	case strings.HasSuffix(r.URL.Path, "/endorse") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
-		h.handleEndorseArtifact(w, r)
-	case strings.HasSuffix(r.URL.Path, "/review") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
-		h.handleKnowledgeReview(w, r)
-	case strings.HasSuffix(r.URL.Path, "/deprecate") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
-		h.handleKnowledgeDeprecate(w, r)
-	case strings.HasSuffix(r.URL.Path, "/republish") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
-		h.handleKnowledgeRepublish(w, r)
-	case strings.HasSuffix(r.URL.Path, "/delete") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
-		h.handleKnowledgeDelete(w, r)
-	case strings.HasSuffix(r.URL.Path, "/history") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/"):
-		h.handleKnowledgeHistory(w, r)
-	case strings.HasPrefix(r.URL.Path, "/ui/knowledge/"):
-		h.handleKnowledgeDetail(w, r)
-	case r.URL.Path == "/ui/collections":
-		h.handleCollections(w, r)
-	case strings.HasPrefix(r.URL.Path, "/ui/collections/"):
-		h.handleCollectionDetail(w, r)
-	case r.URL.Path == "/ui/promotions":
-		h.handlePromotions(w, r)
-	case strings.HasSuffix(r.URL.Path, "/approve") && strings.HasPrefix(r.URL.Path, "/ui/promotions/") && r.Method == http.MethodPost:
-		h.handleApprovePromotion(w, r)
-	case strings.HasSuffix(r.URL.Path, "/reject") && strings.HasPrefix(r.URL.Path, "/ui/promotions/") && r.Method == http.MethodPost:
-		h.handleRejectPromotion(w, r)
-	case r.URL.Path == "/ui/staleness":
-		h.handleStaleness(w, r)
-	case r.URL.Path == "/ui/graph":
-		h.handleGraph(w, r)
-	case r.URL.Path == "/ui/skills":
-		h.handleSkills(w, r)
-	case strings.HasSuffix(r.URL.Path, "/history") && strings.HasPrefix(r.URL.Path, "/ui/skills/"):
-		h.handleSkillHistory(w, r)
-	case strings.HasPrefix(r.URL.Path, "/ui/skills/"):
-		h.handleSkillDetail(w, r)
-	case r.URL.Path == "/ui/principals" && r.Method == http.MethodPost:
-		h.handleCreatePrincipal(w, r)
-	case r.URL.Path == "/ui/principals":
-		h.handlePrincipals(w, r)
-	case r.URL.Path == "/ui/scopes" && r.Method == http.MethodPost:
-		h.handleCreateScope(w, r)
-	case r.URL.Path == "/ui/scopes":
-		h.handleScopes(w, r)
-	case strings.HasSuffix(r.URL.Path, "/delete") && strings.HasPrefix(r.URL.Path, "/ui/scopes/") && r.Method == http.MethodPost:
-		h.handleDeleteScope(w, r)
-	case r.URL.Path == "/ui/memberships" && r.Method == http.MethodPost:
-		h.handleAddMembership(w, r)
-	case r.URL.Path == "/ui/memberships/delete" && r.Method == http.MethodPost:
-		h.handleDeleteMembership(w, r)
-	case r.URL.Path == "/ui/tokens" && r.Method == http.MethodPost:
-		h.handleCreateToken(w, r)
-	case strings.HasSuffix(r.URL.Path, "/revoke") && strings.HasPrefix(r.URL.Path, "/ui/tokens/") && r.Method == http.MethodPost:
-		h.handleRevokeToken(w, r)
-	case r.URL.Path == "/ui/tokens":
-		h.handleTokens(w, r)
-	case r.URL.Path == "/ui/metrics":
-		h.handleMetrics(w, r)
-	case r.URL.Path == "/ui/query":
-		h.handleQuery(w, r)
-	default:
-		http.NotFound(w, r)
-	}
+    // Serve static files.
+    if strings.HasPrefix(r.URL.Path, "/ui/static/") {
+        http.StripPrefix("/ui/static/", http.FileServer(http.FS(h.staticFS))).ServeHTTP(w, r)
+        return
+    }
+    // Login form and POST.
+    if r.URL.Path == "/ui/login" {
+        h.handleLogin(w, r)
+        return
+    }
+    // Auth check for all other routes.
+    if !h.authenticated(w, r) {
+        return
+    }
+    switch {
+    case r.URL.Path == "/ui" || r.URL.Path == "/ui/":
+        h.handleOverview(w, r)
+    case r.URL.Path == "/ui/memories":
+        h.handleMemories(w, r)
+    case strings.HasPrefix(r.URL.Path, "/ui/memories/"):
+        h.handleMemoryDetail(w, r)
+    case r.URL.Path == "/ui/knowledge/upload" && r.Method == http.MethodPost:
+        h.handleUploadKnowledge(w, r)
+    case r.URL.Path == "/ui/knowledge":
+        h.handleKnowledge(w, r)
+    case strings.HasSuffix(r.URL.Path, "/endorse") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
+        h.handleEndorseArtifact(w, r)
+    case strings.HasSuffix(r.URL.Path, "/review") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
+        h.handleKnowledgeReview(w, r)
+    case strings.HasSuffix(r.URL.Path, "/deprecate") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
+        h.handleKnowledgeDeprecate(w, r)
+    case strings.HasSuffix(r.URL.Path, "/republish") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
+        h.handleKnowledgeRepublish(w, r)
+    case strings.HasSuffix(r.URL.Path, "/delete") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
+        h.handleKnowledgeDelete(w, r)
+    case strings.HasSuffix(r.URL.Path, "/history") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/"):
+        h.handleKnowledgeHistory(w, r)
+    case strings.HasPrefix(r.URL.Path, "/ui/knowledge/"):
+        h.handleKnowledgeDetail(w, r)
+    case r.URL.Path == "/ui/collections":
+        h.handleCollections(w, r)
+    case strings.HasPrefix(r.URL.Path, "/ui/collections/"):
+        h.handleCollectionDetail(w, r)
+    case r.URL.Path == "/ui/promotions":
+        h.handlePromotions(w, r)
+    case strings.HasSuffix(r.URL.Path, "/approve") && strings.HasPrefix(r.URL.Path, "/ui/promotions/") && r.Method == http.MethodPost:
+        h.handleApprovePromotion(w, r)
+    case strings.HasSuffix(r.URL.Path, "/reject") && strings.HasPrefix(r.URL.Path, "/ui/promotions/") && r.Method == http.MethodPost:
+        h.handleRejectPromotion(w, r)
+    case r.URL.Path == "/ui/staleness":
+        h.handleStaleness(w, r)
+    case r.URL.Path == "/ui/graph":
+        h.handleGraph(w, r)
+    case r.URL.Path == "/ui/skills":
+        h.handleSkills(w, r)
+    case strings.HasSuffix(r.URL.Path, "/history") && strings.HasPrefix(r.URL.Path, "/ui/skills/"):
+        h.handleSkillHistory(w, r)
+    case strings.HasPrefix(r.URL.Path, "/ui/skills/"):
+        h.handleSkillDetail(w, r)
+    case r.URL.Path == "/ui/principals" && r.Method == http.MethodPost:
+        h.handleCreatePrincipal(w, r)
+    case r.URL.Path == "/ui/principals":
+        h.handlePrincipals(w, r)
+    case r.URL.Path == "/ui/scopes" && r.Method == http.MethodPost:
+        h.handleCreateScope(w, r)
+    case r.URL.Path == "/ui/scopes":
+        h.handleScopes(w, r)
+    case strings.HasSuffix(r.URL.Path, "/delete") && strings.HasPrefix(r.URL.Path, "/ui/scopes/") && r.Method == http.MethodPost:
+        h.handleDeleteScope(w, r)
+    case strings.HasSuffix(r.URL.Path, "/repo/sync/status") && strings.HasPrefix(r.URL.Path, "/ui/scopes/") && r.Method == http.MethodGet:
+        h.handleSyncStatus(w, r)
+    case strings.HasSuffix(r.URL.Path, "/repo/sync") && strings.HasPrefix(r.URL.Path, "/ui/scopes/") && r.Method == http.MethodPost:
+        h.handleSyncScopeRepo(w, r)
+    case strings.HasSuffix(r.URL.Path, "/repo") && strings.HasPrefix(r.URL.Path, "/ui/scopes/") && r.Method == http.MethodPost:
+        h.handleSetScopeRepo(w, r)
+    case r.URL.Path == "/ui/memberships" && r.Method == http.MethodPost:
+        h.handleAddMembership(w, r)
+    case r.URL.Path == "/ui/memberships/delete" && r.Method == http.MethodPost:
+        h.handleDeleteMembership(w, r)
+    case r.URL.Path == "/ui/tokens" && r.Method == http.MethodPost:
+        h.handleCreateToken(w, r)
+    case strings.HasSuffix(r.URL.Path, "/revoke") && strings.HasPrefix(r.URL.Path, "/ui/tokens/") && r.Method == http.MethodPost:
+        h.handleRevokeToken(w, r)
+    case r.URL.Path == "/ui/tokens":
+        h.handleTokens(w, r)
+    case r.URL.Path == "/ui/metrics":
+        h.handleMetrics(w, r)
+    case r.URL.Path == "/ui/query":
+        h.handleQuery(w, r)
+    default:
+        http.NotFound(w, r)
+    }
 }
 
 // render renders a named template wrapped in the base layout.
 // For HTMX requests (HX-Request: true header), renders only the content template.
 func (h *Handler) render(w http.ResponseWriter, r *http.Request, tmplName string, title string, data any) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if r.Header.Get("HX-Request") == "true" {
-		if err := h.templates.ExecuteTemplate(w, tmplName, data); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-	// Render content to buffer first, then wrap in base layout.
-	var buf strings.Builder
-	if err := h.templates.ExecuteTemplate(&buf, tmplName, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if err := h.templates.ExecuteTemplate(w, "base", struct {
-		Title   string
-		Content template.HTML
-	}{
-		Title:   title,
-		Content: template.HTML(buf.String()), //nolint:gosec // generated by our own templates
-	}); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+    w.Header().Set("Content-Type", "text/html; charset=utf-8")
+    if r.Header.Get("HX-Request") == "true" {
+        if err := h.templates.ExecuteTemplate(w, tmplName, data); err != nil {
+            http.Error(w, err.Error(), http.StatusInternalServerError)
+        }
+        return
+    }
+    // Render content to buffer first, then wrap in base layout.
+    var buf strings.Builder
+    if err := h.templates.ExecuteTemplate(&buf, tmplName, data); err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+    if err := h.templates.ExecuteTemplate(w, "base", struct {
+        Title   string
+        Content template.HTML
+    }{
+        Title:   title,
+        Content: template.HTML(buf.String()), //nolint:gosec // generated by our own templates
+    }); err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+    }
 }
 
 // handleOverview serves GET /ui — server health and schema version.
 func (h *Handler) handleOverview(w http.ResponseWriter, r *http.Request) {
-	data := struct {
-		Status          string
-		SchemaVersion   uint
-		ExpectedVersion uint
-		SchemaDirty     bool
-	}{
-		Status:          "ok",
-		SchemaVersion:   0,
-		ExpectedVersion: 0,
-		SchemaDirty:     false,
-	}
-	if h.pool != nil {
-		sv, dirty, err := db.SchemaVersion(r.Context(), h.pool)
-		if err == nil {
-			data.SchemaVersion = sv
-			data.SchemaDirty = dirty
-		} else {
-			data.Status = "degraded"
-		}
-	}
-	h.render(w, r, "health", "Overview", data)
+    data := struct {
+        Status          string
+        SchemaVersion   uint
+        ExpectedVersion uint
+        SchemaDirty     bool
+    }{
+        Status:          "ok",
+        SchemaVersion:   0,
+        ExpectedVersion: 0,
+        SchemaDirty:     false,
+    }
+    if h.pool != nil {
+        sv, dirty, err := db.SchemaVersion(r.Context(), h.pool)
+        if err == nil {
+            data.SchemaVersion = sv
+            data.SchemaDirty = dirty
+        } else {
+            data.Status = "degraded"
+        }
+    }
+    h.render(w, r, "health", "Overview", data)
 }
 
 const memoriesPageSize = 50
 
 // handleMemories serves GET /ui/memories.
 func (h *Handler) handleMemories(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query().Get("q")
-	scopeID := r.URL.Query().Get("scope_id")
-	offset := 0
-	if c := r.URL.Query().Get("cursor"); c != "" {
-		if v, err := strconv.Atoi(c); err == nil && v > 0 {
-			offset = v
-		}
-	}
+    q := r.URL.Query().Get("q")
+    scopeID := r.URL.Query().Get("scope_id")
+    offset := 0
+    if c := r.URL.Query().Get("cursor"); c != "" {
+        if v, err := strconv.Atoi(c); err == nil && v > 0 {
+            offset = v
+        }
+    }
 
-	data := struct {
-		Query      string
-		ScopeID    string
-		Scopes     []*db.Scope
-		Memories   []*db.Memory
-		NextCursor string
-	}{
-		Query:   q,
-		ScopeID: scopeID,
-	}
+    data := struct {
+        Query      string
+        ScopeID    string
+        Scopes     []*db.Scope
+        Memories   []*db.Memory
+        NextCursor string
+    }{
+        Query:   q,
+        ScopeID: scopeID,
+    }
 
-	if h.pool != nil {
-		scopes, err := db.ListScopes(r.Context(), h.pool, 100, 0)
-		if err == nil {
-			data.Scopes = scopes
-		}
-		if scopeID == "" && len(data.Scopes) > 0 {
-			scopeID = data.Scopes[0].ID.String()
-			data.ScopeID = scopeID
-		}
-		if scopeID != "" {
-			if sid, err := uuid.Parse(scopeID); err == nil {
-				mems, err := db.ListMemoriesByScope(r.Context(), h.pool, sid, memoriesPageSize+1, offset)
-				if err == nil {
-					if len(mems) > memoriesPageSize {
-						data.Memories = mems[:memoriesPageSize]
-						data.NextCursor = strconv.Itoa(offset + memoriesPageSize)
-					} else {
-						data.Memories = mems
-					}
-				}
-			}
-		}
-	}
+    if h.pool != nil {
+        scopes, err := db.ListScopes(r.Context(), h.pool, 100, 0)
+        if err == nil {
+            data.Scopes = scopes
+        }
+        if scopeID == "" && len(data.Scopes) > 0 {
+            scopeID = data.Scopes[0].ID.String()
+            data.ScopeID = scopeID
+        }
+        if scopeID != "" {
+            if sid, err := uuid.Parse(scopeID); err == nil {
+                mems, err := db.ListMemoriesByScope(r.Context(), h.pool, sid, memoriesPageSize+1, offset)
+                if err == nil {
+                    if len(mems) > memoriesPageSize {
+                        data.Memories = mems[:memoriesPageSize]
+                        data.NextCursor = strconv.Itoa(offset + memoriesPageSize)
+                    } else {
+                        data.Memories = mems
+                    }
+                }
+            }
+        }
+    }
 
-	tmpl := "memories"
-	if r.Header.Get("HX-Request") == "true" {
-		tmpl = "memories_rows"
-	}
-	h.render(w, r, tmpl, "Memories", data)
+    tmpl := "memories"
+    if r.Header.Get("HX-Request") == "true" {
+        tmpl = "memories_rows"
+    }
+    h.render(w, r, tmpl, "Memories", data)
 }
 
 // handleMemoryDetail serves GET /ui/memories/{id}.
 func (h *Handler) handleMemoryDetail(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimPrefix(r.URL.Path, "/ui/memories/")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
+    idStr := strings.TrimPrefix(r.URL.Path, "/ui/memories/")
+    id, err := uuid.Parse(idStr)
+    if err != nil {
+        http.NotFound(w, r)
+        return
+    }
 
-	data := struct {
-		Memory *db.Memory
-	}{}
+    data := struct {
+        Memory *db.Memory
+    }{}
 
-	if h.pool != nil {
-		mem, err := db.GetMemory(r.Context(), h.pool, id)
-		if err != nil || mem == nil {
-			http.NotFound(w, r)
-			return
-		}
-		data.Memory = mem
-	}
+    if h.pool != nil {
+        mem, err := db.GetMemory(r.Context(), h.pool, id)
+        if err != nil || mem == nil {
+            http.NotFound(w, r)
+            return
+        }
+        data.Memory = mem
+    }
 
-	h.render(w, r, "memory_detail", "Memory", data)
+    h.render(w, r, "memory_detail", "Memory", data)
 }
 
 // handleKnowledge serves GET /ui/knowledge.
+const knowledgePageSize = 50
+
 func (h *Handler) handleKnowledge(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query().Get("q")
-	_ = q
+    q := r.URL.Query().Get("q")
+    status := r.URL.Query().Get("status")
 
-	data := struct {
-		Query       string
-		Artifacts   []*db.KnowledgeArtifact
-		Scopes      []*db.Scope
-		UploadError string
-	}{
-		Query:     q,
-		Artifacts: nil,
-	}
+    cursor := 0
+    if c, err := strconv.Atoi(r.URL.Query().Get("cursor")); err == nil && c > 0 {
+        cursor = c
+    }
 
-	if h.pool != nil {
-		arts, err := db.ListAllArtifacts(r.Context(), h.pool, 20, 0)
-		if err == nil {
-			data.Artifacts = arts
-		}
-		scopes, err := db.ListScopes(r.Context(), h.pool, 200, 0)
-		if err == nil {
-			data.Scopes = scopes
-		}
-	}
+    data := struct {
+        Query       string
+        Status      string
+        Artifacts   []*db.KnowledgeArtifact
+        Scopes      []*db.Scope
+        UploadError string
+        PrevCursor  int
+        NextCursor  int
+        HasPrev     bool
+        HasNext     bool
+    }{
+        Query:      q,
+        Status:     status,
+        PrevCursor: cursor - knowledgePageSize,
+        HasPrev:    cursor > 0,
+    }
 
-	tmpl := "knowledge"
-	if r.Header.Get("HX-Request") == "true" {
-		tmpl = "knowledge_rows"
-	}
-	h.render(w, r, tmpl, "Knowledge", data)
+    if h.pool != nil {
+        var arts []*db.KnowledgeArtifact
+        var err error
+        if q != "" {
+            arts, err = db.SearchArtifacts(r.Context(), h.pool, q, status, knowledgePageSize+1, cursor)
+        } else if status != "" {
+            arts, err = db.ListArtifactsByStatus(r.Context(), h.pool, status, knowledgePageSize+1, cursor)
+        } else {
+            arts, err = db.ListAllArtifacts(r.Context(), h.pool, knowledgePageSize+1, cursor)
+        }
+        if err == nil {
+            if len(arts) > knowledgePageSize {
+                data.Artifacts = arts[:knowledgePageSize]
+                data.HasNext = true
+                data.NextCursor = cursor + knowledgePageSize
+            } else {
+                data.Artifacts = arts
+            }
+        }
+        scopes, err := db.ListScopes(r.Context(), h.pool, 200, 0)
+        if err == nil {
+            data.Scopes = scopes
+        }
+    }
+
+    tmpl := "knowledge"
+    if r.Header.Get("HX-Request") == "true" {
+        tmpl = "knowledge_rows"
+    }
+    h.render(w, r, tmpl, "Knowledge", data)
 }
 
 // handleKnowledgeDetail serves GET /ui/knowledge/{id}.
 func (h *Handler) handleKnowledgeDetail(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimPrefix(r.URL.Path, "/ui/knowledge/")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
+    idStr := strings.TrimPrefix(r.URL.Path, "/ui/knowledge/")
+    id, err := uuid.Parse(idStr)
+    if err != nil {
+        http.NotFound(w, r)
+        return
+    }
 
-	data := struct {
-		Artifact *db.KnowledgeArtifact
-		Sources  []*db.KnowledgeArtifact // populated when Artifact is a digest
-		Digests  []*db.KnowledgeArtifact // published digests covering this artifact
-	}{}
+    data := struct {
+        Artifact *db.KnowledgeArtifact
+        Sources  []*db.KnowledgeArtifact // populated when Artifact is a digest
+        Digests  []*db.KnowledgeArtifact // published digests covering this artifact
+    }{}
 
-	if h.pool != nil {
-		art, err := db.GetArtifact(r.Context(), h.pool, id)
-		if err != nil || art == nil {
-			http.NotFound(w, r)
-			return
-		}
-		data.Artifact = art
+    if h.pool != nil {
+        art, err := db.GetArtifact(r.Context(), h.pool, id)
+        if err != nil || art == nil {
+            http.NotFound(w, r)
+            return
+        }
+        data.Artifact = art
 
-		if art.KnowledgeType == "digest" {
-			data.Sources, _ = db.ListDigestSources(r.Context(), h.pool, id)
-		} else {
-			data.Digests, _ = db.ListDigestsForSource(r.Context(), h.pool, id)
-		}
-	}
+        if art.KnowledgeType == "digest" {
+            data.Sources, _ = db.ListDigestSources(r.Context(), h.pool, id)
+        } else {
+            data.Digests, _ = db.ListDigestsForSource(r.Context(), h.pool, id)
+        }
+    }
 
-	h.render(w, r, "knowledge_detail", "Knowledge", data)
+    h.render(w, r, "knowledge_detail", "Knowledge", data)
 }
 
 // handleKnowledgeHistory serves GET /ui/knowledge/{id}/history.
 func (h *Handler) handleKnowledgeHistory(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/history")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
+    idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/history")
+    id, err := uuid.Parse(idStr)
+    if err != nil {
+        http.NotFound(w, r)
+        return
+    }
 
-	data := struct {
-		Artifact *db.KnowledgeArtifact
-		History  []*db.KnowledgeHistory
-	}{}
+    data := struct {
+        Artifact *db.KnowledgeArtifact
+        History  []*db.KnowledgeHistory
+    }{}
 
-	if h.pool != nil {
-		art, err := db.GetArtifact(r.Context(), h.pool, id)
-		if err != nil || art == nil {
-			http.NotFound(w, r)
-			return
-		}
-		data.Artifact = art
-		history, _ := db.GetArtifactHistory(r.Context(), h.pool, id)
-		data.History = history
-	}
+    if h.pool != nil {
+        art, err := db.GetArtifact(r.Context(), h.pool, id)
+        if err != nil || art == nil {
+            http.NotFound(w, r)
+            return
+        }
+        data.Artifact = art
+        history, _ := db.GetArtifactHistory(r.Context(), h.pool, id)
+        data.History = history
+    }
 
-	h.render(w, r, "knowledge_history", "Knowledge History", data)
+    h.render(w, r, "knowledge_history", "Knowledge History", data)
 }
 
 // handleCollections serves GET /ui/collections.
 func (h *Handler) handleCollections(w http.ResponseWriter, r *http.Request) {
-	data := struct {
-		Collections []*db.KnowledgeCollection
-	}{}
+    data := struct {
+        Collections []*db.KnowledgeCollection
+    }{}
 
-	if h.pool != nil {
-		var colls []*db.KnowledgeCollection
-		scopeStr := r.URL.Query().Get("scope_id")
-		if scopeStr != "" {
-			sid, err := uuid.Parse(scopeStr)
-			if err == nil {
-				colls, _ = db.ListCollections(r.Context(), h.pool, sid)
-			}
-		} else {
-			colls, _ = db.ListAllCollections(r.Context(), h.pool)
-		}
-		data.Collections = colls
-	}
+    if h.pool != nil {
+        var colls []*db.KnowledgeCollection
+        scopeStr := r.URL.Query().Get("scope_id")
+        if scopeStr != "" {
+            sid, err := uuid.Parse(scopeStr)
+            if err == nil {
+                colls, _ = db.ListCollections(r.Context(), h.pool, sid)
+            }
+        } else {
+            colls, _ = db.ListAllCollections(r.Context(), h.pool)
+        }
+        data.Collections = colls
+    }
 
-	h.render(w, r, "collections", "Collections", data)
+    h.render(w, r, "collections", "Collections", data)
 }
 
 // handleCollectionDetail serves GET /ui/collections/{id}.
 func (h *Handler) handleCollectionDetail(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimPrefix(r.URL.Path, "/ui/collections/")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
+    idStr := strings.TrimPrefix(r.URL.Path, "/ui/collections/")
+    id, err := uuid.Parse(idStr)
+    if err != nil {
+        http.NotFound(w, r)
+        return
+    }
 
-	data := struct {
-		Collection *db.KnowledgeCollection
-		Artifacts  []*db.KnowledgeArtifact
-	}{}
+    data := struct {
+        Collection *db.KnowledgeCollection
+        Artifacts  []*db.KnowledgeArtifact
+    }{}
 
-	if h.pool != nil {
-		coll, err := db.GetCollection(r.Context(), h.pool, id)
-		if err != nil || coll == nil {
-			http.NotFound(w, r)
-			return
-		}
-		data.Collection = coll
-		arts, _ := db.ListCollectionItems(r.Context(), h.pool, id)
-		data.Artifacts = arts
-	}
+    if h.pool != nil {
+        coll, err := db.GetCollection(r.Context(), h.pool, id)
+        if err != nil || coll == nil {
+            http.NotFound(w, r)
+            return
+        }
+        data.Collection = coll
+        arts, _ := db.ListCollectionItems(r.Context(), h.pool, id)
+        data.Artifacts = arts
+    }
 
-	h.render(w, r, "collection_detail", "Collection", data)
+    h.render(w, r, "collection_detail", "Collection", data)
 }
 
 // handlePromotions serves GET /ui/promotions.
 func (h *Handler) handlePromotions(w http.ResponseWriter, r *http.Request) {
-	data := struct {
-		Promotions []*db.PromotionRequest
-	}{}
+    data := struct {
+        Promotions []*db.PromotionRequest
+    }{}
 
-	if h.pool != nil {
-		proms, err := db.ListPendingPromotions(r.Context(), h.pool, uuid.Nil)
-		if err == nil {
-			data.Promotions = proms
-		}
-	}
+    if h.pool != nil {
+        proms, err := db.ListPendingPromotions(r.Context(), h.pool, uuid.Nil)
+        if err == nil {
+            data.Promotions = proms
+        }
+    }
 
-	h.render(w, r, "promotions", "Promotion Queue", data)
+    h.render(w, r, "promotions", "Promotion Queue", data)
 }
 
 // handleApprovePromotion serves POST /ui/promotions/{id}/approve.
 func (h *Handler) handleApprovePromotion(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/promotions/"), "/approve")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		http.Error(w, "invalid promotion id", http.StatusBadRequest)
-		return
-	}
-	reviewerID := h.principalFromCookie(r)
-	if _, err := h.knwProm.Approve(r.Context(), id, reviewerID, reviewerID); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	http.Redirect(w, r, "/ui/promotions", http.StatusSeeOther)
+    idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/promotions/"), "/approve")
+    id, err := uuid.Parse(idStr)
+    if err != nil {
+        http.Error(w, "invalid promotion id", http.StatusBadRequest)
+        return
+    }
+    reviewerID := h.principalFromCookie(r)
+    if _, err := h.knwProm.Approve(r.Context(), id, reviewerID, reviewerID); err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+    http.Redirect(w, r, "/ui/promotions", http.StatusSeeOther)
 }
 
 // handleRejectPromotion serves POST /ui/promotions/{id}/reject.
 func (h *Handler) handleRejectPromotion(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/promotions/"), "/reject")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		http.Error(w, "invalid promotion id", http.StatusBadRequest)
-		return
-	}
-	reviewerID := h.principalFromCookie(r)
-	if err := h.knwProm.Reject(r.Context(), id, reviewerID, nil); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	http.Redirect(w, r, "/ui/promotions", http.StatusSeeOther)
+    idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/promotions/"), "/reject")
+    id, err := uuid.Parse(idStr)
+    if err != nil {
+        http.Error(w, "invalid promotion id", http.StatusBadRequest)
+        return
+    }
+    reviewerID := h.principalFromCookie(r)
+    if err := h.knwProm.Reject(r.Context(), id, reviewerID, nil); err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+    http.Redirect(w, r, "/ui/promotions", http.StatusSeeOther)
 }
 
 // handleStaleness serves GET /ui/staleness.
 func (h *Handler) handleStaleness(w http.ResponseWriter, r *http.Request) {
-	data := struct {
-		Flags []*db.StalenessFlag
-	}{}
+    data := struct {
+        Flags []*db.StalenessFlag
+    }{}
 
-	if h.pool != nil {
-		flags, err := db.ListStalenessFlags(r.Context(), h.pool, "open", 50, 0)
-		if err == nil {
-			data.Flags = flags
-		}
-	}
+    if h.pool != nil {
+        flags, err := db.ListStalenessFlags(r.Context(), h.pool, "open", 50, 0)
+        if err == nil {
+            data.Flags = flags
+        }
+    }
 
-	h.render(w, r, "staleness", "Staleness Flags", data)
+    h.render(w, r, "staleness", "Staleness Flags", data)
 }
 
 // graphNode is the JSON shape consumed by the D3 force simulation.
 type graphNode struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Type string `json:"type"`
+    ID   string `json:"id"`
+    Name string `json:"name"`
+    Type string `json:"type"`
 }
 
 // graphLink is the JSON shape for a relation edge.
 type graphLink struct {
-	Source     string  `json:"source"`
-	Target     string  `json:"target"`
-	Predicate  string  `json:"predicate"`
-	Confidence float64 `json:"confidence"`
+    Source     string  `json:"source"`
+    Target     string  `json:"target"`
+    Predicate  string  `json:"predicate"`
+    Confidence float64 `json:"confidence"`
 }
 
 // handleGraph serves GET /ui/graph.
 func (h *Handler) handleGraph(w http.ResponseWriter, r *http.Request) {
-	scopeStr := r.URL.Query().Get("scope_id")
+    scopeStr := r.URL.Query().Get("scope_id")
 
-	data := struct {
-		Scopes    []*db.Scope
-		ScopeID   string
-		NodeCount int
-		EdgeCount int
-		GraphJSON template.JS
-	}{ScopeID: scopeStr}
+    data := struct {
+        Scopes    []*db.Scope
+        ScopeID   string
+        NodeCount int
+        EdgeCount int
+        GraphJSON template.JS
+    }{ScopeID: scopeStr}
 
-	if h.pool == nil {
-		h.render(w, r, "graph", "Entity Graph", data)
-		return
-	}
+    if h.pool == nil {
+        h.render(w, r, "graph", "Entity Graph", data)
+        return
+    }
 
-	scopes, err := db.ListScopes(r.Context(), h.pool, 200, 0)
-	if err == nil {
-		data.Scopes = scopes
-	}
+    scopes, err := db.ListScopes(r.Context(), h.pool, 200, 0)
+    if err == nil {
+        data.Scopes = scopes
+    }
 
-	// Default to first scope when none is selected.
-	if scopeStr == "" && len(data.Scopes) > 0 {
-		scopeStr = data.Scopes[0].ID.String()
-		data.ScopeID = scopeStr
-	}
+    // Default to first scope when none is selected.
+    if scopeStr == "" && len(data.Scopes) > 0 {
+        scopeStr = data.Scopes[0].ID.String()
+        data.ScopeID = scopeStr
+    }
 
-	if scopeStr != "" {
-		sid, err := uuid.Parse(scopeStr)
-		if err == nil {
-			nodes := []graphNode{}
-			links := []graphLink{}
+    if scopeStr != "" {
+        sid, err := uuid.Parse(scopeStr)
+        if err == nil {
+            nodes := []graphNode{}
+            links := []graphLink{}
 
-			ents, err := db.ListEntitiesByScope(r.Context(), h.pool, sid, "", 500, 0)
-			if err == nil {
-				for _, e := range ents {
-					nodes = append(nodes, graphNode{
-						ID:   e.ID.String(),
-						Name: e.Name,
-						Type: e.EntityType,
-					})
-				}
-			}
+            ents, err := db.ListEntitiesByScope(r.Context(), h.pool, sid, "", 100000, 0)
+            if err == nil {
+                for _, e := range ents {
+                    nodes = append(nodes, graphNode{
+                        ID:   e.ID.String(),
+                        Name: e.Name,
+                        Type: e.EntityType,
+                    })
+                }
+            }
 
-			nodeIDs := make(map[string]bool, len(nodes))
-			for _, n := range nodes {
-				nodeIDs[n.ID] = true
-			}
+            nodeIDs := make(map[string]bool, len(nodes))
+            for _, n := range nodes {
+                nodeIDs[n.ID] = true
+            }
 
-			if rels, err := db.ListRelationsByScope(r.Context(), h.pool, sid); err == nil {
-				for _, rel := range rels {
-					src, tgt := rel.SubjectID.String(), rel.ObjectID.String()
-					if !nodeIDs[src] || !nodeIDs[tgt] {
-						continue // skip dangling relations
-					}
-					links = append(links, graphLink{
-						Source:     src,
-						Target:     tgt,
-						Predicate:  rel.Predicate,
-						Confidence: rel.Confidence,
-					})
-				}
-			}
+            if rels, err := db.ListRelationsByScope(r.Context(), h.pool, sid); err == nil {
+                for _, rel := range rels {
+                    src, tgt := rel.SubjectID.String(), rel.ObjectID.String()
+                    if !nodeIDs[src] || !nodeIDs[tgt] {
+                        continue // skip dangling relations
+                    }
+                    links = append(links, graphLink{
+                        Source:     src,
+                        Target:     tgt,
+                        Predicate:  rel.Predicate,
+                        Confidence: rel.Confidence,
+                    })
+                }
+            }
 
-			data.NodeCount = len(nodes)
-			data.EdgeCount = len(links)
+            data.NodeCount = len(nodes)
+            data.EdgeCount = len(links)
 
-			payload, err := json.Marshal(map[string]any{"nodes": nodes, "links": links})
-			if err == nil {
-				data.GraphJSON = template.JS(payload)
-			}
-		}
-	}
+            payload, err := json.Marshal(map[string]any{"nodes": nodes, "links": links})
+            if err == nil {
+                data.GraphJSON = template.JS(payload)
+            }
+        }
+    }
 
-	h.render(w, r, "graph", "Entity Graph", data)
+    h.render(w, r, "graph", "Entity Graph", data)
 }
 
 // handleSkills serves GET /ui/skills.
 func (h *Handler) handleSkills(w http.ResponseWriter, r *http.Request) {
-	data := struct {
-		Skills []*db.Skill
-	}{}
+    data := struct {
+        Skills []*db.Skill
+    }{}
 
-	if h.pool != nil {
-		skills, err := db.ListPublishedSkillsForAgent(r.Context(), h.pool, nil, "")
-		if err == nil {
-			data.Skills = skills
-		}
-	}
+    if h.pool != nil {
+        skills, err := db.ListPublishedSkillsForAgent(r.Context(), h.pool, nil, "")
+        if err == nil {
+            data.Skills = skills
+        }
+    }
 
-	h.render(w, r, "skills", "Skills", data)
+    h.render(w, r, "skills", "Skills", data)
 }
 
 // handleSkillDetail serves GET /ui/skills/{id}.
 func (h *Handler) handleSkillDetail(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimPrefix(r.URL.Path, "/ui/skills/")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
+    idStr := strings.TrimPrefix(r.URL.Path, "/ui/skills/")
+    id, err := uuid.Parse(idStr)
+    if err != nil {
+        http.NotFound(w, r)
+        return
+    }
 
-	data := struct {
-		Skill *db.Skill
-	}{}
+    data := struct {
+        Skill *db.Skill
+    }{}
 
-	if h.pool != nil {
-		skill, err := db.GetSkill(r.Context(), h.pool, id)
-		if err != nil || skill == nil {
-			http.NotFound(w, r)
-			return
-		}
-		data.Skill = skill
-	}
+    if h.pool != nil {
+        skill, err := db.GetSkill(r.Context(), h.pool, id)
+        if err != nil || skill == nil {
+            http.NotFound(w, r)
+            return
+        }
+        data.Skill = skill
+    }
 
-	h.render(w, r, "skill_detail", "Skill", data)
+    h.render(w, r, "skill_detail", "Skill", data)
 }
 
 // handleSkillHistory serves GET /ui/skills/{id}/history.
 func (h *Handler) handleSkillHistory(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/skills/"), "/history")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
+    idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/skills/"), "/history")
+    id, err := uuid.Parse(idStr)
+    if err != nil {
+        http.NotFound(w, r)
+        return
+    }
 
-	data := struct {
-		Skill   *db.Skill
-		History []*db.SkillHistory
-	}{}
+    data := struct {
+        Skill   *db.Skill
+        History []*db.SkillHistory
+    }{}
 
-	if h.pool != nil {
-		skill, err := db.GetSkill(r.Context(), h.pool, id)
-		if err != nil || skill == nil {
-			http.NotFound(w, r)
-			return
-		}
-		data.Skill = skill
-		history, _ := db.GetSkillHistory(r.Context(), h.pool, id)
-		data.History = history
-	}
+    if h.pool != nil {
+        skill, err := db.GetSkill(r.Context(), h.pool, id)
+        if err != nil || skill == nil {
+            http.NotFound(w, r)
+            return
+        }
+        data.Skill = skill
+        history, _ := db.GetSkillHistory(r.Context(), h.pool, id)
+        data.History = history
+    }
 
-	h.render(w, r, "skill_history", "Skill History", data)
+    h.render(w, r, "skill_history", "Skill History", data)
 }
 
 // handlePrincipals serves GET /ui/principals.
 func (h *Handler) handlePrincipals(w http.ResponseWriter, r *http.Request) {
-	h.renderPrincipals(w, r, "", "", "")
+    h.renderPrincipals(w, r, "", "", "")
 }
 
 // handleScopes serves GET /ui/scopes.
 func (h *Handler) handleScopes(w http.ResponseWriter, r *http.Request) {
-	h.renderScopes(w, r, "")
+    h.renderScopes(w, r, "")
 }
 
 // renderScopes renders the scopes page with an optional form error.
 func (h *Handler) renderScopes(w http.ResponseWriter, r *http.Request, scopeErr string) {
-	data := struct {
-		Principals     []*db.Principal
-		Scopes         []*db.Scope
-		ScopeFormError string
-	}{ScopeFormError: scopeErr}
+    data := struct {
+        Principals     []*db.Principal
+        Scopes         []*db.Scope
+        ScopeFormError string
+        SyncStatus     map[string]codegraph.SyncStatus
+    }{
+        ScopeFormError: scopeErr,
+        SyncStatus:     make(map[string]codegraph.SyncStatus),
+    }
 
-	if h.pool != nil {
-		principals, err := db.ListPrincipals(r.Context(), h.pool, 50, 0)
-		if err == nil {
-			data.Principals = principals
-		}
-		scopes, err := db.ListScopes(r.Context(), h.pool, 50, 0)
-		if err == nil {
-			data.Scopes = scopes
-		}
-	}
+    if h.pool != nil {
+        principals, err := db.ListPrincipals(r.Context(), h.pool, 50, 0)
+        if err == nil {
+            data.Principals = principals
+        }
+        scopes, err := db.ListScopes(r.Context(), h.pool, 50, 0)
+        if err == nil {
+            data.Scopes = scopes
+            for _, s := range scopes {
+                st := h.syncer.Status(s.ID)
+                if st.State != codegraph.SyncIdle || st.CommitSHA != "" || st.Error != "" {
+                    data.SyncStatus[s.ID.String()] = st
+                }
+            }
+        }
+    }
 
-	h.render(w, r, "scopes", "Scopes", data)
+    h.render(w, r, "scopes", "Scopes", data)
 }
 
 // renderPrincipals renders the principals page with optional form errors.
 func (h *Handler) renderPrincipals(w http.ResponseWriter, r *http.Request, principalErr, _, membershipErr string) {
-	data := struct {
-		Principals          []*db.Principal
-		Memberships         []*db.MembershipRow
-		PrincipalFormError  string
-		MembershipFormError string
-	}{PrincipalFormError: principalErr, MembershipFormError: membershipErr}
+    data := struct {
+        Principals          []*db.Principal
+        Memberships         []*db.MembershipRow
+        PrincipalFormError  string
+        MembershipFormError string
+    }{PrincipalFormError: principalErr, MembershipFormError: membershipErr}
 
-	if h.pool != nil {
-		principals, err := db.ListPrincipals(r.Context(), h.pool, 50, 0)
-		if err == nil {
-			data.Principals = principals
-		}
-		memberships, err := db.ListAllMemberships(r.Context(), h.pool)
-		if err == nil {
-			data.Memberships = memberships
-		}
-	}
+    if h.pool != nil {
+        principals, err := db.ListPrincipals(r.Context(), h.pool, 50, 0)
+        if err == nil {
+            data.Principals = principals
+        }
+        memberships, err := db.ListAllMemberships(r.Context(), h.pool)
+        if err == nil {
+            data.Memberships = memberships
+        }
+    }
 
-	h.render(w, r, "principals", "Principals", data)
+    h.render(w, r, "principals", "Principals", data)
 }
 
 // handleDeleteScope serves POST /ui/scopes/{id}/delete.
 func (h *Handler) handleDeleteScope(w http.ResponseWriter, r *http.Request) {
-	trimmed := strings.TrimPrefix(r.URL.Path, "/ui/scopes/")
-	idStr := strings.TrimSuffix(trimmed, "/delete")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		h.renderScopes(w, r, "invalid scope id")
-		return
-	}
-	if h.pool == nil {
-		h.renderScopes(w, r, "service unavailable")
-		return
-	}
-	if err := db.DeleteScope(r.Context(), h.pool, id); err != nil {
-		h.renderScopes(w, r, err.Error())
-		return
-	}
-	http.Redirect(w, r, "/ui/scopes", http.StatusSeeOther)
+    trimmed := strings.TrimPrefix(r.URL.Path, "/ui/scopes/")
+    idStr := strings.TrimSuffix(trimmed, "/delete")
+    id, err := uuid.Parse(idStr)
+    if err != nil {
+        h.renderScopes(w, r, "invalid scope id")
+        return
+    }
+    if h.pool == nil {
+        h.renderScopes(w, r, "service unavailable")
+        return
+    }
+    if err := db.DeleteScope(r.Context(), h.pool, id); err != nil {
+        h.renderScopes(w, r, err.Error())
+        return
+    }
+    http.Redirect(w, r, "/ui/scopes", http.StatusSeeOther)
 }
 
 // handleCreatePrincipal serves POST /ui/principals.
 func (h *Handler) handleCreatePrincipal(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		h.renderPrincipals(w, r, "bad form data", "", "")
-		return
-	}
-	kind := r.FormValue("kind")
-	slug := r.FormValue("slug")
-	displayName := r.FormValue("display_name")
-	if kind == "" || slug == "" || displayName == "" {
-		h.renderPrincipals(w, r, "kind, slug and display_name are required", "", "")
-		return
-	}
-	if h.pool == nil {
-		h.renderPrincipals(w, r, "service unavailable", "", "")
-		return
-	}
-	ps := principals.NewStore(h.pool)
-	if _, err := ps.Create(r.Context(), kind, slug, displayName, nil); err != nil {
-		h.renderPrincipals(w, r, err.Error(), "", "")
-		return
-	}
-	http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
+    if err := r.ParseForm(); err != nil {
+        h.renderPrincipals(w, r, "bad form data", "", "")
+        return
+    }
+    kind := r.FormValue("kind")
+    slug := r.FormValue("slug")
+    displayName := r.FormValue("display_name")
+    if kind == "" || slug == "" || displayName == "" {
+        h.renderPrincipals(w, r, "kind, slug and display_name are required", "", "")
+        return
+    }
+    if h.pool == nil {
+        h.renderPrincipals(w, r, "service unavailable", "", "")
+        return
+    }
+    ps := principals.NewStore(h.pool)
+    if _, err := ps.Create(r.Context(), kind, slug, displayName, nil); err != nil {
+        h.renderPrincipals(w, r, err.Error(), "", "")
+        return
+    }
+    http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
 }
 
 // handleCreateScope serves POST /ui/scopes.
 func (h *Handler) handleCreateScope(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		h.renderScopes(w, r, "bad form data")
-		return
-	}
-	kind := r.FormValue("kind")
-	externalID := r.FormValue("external_id")
-	name := r.FormValue("name")
-	principalIDStr := r.FormValue("principal_id")
-	parentIDStr := r.FormValue("parent_id")
+    if err := r.ParseForm(); err != nil {
+        h.renderScopes(w, r, "bad form data")
+        return
+    }
+    kind := r.FormValue("kind")
+    externalID := r.FormValue("external_id")
+    name := r.FormValue("name")
+    principalIDStr := r.FormValue("principal_id")
+    parentIDStr := r.FormValue("parent_id")
 
-	if kind == "" || externalID == "" || name == "" || principalIDStr == "" {
-		h.renderScopes(w, r, "kind, external_id, name and principal are required")
-		return
-	}
-	principalID, err := uuid.Parse(principalIDStr)
-	if err != nil {
-		h.renderScopes(w, r, "invalid principal id")
-		return
-	}
-	var parentID *uuid.UUID
-	if parentIDStr != "" {
-		pid, err := uuid.Parse(parentIDStr)
-		if err != nil {
-			h.renderScopes(w, r, "invalid parent scope id")
-			return
-		}
-		parentID = &pid
-	}
-	if h.pool == nil {
-		h.renderScopes(w, r, "service unavailable")
-		return
-	}
-	if _, err := db.CreateScope(r.Context(), h.pool, kind, externalID, name, parentID, principalID, nil); err != nil {
-		h.renderScopes(w, r, err.Error())
-		return
-	}
-	http.Redirect(w, r, "/ui/scopes", http.StatusSeeOther)
+    if kind == "" || externalID == "" || name == "" || principalIDStr == "" {
+        h.renderScopes(w, r, "kind, external_id, name and principal are required")
+        return
+    }
+    principalID, err := uuid.Parse(principalIDStr)
+    if err != nil {
+        h.renderScopes(w, r, "invalid principal id")
+        return
+    }
+    var parentID *uuid.UUID
+    if parentIDStr != "" {
+        pid, err := uuid.Parse(parentIDStr)
+        if err != nil {
+            h.renderScopes(w, r, "invalid parent scope id")
+            return
+        }
+        parentID = &pid
+    }
+    if h.pool == nil {
+        h.renderScopes(w, r, "service unavailable")
+        return
+    }
+    if _, err := db.CreateScope(r.Context(), h.pool, kind, externalID, name, parentID, principalID, nil); err != nil {
+        h.renderScopes(w, r, err.Error())
+        return
+    }
+    http.Redirect(w, r, "/ui/scopes", http.StatusSeeOther)
+}
+
+// handleSetScopeRepo serves POST /ui/scopes/{id}/repo.
+func (h *Handler) handleSetScopeRepo(w http.ResponseWriter, r *http.Request) {
+    trimmed := strings.TrimPrefix(r.URL.Path, "/ui/scopes/")
+    idStr := strings.TrimSuffix(trimmed, "/repo")
+    id, err := uuid.Parse(idStr)
+    if err != nil {
+        h.renderScopes(w, r, "invalid scope id")
+        return
+    }
+    if err := r.ParseForm(); err != nil {
+        h.renderScopes(w, r, "bad form data")
+        return
+    }
+    repoURL := r.FormValue("repo_url")
+    defaultBranch := r.FormValue("default_branch")
+    if repoURL == "" {
+        h.renderScopes(w, r, "repo_url is required")
+        return
+    }
+    if defaultBranch == "" {
+        defaultBranch = "main"
+    }
+    if h.pool == nil {
+        h.renderScopes(w, r, "service unavailable")
+        return
+    }
+    if _, err := db.SetScopeRepo(r.Context(), h.pool, id, repoURL, defaultBranch); err != nil {
+        h.renderScopes(w, r, err.Error())
+        return
+    }
+    http.Redirect(w, r, "/ui/scopes", http.StatusSeeOther)
+}
+
+// handleSyncScopeRepo serves POST /ui/scopes/{id}/repo/sync.
+// Starts a background sync and redirects immediately.
+func (h *Handler) handleSyncScopeRepo(w http.ResponseWriter, r *http.Request) {
+    trimmed := strings.TrimPrefix(r.URL.Path, "/ui/scopes/")
+    idStr := strings.TrimSuffix(trimmed, "/repo/sync")
+    id, err := uuid.Parse(idStr)
+    if err != nil {
+        h.renderScopes(w, r, "invalid scope id")
+        return
+    }
+    if h.pool == nil {
+        h.renderScopes(w, r, "service unavailable")
+        return
+    }
+    scope, err := db.GetScopeByID(r.Context(), h.pool, id)
+    if err != nil || scope == nil {
+        h.renderScopes(w, r, "scope not found")
+        return
+    }
+    if scope.RepoUrl == nil || *scope.RepoUrl == "" {
+        h.renderScopes(w, r, "no repository attached to this scope")
+        return
+    }
+    _ = r.ParseForm()
+    prevCommit := ""
+    if scope.LastIndexedCommit != nil {
+        prevCommit = *scope.LastIndexedCommit
+    }
+    opts := codegraph.IndexOptions{
+        ScopeID:       scope.ID,
+        RepoURL:       *scope.RepoUrl,
+        DefaultBranch: scope.RepoDefaultBranch,
+        AuthToken:     r.FormValue("auth_token"),
+        PrevCommit:    prevCommit,
+    }
+    h.syncer.Start(h.pool, opts) // fire and forget; status polled by UI
+    http.Redirect(w, r, "/ui/scopes", http.StatusSeeOther)
+}
+
+// handleSyncStatus serves GET /ui/scopes/{id}/repo/sync/status.
+// Returns JSON sync status for JS polling.
+func (h *Handler) handleSyncStatus(w http.ResponseWriter, r *http.Request) {
+    trimmed := strings.TrimPrefix(r.URL.Path, "/ui/scopes/")
+    idStr := strings.TrimSuffix(trimmed, "/repo/sync/status")
+    id, err := uuid.Parse(idStr)
+    if err != nil {
+        http.Error(w, "invalid scope id", http.StatusBadRequest)
+        return
+    }
+    status := h.syncer.Status(id)
+    w.Header().Set("Content-Type", "application/json")
+    _ = json.NewEncoder(w).Encode(status)
 }
 
 // handleAddMembership serves POST /ui/memberships.
 func (h *Handler) handleAddMembership(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		h.renderPrincipals(w, r, "", "", "bad form data")
-		return
-	}
-	memberIDStr := r.FormValue("member_id")
-	parentIDStr := r.FormValue("parent_id")
-	role := r.FormValue("role")
-	if memberIDStr == "" || parentIDStr == "" || role == "" {
-		h.renderPrincipals(w, r, "", "", "member, parent and role are required")
-		return
-	}
-	memberID, err := uuid.Parse(memberIDStr)
-	if err != nil {
-		h.renderPrincipals(w, r, "", "", "invalid member id")
-		return
-	}
-	parentID, err := uuid.Parse(parentIDStr)
-	if err != nil {
-		h.renderPrincipals(w, r, "", "", "invalid parent id")
-		return
-	}
-	if h.pool == nil {
-		h.renderPrincipals(w, r, "", "", "service unavailable")
-		return
-	}
-	grantedBy := h.principalFromCookie(r)
-	var grantedByPtr *uuid.UUID
-	if grantedBy != uuid.Nil {
-		grantedByPtr = &grantedBy
-	}
-	ms := principals.NewMembershipStore(h.pool)
-	if err := ms.AddMembership(r.Context(), memberID, parentID, role, grantedByPtr); err != nil {
-		h.renderPrincipals(w, r, "", "", err.Error())
-		return
-	}
-	http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
+    if err := r.ParseForm(); err != nil {
+        h.renderPrincipals(w, r, "", "", "bad form data")
+        return
+    }
+    memberIDStr := r.FormValue("member_id")
+    parentIDStr := r.FormValue("parent_id")
+    role := r.FormValue("role")
+    if memberIDStr == "" || parentIDStr == "" || role == "" {
+        h.renderPrincipals(w, r, "", "", "member, parent and role are required")
+        return
+    }
+    memberID, err := uuid.Parse(memberIDStr)
+    if err != nil {
+        h.renderPrincipals(w, r, "", "", "invalid member id")
+        return
+    }
+    parentID, err := uuid.Parse(parentIDStr)
+    if err != nil {
+        h.renderPrincipals(w, r, "", "", "invalid parent id")
+        return
+    }
+    if h.pool == nil {
+        h.renderPrincipals(w, r, "", "", "service unavailable")
+        return
+    }
+    grantedBy := h.principalFromCookie(r)
+    var grantedByPtr *uuid.UUID
+    if grantedBy != uuid.Nil {
+        grantedByPtr = &grantedBy
+    }
+    ms := principals.NewMembershipStore(h.pool)
+    if err := ms.AddMembership(r.Context(), memberID, parentID, role, grantedByPtr); err != nil {
+        h.renderPrincipals(w, r, "", "", err.Error())
+        return
+    }
+    http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
 }
 
 // handleDeleteMembership serves POST /ui/memberships/delete.
 func (h *Handler) handleDeleteMembership(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		h.renderPrincipals(w, r, "", "", "bad form data")
-		return
-	}
-	memberIDStr := r.FormValue("member_id")
-	parentIDStr := r.FormValue("parent_id")
-	memberID, err := uuid.Parse(memberIDStr)
-	if err != nil {
-		h.renderPrincipals(w, r, "", "", "invalid member id")
-		return
-	}
-	parentID, err := uuid.Parse(parentIDStr)
-	if err != nil {
-		h.renderPrincipals(w, r, "", "", "invalid parent id")
-		return
-	}
-	if h.pool == nil {
-		h.renderPrincipals(w, r, "", "", "service unavailable")
-		return
-	}
-	if err := db.DeleteMembership(r.Context(), h.pool, memberID, parentID); err != nil {
-		h.renderPrincipals(w, r, "", "", err.Error())
-		return
-	}
-	http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
+    if err := r.ParseForm(); err != nil {
+        h.renderPrincipals(w, r, "", "", "bad form data")
+        return
+    }
+    memberIDStr := r.FormValue("member_id")
+    parentIDStr := r.FormValue("parent_id")
+    memberID, err := uuid.Parse(memberIDStr)
+    if err != nil {
+        h.renderPrincipals(w, r, "", "", "invalid member id")
+        return
+    }
+    parentID, err := uuid.Parse(parentIDStr)
+    if err != nil {
+        h.renderPrincipals(w, r, "", "", "invalid parent id")
+        return
+    }
+    if h.pool == nil {
+        h.renderPrincipals(w, r, "", "", "service unavailable")
+        return
+    }
+    if err := db.DeleteMembership(r.Context(), h.pool, memberID, parentID); err != nil {
+        h.renderPrincipals(w, r, "", "", err.Error())
+        return
+    }
+    http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
 }
 
 // principalFromCookie resolves the principal ID from the pb_session cookie.
 // Returns uuid.Nil if the cookie is missing or invalid.
 func (h *Handler) principalFromCookie(r *http.Request) uuid.UUID {
-	cookie, err := r.Cookie(cookieName)
-	if err != nil || cookie.Value == "" || h.pool == nil {
-		return uuid.Nil
-	}
-	hash := auth.HashToken(cookie.Value)
-	token, err := auth.NewTokenStore(h.pool).Lookup(r.Context(), hash)
-	if err != nil || token == nil {
-		return uuid.Nil
-	}
-	return token.PrincipalID
+    cookie, err := r.Cookie(cookieName)
+    if err != nil || cookie.Value == "" || h.pool == nil {
+        return uuid.Nil
+    }
+    hash := auth.HashToken(cookie.Value)
+    token, err := auth.NewTokenStore(h.pool).Lookup(r.Context(), hash)
+    if err != nil || token == nil {
+        return uuid.Nil
+    }
+    return token.PrincipalID
 }
 
 // handleEndorseArtifact serves POST /ui/knowledge/{id}/endorse.
 func (h *Handler) handleEndorseArtifact(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/endorse")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		http.Error(w, "invalid artifact id", http.StatusBadRequest)
-		return
-	}
-	endorserID := h.principalFromCookie(r)
-	if _, err := h.knwLife.Endorse(r.Context(), id, endorserID, nil); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	http.Redirect(w, r, r.Referer(), http.StatusSeeOther)
+    idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/endorse")
+    id, err := uuid.Parse(idStr)
+    if err != nil {
+        http.Error(w, "invalid artifact id", http.StatusBadRequest)
+        return
+    }
+    endorserID := h.principalFromCookie(r)
+    if _, err := h.knwLife.Endorse(r.Context(), id, endorserID, nil); err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+    http.Redirect(w, r, r.Referer(), http.StatusSeeOther)
 }
 
 // handleKnowledgeReview serves POST /ui/knowledge/{id}/review.
 func (h *Handler) handleKnowledgeReview(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/review")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		http.Error(w, "invalid artifact id", http.StatusBadRequest)
-		return
-	}
-	callerID := h.principalFromCookie(r)
-	if err := h.knwLife.SubmitForReview(r.Context(), id, callerID); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	http.Redirect(w, r, "/ui/knowledge/"+id.String(), http.StatusSeeOther)
+    idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/review")
+    id, err := uuid.Parse(idStr)
+    if err != nil {
+        http.Error(w, "invalid artifact id", http.StatusBadRequest)
+        return
+    }
+    callerID := h.principalFromCookie(r)
+    if err := h.knwLife.SubmitForReview(r.Context(), id, callerID); err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+    http.Redirect(w, r, "/ui/knowledge/"+id.String(), http.StatusSeeOther)
 }
 
 // handleKnowledgeDeprecate serves POST /ui/knowledge/{id}/deprecate.
 func (h *Handler) handleKnowledgeDeprecate(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/deprecate")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		http.Error(w, "invalid artifact id", http.StatusBadRequest)
-		return
-	}
-	callerID := h.principalFromCookie(r)
-	if err := h.knwLife.Deprecate(r.Context(), id, callerID); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	http.Redirect(w, r, "/ui/knowledge/"+id.String(), http.StatusSeeOther)
+    idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/deprecate")
+    id, err := uuid.Parse(idStr)
+    if err != nil {
+        http.Error(w, "invalid artifact id", http.StatusBadRequest)
+        return
+    }
+    callerID := h.principalFromCookie(r)
+    if err := h.knwLife.Deprecate(r.Context(), id, callerID); err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+    http.Redirect(w, r, "/ui/knowledge/"+id.String(), http.StatusSeeOther)
 }
 
 // handleKnowledgeRepublish serves POST /ui/knowledge/{id}/republish.
 func (h *Handler) handleKnowledgeRepublish(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/republish")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		http.Error(w, "invalid artifact id", http.StatusBadRequest)
-		return
-	}
-	callerID := h.principalFromCookie(r)
-	if err := h.knwLife.Republish(r.Context(), id, callerID); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	http.Redirect(w, r, "/ui/knowledge/"+id.String(), http.StatusSeeOther)
+    idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/republish")
+    id, err := uuid.Parse(idStr)
+    if err != nil {
+        http.Error(w, "invalid artifact id", http.StatusBadRequest)
+        return
+    }
+    callerID := h.principalFromCookie(r)
+    if err := h.knwLife.Republish(r.Context(), id, callerID); err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+    http.Redirect(w, r, "/ui/knowledge/"+id.String(), http.StatusSeeOther)
 }
 
 // handleKnowledgeDelete serves POST /ui/knowledge/{id}/delete.
 func (h *Handler) handleKnowledgeDelete(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/delete")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		http.Error(w, "invalid artifact id", http.StatusBadRequest)
-		return
-	}
-	callerID := h.principalFromCookie(r)
-	if err := h.knwLife.Delete(r.Context(), id, callerID); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	http.Redirect(w, r, "/ui/knowledge", http.StatusSeeOther)
+    idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/delete")
+    id, err := uuid.Parse(idStr)
+    if err != nil {
+        http.Error(w, "invalid artifact id", http.StatusBadRequest)
+        return
+    }
+    callerID := h.principalFromCookie(r)
+    if err := h.knwLife.Delete(r.Context(), id, callerID); err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+    http.Redirect(w, r, "/ui/knowledge", http.StatusSeeOther)
 }
 
 // handleQuery serves GET /ui/query — the recall playground.
 func (h *Handler) handleQuery(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+    ctx := r.Context()
 
-	scopes, _ := db.ListScopes(ctx, h.pool, 200, 0)
+    scopes, _ := db.ListScopes(ctx, h.pool, 200, 0)
 
-	type queryResult struct {
-		Layer         string
-		ID            string
-		Score         float64
-		Title         string
-		Content       string
-		MemoryType    string
-		KnowledgeType string
-		SourceRef     string
-		Status        string
-		Visibility    string
-		Endorsements  int
-	}
+    type queryResult struct {
+        Layer         string
+        ID            string
+        Score         float64
+        Title         string
+        Content       string
+        MemoryType    string
+        KnowledgeType string
+        SourceRef     string
+        Status        string
+        Visibility    string
+        Endorsements  int
+    }
 
-	data := struct {
-		Title      string
-		Content    template.HTML
-		Scopes     []*db.Scope
-		Query      string
-		ScopeID    string
-		Layers     map[string]bool
-		SearchMode string
-		Limit      int
-		Results    []queryResult
-		Ran        bool
-		Error      string
-	}{
-		Title:      "Query Playground",
-		Scopes:     scopes,
-		Layers:     map[string]bool{"memory": true, "knowledge": true, "skill": true},
-		SearchMode: "hybrid",
-		Limit:      10,
-	}
+    data := struct {
+        Title      string
+        Content    template.HTML
+        Scopes     []*db.Scope
+        Query      string
+        ScopeID    string
+        Layers     map[string]bool
+        SearchMode string
+        Limit      int
+        Results    []queryResult
+        Ran        bool
+        Error      string
+    }{
+        Title:      "Query Playground",
+        Scopes:     scopes,
+        Layers:     map[string]bool{"memory": true, "knowledge": true, "skill": true},
+        SearchMode: "hybrid",
+        Limit:      10,
+    }
 
-	if r.Method == http.MethodGet && r.URL.Query().Get("q") != "" {
-		data.Query = r.URL.Query().Get("q")
-		data.ScopeID = r.URL.Query().Get("scope_id")
-		data.SearchMode = r.URL.Query().Get("search_mode")
-		if data.SearchMode == "" {
-			data.SearchMode = "hybrid"
-		}
-		if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 {
-			data.Limit = l
-		}
-		// Layers from checkboxes.
-		data.Layers = map[string]bool{
-			"memory":    r.URL.Query().Get("layer_memory") == "1",
-			"knowledge": r.URL.Query().Get("layer_knowledge") == "1",
-			"skill":     r.URL.Query().Get("layer_skill") == "1",
-		}
-		// Default: all layers if none checked.
-		if !data.Layers["memory"] && !data.Layers["knowledge"] && !data.Layers["skill"] {
-			data.Layers = map[string]bool{"memory": true, "knowledge": true, "skill": true}
-		}
+    if r.Method == http.MethodGet && r.URL.Query().Get("q") != "" {
+        data.Query = r.URL.Query().Get("q")
+        data.ScopeID = r.URL.Query().Get("scope_id")
+        data.SearchMode = r.URL.Query().Get("search_mode")
+        if data.SearchMode == "" {
+            data.SearchMode = "hybrid"
+        }
+        if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 {
+            data.Limit = l
+        }
+        // Layers from checkboxes.
+        data.Layers = map[string]bool{
+            "memory":    r.URL.Query().Get("layer_memory") == "1",
+            "knowledge": r.URL.Query().Get("layer_knowledge") == "1",
+            "skill":     r.URL.Query().Get("layer_skill") == "1",
+        }
+        // Default: all layers if none checked.
+        if !data.Layers["memory"] && !data.Layers["knowledge"] && !data.Layers["skill"] {
+            data.Layers = map[string]bool{"memory": true, "knowledge": true, "skill": true}
+        }
 
-		scopeID, err := uuid.Parse(data.ScopeID)
-		if err != nil && len(scopes) > 0 {
-			scopeID = scopes[0].ID
-			data.ScopeID = scopeID.String()
-		}
+        scopeID, err := uuid.Parse(data.ScopeID)
+        if err != nil && len(scopes) > 0 {
+            scopeID = scopes[0].ID
+            data.ScopeID = scopeID.String()
+        }
 
-		var allResults []*retrieval.Result
+        var allResults []*retrieval.Result
 
-		if data.Layers["memory"] && h.memStore != nil {
-			mems, err := h.memStore.Recall(ctx, memory.RecallInput{
-				Query:      data.Query,
-				ScopeID:    scopeID,
-				SearchMode: data.SearchMode,
-				Limit:      data.Limit * 2,
-			})
-			if err != nil {
-				data.Error = "memory recall: " + err.Error()
-			} else {
-				for _, m := range mems {
-					r := &retrieval.Result{
-						Layer:      retrieval.LayerMemory,
-						ID:         m.Memory.ID,
-						Score:      m.Score,
-						Content:    m.Memory.Content,
-						MemoryType: m.Memory.MemoryType,
-					}
-					if m.Memory.SourceRef != nil {
-						r.SourceRef = *m.Memory.SourceRef
-					}
-					allResults = append(allResults, r)
-				}
-			}
-		}
+        if data.Layers["memory"] && h.memStore != nil {
+            mems, err := h.memStore.Recall(ctx, memory.RecallInput{
+                Query:      data.Query,
+                ScopeID:    scopeID,
+                SearchMode: data.SearchMode,
+                Limit:      data.Limit * 2,
+            })
+            if err != nil {
+                data.Error = "memory recall: " + err.Error()
+            } else {
+                for _, m := range mems {
+                    r := &retrieval.Result{
+                        Layer:      retrieval.LayerMemory,
+                        ID:         m.Memory.ID,
+                        Score:      m.Score,
+                        Content:    m.Memory.Content,
+                        MemoryType: m.Memory.MemoryType,
+                    }
+                    if m.Memory.SourceRef != nil {
+                        r.SourceRef = *m.Memory.SourceRef
+                    }
+                    allResults = append(allResults, r)
+                }
+            }
+        }
 
-		if data.Layers["knowledge"] && h.knwStore != nil {
-			arts, err := h.knwStore.Recall(ctx, h.pool, knowledge.RecallInput{
-				Query:   data.Query,
-				ScopeID: scopeID,
-				Limit:   data.Limit * 2,
-			})
-			if err != nil && data.Error == "" {
-				data.Error = "knowledge recall: " + err.Error()
-			} else {
-				for _, a := range arts {
-					content := a.Artifact.Content
-					if a.Artifact.Summary != nil && *a.Artifact.Summary != "" {
-						content = *a.Artifact.Summary
-					}
-					allResults = append(allResults, &retrieval.Result{
-						Layer:         retrieval.LayerKnowledge,
-						ID:            a.Artifact.ID,
-						Score:         a.Score,
-						Title:         a.Artifact.Title,
-						Content:       content,
-						KnowledgeType: a.Artifact.KnowledgeType,
-						Visibility:    a.Artifact.Visibility,
-						Status:        a.Artifact.Status,
-						Endorsements:  int(a.Artifact.EndorsementCount),
-					})
-				}
-			}
-		}
+        if data.Layers["knowledge"] && h.knwStore != nil {
+            arts, err := h.knwStore.Recall(ctx, h.pool, knowledge.RecallInput{
+                Query:   data.Query,
+                ScopeID: scopeID,
+                Limit:   data.Limit * 2,
+            })
+            if err != nil && data.Error == "" {
+                data.Error = "knowledge recall: " + err.Error()
+            } else {
+                for _, a := range arts {
+                    content := a.Artifact.Content
+                    if a.Artifact.Summary != nil && *a.Artifact.Summary != "" {
+                        content = *a.Artifact.Summary
+                    }
+                    allResults = append(allResults, &retrieval.Result{
+                        Layer:         retrieval.LayerKnowledge,
+                        ID:            a.Artifact.ID,
+                        Score:         a.Score,
+                        Title:         a.Artifact.Title,
+                        Content:       content,
+                        KnowledgeType: a.Artifact.KnowledgeType,
+                        Visibility:    a.Artifact.Visibility,
+                        Status:        a.Artifact.Status,
+                        Endorsements:  int(a.Artifact.EndorsementCount),
+                    })
+                }
+            }
+        }
 
-		merged := retrieval.Merge(allResults, data.Limit, 0)
-		for _, res := range merged {
-			data.Results = append(data.Results, queryResult{
-				Layer:         string(res.Layer),
-				ID:            res.ID.String(),
-				Score:         res.Score,
-				Title:         res.Title,
-				Content:       res.Content,
-				MemoryType:    res.MemoryType,
-				KnowledgeType: res.KnowledgeType,
-				SourceRef:     res.SourceRef,
-				Status:        res.Status,
-				Visibility:    res.Visibility,
-				Endorsements:  res.Endorsements,
-			})
-		}
-		data.Ran = true
-	} else if len(scopes) > 0 {
-		data.ScopeID = scopes[0].ID.String()
-	}
+        merged := retrieval.Merge(allResults, data.Limit, 0)
+        for _, res := range merged {
+            data.Results = append(data.Results, queryResult{
+                Layer:         string(res.Layer),
+                ID:            res.ID.String(),
+                Score:         res.Score,
+                Title:         res.Title,
+                Content:       res.Content,
+                MemoryType:    res.MemoryType,
+                KnowledgeType: res.KnowledgeType,
+                SourceRef:     res.SourceRef,
+                Status:        res.Status,
+                Visibility:    res.Visibility,
+                Endorsements:  res.Endorsements,
+            })
+        }
+        data.Ran = true
+    } else if len(scopes) > 0 {
+        data.ScopeID = scopes[0].ID.String()
+    }
 
-	h.render(w, r, "query", "Query Playground", data)
+    h.render(w, r, "query", "Query Playground", data)
 }
 
 // handleMetrics serves GET /ui/metrics.
 func (h *Handler) handleMetrics(w http.ResponseWriter, r *http.Request) {
-	h.render(w, r, "metrics", "Metrics", nil)
+    h.render(w, r, "metrics", "Metrics", nil)
 }
 
 // handleUploadKnowledge serves POST /ui/knowledge/upload.
 func (h *Handler) handleUploadKnowledge(w http.ResponseWriter, r *http.Request) {
-	if h.knwStore == nil {
-		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
-		return
-	}
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		http.Error(w, "file too large or invalid form", http.StatusBadRequest)
-		return
-	}
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		http.Error(w, "file field is required", http.StatusBadRequest)
-		return
-	}
-	defer file.Close()
+    if h.knwStore == nil {
+        http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+        return
+    }
+    if err := r.ParseMultipartForm(32 << 20); err != nil {
+        http.Error(w, "file too large or invalid form", http.StatusBadRequest)
+        return
+    }
+    file, header, err := r.FormFile("file")
+    if err != nil {
+        http.Error(w, "file field is required", http.StatusBadRequest)
+        return
+    }
+    defer file.Close()
 
-	data, err := io.ReadAll(io.LimitReader(file, 32<<20))
-	if err != nil {
-		http.Error(w, "failed to read file", http.StatusInternalServerError)
-		return
-	}
+    data, err := io.ReadAll(io.LimitReader(file, 32<<20))
+    if err != nil {
+        http.Error(w, "failed to read file", http.StatusInternalServerError)
+        return
+    }
 
-	text, err := ingest.Extract(header.Filename, data)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if strings.TrimSpace(text) == "" {
-		http.Error(w, "extracted text is empty", http.StatusBadRequest)
-		return
-	}
+    text, err := ingest.Extract(header.Filename, data)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
+    if strings.TrimSpace(text) == "" {
+        http.Error(w, "extracted text is empty", http.StatusBadRequest)
+        return
+    }
 
-	scopeStr := r.FormValue("scope")
-	if scopeStr == "" {
-		http.Error(w, "scope is required", http.StatusBadRequest)
-		return
-	}
-	parts := strings.SplitN(scopeStr, ":", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		http.Error(w, "scope must be kind:external_id", http.StatusBadRequest)
-		return
-	}
-	scope, err := db.GetScopeByExternalID(r.Context(), h.pool, parts[0], parts[1])
-	if err != nil || scope == nil {
-		http.Error(w, "scope not found", http.StatusBadRequest)
-		return
-	}
+    scopeStr := r.FormValue("scope")
+    if scopeStr == "" {
+        http.Error(w, "scope is required", http.StatusBadRequest)
+        return
+    }
+    parts := strings.SplitN(scopeStr, ":", 2)
+    if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+        http.Error(w, "scope must be kind:external_id", http.StatusBadRequest)
+        return
+    }
+    scope, err := db.GetScopeByExternalID(r.Context(), h.pool, parts[0], parts[1])
+    if err != nil || scope == nil {
+        http.Error(w, "scope not found", http.StatusBadRequest)
+        return
+    }
 
-	title := r.FormValue("title")
-	if title == "" {
-		base := filepath.Base(header.Filename)
-		title = strings.TrimSuffix(base, filepath.Ext(base))
-	}
+    title := r.FormValue("title")
+    if title == "" {
+        base := filepath.Base(header.Filename)
+        title = strings.TrimSuffix(base, filepath.Ext(base))
+    }
 
-	knowledgeType := r.FormValue("knowledge_type")
-	if knowledgeType == "" {
-		knowledgeType = "reference"
-	}
+    knowledgeType := r.FormValue("knowledge_type")
+    if knowledgeType == "" {
+        knowledgeType = "reference"
+    }
 
-	authorID := h.principalFromCookie(r)
+    authorID := h.principalFromCookie(r)
 
-	workflow := r.FormValue("workflow")
-	_, err = h.knwStore.Create(r.Context(), knowledge.CreateInput{
-		KnowledgeType: knowledgeType,
-		OwnerScopeID:  scope.ID,
-		AuthorID:      authorID,
-		Visibility:    "team",
-		Title:         title,
-		Content:       text,
-		AutoReview:    workflow == "review",
-		AutoPublish:   workflow == "publish",
-	})
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+    workflow := r.FormValue("workflow")
+    _, err = h.knwStore.Create(r.Context(), knowledge.CreateInput{
+        KnowledgeType: knowledgeType,
+        OwnerScopeID:  scope.ID,
+        AuthorID:      authorID,
+        Visibility:    "team",
+        Title:         title,
+        Content:       text,
+        AutoReview:    workflow == "review",
+        AutoPublish:   workflow == "publish",
+    })
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
 
-	http.Redirect(w, r, "/ui/knowledge", http.StatusSeeOther)
+    http.Redirect(w, r, "/ui/knowledge", http.StatusSeeOther)
 }

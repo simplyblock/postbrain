@@ -87,6 +87,10 @@ func (mc *mockCreator) UpsertRelation(_ context.Context, r *db.Relation) (*db.Re
 	return r, nil
 }
 
+func (mc *mockCreator) FindEntitiesBySuffix(_ context.Context, _ uuid.UUID, _ string) ([]*db.Entity, error) {
+	return nil, nil
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 func newTestStore(withCode bool, creator memoryDB) *Store {

@@ -5,7 +5,7 @@
 </div>
 {{if .ScopeFormError}}<div class="alert alert-error">{{.ScopeFormError}}</div>{{end}}
 <table>
-  <thead><tr><th>Kind</th><th>External ID</th><th>Name</th><th>Path</th><th>Created</th><th></th></tr></thead>
+  <thead><tr><th>Kind</th><th>External ID</th><th>Name</th><th>Path</th><th>Repository</th><th>Last Indexed</th><th>Created</th><th></th></tr></thead>
   <tbody>
   {{range .Scopes}}
   <tr>
@@ -13,16 +13,42 @@
     <td class="mono">{{.ExternalID}}</td>
     <td>{{.Name}}</td>
     <td><code>{{.Path}}</code></td>
+    <td class="muted" style="font-size:0.8rem">
+      {{if .RepoUrl}}<code>{{deref .RepoUrl}}</code> <span class="muted">({{.RepoDefaultBranch}})</span>
+      {{else if eq .Kind "project"}}<span class="muted">—</span>{{end}}
+    </td>
+    <td class="muted" style="font-size:0.8rem" id="sync-cell-{{.ID}}">
+      {{$st := index $.SyncStatus (printf "%s" .ID)}}
+      {{if eq $st.State 1}}<span class="sync-running" data-scope="{{.ID}}">⟳ syncing…</span>
+      {{else if $st.Error}}<span title="{{$st.Error}}" style="color:var(--pico-color-red-500)">✕ error</span>
+      {{else if .LastIndexedCommit}}<code>{{slice (deref .LastIndexedCommit) 0 7}}</code>
+      {{else}}—{{end}}
+    </td>
     <td class="muted">{{timeAgo .CreatedAt}}</td>
-    <td>
+    <td style="white-space:nowrap">
+      {{if eq .Kind "project"}}
+        <button class="secondary" style="margin-right:0.25rem;padding:0.25rem 0.5rem;font-size:0.8rem"
+                onclick="openRepoDialog('{{.ID}}','{{if .RepoUrl}}{{deref .RepoUrl}}{{end}}','{{.RepoDefaultBranch}}')">
+          {{if .RepoUrl}}Edit Repo{{else}}Attach Repo{{end}}
+        </button>
+        {{if .RepoUrl}}
+        {{$st := index $.SyncStatus (printf "%s" .ID)}}
+        <form method="POST" action="/ui/scopes/{{.ID}}/repo/sync" style="display:inline">
+          <button type="submit" style="padding:0.25rem 0.5rem;font-size:0.8rem"
+                  {{if eq $st.State 1}}disabled{{end}}>
+            {{if eq $st.State 1}}Syncing…{{else}}Sync{{end}}
+          </button>
+        </form>
+        {{end}}
+      {{end}}
       <form method="POST" action="/ui/scopes/{{.ID}}/delete" style="display:inline"
             onsubmit="return confirm('Delete scope {{.ExternalID}}?')">
-        <button type="submit" class="danger">Delete</button>
+        <button type="submit" class="danger" style="padding:0.25rem 0.5rem;font-size:0.8rem">Delete</button>
       </form>
     </td>
   </tr>
   {{else}}
-  <tr><td colspan="6" class="muted">No scopes.</td></tr>
+  <tr><td colspan="8" class="muted">No scopes.</td></tr>
   {{end}}
   </tbody>
 </table>
@@ -111,4 +137,57 @@
 </dialog>
 
 {{if .ScopeFormError}}<script>document.getElementById('dlg-scope').showModal()</script>{{end}}
+
+<!-- ── Dialog: Attach / Edit Repository ───────────────────── -->
+<dialog id="dlg-repo">
+  <h2 id="dlg-repo-title">Attach Repository</h2>
+  <form id="dlg-repo-form" method="POST">
+    <label>Repository URL
+      <input type="url" name="repo_url" id="dlg-repo-url" placeholder="https://github.com/org/repo" required>
+    </label>
+    <label>Default Branch
+      <input type="text" name="default_branch" id="dlg-repo-branch" placeholder="main" value="main">
+    </label>
+    <div class="dialog-footer">
+      <button type="button" class="secondary" onclick="document.getElementById('dlg-repo').close()">Cancel</button>
+      <button type="submit">Save</button>
+    </div>
+  </form>
+</dialog>
+<script>
+// ── Sync status polling ────────────────────────────────────
+(function () {
+  var running = Array.from(document.querySelectorAll('.sync-running'));
+  if (running.length === 0) return;
+
+  function poll(scopeId) {
+    fetch('/ui/scopes/' + scopeId + '/repo/sync/status')
+      .then(function (r) { return r.json(); })
+      .then(function (st) {
+        var cell = document.getElementById('sync-cell-' + scopeId);
+        if (!cell) return;
+        if (st.state === 1) {
+          // still running — poll again in 3s
+          setTimeout(function () { poll(scopeId); }, 3000);
+        } else {
+          // done — reload the page to show updated commit SHA / error
+          window.location.reload();
+        }
+      })
+      .catch(function () {
+        setTimeout(function () { poll(scopeId); }, 5000);
+      });
+  }
+
+  running.forEach(function (el) { poll(el.dataset.scope); });
+})();
+
+function openRepoDialog(scopeId, repoUrl, branch) {
+  document.getElementById('dlg-repo-form').action = '/ui/scopes/' + scopeId + '/repo';
+  document.getElementById('dlg-repo-url').value = repoUrl || '';
+  document.getElementById('dlg-repo-branch').value = branch || 'main';
+  document.getElementById('dlg-repo-title').textContent = repoUrl ? 'Edit Repository' : 'Attach Repository';
+  document.getElementById('dlg-repo').showModal();
+}
+</script>
 {{end}}

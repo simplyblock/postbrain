@@ -28,4 +28,14 @@
   {{end}}
   </tbody>
 </table>
+{{if or .HasPrev .HasNext}}
+<div class="pagination">
+  {{if .HasPrev}}
+  <a href="/ui/knowledge?q={{.Query}}&status={{.Status}}&cursor={{.PrevCursor}}">← Previous</a>
+  {{end}}
+  {{if .HasNext}}
+  <a href="/ui/knowledge?q={{.Query}}&status={{.Status}}&cursor={{.NextCursor}}">Next →</a>
+  {{end}}
+</div>
+{{end}}
 {{end}}

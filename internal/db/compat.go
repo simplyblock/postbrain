@@ -214,15 +214,18 @@ func CreateScope(ctx context.Context, pool *pgxpool.Pool, kind, externalID, name
 		return nil, err
 	}
 	return &Scope{
-		ID:          row.ID,
-		Kind:        row.Kind,
-		ExternalID:  row.ExternalID,
-		Name:        row.Name,
-		ParentID:    row.ParentID,
-		PrincipalID: row.PrincipalID,
-		Path:        row.Path,
-		Meta:        row.Meta,
-		CreatedAt:   row.CreatedAt,
+		ID:                row.ID,
+		Kind:              row.Kind,
+		ExternalID:        row.ExternalID,
+		Name:              row.Name,
+		ParentID:          row.ParentID,
+		PrincipalID:       row.PrincipalID,
+		Path:              row.Path,
+		Meta:              row.Meta,
+		RepoUrl:           row.RepoUrl,
+		RepoDefaultBranch: row.RepoDefaultBranch,
+		LastIndexedCommit: row.LastIndexedCommit,
+		CreatedAt:         row.CreatedAt,
 	}, nil
 }
 
@@ -237,15 +240,18 @@ func GetScopeByID(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*Scope
 		return nil, err
 	}
 	return &Scope{
-		ID:          row.ID,
-		Kind:        row.Kind,
-		ExternalID:  row.ExternalID,
-		Name:        row.Name,
-		ParentID:    row.ParentID,
-		PrincipalID: row.PrincipalID,
-		Path:        row.Path,
-		Meta:        row.Meta,
-		CreatedAt:   row.CreatedAt,
+		ID:                row.ID,
+		Kind:              row.Kind,
+		ExternalID:        row.ExternalID,
+		Name:              row.Name,
+		ParentID:          row.ParentID,
+		PrincipalID:       row.PrincipalID,
+		Path:              row.Path,
+		Meta:              row.Meta,
+		RepoUrl:           row.RepoUrl,
+		RepoDefaultBranch: row.RepoDefaultBranch,
+		LastIndexedCommit: row.LastIndexedCommit,
+		CreatedAt:         row.CreatedAt,
 	}, nil
 }
 
@@ -263,15 +269,18 @@ func GetScopeByExternalID(ctx context.Context, pool *pgxpool.Pool, kind, externa
 		return nil, err
 	}
 	return &Scope{
-		ID:          row.ID,
-		Kind:        row.Kind,
-		ExternalID:  row.ExternalID,
-		Name:        row.Name,
-		ParentID:    row.ParentID,
-		PrincipalID: row.PrincipalID,
-		Path:        row.Path,
-		Meta:        row.Meta,
-		CreatedAt:   row.CreatedAt,
+		ID:                row.ID,
+		Kind:              row.Kind,
+		ExternalID:        row.ExternalID,
+		Name:              row.Name,
+		ParentID:          row.ParentID,
+		PrincipalID:       row.PrincipalID,
+		Path:              row.Path,
+		Meta:              row.Meta,
+		RepoUrl:           row.RepoUrl,
+		RepoDefaultBranch: row.RepoDefaultBranch,
+		LastIndexedCommit: row.LastIndexedCommit,
+		CreatedAt:         row.CreatedAt,
 	}, nil
 }
 
@@ -291,15 +300,18 @@ func ListScopes(ctx context.Context, pool *pgxpool.Pool, limit, offset int) ([]*
 	out := make([]*Scope, len(rows))
 	for i, row := range rows {
 		out[i] = &Scope{
-			ID:          row.ID,
-			Kind:        row.Kind,
-			ExternalID:  row.ExternalID,
-			Name:        row.Name,
-			ParentID:    row.ParentID,
-			PrincipalID: row.PrincipalID,
-			Path:        row.Path,
-			Meta:        row.Meta,
-			CreatedAt:   row.CreatedAt,
+			ID:                row.ID,
+			Kind:              row.Kind,
+			ExternalID:        row.ExternalID,
+			Name:              row.Name,
+			ParentID:          row.ParentID,
+			PrincipalID:       row.PrincipalID,
+			Path:              row.Path,
+			Meta:              row.Meta,
+			RepoUrl:           row.RepoUrl,
+			RepoDefaultBranch: row.RepoDefaultBranch,
+			LastIndexedCommit: row.LastIndexedCommit,
+			CreatedAt:         row.CreatedAt,
 		}
 	}
 	return out, nil
@@ -319,15 +331,18 @@ func UpdateScope(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, name str
 		return nil, err
 	}
 	return &Scope{
-		ID:          row.ID,
-		Kind:        row.Kind,
-		ExternalID:  row.ExternalID,
-		Name:        row.Name,
-		ParentID:    row.ParentID,
-		PrincipalID: row.PrincipalID,
-		Path:        row.Path,
-		Meta:        row.Meta,
-		CreatedAt:   row.CreatedAt,
+		ID:                row.ID,
+		Kind:              row.Kind,
+		ExternalID:        row.ExternalID,
+		Name:              row.Name,
+		ParentID:          row.ParentID,
+		PrincipalID:       row.PrincipalID,
+		Path:              row.Path,
+		Meta:              row.Meta,
+		RepoUrl:           row.RepoUrl,
+		RepoDefaultBranch: row.RepoDefaultBranch,
+		LastIndexedCommit: row.LastIndexedCommit,
+		CreatedAt:         row.CreatedAt,
 	}, nil
 }
 
@@ -335,6 +350,51 @@ func UpdateScope(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, name str
 func DeleteScope(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error {
 	q := New(pool)
 	return q.DeleteScope(ctx, id)
+}
+
+// SetScopeRepo attaches a git repository URL and default branch to a project-kind scope.
+func SetScopeRepo(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, repoURL, defaultBranch string) (*Scope, error) {
+	q := New(pool)
+	row, err := q.SetScopeRepo(ctx, SetScopeRepoParams{
+		ID:                id,
+		RepoUrl:           &repoURL,
+		RepoDefaultBranch: defaultBranch,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("db: set scope repo: %w", err)
+	}
+	return &Scope{
+		ID:                id,
+		Kind:              row.Kind,
+		ExternalID:        row.ExternalID,
+		Name:              row.Name,
+		ParentID:          row.ParentID,
+		PrincipalID:       row.PrincipalID,
+		Path:              row.Path,
+		Meta:              row.Meta,
+		RepoUrl:           row.RepoUrl,
+		RepoDefaultBranch: row.RepoDefaultBranch,
+		LastIndexedCommit: row.LastIndexedCommit,
+		CreatedAt:         row.CreatedAt,
+	}, nil
+}
+
+// SetLastIndexedCommit records the last successfully indexed commit SHA for a scope.
+func SetLastIndexedCommit(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, sha string) error {
+	q := New(pool)
+	return q.SetLastIndexedCommit(ctx, SetLastIndexedCommitParams{
+		ID:                id,
+		LastIndexedCommit: &sha,
+	})
+}
+
+// DeleteRelationsBySourceFile removes all relations from a scope that were extracted from a given file.
+func DeleteRelationsBySourceFile(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, sourceFile string) error {
+	q := New(pool)
+	return q.DeleteRelationsBySourceFile(ctx, DeleteRelationsBySourceFileParams{
+		ScopeID:    scopeID,
+		SourceFile: &sourceFile,
+	})
 }
 
 // ── Tokens ────────────────────────────────────────────────────────────────────
@@ -829,6 +889,7 @@ func UpsertRelation(ctx context.Context, pool *pgxpool.Pool, r *Relation) (*Rela
 		Confidence:     r.Confidence,
 		SourceMemory:   r.SourceMemory,
 		SourceArtifact: r.SourceArtifact,
+		SourceFile:     r.SourceFile,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("db: upsert relation: %w", err)
@@ -842,6 +903,7 @@ func UpsertRelation(ctx context.Context, pool *pgxpool.Pool, r *Relation) (*Rela
 		Confidence:     result.Confidence,
 		SourceMemory:   result.SourceMemory,
 		SourceArtifact: result.SourceArtifact,
+		SourceFile:     result.SourceFile,
 		CreatedAt:      result.CreatedAt,
 	}, nil
 }
@@ -921,6 +983,21 @@ func ListEntitiesByScope(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.U
 	})
 	if err != nil {
 		return nil, fmt.Errorf("db: list entities by scope: %w", err)
+	}
+	return es, nil
+}
+
+// FindEntitiesBySuffix returns entities in a scope whose canonical name equals
+// suffix or ends with ".suffix", "::suffix", or "#suffix".
+// Used for heuristic call-target resolution in code graph extraction.
+func FindEntitiesBySuffix(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, suffix string) ([]*Entity, error) {
+	q := New(pool)
+	es, err := q.FindEntitiesBySuffix(ctx, FindEntitiesBySuffixParams{
+		ScopeID:   scopeID,
+		Canonical: suffix,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("db: find entities by suffix: %w", err)
 	}
 	return es, nil
 }
@@ -1083,6 +1160,27 @@ func GetEndorsementByEndorser(ctx context.Context, pool *pgxpool.Pool, artifactI
 		return nil, nil
 	}
 	return e, err
+}
+
+// SearchArtifacts filters artifacts by a text query (ILIKE on title/content) and optional status.
+func SearchArtifacts(ctx context.Context, pool *pgxpool.Pool, query, status string, limit, offset int) ([]*KnowledgeArtifact, error) {
+	q := New(pool)
+	return q.SearchArtifacts(ctx, SearchArtifactsParams{
+		Title:  "%" + query + "%",
+		Column2: status,
+		Limit:  int32(limit),
+		Offset: int32(offset),
+	})
+}
+
+// ListArtifactsByStatus returns artifacts filtered by a single status value.
+func ListArtifactsByStatus(ctx context.Context, pool *pgxpool.Pool, status string, limit, offset int) ([]*KnowledgeArtifact, error) {
+	q := New(pool)
+	return q.ListArtifactsByStatus(ctx, ListArtifactsByStatusParams{
+		Status: status,
+		Limit:  int32(limit),
+		Offset: int32(offset),
+	})
 }
 
 // ListAllArtifacts returns all artifacts regardless of status or scope (admin view).
