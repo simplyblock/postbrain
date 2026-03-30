@@ -193,40 +193,31 @@ visible at a glance.
 
 ## Open Questions
 
-1. **Scope of resolution for v1** — heuristic name matching is implemented (Option A).
-   The next step is whether to invest in `go/packages` for type-resolved edges; the heuristic
-   approach ships a usable graph today but produces a graph agents can only partially trust
-   for impact analysis.
+1. **Scope of resolution** — Phase 1 used pure suffix heuristics. Phase 4 adds
+   import-aware lookup as the primary strategy, with LSP as an opt-in per-language
+   enhancement. No language-specific toolchains are required dependencies.
 
-2. **Language priority** — Go only first (fits the postbrain codebase itself), then expand?
-   Or design the extraction pipeline to be language-pluggable from day one?
+2. **Granularity** — Phase 4 moves to function-level chunk memories. The schema
+   change (`parent_memory_id`) is backward-compatible; file-level memories remain.
 
-3. **Granularity** — file-level memories with structural edges, or function-level chunks?
-   Function-level is better for retrieval but requires the chunk schema change.
+3. **Trigger model** — write-time extraction (for individual memories) and background
+   repo indexer (for bulk/incremental) are both implemented. The chunk indexer runs
+   as part of the repo sync, not at write time.
 
-4. **Trigger model** — extraction triggered by individual memory writes (incremental), a
-   bulk-index command, or a background job that watches for new `source_ref=file:` memories?
-   All three are useful; the write-time trigger is the minimum viable starting point.
+4. **Staleness** — deleted/renamed files are handled by `DeleteRelationsBySourceFile`
+   during incremental sync. Entity cleanup (orphaned entities with no remaining
+   relations or memories) is a future reconciliation job.
 
-5. **Staleness** — how do deleted or renamed files get cleaned up? A file rename creates
-   a new entity but the old one lingers. Needs a reconciliation job or an explicit
-   `DELETE /v1/graph/file?path=…` endpoint.
+5. **Cross-scope edges** — deferred. Current graph is strictly per-scope. Cross-scope
+   relation visibility should align with the sharing-grants model.
 
-6. **Cross-scope edges** — when `project:acme/api` calls into `project:acme/shared`, should
-   the edge cross scope boundaries in the graph? This intersects with the existing
-   visibility and sharing-grants model.
+6. **LSP resolver temp-dir lifecycle** — the in-memory git clone is written to a temp
+   dir before the LSP server starts. The temp dir is deleted in a `defer` even on
+   crash; if the process is killed hard, OS temp-dir cleanup handles it on next boot.
 
-7. **Embedding code symbols** — should individual function entities carry their own
-   embedding (the function body embedded via the code model)? This enables "find functions
-   similar to this one" queries beyond name matching, but doubles the embedding workload.
-
-8. **Integration with the MCP `recall` tool** — should `recall` with `search_mode=code`
-   automatically include graph-neighbour results (e.g. if `auth.VerifyToken` matches,
-   also return its callees)? This is a graph-augmented RAG pattern that significantly
-   improves recall completeness for code tasks.
-
-9. **In-memory repo index crash cleanup** — for repos exceeding the in-memory size limit,
-   what is the temp-dir cleanup strategy if the process crashes mid-index?
+7. **Chunk embedding workload** — each function chunk gets a code embedding. For large
+   repos this significantly increases embedding API calls. The indexer should respect
+   a configurable `REPO_CHUNK_EMBED_MAX` limit (default: embed all, skip if >N chunks).
 
 ---
 
@@ -317,15 +308,109 @@ Configurable `REPO_INDEX_MAX_MB` (default 500). The indexer checks the pack size
 during the git handshake and aborts with a clear error if exceeded. Large repos can fall back
 to a temp-dir shallow clone that is deleted after indexing.
 
-### Phase 3 — Query endpoints and graph-augmented recall
+### Phase 3 — Query endpoints and graph-augmented recall [COMPLETE]
 
-- Implement structured traversal REST endpoints (`callers`, `callees`, `deps`, `dependents`)
-- Traversal endpoints are the prerequisite for graph-augmented recall.
-- Extend `recall` to optionally include graph neighbours of matched symbols
-- Web UI: visualisation of file/function dependency graph
+- Structured traversal REST endpoints implemented: `GET /v1/graph/callers`,
+  `/callees`, `/deps`, `/dependents` — each resolves a symbol and returns
+  typed neighbour list with predicate, direction, confidence, source_file
+- `internal/graph/traversal.go`: `ResolveSymbol`, `Callers`, `Callees`,
+  `Dependencies`, `Dependents`, `NeighboursForEntity`
+- `recall` MCP tool extended with `graph_depth` parameter (0=off, 1=neighbours):
+  fetches graph neighbours of matched code entities, appends linked memories
+  with discounted scores and `graph_context=true` flag
 
-### Phase 4 — Polyglot and chunk-level granularity
+### Phase 4 — Chunk-level granularity and import-aware resolution
 
-- Add language-pluggable extraction interface; add Python, TypeScript extractors
-- Introduce function-level chunk memories linked to file-level parent
-- LSP-based resolution as an optional high-fidelity mode
+The goal is to move from file-level to function/method/class-level memories and
+to close call-graph edges accurately using import context — without language-specific
+toolchains.
+
+#### 4a — Symbol range extraction (all 22 languages)
+
+Tree-sitter nodes carry `StartPoint()` / `EndPoint()` (row, column). The
+existing `Symbol` struct is extended with `StartLine`, `EndLine` fields.
+Each extractor is updated to populate these from the defining CST node.
+
+#### 4b — Chunk memories (schema migration 000010)
+
+```sql
+ALTER TABLE memories ADD COLUMN parent_memory_id UUID REFERENCES memories(id);
+CREATE INDEX memories_parent_id_idx ON memories (parent_memory_id)
+    WHERE parent_memory_id IS NOT NULL;
+```
+
+The repo indexer creates **one memory per extracted top-level symbol**:
+- `content` = sliced source bytes `src[startByte:endByte]`
+- `source_ref` = `file:<path>:<start_line>`
+- `parent_memory_id` = the file-level memory for that file
+- `content_kind` = `"code"`
+- Gets its own embedding (code model)
+
+The file-level memory (already created) remains as the parent. This enables
+both file-level and function-level retrieval from the same index run.
+
+#### 4c — Import-aware resolution pipeline
+
+The current heuristic (suffix matching) is replaced by a three-stage pipeline:
+
+```
+1. Local symbol table   — exact match in file's own defined symbols
+2. Import-aware lookup  — for each unresolved name, find import edges from
+                          the current file entity; for each imported package/
+                          module entity, search for <package>.<name> canonical
+3. Suffix fallback      — existing FindEntitiesBySuffix heuristic
+```
+
+Stage 2 is entirely driven by the import edges already stored in the graph:
+
+```
+file:src/auth/service.go  --imports-->  package:internal/db
+                                                 |
+                                           entity: db.GetUser
+                                                 ↑
+call target "GetUser" resolved via import edge + canonical prefix match
+```
+
+This is language-agnostic because import edges are extracted uniformly by the
+tree-sitter extractors for all 22 languages. Accuracy is substantially higher
+than pure suffix matching for codebases with a complete import graph.
+
+#### 4d — LSP-based resolution (optional, per-language)
+
+For codebases where the import graph is insufficient (e.g. dynamic dispatch,
+generated code, complex module aliasing), a `Resolver` interface allows
+language-specific implementations to be plugged in:
+
+```go
+type Resolver interface {
+    // Language returns the file extension this resolver handles (e.g. ".go").
+    Language() string
+    // Resolve maps an unresolved call target to a canonical entity name.
+    // Returns "" if unresolvable.
+    Resolve(ctx context.Context, file, symbol string) (canonical string, err error)
+    // Close releases any resources (LSP process, temp dir).
+    Close() error
+}
+```
+
+Implementations start the language server on demand, keep it warm for the
+duration of an index run, and shut it down when `Close()` is called. The
+source tree must be on disk for LSP; the indexer writes it to a temp dir
+(already in RAM from the in-memory git clone) before starting the server.
+
+Planned implementations (order reflects value/effort ratio):
+
+| Language   | Server                       | Notes                                  |
+|------------|------------------------------|----------------------------------------|
+| Go         | `gopls`                      | Highest accuracy; requires `go.mod` in tree |
+| TypeScript | `typescript-language-server` | Covers TS + TSX + JS + JSX             |
+| Python     | `pyright` or `pylsp`         | `pyright` preferred for accuracy       |
+| Rust       | `rust-analyzer`              | Requires `Cargo.toml` in tree          |
+
+The `Resolver` interface is registered per-language in the indexer; if no
+resolver is registered for a file's language, the import-aware pipeline runs
+instead. This means the system degrades gracefully and operators can opt in to
+LSP support per-language without it being a hard dependency.
+
+LSP resolver implementations are out of scope for the initial Phase 4 ship;
+the interface and wiring are implemented so they can be added incrementally.
