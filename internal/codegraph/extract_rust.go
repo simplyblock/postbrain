@@ -47,6 +47,19 @@ func (e *rustExtractor) addSymbol(name string, kind SymbolKind) {
 	e.symbols = append(e.symbols, Symbol{Name: name, Kind: kind, Package: e.crateName, File: e.filename})
 }
 
+func (e *rustExtractor) addSymbolNode(name string, kind SymbolKind, n *sitter.Node) {
+	e.symbols = append(e.symbols, Symbol{
+		Name:      name,
+		Kind:      kind,
+		Package:   e.crateName,
+		File:      e.filename,
+		StartLine: n.StartPoint().Row,
+		EndLine:   n.EndPoint().Row,
+		StartByte: n.StartByte(),
+		EndByte:   n.EndByte(),
+	})
+}
+
 func (e *rustExtractor) addEdge(subject, predicate, object string) {
 	if subject == "" || object == "" {
 		return
@@ -199,7 +212,7 @@ func (e *rustExtractor) handleFunction(fileCanon string, n *sitter.Node, implTyp
 	if implType != "" {
 		kind = KindMethod
 	}
-	e.addSymbol(qualified, kind)
+	e.addSymbolNode(qualified, kind, n)
 	e.addEdge(fileCanon, "defines", qualified)
 
 	// Walk body for calls.
@@ -219,7 +232,7 @@ func (e *rustExtractor) handleStruct(fileCanon string, n *sitter.Node) {
 	if mod != "" {
 		qualified = mod + "::" + name
 	}
-	e.addSymbol(qualified, KindStruct)
+	e.addSymbolNode(qualified, KindStruct, n)
 	e.addEdge(fileCanon, "defines", qualified)
 }
 
@@ -247,7 +260,7 @@ func (e *rustExtractor) handleTrait(fileCanon string, n *sitter.Node) {
 	if mod != "" {
 		qualified = mod + "::" + name
 	}
-	e.addSymbol(qualified, KindInterface)
+	e.addSymbolNode(qualified, KindInterface, n)
 	e.addEdge(fileCanon, "defines", qualified)
 
 	// Walk body for default methods.

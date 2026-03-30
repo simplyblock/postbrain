@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	pgvector_go "github.com/pgvector/pgvector-go"
@@ -72,15 +73,42 @@ type GetMemoriesNeedingCodeReembedParams struct {
 	Offset               int32
 }
 
-func (q *Queries) GetMemoriesNeedingCodeReembed(ctx context.Context, arg GetMemoriesNeedingCodeReembedParams) ([]*Memory, error) {
+type GetMemoriesNeedingCodeReembedRow struct {
+	ID                   uuid.UUID
+	MemoryType           string
+	ScopeID              uuid.UUID
+	AuthorID             uuid.UUID
+	Content              string
+	Summary              *string
+	Embedding            *pgvector_go.Vector
+	EmbeddingModelID     *uuid.UUID
+	EmbeddingCode        *pgvector_go.Vector
+	EmbeddingCodeModelID *uuid.UUID
+	ContentKind          string
+	Meta                 []byte
+	Version              int32
+	IsActive             bool
+	Confidence           float64
+	Importance           float64
+	AccessCount          int32
+	LastAccessed         *time.Time
+	ExpiresAt            *time.Time
+	PromotionStatus      string
+	PromotedTo           *uuid.UUID
+	SourceRef            *string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+}
+
+func (q *Queries) GetMemoriesNeedingCodeReembed(ctx context.Context, arg GetMemoriesNeedingCodeReembedParams) ([]*GetMemoriesNeedingCodeReembedRow, error) {
 	rows, err := q.db.Query(ctx, getMemoriesNeedingCodeReembed, arg.EmbeddingCodeModelID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []*Memory{}
+	items := []*GetMemoriesNeedingCodeReembedRow{}
 	for rows.Next() {
-		var i Memory
+		var i GetMemoriesNeedingCodeReembedRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.MemoryType,
@@ -137,15 +165,42 @@ type GetMemoriesNeedingTextReembedParams struct {
 	Offset           int32
 }
 
-func (q *Queries) GetMemoriesNeedingTextReembed(ctx context.Context, arg GetMemoriesNeedingTextReembedParams) ([]*Memory, error) {
+type GetMemoriesNeedingTextReembedRow struct {
+	ID                   uuid.UUID
+	MemoryType           string
+	ScopeID              uuid.UUID
+	AuthorID             uuid.UUID
+	Content              string
+	Summary              *string
+	Embedding            *pgvector_go.Vector
+	EmbeddingModelID     *uuid.UUID
+	EmbeddingCode        *pgvector_go.Vector
+	EmbeddingCodeModelID *uuid.UUID
+	ContentKind          string
+	Meta                 []byte
+	Version              int32
+	IsActive             bool
+	Confidence           float64
+	Importance           float64
+	AccessCount          int32
+	LastAccessed         *time.Time
+	ExpiresAt            *time.Time
+	PromotionStatus      string
+	PromotedTo           *uuid.UUID
+	SourceRef            *string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+}
+
+func (q *Queries) GetMemoriesNeedingTextReembed(ctx context.Context, arg GetMemoriesNeedingTextReembedParams) ([]*GetMemoriesNeedingTextReembedRow, error) {
 	rows, err := q.db.Query(ctx, getMemoriesNeedingTextReembed, arg.EmbeddingModelID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []*Memory{}
+	items := []*GetMemoriesNeedingTextReembedRow{}
 	for rows.Next() {
-		var i Memory
+		var i GetMemoriesNeedingTextReembedRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.MemoryType,

@@ -35,6 +35,13 @@ type Symbol struct {
 	Package string
 	// File is the source file path as provided to Extract.
 	File string
+	// StartLine is the 0-based line number where the symbol definition begins.
+	StartLine uint32
+	// EndLine is the 0-based line number where the symbol definition ends.
+	EndLine uint32
+	// StartByte and EndByte are the byte offsets in the source.
+	StartByte uint32
+	EndByte   uint32
 }
 
 // Edge is a directional structural relationship between two symbols (by name).

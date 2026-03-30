@@ -45,6 +45,18 @@ func (e *pyExtractor) addSymbol(name string, kind SymbolKind) {
 	e.symbols = append(e.symbols, Symbol{Name: name, Kind: kind, File: e.filename})
 }
 
+func (e *pyExtractor) addSymbolNode(name string, kind SymbolKind, n *sitter.Node) {
+	e.symbols = append(e.symbols, Symbol{
+		Name:      name,
+		Kind:      kind,
+		File:      e.filename,
+		StartLine: n.StartPoint().Row,
+		EndLine:   n.EndPoint().Row,
+		StartByte: n.StartByte(),
+		EndByte:   n.EndByte(),
+	})
+}
+
 func (e *pyExtractor) addEdge(subject, predicate, object string) {
 	if subject == "" || object == "" {
 		return
@@ -144,7 +156,7 @@ func (e *pyExtractor) handleFunction(fileCanon string, n *sitter.Node, className
 	if className != "" {
 		kind = KindMethod
 	}
-	e.addSymbol(qualified, kind)
+	e.addSymbolNode(qualified, kind, n)
 	e.addEdge(fileCanon, "defines", qualified)
 
 	// Walk body for calls.
@@ -167,7 +179,7 @@ func (e *pyExtractor) handleClass(fileCanon string, n *sitter.Node) {
 	} else {
 		qualified = name
 	}
-	e.addSymbol(qualified, KindClass)
+	e.addSymbolNode(qualified, KindClass, n)
 	e.addEdge(fileCanon, "defines", qualified)
 
 	// Superclasses → extends edges.

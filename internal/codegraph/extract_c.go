@@ -58,6 +58,18 @@ func (e *cExtractor) addSymbol(name string, kind SymbolKind) {
 	e.symbols = append(e.symbols, Symbol{Name: name, Kind: kind, File: e.filename})
 }
 
+func (e *cExtractor) addSymbolNode(name string, kind SymbolKind, n *sitter.Node) {
+	e.symbols = append(e.symbols, Symbol{
+		Name:      name,
+		Kind:      kind,
+		File:      e.filename,
+		StartLine: n.StartPoint().Row,
+		EndLine:   n.EndPoint().Row,
+		StartByte: n.StartByte(),
+		EndByte:   n.EndByte(),
+	})
+}
+
 func (e *cExtractor) addEdge(subject, predicate, object string) {
 	if subject == "" || object == "" {
 		return
@@ -128,7 +140,7 @@ func (e *cExtractor) handleFunction(fileCanon string, n *sitter.Node, classScope
 	if classScope != "" {
 		qualified = classScope + "::" + name
 	}
-	e.addSymbol(qualified, KindFunction)
+	e.addSymbolNode(qualified, KindFunction, n)
 	e.addEdge(fileCanon, "defines", qualified)
 
 	body := n.ChildByFieldName("body")
@@ -208,7 +220,7 @@ func (e *cExtractor) handleStruct(fileCanon string, n *sitter.Node) {
 		return
 	}
 	name := e.text(nameNode)
-	e.addSymbol(name, KindStruct)
+	e.addSymbolNode(name, KindStruct, n)
 	e.addEdge(fileCanon, "defines", name)
 }
 
@@ -245,7 +257,7 @@ func (e *cExtractor) handleClass(fileCanon string, n *sitter.Node) {
 		return
 	}
 	name := e.text(nameNode)
-	e.addSymbol(name, KindClass)
+	e.addSymbolNode(name, KindClass, n)
 	e.addEdge(fileCanon, "defines", name)
 
 	// Base classes → extends

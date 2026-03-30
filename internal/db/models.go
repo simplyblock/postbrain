@@ -167,6 +167,7 @@ type Memory struct {
 	SourceRef            *string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
+	ParentMemoryID       *uuid.UUID
 }
 
 type MemoryEntity struct {
