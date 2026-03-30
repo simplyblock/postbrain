@@ -58,6 +58,19 @@ func (e *javaExtractor) addSymbol(name string, kind SymbolKind) {
 	e.symbols = append(e.symbols, Symbol{Name: name, Kind: kind, Package: e.pkg, File: e.filename})
 }
 
+func (e *javaExtractor) addSymbolNode(name string, kind SymbolKind, n *sitter.Node) {
+	e.symbols = append(e.symbols, Symbol{
+		Name:      name,
+		Kind:      kind,
+		Package:   e.pkg,
+		File:      e.filename,
+		StartLine: n.StartPoint().Row,
+		EndLine:   n.EndPoint().Row,
+		StartByte: n.StartByte(),
+		EndByte:   n.EndByte(),
+	})
+}
+
 func (e *javaExtractor) addEdge(subject, predicate, object string) {
 	if subject == "" || object == "" {
 		return
@@ -141,7 +154,7 @@ func (e *javaExtractor) handleClass(fileCanon string, n *sitter.Node) {
 		return
 	}
 	name := e.qual(e.text(nameNode))
-	e.addSymbol(name, KindClass)
+	e.addSymbolNode(name, KindClass, n)
 	e.addEdge(fileCanon, "defines", name)
 
 	// Superclass → extends
@@ -172,7 +185,7 @@ func (e *javaExtractor) handleInterface(fileCanon string, n *sitter.Node) {
 		return
 	}
 	name := e.qual(e.text(nameNode))
-	e.addSymbol(name, KindInterface)
+	e.addSymbolNode(name, KindInterface, n)
 	e.addEdge(fileCanon, "defines", name)
 
 	extends := n.ChildByFieldName("extends_interfaces")
@@ -241,7 +254,7 @@ func (e *javaExtractor) handleMethod(fileCanon, className string, n *sitter.Node
 	if n.Type() == "constructor_declaration" {
 		kind = KindFunction
 	}
-	e.addSymbol(name, kind)
+	e.addSymbolNode(name, kind, n)
 	e.addEdge(fileCanon, "defines", name)
 
 	body := n.ChildByFieldName("body")
@@ -266,7 +279,7 @@ func (e *javaExtractor) handleFunction(fileCanon string, n *sitter.Node, classNa
 	if className != "" {
 		kind = KindMethod
 	}
-	e.addSymbol(name, kind)
+	e.addSymbolNode(name, kind, n)
 	e.addEdge(fileCanon, "defines", name)
 
 	body := n.ChildByFieldName("body")

@@ -47,6 +47,7 @@ type IndexResult struct {
 	FilesSkipped      int
 	SymbolsUpserted   int
 	RelationsUpserted int
+	ChunksCreated     int
 }
 
 // IndexRepo clones (or diffs) the repository in-memory and upserts all extracted
@@ -210,7 +211,26 @@ func indexFile(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, f *ob
 	res.FilesIndexed++
 	sourceFile := f.Name
 
+	// Create a file-level memory for the source content.
+	fileSourceRef := "file:" + f.Name
+	fileMem, memErr := db.CreateMemory(ctx, pool, &db.Memory{
+		MemoryType:      "observation",
+		ScopeID:         opts.ScopeID,
+		AuthorID:        opts.ScopeID, // use scope as author for automated indexing
+		Content:         string(src),
+		ContentKind:     "code",
+		SourceRef:       &fileSourceRef,
+		PromotionStatus: "none",
+	})
+	var fileMemoryID *uuid.UUID
+	if memErr != nil {
+		slog.WarnContext(ctx, "codegraph: create file memory", "file", f.Name, "err", memErr)
+	} else if fileMem != nil {
+		fileMemoryID = &fileMem.ID
+	}
+
 	// Upsert symbols as entities.
+	resolver := NewResolver(pool, opts.ScopeID, nil)
 	symToID := make(map[string]uuid.UUID, len(syms))
 	for _, sym := range syms {
 		canonical := sym.Name
@@ -229,16 +249,56 @@ func indexFile(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, f *ob
 		}
 		symToID[sym.Name] = ent.ID
 		symToID[canonical] = ent.ID
+
+		// Link file memory to the file entity (KindFile symbols).
+		if sym.Kind == KindFile && fileMem != nil {
+			if lErr := db.LinkMemoryToEntity(ctx, pool, fileMem.ID, ent.ID, ""); lErr != nil {
+				slog.WarnContext(ctx, "codegraph: link file memory to entity", "err", lErr)
+			}
+		}
+
 		res.SymbolsUpserted++
+	}
+
+	// Create chunk memories for substantive code symbols.
+	if fileMemoryID != nil {
+		for _, sym := range syms {
+			switch sym.Kind {
+			case KindFunction, KindMethod, KindClass, KindStruct, KindInterface:
+				if sym.StartByte == sym.EndByte {
+					continue
+				}
+				if int(sym.EndByte) > len(src) || int(sym.StartByte) >= len(src) {
+					continue
+				}
+				chunkContent := string(src[sym.StartByte:sym.EndByte])
+				chunkSourceRef := fmt.Sprintf("file:%s:%d", f.Name, sym.StartLine+1)
+				_, cErr := db.CreateMemory(ctx, pool, &db.Memory{
+					MemoryType:      "observation",
+					ScopeID:         opts.ScopeID,
+					AuthorID:        opts.ScopeID,
+					Content:         chunkContent,
+					ContentKind:     "code",
+					SourceRef:       &chunkSourceRef,
+					ParentMemoryID:  fileMemoryID,
+					PromotionStatus: "none",
+				})
+				if cErr != nil {
+					slog.WarnContext(ctx, "codegraph: create chunk memory", "sym", sym.Name, "err", cErr)
+					continue
+				}
+				res.ChunksCreated++
+			}
+		}
 	}
 
 	// Upsert relations.
 	for _, edge := range edges {
-		subjectID, ok := resolveSymbol(ctx, pool, opts.ScopeID, edge.SubjectName, symToID)
+		subjectID, ok := resolver.Resolve(ctx, f.Name, edge.SubjectName, symToID)
 		if !ok {
 			continue
 		}
-		objectID, ok := resolveSymbol(ctx, pool, opts.ScopeID, edge.ObjectName, symToID)
+		objectID, ok := resolver.Resolve(ctx, f.Name, edge.ObjectName, symToID)
 		if !ok {
 			continue
 		}
@@ -260,19 +320,6 @@ func indexFile(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, f *ob
 	}
 
 	return nil
-}
-
-// resolveSymbol looks up a name in the local symbol table, then falls back to
-// heuristic suffix resolution via the database.
-func resolveSymbol(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, name string, symToID map[string]uuid.UUID) (uuid.UUID, bool) {
-	if id, ok := symToID[name]; ok {
-		return id, true
-	}
-	candidates, err := db.FindEntitiesBySuffix(ctx, pool, scopeID, name)
-	if err == nil && len(candidates) > 0 {
-		return candidates[0].ID, true
-	}
-	return uuid.UUID{}, false
 }
 
 // sanitizeURL removes credentials from a URL for safe logging.

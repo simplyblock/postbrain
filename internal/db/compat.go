@@ -516,7 +516,7 @@ func GetMemory(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*Memory, 
 	if err != nil {
 		return nil, fmt.Errorf("db: get memory: %w", err)
 	}
-	return m, nil
+	return memoryFromGetMemoryRow(m), nil
 }
 
 // ListMemoriesByScope returns active memories for a scope.
@@ -530,7 +530,11 @@ func ListMemoriesByScope(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.U
 	if err != nil {
 		return nil, fmt.Errorf("db: list memories by scope: %w", err)
 	}
-	return ms, nil
+	out := make([]*Memory, len(ms))
+	for i, r := range ms {
+		out[i] = memoryFromListMemoriesByScopeRow(r)
+	}
+	return out, nil
 }
 
 // vecPtr returns a *pgvector.Vector when the slice is non-empty, or nil (SQL NULL)
@@ -590,11 +594,12 @@ func CreateMemory(ctx context.Context, pool *pgxpool.Pool, m *Memory) (*Memory, 
 		PromotionStatus:      m.PromotionStatus,
 		PromotedTo:           m.PromotedTo,
 		SourceRef:            m.SourceRef,
+		ParentMemoryID:       m.ParentMemoryID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("db: create memory: %w", err)
 	}
-	return created, nil
+	return memoryFromCreateMemoryRow(created), nil
 }
 
 // UpdateMemoryContent updates content and embeddings.
@@ -615,7 +620,7 @@ func UpdateMemoryContent(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, 
 	if err != nil {
 		return nil, fmt.Errorf("db: update memory content: %w", err)
 	}
-	return m, nil
+	return memoryFromUpdateMemoryContentRow(m), nil
 }
 
 // SoftDeleteMemory marks a memory as inactive.
@@ -652,7 +657,11 @@ func FindNearDuplicates(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UU
 	if err != nil {
 		return nil, fmt.Errorf("db: find near duplicates: %w", err)
 	}
-	return ms, nil
+	out := make([]*Memory, len(ms))
+	for i, r := range ms {
+		out[i] = memoryFromFindNearDuplicatesRow(r)
+	}
+	return out, nil
 }
 
 // RecallMemoriesByVector performs ANN search.
@@ -743,6 +752,20 @@ func RecallMemoriesByTrigram(ctx context.Context, pool *pgxpool.Pool, scopeIDs [
 	return results, nil
 }
 
+// ListChunkMemories returns chunk memories (children) for a given parent memory.
+func ListChunkMemories(ctx context.Context, pool *pgxpool.Pool, parentMemoryID uuid.UUID) ([]*Memory, error) {
+	q := New(pool)
+	rows, err := q.ListChunkMemories(ctx, &parentMemoryID)
+	if err != nil {
+		return nil, fmt.Errorf("db: list chunk memories: %w", err)
+	}
+	out := make([]*Memory, len(rows))
+	for i, r := range rows {
+		out[i] = memoryFromListChunkMemoriesRow(r)
+	}
+	return out, nil
+}
+
 // ListConsolidationCandidates returns low-importance, low-access memories.
 func ListConsolidationCandidates(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID) ([]*Memory, error) {
 	q := New(pool)
@@ -750,7 +773,11 @@ func ListConsolidationCandidates(ctx context.Context, pool *pgxpool.Pool, scopeI
 	if err != nil {
 		return nil, fmt.Errorf("db: list consolidation candidates: %w", err)
 	}
-	return ms, nil
+	out := make([]*Memory, len(ms))
+	for i, r := range ms {
+		out[i] = memoryFromListConsolidationCandidatesRow(r)
+	}
+	return out, nil
 }
 
 // ── Consolidations ────────────────────────────────────────────────────────────
@@ -1085,7 +1112,11 @@ func ListMemoriesForEntity(ctx context.Context, pool *pgxpool.Pool, entityID uui
 	if err != nil {
 		return nil, fmt.Errorf("db: list memories for entity: %w", err)
 	}
-	return rows, nil
+	out := make([]*Memory, len(rows))
+	for i, r := range rows {
+		out[i] = memoryFromListMemoriesForEntityRow(r)
+	}
+	return out, nil
 }
 
 // ListRelationsByScope returns all relations in a scope.
@@ -1873,6 +1904,257 @@ func derefTime(t *time.Time) time.Time {
 	return *t
 }
 
+// memoryFromRow is a shared helper that copies all common fields from any memory-like struct.
+// Used by the typed conversion helpers below.
+
+// memoryFromGetMemoryRow converts a GetMemoryRow to a *Memory.
+func memoryFromGetMemoryRow(r *GetMemoryRow) *Memory {
+	return &Memory{
+		ID:                   r.ID,
+		MemoryType:           r.MemoryType,
+		ScopeID:              r.ScopeID,
+		AuthorID:             r.AuthorID,
+		Content:              r.Content,
+		Summary:              r.Summary,
+		Embedding:            r.Embedding,
+		EmbeddingModelID:     r.EmbeddingModelID,
+		EmbeddingCode:        r.EmbeddingCode,
+		EmbeddingCodeModelID: r.EmbeddingCodeModelID,
+		ContentKind:          r.ContentKind,
+		Meta:                 r.Meta,
+		Version:              r.Version,
+		IsActive:             r.IsActive,
+		Confidence:           r.Confidence,
+		Importance:           r.Importance,
+		AccessCount:          r.AccessCount,
+		LastAccessed:         r.LastAccessed,
+		ExpiresAt:            r.ExpiresAt,
+		PromotionStatus:      r.PromotionStatus,
+		PromotedTo:           r.PromotedTo,
+		SourceRef:            r.SourceRef,
+		ParentMemoryID:       r.ParentMemoryID,
+		CreatedAt:            r.CreatedAt,
+		UpdatedAt:            r.UpdatedAt,
+	}
+}
+
+// memoryFromCreateMemoryRow converts a CreateMemoryRow to a *Memory.
+func memoryFromCreateMemoryRow(r *CreateMemoryRow) *Memory {
+	return &Memory{
+		ID:                   r.ID,
+		MemoryType:           r.MemoryType,
+		ScopeID:              r.ScopeID,
+		AuthorID:             r.AuthorID,
+		Content:              r.Content,
+		Summary:              r.Summary,
+		Embedding:            r.Embedding,
+		EmbeddingModelID:     r.EmbeddingModelID,
+		EmbeddingCode:        r.EmbeddingCode,
+		EmbeddingCodeModelID: r.EmbeddingCodeModelID,
+		ContentKind:          r.ContentKind,
+		Meta:                 r.Meta,
+		Version:              r.Version,
+		IsActive:             r.IsActive,
+		Confidence:           r.Confidence,
+		Importance:           r.Importance,
+		AccessCount:          r.AccessCount,
+		LastAccessed:         r.LastAccessed,
+		ExpiresAt:            r.ExpiresAt,
+		PromotionStatus:      r.PromotionStatus,
+		PromotedTo:           r.PromotedTo,
+		SourceRef:            r.SourceRef,
+		ParentMemoryID:       r.ParentMemoryID,
+		CreatedAt:            r.CreatedAt,
+		UpdatedAt:            r.UpdatedAt,
+	}
+}
+
+// memoryFromUpdateMemoryContentRow converts an UpdateMemoryContentRow to a *Memory.
+func memoryFromUpdateMemoryContentRow(r *UpdateMemoryContentRow) *Memory {
+	return &Memory{
+		ID:                   r.ID,
+		MemoryType:           r.MemoryType,
+		ScopeID:              r.ScopeID,
+		AuthorID:             r.AuthorID,
+		Content:              r.Content,
+		Summary:              r.Summary,
+		Embedding:            r.Embedding,
+		EmbeddingModelID:     r.EmbeddingModelID,
+		EmbeddingCode:        r.EmbeddingCode,
+		EmbeddingCodeModelID: r.EmbeddingCodeModelID,
+		ContentKind:          r.ContentKind,
+		Meta:                 r.Meta,
+		Version:              r.Version,
+		IsActive:             r.IsActive,
+		Confidence:           r.Confidence,
+		Importance:           r.Importance,
+		AccessCount:          r.AccessCount,
+		LastAccessed:         r.LastAccessed,
+		ExpiresAt:            r.ExpiresAt,
+		PromotionStatus:      r.PromotionStatus,
+		PromotedTo:           r.PromotedTo,
+		SourceRef:            r.SourceRef,
+		ParentMemoryID:       r.ParentMemoryID,
+		CreatedAt:            r.CreatedAt,
+		UpdatedAt:            r.UpdatedAt,
+	}
+}
+
+// memoryFromFindNearDuplicatesRow converts a FindNearDuplicatesRow to a *Memory.
+func memoryFromFindNearDuplicatesRow(r *FindNearDuplicatesRow) *Memory {
+	return &Memory{
+		ID:                   r.ID,
+		MemoryType:           r.MemoryType,
+		ScopeID:              r.ScopeID,
+		AuthorID:             r.AuthorID,
+		Content:              r.Content,
+		Summary:              r.Summary,
+		Embedding:            r.Embedding,
+		EmbeddingModelID:     r.EmbeddingModelID,
+		EmbeddingCode:        r.EmbeddingCode,
+		EmbeddingCodeModelID: r.EmbeddingCodeModelID,
+		ContentKind:          r.ContentKind,
+		Meta:                 r.Meta,
+		Version:              r.Version,
+		IsActive:             r.IsActive,
+		Confidence:           r.Confidence,
+		Importance:           r.Importance,
+		AccessCount:          r.AccessCount,
+		LastAccessed:         r.LastAccessed,
+		ExpiresAt:            r.ExpiresAt,
+		PromotionStatus:      r.PromotionStatus,
+		PromotedTo:           r.PromotedTo,
+		SourceRef:            r.SourceRef,
+		ParentMemoryID:       r.ParentMemoryID,
+		CreatedAt:            r.CreatedAt,
+		UpdatedAt:            r.UpdatedAt,
+	}
+}
+
+// memoryFromListMemoriesByScopeRow converts a ListMemoriesByScopeRow to a *Memory.
+func memoryFromListMemoriesByScopeRow(r *ListMemoriesByScopeRow) *Memory {
+	return &Memory{
+		ID:                   r.ID,
+		MemoryType:           r.MemoryType,
+		ScopeID:              r.ScopeID,
+		AuthorID:             r.AuthorID,
+		Content:              r.Content,
+		Summary:              r.Summary,
+		Embedding:            r.Embedding,
+		EmbeddingModelID:     r.EmbeddingModelID,
+		EmbeddingCode:        r.EmbeddingCode,
+		EmbeddingCodeModelID: r.EmbeddingCodeModelID,
+		ContentKind:          r.ContentKind,
+		Meta:                 r.Meta,
+		Version:              r.Version,
+		IsActive:             r.IsActive,
+		Confidence:           r.Confidence,
+		Importance:           r.Importance,
+		AccessCount:          r.AccessCount,
+		LastAccessed:         r.LastAccessed,
+		ExpiresAt:            r.ExpiresAt,
+		PromotionStatus:      r.PromotionStatus,
+		PromotedTo:           r.PromotedTo,
+		SourceRef:            r.SourceRef,
+		ParentMemoryID:       r.ParentMemoryID,
+		CreatedAt:            r.CreatedAt,
+		UpdatedAt:            r.UpdatedAt,
+	}
+}
+
+// memoryFromListConsolidationCandidatesRow converts a ListConsolidationCandidatesRow to a *Memory.
+func memoryFromListConsolidationCandidatesRow(r *ListConsolidationCandidatesRow) *Memory {
+	return &Memory{
+		ID:                   r.ID,
+		MemoryType:           r.MemoryType,
+		ScopeID:              r.ScopeID,
+		AuthorID:             r.AuthorID,
+		Content:              r.Content,
+		Summary:              r.Summary,
+		Embedding:            r.Embedding,
+		EmbeddingModelID:     r.EmbeddingModelID,
+		EmbeddingCode:        r.EmbeddingCode,
+		EmbeddingCodeModelID: r.EmbeddingCodeModelID,
+		ContentKind:          r.ContentKind,
+		Meta:                 r.Meta,
+		Version:              r.Version,
+		IsActive:             r.IsActive,
+		Confidence:           r.Confidence,
+		Importance:           r.Importance,
+		AccessCount:          r.AccessCount,
+		LastAccessed:         r.LastAccessed,
+		ExpiresAt:            r.ExpiresAt,
+		PromotionStatus:      r.PromotionStatus,
+		PromotedTo:           r.PromotedTo,
+		SourceRef:            r.SourceRef,
+		ParentMemoryID:       r.ParentMemoryID,
+		CreatedAt:            r.CreatedAt,
+		UpdatedAt:            r.UpdatedAt,
+	}
+}
+
+// memoryFromListMemoriesForEntityRow converts a ListMemoriesForEntityRow to a *Memory.
+func memoryFromListMemoriesForEntityRow(r *ListMemoriesForEntityRow) *Memory {
+	return &Memory{
+		ID:                   r.ID,
+		MemoryType:           r.MemoryType,
+		ScopeID:              r.ScopeID,
+		AuthorID:             r.AuthorID,
+		Content:              r.Content,
+		Summary:              r.Summary,
+		Embedding:            r.Embedding,
+		EmbeddingModelID:     r.EmbeddingModelID,
+		EmbeddingCode:        r.EmbeddingCode,
+		EmbeddingCodeModelID: r.EmbeddingCodeModelID,
+		ContentKind:          r.ContentKind,
+		Meta:                 r.Meta,
+		Version:              r.Version,
+		IsActive:             r.IsActive,
+		Confidence:           r.Confidence,
+		Importance:           r.Importance,
+		AccessCount:          r.AccessCount,
+		LastAccessed:         r.LastAccessed,
+		ExpiresAt:            r.ExpiresAt,
+		PromotionStatus:      r.PromotionStatus,
+		PromotedTo:           r.PromotedTo,
+		SourceRef:            r.SourceRef,
+		ParentMemoryID:       r.ParentMemoryID,
+		CreatedAt:            r.CreatedAt,
+		UpdatedAt:            r.UpdatedAt,
+	}
+}
+
+// memoryFromListChunkMemoriesRow converts a ListChunkMemoriesRow to a *Memory.
+func memoryFromListChunkMemoriesRow(r *ListChunkMemoriesRow) *Memory {
+	return &Memory{
+		ID:                   r.ID,
+		MemoryType:           r.MemoryType,
+		ScopeID:              r.ScopeID,
+		AuthorID:             r.AuthorID,
+		Content:              r.Content,
+		Summary:              r.Summary,
+		Embedding:            r.Embedding,
+		EmbeddingModelID:     r.EmbeddingModelID,
+		EmbeddingCode:        r.EmbeddingCode,
+		EmbeddingCodeModelID: r.EmbeddingCodeModelID,
+		ContentKind:          r.ContentKind,
+		Meta:                 r.Meta,
+		Version:              r.Version,
+		IsActive:             r.IsActive,
+		Confidence:           r.Confidence,
+		Importance:           r.Importance,
+		AccessCount:          r.AccessCount,
+		LastAccessed:         r.LastAccessed,
+		ExpiresAt:            r.ExpiresAt,
+		PromotionStatus:      r.PromotionStatus,
+		PromotedTo:           r.PromotedTo,
+		SourceRef:            r.SourceRef,
+		ParentMemoryID:       r.ParentMemoryID,
+		CreatedAt:            r.CreatedAt,
+		UpdatedAt:            r.UpdatedAt,
+	}
+}
+
 // memoryFromRecallByVectorRow converts a RecallMemoriesByVectorRow to a *Memory.
 func memoryFromRecallByVectorRow(r *RecallMemoriesByVectorRow) *Memory {
 	return &Memory{
@@ -1898,6 +2180,7 @@ func memoryFromRecallByVectorRow(r *RecallMemoriesByVectorRow) *Memory {
 		PromotionStatus:      r.PromotionStatus,
 		PromotedTo:           r.PromotedTo,
 		SourceRef:            r.SourceRef,
+		ParentMemoryID:       r.ParentMemoryID,
 		CreatedAt:            r.CreatedAt,
 		UpdatedAt:            r.UpdatedAt,
 	}
@@ -1928,6 +2211,7 @@ func memoryFromRecallByCodeVectorRow(r *RecallMemoriesByCodeVectorRow) *Memory {
 		PromotionStatus:      r.PromotionStatus,
 		PromotedTo:           r.PromotedTo,
 		SourceRef:            r.SourceRef,
+		ParentMemoryID:       r.ParentMemoryID,
 		CreatedAt:            r.CreatedAt,
 		UpdatedAt:            r.UpdatedAt,
 	}
@@ -1958,6 +2242,7 @@ func memoryFromRecallByFTSRow(r *RecallMemoriesByFTSRow) *Memory {
 		PromotionStatus:      r.PromotionStatus,
 		PromotedTo:           r.PromotedTo,
 		SourceRef:            r.SourceRef,
+		ParentMemoryID:       r.ParentMemoryID,
 		CreatedAt:            r.CreatedAt,
 		UpdatedAt:            r.UpdatedAt,
 	}
@@ -2106,6 +2391,7 @@ func memoryFromRecallByTrigramRow(r *RecallMemoriesByTrigramRow) *Memory {
 		PromotionStatus:      r.PromotionStatus,
 		PromotedTo:           r.PromotedTo,
 		SourceRef:            r.SourceRef,
+		ParentMemoryID:       r.ParentMemoryID,
 		CreatedAt:            r.CreatedAt,
 		UpdatedAt:            r.UpdatedAt,
 	}

@@ -4,7 +4,7 @@ SELECT m.id, m.memory_type, m.scope_id, m.author_id,
     m.content, m.summary, m.embedding, m.embedding_model_id,
     m.embedding_code, m.embedding_code_model_id, m.content_kind, m.meta,
     m.version, m.is_active, m.confidence, m.importance, m.access_count, m.last_accessed,
-    m.expires_at, m.promotion_status, m.promoted_to, m.source_ref, m.created_at, m.updated_at
+    m.expires_at, m.promotion_status, m.promoted_to, m.source_ref, m.parent_memory_id, m.created_at, m.updated_at
 FROM memories m
 JOIN memory_entities me ON me.memory_id = m.id
 WHERE me.entity_id = $1 AND m.is_active = true
@@ -16,7 +16,7 @@ SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,
     embedding_code, embedding_code_model_id, content_kind, meta,
     version, is_active, confidence, importance, access_count, last_accessed,
-    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at
+    expires_at, promotion_status, promoted_to, source_ref, parent_memory_id, created_at, updated_at
 FROM memories WHERE id = $1;
 
 -- name: ListMemoriesByScope :many
@@ -24,7 +24,7 @@ SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,
     embedding_code, embedding_code_model_id, content_kind, meta,
     version, is_active, confidence, importance, access_count, last_accessed,
-    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at
+    expires_at, promotion_status, promoted_to, source_ref, parent_memory_id, created_at, updated_at
 FROM memories WHERE scope_id=$1 AND is_active=true
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
@@ -34,15 +34,15 @@ INSERT INTO memories
 (memory_type, scope_id, author_id, content, summary,
  embedding, embedding_model_id, embedding_code, embedding_code_model_id,
  content_kind, meta, version, is_active, confidence, importance,
- access_count, expires_at, promotion_status, promoted_to, source_ref)
+ access_count, expires_at, promotion_status, promoted_to, source_ref, parent_memory_id)
 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
         COALESCE($12,1),true,COALESCE($13,1.0),COALESCE($14,0.5),
-        0,$15,$16,$17,$18)
+        0,$15,$16,$17,$18,$19)
 RETURNING id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,
     embedding_code, embedding_code_model_id, content_kind, meta,
     version, is_active, confidence, importance, access_count, last_accessed,
-    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at;
+    expires_at, promotion_status, promoted_to, source_ref, parent_memory_id, created_at, updated_at;
 
 -- name: UpdateMemoryContent :one
 UPDATE memories
@@ -54,7 +54,7 @@ RETURNING id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,
     embedding_code, embedding_code_model_id, content_kind, meta,
     version, is_active, confidence, importance, access_count, last_accessed,
-    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at;
+    expires_at, promotion_status, promoted_to, source_ref, parent_memory_id, created_at, updated_at;
 
 -- name: SoftDeleteMemory :exec
 UPDATE memories SET is_active=false, updated_at=now() WHERE id=$1;
@@ -70,7 +70,7 @@ SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,
     embedding_code, embedding_code_model_id, content_kind, meta,
     version, is_active, confidence, importance, access_count, last_accessed,
-    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at
+    expires_at, promotion_status, promoted_to, source_ref, parent_memory_id, created_at, updated_at
 FROM memories
 WHERE scope_id = $1
   AND is_active = true
@@ -83,7 +83,7 @@ SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,
     embedding_code, embedding_code_model_id, content_kind, meta,
     version, is_active, confidence, importance, access_count, last_accessed,
-    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at,
+    expires_at, promotion_status, promoted_to, source_ref, parent_memory_id, created_at, updated_at,
     (1 - (embedding <=> $3))::float4 AS vec_score
 FROM memories
 WHERE is_active = true AND scope_id = ANY($1::uuid[])
@@ -95,7 +95,7 @@ SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,
     embedding_code, embedding_code_model_id, content_kind, meta,
     version, is_active, confidence, importance, access_count, last_accessed,
-    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at,
+    expires_at, promotion_status, promoted_to, source_ref, parent_memory_id, created_at, updated_at,
     (1 - (embedding_code <=> $3))::float4 AS vec_score
 FROM memories
 WHERE is_active = true AND scope_id = ANY($1::uuid[]) AND embedding_code IS NOT NULL
@@ -107,7 +107,7 @@ SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,
     embedding_code, embedding_code_model_id, content_kind, meta,
     version, is_active, confidence, importance, access_count, last_accessed,
-    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at,
+    expires_at, promotion_status, promoted_to, source_ref, parent_memory_id, created_at, updated_at,
     ts_rank_cd(to_tsvector('postbrain_fts', content), plainto_tsquery('postbrain_fts', $3)) AS bm25_score
 FROM memories
 WHERE is_active = true AND scope_id = ANY($1::uuid[])
@@ -120,7 +120,7 @@ SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,
     embedding_code, embedding_code_model_id, content_kind, meta,
     version, is_active, confidence, importance, access_count, last_accessed,
-    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at,
+    expires_at, promotion_status, promoted_to, source_ref, parent_memory_id, created_at, updated_at,
     similarity(content, $3) AS trgm_score
 FROM memories
 WHERE is_active = true AND scope_id = ANY($1::uuid[])
@@ -133,6 +133,17 @@ SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,
     embedding_code, embedding_code_model_id, content_kind, meta,
     version, is_active, confidence, importance, access_count, last_accessed,
-    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at
+    expires_at, promotion_status, promoted_to, source_ref, parent_memory_id, created_at, updated_at
 FROM memories
 WHERE is_active = true AND scope_id = $1 AND importance < 0.7 AND access_count < 3;
+
+-- name: ListChunkMemories :many
+-- Returns chunk memories (children) for a given parent memory.
+SELECT id, memory_type, scope_id, author_id,
+    content, summary, embedding, embedding_model_id,
+    embedding_code, embedding_code_model_id, content_kind, meta,
+    version, is_active, confidence, importance, access_count, last_accessed,
+    expires_at, promotion_status, promoted_to, source_ref, parent_memory_id, created_at, updated_at
+FROM memories
+WHERE parent_memory_id = $1 AND is_active = true
+ORDER BY created_at;

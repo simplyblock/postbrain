@@ -62,6 +62,18 @@ func (e *jsExtractor) addSymbol(name string, kind SymbolKind) {
 	e.symbols = append(e.symbols, Symbol{Name: name, Kind: kind, File: e.filename})
 }
 
+func (e *jsExtractor) addSymbolNode(name string, kind SymbolKind, n *sitter.Node) {
+	e.symbols = append(e.symbols, Symbol{
+		Name:      name,
+		Kind:      kind,
+		File:      e.filename,
+		StartLine: n.StartPoint().Row,
+		EndLine:   n.EndPoint().Row,
+		StartByte: n.StartByte(),
+		EndByte:   n.EndByte(),
+	})
+}
+
 func (e *jsExtractor) addEdge(subject, predicate, object string) {
 	if subject == "" || object == "" {
 		return
@@ -188,7 +200,7 @@ func (e *jsExtractor) handleFunction(fileCanon string, n *sitter.Node, className
 	if className != "" {
 		kind = KindMethod
 	}
-	e.addSymbol(qualified, kind)
+	e.addSymbolNode(qualified, kind, n)
 	e.addEdge(fileCanon, "defines", qualified)
 
 	body := n.ChildByFieldName("body")
@@ -211,7 +223,7 @@ func (e *jsExtractor) handleClass(fileCanon string, n *sitter.Node) {
 	if mod != "" {
 		qualified = mod + "." + name
 	}
-	e.addSymbol(qualified, KindClass)
+	e.addSymbolNode(qualified, KindClass, n)
 	e.addEdge(fileCanon, "defines", qualified)
 
 	// Superclass → extends edge.
@@ -272,7 +284,7 @@ func (e *jsExtractor) handleMethodDef(fileCanon, className string, n *sitter.Nod
 		return
 	}
 	qualified := className + "." + name
-	e.addSymbol(qualified, KindMethod)
+	e.addSymbolNode(qualified, KindMethod, n)
 	e.addEdge(fileCanon, "defines", qualified)
 
 	body := n.ChildByFieldName("body")

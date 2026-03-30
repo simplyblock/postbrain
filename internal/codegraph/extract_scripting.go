@@ -41,6 +41,18 @@ func (e *bashExtractor) addSymbol(name string, kind SymbolKind) {
 	e.symbols = append(e.symbols, Symbol{Name: name, Kind: kind, File: e.filename})
 }
 
+func (e *bashExtractor) addSymbolNode(name string, kind SymbolKind, n *sitter.Node) {
+	e.symbols = append(e.symbols, Symbol{
+		Name:      name,
+		Kind:      kind,
+		File:      e.filename,
+		StartLine: n.StartPoint().Row,
+		EndLine:   n.EndPoint().Row,
+		StartByte: n.StartByte(),
+		EndByte:   n.EndByte(),
+	})
+}
+
 func (e *bashExtractor) addEdge(subject, predicate, object string) {
 	if subject == "" || object == "" {
 		return
@@ -106,7 +118,7 @@ func (e *bashExtractor) handleFunction(fileCanon string, n *sitter.Node) {
 		return
 	}
 	name := e.scriptName() + "." + e.text(nameNode)
-	e.addSymbol(name, KindFunction)
+	e.addSymbolNode(name, KindFunction, n)
 	e.addEdge(fileCanon, "defines", name)
 
 	body := n.ChildByFieldName("body")
@@ -162,6 +174,18 @@ func (e *luaExtractor) addSymbol(name string, kind SymbolKind) {
 	e.symbols = append(e.symbols, Symbol{Name: name, Kind: kind, File: e.filename})
 }
 
+func (e *luaExtractor) addSymbolNode(name string, kind SymbolKind, n *sitter.Node) {
+	e.symbols = append(e.symbols, Symbol{
+		Name:      name,
+		Kind:      kind,
+		File:      e.filename,
+		StartLine: n.StartPoint().Row,
+		EndLine:   n.EndPoint().Row,
+		StartByte: n.StartByte(),
+		EndByte:   n.EndByte(),
+	})
+}
+
 func (e *luaExtractor) addEdge(subject, predicate, object string) {
 	if subject == "" || object == "" {
 		return
@@ -205,7 +229,7 @@ func (e *luaExtractor) handleFunction(fileCanon string, n *sitter.Node) {
 	}
 	rawName := e.text(nameNode)
 	name := e.moduleName() + "." + rawName
-	e.addSymbol(name, KindFunction)
+	e.addSymbolNode(name, KindFunction, n)
 	e.addEdge(fileCanon, "defines", name)
 
 	body := n.ChildByFieldName("body")
@@ -289,6 +313,18 @@ func (e *phpExtractor) addSymbol(name string, kind SymbolKind) {
 	e.symbols = append(e.symbols, Symbol{Name: name, Kind: kind, File: e.filename})
 }
 
+func (e *phpExtractor) addSymbolNode(name string, kind SymbolKind, n *sitter.Node) {
+	e.symbols = append(e.symbols, Symbol{
+		Name:      name,
+		Kind:      kind,
+		File:      e.filename,
+		StartLine: n.StartPoint().Row,
+		EndLine:   n.EndPoint().Row,
+		StartByte: n.StartByte(),
+		EndByte:   n.EndByte(),
+	})
+}
+
 func (e *phpExtractor) addEdge(subject, predicate, object string) {
 	if subject == "" || object == "" {
 		return
@@ -361,7 +397,7 @@ func (e *phpExtractor) handleFunction(fileCanon string, n *sitter.Node, classSco
 	if classScope != "" {
 		kind = KindMethod
 	}
-	e.addSymbol(name, kind)
+	e.addSymbolNode(name, kind, n)
 	e.addEdge(fileCanon, "defines", name)
 
 	body := n.ChildByFieldName("body")
@@ -376,7 +412,7 @@ func (e *phpExtractor) handleClass(fileCanon string, n *sitter.Node) {
 		return
 	}
 	name := e.text(nameNode)
-	e.addSymbol(name, KindClass)
+	e.addSymbolNode(name, KindClass, n)
 	e.addEdge(fileCanon, "defines", name)
 
 	base := n.ChildByFieldName("base_clause")
@@ -488,6 +524,18 @@ func (e *rubyExtractor) addSymbol(name string, kind SymbolKind) {
 	e.symbols = append(e.symbols, Symbol{Name: name, Kind: kind, File: e.filename})
 }
 
+func (e *rubyExtractor) addSymbolNode(name string, kind SymbolKind, n *sitter.Node) {
+	e.symbols = append(e.symbols, Symbol{
+		Name:      name,
+		Kind:      kind,
+		File:      e.filename,
+		StartLine: n.StartPoint().Row,
+		EndLine:   n.EndPoint().Row,
+		StartByte: n.StartByte(),
+		EndByte:   n.EndByte(),
+	})
+}
+
 func (e *rubyExtractor) addEdge(subject, predicate, object string) {
 	if subject == "" || object == "" {
 		return
@@ -548,7 +596,7 @@ func (e *rubyExtractor) handleMethod(fileCanon string, n *sitter.Node, classScop
 	if classScope == "" {
 		kind = KindFunction
 	}
-	e.addSymbol(name, kind)
+	e.addSymbolNode(name, kind, n)
 	e.addEdge(fileCanon, "defines", name)
 
 	body := n.ChildByFieldName("body")
@@ -563,7 +611,7 @@ func (e *rubyExtractor) handleClass(fileCanon string, n *sitter.Node) {
 		return
 	}
 	name := e.text(nameNode)
-	e.addSymbol(name, KindClass)
+	e.addSymbolNode(name, KindClass, n)
 	e.addEdge(fileCanon, "defines", name)
 
 	// Superclass

@@ -46,6 +46,19 @@ func (e *csExtractor) addSymbol(name string, kind SymbolKind) {
 	e.symbols = append(e.symbols, Symbol{Name: name, Kind: kind, Package: e.namespace, File: e.filename})
 }
 
+func (e *csExtractor) addSymbolNode(name string, kind SymbolKind, n *sitter.Node) {
+	e.symbols = append(e.symbols, Symbol{
+		Name:      name,
+		Kind:      kind,
+		Package:   e.namespace,
+		File:      e.filename,
+		StartLine: n.StartPoint().Row,
+		EndLine:   n.EndPoint().Row,
+		StartByte: n.StartByte(),
+		EndByte:   n.EndByte(),
+	})
+}
+
 func (e *csExtractor) addEdge(subject, predicate, object string) {
 	if subject == "" || object == "" {
 		return
@@ -133,7 +146,7 @@ func (e *csExtractor) handleClass(fileCanon string, n *sitter.Node) {
 	if n.Type() == "struct_declaration" {
 		kind = KindStruct
 	}
-	e.addSymbol(name, kind)
+	e.addSymbolNode(name, kind, n)
 	e.addEdge(fileCanon, "defines", name)
 
 	// Base types → extends / implements
@@ -164,7 +177,7 @@ func (e *csExtractor) handleInterface(fileCanon string, n *sitter.Node) {
 		return
 	}
 	name := e.qual(e.text(nameNode))
-	e.addSymbol(name, KindInterface)
+	e.addSymbolNode(name, KindInterface, n)
 	e.addEdge(fileCanon, "defines", name)
 
 	bases := n.ChildByFieldName("bases")
@@ -204,7 +217,7 @@ func (e *csExtractor) handleMethod(fileCanon string, n *sitter.Node, classScope 
 	if classScope == "" {
 		kind = KindFunction
 	}
-	e.addSymbol(name, kind)
+	e.addSymbolNode(name, kind, n)
 	e.addEdge(fileCanon, "defines", name)
 
 	body := n.ChildByFieldName("body")

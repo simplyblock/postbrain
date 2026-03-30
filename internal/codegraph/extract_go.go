@@ -49,6 +49,19 @@ func (e *goExtractor) addSymbol(name string, kind SymbolKind) {
 	e.symbols = append(e.symbols, Symbol{Name: name, Kind: kind, Package: e.pkg, File: e.filename})
 }
 
+func (e *goExtractor) addSymbolNode(name string, kind SymbolKind, n *sitter.Node) {
+	e.symbols = append(e.symbols, Symbol{
+		Name:      name,
+		Kind:      kind,
+		Package:   e.pkg,
+		File:      e.filename,
+		StartLine: n.StartPoint().Row,
+		EndLine:   n.EndPoint().Row,
+		StartByte: n.StartByte(),
+		EndByte:   n.EndByte(),
+	})
+}
+
 func (e *goExtractor) addEdge(subject, predicate, object string) {
 	if subject == "" || object == "" {
 		return
@@ -118,7 +131,7 @@ func (e *goExtractor) handleFunction(fileCanon string, n *sitter.Node) {
 		return
 	}
 	qualified := e.qual(name)
-	e.addSymbol(qualified, KindFunction)
+	e.addSymbolNode(qualified, KindFunction, n)
 	e.addEdge(fileCanon, "defines", qualified)
 
 	body := n.ChildByFieldName("body")
@@ -144,7 +157,7 @@ func (e *goExtractor) handleMethod(fileCanon string, n *sitter.Node) {
 	} else {
 		qualified = e.qual(name)
 	}
-	e.addSymbol(qualified, KindMethod)
+	e.addSymbolNode(qualified, KindMethod, n)
 	e.addEdge(fileCanon, "defines", qualified)
 
 	body := n.ChildByFieldName("body")
@@ -206,7 +219,7 @@ func (e *goExtractor) handleTypeSpec(fileCanon string, n *sitter.Node) {
 			kind = KindInterface
 		}
 	}
-	e.addSymbol(qualified, kind)
+	e.addSymbolNode(qualified, kind, n)
 	e.addEdge(fileCanon, "defines", qualified)
 
 	if kind == KindStruct && typeVal != nil {

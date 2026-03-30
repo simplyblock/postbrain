@@ -18,15 +18,15 @@ INSERT INTO memories
 (memory_type, scope_id, author_id, content, summary,
  embedding, embedding_model_id, embedding_code, embedding_code_model_id,
  content_kind, meta, version, is_active, confidence, importance,
- access_count, expires_at, promotion_status, promoted_to, source_ref)
+ access_count, expires_at, promotion_status, promoted_to, source_ref, parent_memory_id)
 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
         COALESCE($12,1),true,COALESCE($13,1.0),COALESCE($14,0.5),
-        0,$15,$16,$17,$18)
+        0,$15,$16,$17,$18,$19)
 RETURNING id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,
     embedding_code, embedding_code_model_id, content_kind, meta,
     version, is_active, confidence, importance, access_count, last_accessed,
-    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at
+    expires_at, promotion_status, promoted_to, source_ref, parent_memory_id, created_at, updated_at
 `
 
 type CreateMemoryParams struct {
@@ -48,9 +48,38 @@ type CreateMemoryParams struct {
 	PromotionStatus      string
 	PromotedTo           *uuid.UUID
 	SourceRef            *string
+	ParentMemoryID       *uuid.UUID
 }
 
-func (q *Queries) CreateMemory(ctx context.Context, arg CreateMemoryParams) (*Memory, error) {
+type CreateMemoryRow struct {
+	ID                   uuid.UUID
+	MemoryType           string
+	ScopeID              uuid.UUID
+	AuthorID             uuid.UUID
+	Content              string
+	Summary              *string
+	Embedding            *pgvector_go.Vector
+	EmbeddingModelID     *uuid.UUID
+	EmbeddingCode        *pgvector_go.Vector
+	EmbeddingCodeModelID *uuid.UUID
+	ContentKind          string
+	Meta                 []byte
+	Version              int32
+	IsActive             bool
+	Confidence           float64
+	Importance           float64
+	AccessCount          int32
+	LastAccessed         *time.Time
+	ExpiresAt            *time.Time
+	PromotionStatus      string
+	PromotedTo           *uuid.UUID
+	SourceRef            *string
+	ParentMemoryID       *uuid.UUID
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+}
+
+func (q *Queries) CreateMemory(ctx context.Context, arg CreateMemoryParams) (*CreateMemoryRow, error) {
 	row := q.db.QueryRow(ctx, createMemory,
 		arg.MemoryType,
 		arg.ScopeID,
@@ -70,8 +99,9 @@ func (q *Queries) CreateMemory(ctx context.Context, arg CreateMemoryParams) (*Me
 		arg.PromotionStatus,
 		arg.PromotedTo,
 		arg.SourceRef,
+		arg.ParentMemoryID,
 	)
-	var i Memory
+	var i CreateMemoryRow
 	err := row.Scan(
 		&i.ID,
 		&i.MemoryType,
@@ -95,6 +125,7 @@ func (q *Queries) CreateMemory(ctx context.Context, arg CreateMemoryParams) (*Me
 		&i.PromotionStatus,
 		&i.PromotedTo,
 		&i.SourceRef,
+		&i.ParentMemoryID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -106,7 +137,7 @@ SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,
     embedding_code, embedding_code_model_id, content_kind, meta,
     version, is_active, confidence, importance, access_count, last_accessed,
-    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at
+    expires_at, promotion_status, promoted_to, source_ref, parent_memory_id, created_at, updated_at
 FROM memories
 WHERE scope_id = $1
   AND is_active = true
@@ -122,7 +153,35 @@ type FindNearDuplicatesParams struct {
 	Column4   uuid.UUID
 }
 
-func (q *Queries) FindNearDuplicates(ctx context.Context, arg FindNearDuplicatesParams) ([]*Memory, error) {
+type FindNearDuplicatesRow struct {
+	ID                   uuid.UUID
+	MemoryType           string
+	ScopeID              uuid.UUID
+	AuthorID             uuid.UUID
+	Content              string
+	Summary              *string
+	Embedding            *pgvector_go.Vector
+	EmbeddingModelID     *uuid.UUID
+	EmbeddingCode        *pgvector_go.Vector
+	EmbeddingCodeModelID *uuid.UUID
+	ContentKind          string
+	Meta                 []byte
+	Version              int32
+	IsActive             bool
+	Confidence           float64
+	Importance           float64
+	AccessCount          int32
+	LastAccessed         *time.Time
+	ExpiresAt            *time.Time
+	PromotionStatus      string
+	PromotedTo           *uuid.UUID
+	SourceRef            *string
+	ParentMemoryID       *uuid.UUID
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+}
+
+func (q *Queries) FindNearDuplicates(ctx context.Context, arg FindNearDuplicatesParams) ([]*FindNearDuplicatesRow, error) {
 	rows, err := q.db.Query(ctx, findNearDuplicates,
 		arg.ScopeID,
 		arg.Embedding,
@@ -133,9 +192,9 @@ func (q *Queries) FindNearDuplicates(ctx context.Context, arg FindNearDuplicates
 		return nil, err
 	}
 	defer rows.Close()
-	items := []*Memory{}
+	items := []*FindNearDuplicatesRow{}
 	for rows.Next() {
-		var i Memory
+		var i FindNearDuplicatesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.MemoryType,
@@ -159,6 +218,7 @@ func (q *Queries) FindNearDuplicates(ctx context.Context, arg FindNearDuplicates
 			&i.PromotionStatus,
 			&i.PromotedTo,
 			&i.SourceRef,
+			&i.ParentMemoryID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -177,13 +237,41 @@ SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,
     embedding_code, embedding_code_model_id, content_kind, meta,
     version, is_active, confidence, importance, access_count, last_accessed,
-    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at
+    expires_at, promotion_status, promoted_to, source_ref, parent_memory_id, created_at, updated_at
 FROM memories WHERE id = $1
 `
 
-func (q *Queries) GetMemory(ctx context.Context, id uuid.UUID) (*Memory, error) {
+type GetMemoryRow struct {
+	ID                   uuid.UUID
+	MemoryType           string
+	ScopeID              uuid.UUID
+	AuthorID             uuid.UUID
+	Content              string
+	Summary              *string
+	Embedding            *pgvector_go.Vector
+	EmbeddingModelID     *uuid.UUID
+	EmbeddingCode        *pgvector_go.Vector
+	EmbeddingCodeModelID *uuid.UUID
+	ContentKind          string
+	Meta                 []byte
+	Version              int32
+	IsActive             bool
+	Confidence           float64
+	Importance           float64
+	AccessCount          int32
+	LastAccessed         *time.Time
+	ExpiresAt            *time.Time
+	PromotionStatus      string
+	PromotedTo           *uuid.UUID
+	SourceRef            *string
+	ParentMemoryID       *uuid.UUID
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+}
+
+func (q *Queries) GetMemory(ctx context.Context, id uuid.UUID) (*GetMemoryRow, error) {
 	row := q.db.QueryRow(ctx, getMemory, id)
-	var i Memory
+	var i GetMemoryRow
 	err := row.Scan(
 		&i.ID,
 		&i.MemoryType,
@@ -207,6 +295,7 @@ func (q *Queries) GetMemory(ctx context.Context, id uuid.UUID) (*Memory, error) 
 		&i.PromotionStatus,
 		&i.PromotedTo,
 		&i.SourceRef,
+		&i.ParentMemoryID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -231,25 +320,55 @@ func (q *Queries) IncrementMemoryAccess(ctx context.Context, id uuid.UUID) error
 	return err
 }
 
-const listConsolidationCandidates = `-- name: ListConsolidationCandidates :many
+const listChunkMemories = `-- name: ListChunkMemories :many
 SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,
     embedding_code, embedding_code_model_id, content_kind, meta,
     version, is_active, confidence, importance, access_count, last_accessed,
-    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at
+    expires_at, promotion_status, promoted_to, source_ref, parent_memory_id, created_at, updated_at
 FROM memories
-WHERE is_active = true AND scope_id = $1 AND importance < 0.7 AND access_count < 3
+WHERE parent_memory_id = $1 AND is_active = true
+ORDER BY created_at
 `
 
-func (q *Queries) ListConsolidationCandidates(ctx context.Context, scopeID uuid.UUID) ([]*Memory, error) {
-	rows, err := q.db.Query(ctx, listConsolidationCandidates, scopeID)
+type ListChunkMemoriesRow struct {
+	ID                   uuid.UUID
+	MemoryType           string
+	ScopeID              uuid.UUID
+	AuthorID             uuid.UUID
+	Content              string
+	Summary              *string
+	Embedding            *pgvector_go.Vector
+	EmbeddingModelID     *uuid.UUID
+	EmbeddingCode        *pgvector_go.Vector
+	EmbeddingCodeModelID *uuid.UUID
+	ContentKind          string
+	Meta                 []byte
+	Version              int32
+	IsActive             bool
+	Confidence           float64
+	Importance           float64
+	AccessCount          int32
+	LastAccessed         *time.Time
+	ExpiresAt            *time.Time
+	PromotionStatus      string
+	PromotedTo           *uuid.UUID
+	SourceRef            *string
+	ParentMemoryID       *uuid.UUID
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+}
+
+// Returns chunk memories (children) for a given parent memory.
+func (q *Queries) ListChunkMemories(ctx context.Context, parentMemoryID *uuid.UUID) ([]*ListChunkMemoriesRow, error) {
+	rows, err := q.db.Query(ctx, listChunkMemories, parentMemoryID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []*Memory{}
+	items := []*ListChunkMemoriesRow{}
 	for rows.Next() {
-		var i Memory
+		var i ListChunkMemoriesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.MemoryType,
@@ -273,6 +392,91 @@ func (q *Queries) ListConsolidationCandidates(ctx context.Context, scopeID uuid.
 			&i.PromotionStatus,
 			&i.PromotedTo,
 			&i.SourceRef,
+			&i.ParentMemoryID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listConsolidationCandidates = `-- name: ListConsolidationCandidates :many
+SELECT id, memory_type, scope_id, author_id,
+    content, summary, embedding, embedding_model_id,
+    embedding_code, embedding_code_model_id, content_kind, meta,
+    version, is_active, confidence, importance, access_count, last_accessed,
+    expires_at, promotion_status, promoted_to, source_ref, parent_memory_id, created_at, updated_at
+FROM memories
+WHERE is_active = true AND scope_id = $1 AND importance < 0.7 AND access_count < 3
+`
+
+type ListConsolidationCandidatesRow struct {
+	ID                   uuid.UUID
+	MemoryType           string
+	ScopeID              uuid.UUID
+	AuthorID             uuid.UUID
+	Content              string
+	Summary              *string
+	Embedding            *pgvector_go.Vector
+	EmbeddingModelID     *uuid.UUID
+	EmbeddingCode        *pgvector_go.Vector
+	EmbeddingCodeModelID *uuid.UUID
+	ContentKind          string
+	Meta                 []byte
+	Version              int32
+	IsActive             bool
+	Confidence           float64
+	Importance           float64
+	AccessCount          int32
+	LastAccessed         *time.Time
+	ExpiresAt            *time.Time
+	PromotionStatus      string
+	PromotedTo           *uuid.UUID
+	SourceRef            *string
+	ParentMemoryID       *uuid.UUID
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+}
+
+func (q *Queries) ListConsolidationCandidates(ctx context.Context, scopeID uuid.UUID) ([]*ListConsolidationCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listConsolidationCandidates, scopeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*ListConsolidationCandidatesRow{}
+	for rows.Next() {
+		var i ListConsolidationCandidatesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.MemoryType,
+			&i.ScopeID,
+			&i.AuthorID,
+			&i.Content,
+			&i.Summary,
+			&i.Embedding,
+			&i.EmbeddingModelID,
+			&i.EmbeddingCode,
+			&i.EmbeddingCodeModelID,
+			&i.ContentKind,
+			&i.Meta,
+			&i.Version,
+			&i.IsActive,
+			&i.Confidence,
+			&i.Importance,
+			&i.AccessCount,
+			&i.LastAccessed,
+			&i.ExpiresAt,
+			&i.PromotionStatus,
+			&i.PromotedTo,
+			&i.SourceRef,
+			&i.ParentMemoryID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -291,7 +495,7 @@ SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,
     embedding_code, embedding_code_model_id, content_kind, meta,
     version, is_active, confidence, importance, access_count, last_accessed,
-    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at
+    expires_at, promotion_status, promoted_to, source_ref, parent_memory_id, created_at, updated_at
 FROM memories WHERE scope_id=$1 AND is_active=true
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -303,15 +507,43 @@ type ListMemoriesByScopeParams struct {
 	Offset  int32
 }
 
-func (q *Queries) ListMemoriesByScope(ctx context.Context, arg ListMemoriesByScopeParams) ([]*Memory, error) {
+type ListMemoriesByScopeRow struct {
+	ID                   uuid.UUID
+	MemoryType           string
+	ScopeID              uuid.UUID
+	AuthorID             uuid.UUID
+	Content              string
+	Summary              *string
+	Embedding            *pgvector_go.Vector
+	EmbeddingModelID     *uuid.UUID
+	EmbeddingCode        *pgvector_go.Vector
+	EmbeddingCodeModelID *uuid.UUID
+	ContentKind          string
+	Meta                 []byte
+	Version              int32
+	IsActive             bool
+	Confidence           float64
+	Importance           float64
+	AccessCount          int32
+	LastAccessed         *time.Time
+	ExpiresAt            *time.Time
+	PromotionStatus      string
+	PromotedTo           *uuid.UUID
+	SourceRef            *string
+	ParentMemoryID       *uuid.UUID
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+}
+
+func (q *Queries) ListMemoriesByScope(ctx context.Context, arg ListMemoriesByScopeParams) ([]*ListMemoriesByScopeRow, error) {
 	rows, err := q.db.Query(ctx, listMemoriesByScope, arg.ScopeID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []*Memory{}
+	items := []*ListMemoriesByScopeRow{}
 	for rows.Next() {
-		var i Memory
+		var i ListMemoriesByScopeRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.MemoryType,
@@ -335,6 +567,7 @@ func (q *Queries) ListMemoriesByScope(ctx context.Context, arg ListMemoriesBySco
 			&i.PromotionStatus,
 			&i.PromotedTo,
 			&i.SourceRef,
+			&i.ParentMemoryID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -353,7 +586,7 @@ SELECT m.id, m.memory_type, m.scope_id, m.author_id,
     m.content, m.summary, m.embedding, m.embedding_model_id,
     m.embedding_code, m.embedding_code_model_id, m.content_kind, m.meta,
     m.version, m.is_active, m.confidence, m.importance, m.access_count, m.last_accessed,
-    m.expires_at, m.promotion_status, m.promoted_to, m.source_ref, m.created_at, m.updated_at
+    m.expires_at, m.promotion_status, m.promoted_to, m.source_ref, m.parent_memory_id, m.created_at, m.updated_at
 FROM memories m
 JOIN memory_entities me ON me.memory_id = m.id
 WHERE me.entity_id = $1 AND m.is_active = true
@@ -366,16 +599,44 @@ type ListMemoriesForEntityParams struct {
 	Limit    int32
 }
 
+type ListMemoriesForEntityRow struct {
+	ID                   uuid.UUID
+	MemoryType           string
+	ScopeID              uuid.UUID
+	AuthorID             uuid.UUID
+	Content              string
+	Summary              *string
+	Embedding            *pgvector_go.Vector
+	EmbeddingModelID     *uuid.UUID
+	EmbeddingCode        *pgvector_go.Vector
+	EmbeddingCodeModelID *uuid.UUID
+	ContentKind          string
+	Meta                 []byte
+	Version              int32
+	IsActive             bool
+	Confidence           float64
+	Importance           float64
+	AccessCount          int32
+	LastAccessed         *time.Time
+	ExpiresAt            *time.Time
+	PromotionStatus      string
+	PromotedTo           *uuid.UUID
+	SourceRef            *string
+	ParentMemoryID       *uuid.UUID
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+}
+
 // Returns active memories linked to a given entity, most recent first.
-func (q *Queries) ListMemoriesForEntity(ctx context.Context, arg ListMemoriesForEntityParams) ([]*Memory, error) {
+func (q *Queries) ListMemoriesForEntity(ctx context.Context, arg ListMemoriesForEntityParams) ([]*ListMemoriesForEntityRow, error) {
 	rows, err := q.db.Query(ctx, listMemoriesForEntity, arg.EntityID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []*Memory{}
+	items := []*ListMemoriesForEntityRow{}
 	for rows.Next() {
-		var i Memory
+		var i ListMemoriesForEntityRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.MemoryType,
@@ -399,6 +660,7 @@ func (q *Queries) ListMemoriesForEntity(ctx context.Context, arg ListMemoriesFor
 			&i.PromotionStatus,
 			&i.PromotedTo,
 			&i.SourceRef,
+			&i.ParentMemoryID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -417,7 +679,7 @@ SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,
     embedding_code, embedding_code_model_id, content_kind, meta,
     version, is_active, confidence, importance, access_count, last_accessed,
-    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at,
+    expires_at, promotion_status, promoted_to, source_ref, parent_memory_id, created_at, updated_at,
     (1 - (embedding_code <=> $3))::float4 AS vec_score
 FROM memories
 WHERE is_active = true AND scope_id = ANY($1::uuid[]) AND embedding_code IS NOT NULL
@@ -454,6 +716,7 @@ type RecallMemoriesByCodeVectorRow struct {
 	PromotionStatus      string
 	PromotedTo           *uuid.UUID
 	SourceRef            *string
+	ParentMemoryID       *uuid.UUID
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 	VecScore             float32
@@ -491,6 +754,7 @@ func (q *Queries) RecallMemoriesByCodeVector(ctx context.Context, arg RecallMemo
 			&i.PromotionStatus,
 			&i.PromotedTo,
 			&i.SourceRef,
+			&i.ParentMemoryID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.VecScore,
@@ -510,7 +774,7 @@ SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,
     embedding_code, embedding_code_model_id, content_kind, meta,
     version, is_active, confidence, importance, access_count, last_accessed,
-    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at,
+    expires_at, promotion_status, promoted_to, source_ref, parent_memory_id, created_at, updated_at,
     ts_rank_cd(to_tsvector('postbrain_fts', content), plainto_tsquery('postbrain_fts', $3)) AS bm25_score
 FROM memories
 WHERE is_active = true AND scope_id = ANY($1::uuid[])
@@ -548,6 +812,7 @@ type RecallMemoriesByFTSRow struct {
 	PromotionStatus      string
 	PromotedTo           *uuid.UUID
 	SourceRef            *string
+	ParentMemoryID       *uuid.UUID
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 	Bm25Score            float32
@@ -585,6 +850,7 @@ func (q *Queries) RecallMemoriesByFTS(ctx context.Context, arg RecallMemoriesByF
 			&i.PromotionStatus,
 			&i.PromotedTo,
 			&i.SourceRef,
+			&i.ParentMemoryID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Bm25Score,
@@ -604,7 +870,7 @@ SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,
     embedding_code, embedding_code_model_id, content_kind, meta,
     version, is_active, confidence, importance, access_count, last_accessed,
-    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at,
+    expires_at, promotion_status, promoted_to, source_ref, parent_memory_id, created_at, updated_at,
     similarity(content, $3) AS trgm_score
 FROM memories
 WHERE is_active = true AND scope_id = ANY($1::uuid[])
@@ -642,6 +908,7 @@ type RecallMemoriesByTrigramRow struct {
 	PromotionStatus      string
 	PromotedTo           *uuid.UUID
 	SourceRef            *string
+	ParentMemoryID       *uuid.UUID
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 	TrgmScore            float32
@@ -679,6 +946,7 @@ func (q *Queries) RecallMemoriesByTrigram(ctx context.Context, arg RecallMemorie
 			&i.PromotionStatus,
 			&i.PromotedTo,
 			&i.SourceRef,
+			&i.ParentMemoryID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.TrgmScore,
@@ -698,7 +966,7 @@ SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,
     embedding_code, embedding_code_model_id, content_kind, meta,
     version, is_active, confidence, importance, access_count, last_accessed,
-    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at,
+    expires_at, promotion_status, promoted_to, source_ref, parent_memory_id, created_at, updated_at,
     (1 - (embedding <=> $3))::float4 AS vec_score
 FROM memories
 WHERE is_active = true AND scope_id = ANY($1::uuid[])
@@ -735,6 +1003,7 @@ type RecallMemoriesByVectorRow struct {
 	PromotionStatus      string
 	PromotedTo           *uuid.UUID
 	SourceRef            *string
+	ParentMemoryID       *uuid.UUID
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 	VecScore             float32
@@ -772,6 +1041,7 @@ func (q *Queries) RecallMemoriesByVector(ctx context.Context, arg RecallMemories
 			&i.PromotionStatus,
 			&i.PromotedTo,
 			&i.SourceRef,
+			&i.ParentMemoryID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.VecScore,
@@ -805,7 +1075,7 @@ RETURNING id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,
     embedding_code, embedding_code_model_id, content_kind, meta,
     version, is_active, confidence, importance, access_count, last_accessed,
-    expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at
+    expires_at, promotion_status, promoted_to, source_ref, parent_memory_id, created_at, updated_at
 `
 
 type UpdateMemoryContentParams struct {
@@ -818,7 +1088,35 @@ type UpdateMemoryContentParams struct {
 	ContentKind          string
 }
 
-func (q *Queries) UpdateMemoryContent(ctx context.Context, arg UpdateMemoryContentParams) (*Memory, error) {
+type UpdateMemoryContentRow struct {
+	ID                   uuid.UUID
+	MemoryType           string
+	ScopeID              uuid.UUID
+	AuthorID             uuid.UUID
+	Content              string
+	Summary              *string
+	Embedding            *pgvector_go.Vector
+	EmbeddingModelID     *uuid.UUID
+	EmbeddingCode        *pgvector_go.Vector
+	EmbeddingCodeModelID *uuid.UUID
+	ContentKind          string
+	Meta                 []byte
+	Version              int32
+	IsActive             bool
+	Confidence           float64
+	Importance           float64
+	AccessCount          int32
+	LastAccessed         *time.Time
+	ExpiresAt            *time.Time
+	PromotionStatus      string
+	PromotedTo           *uuid.UUID
+	SourceRef            *string
+	ParentMemoryID       *uuid.UUID
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+}
+
+func (q *Queries) UpdateMemoryContent(ctx context.Context, arg UpdateMemoryContentParams) (*UpdateMemoryContentRow, error) {
 	row := q.db.QueryRow(ctx, updateMemoryContent,
 		arg.ID,
 		arg.Content,
@@ -828,7 +1126,7 @@ func (q *Queries) UpdateMemoryContent(ctx context.Context, arg UpdateMemoryConte
 		arg.EmbeddingCodeModelID,
 		arg.ContentKind,
 	)
-	var i Memory
+	var i UpdateMemoryContentRow
 	err := row.Scan(
 		&i.ID,
 		&i.MemoryType,
@@ -852,6 +1150,7 @@ func (q *Queries) UpdateMemoryContent(ctx context.Context, arg UpdateMemoryConte
 		&i.PromotionStatus,
 		&i.PromotedTo,
 		&i.SourceRef,
+		&i.ParentMemoryID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
