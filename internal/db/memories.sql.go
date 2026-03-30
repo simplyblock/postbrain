@@ -354,7 +354,7 @@ SELECT id, memory_type, scope_id, author_id,
     embedding_code, embedding_code_model_id, content_kind, meta,
     version, is_active, confidence, importance, access_count, last_accessed,
     expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at,
-    1 - (embedding_code <=> $3) AS vec_score
+    (1 - (embedding_code <=> $3))::float4 AS vec_score
 FROM memories
 WHERE is_active = true AND scope_id = ANY($1::uuid[]) AND embedding_code IS NOT NULL
 ORDER BY embedding_code <=> $3
@@ -392,7 +392,7 @@ type RecallMemoriesByCodeVectorRow struct {
 	SourceRef            *string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
-	VecScore             int32
+	VecScore             float32
 }
 
 func (q *Queries) RecallMemoriesByCodeVector(ctx context.Context, arg RecallMemoriesByCodeVectorParams) ([]*RecallMemoriesByCodeVectorRow, error) {
@@ -635,7 +635,7 @@ SELECT id, memory_type, scope_id, author_id,
     embedding_code, embedding_code_model_id, content_kind, meta,
     version, is_active, confidence, importance, access_count, last_accessed,
     expires_at, promotion_status, promoted_to, source_ref, created_at, updated_at,
-    1 - (embedding <=> $3) AS vec_score
+    (1 - (embedding <=> $3))::float4 AS vec_score
 FROM memories
 WHERE is_active = true AND scope_id = ANY($1::uuid[])
 ORDER BY embedding <=> $3
@@ -673,7 +673,7 @@ type RecallMemoriesByVectorRow struct {
 	SourceRef            *string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
-	VecScore             int32
+	VecScore             float32
 }
 
 func (q *Queries) RecallMemoriesByVector(ctx context.Context, arg RecallMemoriesByVectorParams) ([]*RecallMemoriesByVectorRow, error) {

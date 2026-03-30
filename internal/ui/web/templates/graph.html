@@ -11,7 +11,7 @@
 </div>
 <p class="muted">{{.NodeCount}} entities · {{.EdgeCount}} relations</p>
 
-<div id="graph-container" style="width:100%;height:72vh;border:1px solid var(--border);border-radius:var(--border-radius);overflow:hidden;background:var(--card-background-color)"></div>
+<div id="graph-container" style="width:100%;height:72vh;border:1px solid var(--border);border-radius:var(--border-radius);overflow:hidden;background:var(--card-background-color);position:relative"></div>
 
 <div id="tooltip" style="position:fixed;display:none;background:var(--card-background-color);border:1px solid var(--border);border-radius:var(--border-radius);padding:0.4rem 0.7rem;font-size:0.85rem;pointer-events:none;z-index:100;max-width:220px"></div>
 
@@ -27,35 +27,23 @@
   // ── colour by entity type ──────────────────────────────────
   const types = [...new Set(nodes.map(n => n.type))].sort();
   const palette = d3.schemeTableau10;
-  const colour = d => palette[types.indexOf(d.type) % palette.length];
+  const typeColour = t => palette[types.indexOf(t) % palette.length];
 
-  // ── SVG setup ─────────────────────────────────────────────
+  // ── canvas setup ──────────────────────────────────────────
   const container = document.getElementById("graph-container");
   const W = container.clientWidth, H = container.clientHeight;
 
-  const svg = d3.select(container).append("svg")
-    .attr("width", W).attr("height", H);
+  const canvas = d3.select(container).append("canvas")
+    .attr("width", W).attr("height", H)
+    .style("display", "block");
+  const ctx = canvas.node().getContext("2d");
 
-  // zoom/pan
-  const g = svg.append("g");
-  svg.call(d3.zoom().scaleExtent([0.1, 8]).on("zoom", e => g.attr("transform", e.transform)));
-
-  // arrow markers
-  const defs = svg.append("defs");
-  defs.append("marker")
-    .attr("id", "arrow")
-    .attr("viewBox", "0 -4 8 8")
-    .attr("refX", 18).attr("refY", 0)
-    .attr("markerWidth", 6).attr("markerHeight", 6)
-    .attr("orient", "auto")
-    .append("path").attr("d", "M0,-4L8,0L0,4").attr("fill", "#999");
-  defs.append("marker")
-    .attr("id", "arrow-same")
-    .attr("viewBox", "0 -4 8 8")
-    .attr("refX", 18).attr("refY", 0)
-    .attr("markerWidth", 6).attr("markerHeight", 6)
-    .attr("orient", "auto")
-    .append("path").attr("d", "M0,-4L8,0L0,4").attr("fill", "#f80");
+  // ── zoom / pan ─────────────────────────────────────────────
+  let transform = d3.zoomIdentity;
+  canvas.call(
+    d3.zoom().scaleExtent([0.1, 8])
+      .on("zoom", e => { transform = e.transform; draw(); })
+  );
 
   // ── simulation ────────────────────────────────────────────
   const sim = d3.forceSimulation(nodes)
@@ -66,71 +54,149 @@
     .force("center", d3.forceCenter(W / 2, H / 2))
     .force("x",      d3.forceX(W / 2).strength(0.04))
     .force("y",      d3.forceY(H / 2).strength(0.04))
-    .force("collide",d3.forceCollide(22));
+    .force("collide",d3.forceCollide(22))
+    .on("tick", draw);
 
-  // ── edges ─────────────────────────────────────────────────
-  const link = g.append("g").attr("stroke-opacity", 0.6)
-    .selectAll("line").data(links).join("line")
-    .attr("stroke",       d => d.predicate === "same_as" ? "#f80" : "#999")
-    .attr("stroke-width", d => d.predicate === "same_as" ? 2 : 1 + d.confidence)
-    .attr("stroke-dasharray", d => d.predicate === "same_as" ? "5,3" : null)
-    .attr("marker-end",   d => d.predicate === "same_as" ? "url(#arrow-same)" : "url(#arrow)");
+  const NODE_R = 10;
+  const SHOW_EDGE_LABELS = links.length < 200;
 
-  // edge labels (only show if < 200 edges to keep it readable)
-  const linkLabel = links.length < 200
-    ? g.append("g").attr("font-size", 9).attr("fill", "#888").attr("text-anchor", "middle")
-        .selectAll("text").data(links).join("text").text(d => d.predicate)
-    : null;
+  // ── draw helpers ──────────────────────────────────────────
+  function drawArrow(x1, y1, x2, y2, colour, dashed) {
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    const tx = x2 - NODE_R * Math.cos(angle);
+    const ty = y2 - NODE_R * Math.sin(angle);
 
-  // ── nodes ─────────────────────────────────────────────────
+    ctx.beginPath();
+    if (dashed) ctx.setLineDash([5, 3]); else ctx.setLineDash([]);
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(tx, ty);
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = dashed ? 2 : 1.5;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // arrowhead
+    const ah = 7;
+    ctx.beginPath();
+    ctx.moveTo(tx, ty);
+    ctx.lineTo(tx - ah * Math.cos(angle - Math.PI / 6), ty - ah * Math.sin(angle - Math.PI / 6));
+    ctx.lineTo(tx - ah * Math.cos(angle + Math.PI / 6), ty - ah * Math.sin(angle + Math.PI / 6));
+    ctx.closePath();
+    ctx.fillStyle = colour;
+    ctx.fill();
+  }
+
+  function draw() {
+    ctx.save();
+    ctx.clearRect(0, 0, W, H);
+    ctx.translate(transform.x, transform.y);
+    ctx.scale(transform.k, transform.k);
+
+    // edges
+    links.forEach(l => {
+      const sx = l.source.x, sy = l.source.y;
+      const tx = l.target.x, ty = l.target.y;
+      const isSameAs = l.predicate === "same_as";
+      drawArrow(sx, sy, tx, ty, isSameAs ? "#f80" : "#999", isSameAs);
+    });
+
+    // edge labels
+    if (SHOW_EDGE_LABELS) {
+      ctx.font = "9px sans-serif";
+      ctx.fillStyle = "#888";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      links.forEach(l => {
+        ctx.fillText(l.predicate,
+          (l.source.x + l.target.x) / 2,
+          (l.source.y + l.target.y) / 2);
+      });
+    }
+
+    // nodes
+    nodes.forEach(n => {
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, NODE_R, 0, 2 * Math.PI);
+      ctx.fillStyle = typeColour(n.type);
+      ctx.fill();
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    });
+
+    // node labels
+    ctx.font = "11px sans-serif";
+    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue("color") || "#333";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    nodes.forEach(n => {
+      const label = n.name.length > 22 ? n.name.slice(0, 20) + "…" : n.name;
+      ctx.fillText(label, n.x + 13, n.y);
+    });
+
+    // legend (fixed in screen space — restore first)
+    ctx.restore();
+    drawLegend();
+    return; // skip second restore
+  }
+
+  function drawLegend() {
+    const x0 = 14, y0 = 14, rowH = 18;
+    types.forEach((t, i) => {
+      const y = y0 + i * rowH;
+      ctx.beginPath();
+      ctx.arc(x0 + 6, y + 6, 6, 0, 2 * Math.PI);
+      ctx.fillStyle = palette[i % palette.length];
+      ctx.fill();
+      ctx.font = "11px sans-serif";
+      ctx.fillStyle = getComputedStyle(document.body).getPropertyValue("color") || "#333";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText(t, x0 + 16, y + 7);
+    });
+  }
+
+  // ── drag ──────────────────────────────────────────────────
+  function findNode(ex, ey) {
+    const [wx, wy] = transform.invert([ex, ey]);
+    return nodes.find(n => Math.hypot(n.x - wx, n.y - wy) < NODE_R + 4);
+  }
+
+  canvas.call(
+    d3.drag()
+      .subject(event => findNode(event.x, event.y) || null)
+      .on("start", (event) => {
+        if (!event.active) sim.alphaTarget(0.3).restart();
+        event.subject.fx = event.subject.x;
+        event.subject.fy = event.subject.y;
+      })
+      .on("drag", (event) => {
+        const [wx, wy] = transform.invert([event.x, event.y]);
+        event.subject.fx = wx;
+        event.subject.fy = wy;
+      })
+      .on("end", (event) => {
+        if (!event.active) sim.alphaTarget(0);
+        event.subject.fx = null;
+        event.subject.fy = null;
+      })
+  );
+
+  // ── tooltip ───────────────────────────────────────────────
   const tooltip = document.getElementById("tooltip");
-
-  const node = g.append("g").attr("stroke", "#fff").attr("stroke-width", 1.5)
-    .selectAll("circle").data(nodes).join("circle")
-    .attr("r", 10)
-    .attr("fill", colour)
-    .on("mouseover", (event, d) => {
+  canvas.on("mousemove", function (event) {
+    const [ex, ey] = d3.pointer(event);
+    const n = findNode(ex, ey);
+    if (n) {
       tooltip.style.display = "block";
-      tooltip.innerHTML = `<strong>${d.name}</strong><br><span style="opacity:.7">${d.type}</span>`;
-    })
-    .on("mousemove", event => {
       tooltip.style.left = (event.clientX + 14) + "px";
       tooltip.style.top  = (event.clientY - 28) + "px";
-    })
-    .on("mouseout", () => { tooltip.style.display = "none"; })
-    .call(d3.drag()
-      .on("start", (event, d) => { if (!event.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
-      .on("drag",  (event, d) => { d.fx = event.x; d.fy = event.y; })
-      .on("end",   (event, d) => { if (!event.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }));
-
-  // node labels
-  const label = g.append("g").attr("font-size", 11).attr("fill", "currentColor")
-    .attr("pointer-events", "none")
-    .selectAll("text").data(nodes).join("text")
-    .attr("dy", "0.35em").attr("x", 13)
-    .text(d => d.name.length > 22 ? d.name.slice(0, 20) + "…" : d.name);
-
-  // ── legend ────────────────────────────────────────────────
-  const legend = svg.append("g").attr("transform", "translate(14,14)");
-  types.forEach((t, i) => {
-    const row = legend.append("g").attr("transform", `translate(0,${i * 18})`);
-    row.append("circle").attr("r", 6).attr("cx", 6).attr("cy", 6).attr("fill", palette[i % palette.length]);
-    row.append("text").attr("x", 16).attr("y", 10).attr("font-size", 11).attr("fill", "currentColor").text(t);
+      tooltip.innerHTML = `<strong>${n.name}</strong><br><span style="opacity:.7">${n.type}</span>`;
+    } else {
+      tooltip.style.display = "none";
+    }
   });
-
-  // ── tick ──────────────────────────────────────────────────
-  sim.on("tick", () => {
-    link
-      .attr("x1", d => d.source.x).attr("y1", d => d.source.y)
-      .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
-
-    if (linkLabel) linkLabel
-      .attr("x", d => (d.source.x + d.target.x) / 2)
-      .attr("y", d => (d.source.y + d.target.y) / 2);
-
-    node.attr("cx", d => d.x).attr("cy", d => d.y);
-    label.attr("x", d => d.x + 13).attr("y", d => d.y);
-  });
+  canvas.on("mouseleave", () => { tooltip.style.display = "none"; });
 })();
 </script>
 {{end}}

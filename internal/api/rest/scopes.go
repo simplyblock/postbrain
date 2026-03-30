@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/simplyblock/postbrain/internal/codegraph"
 	"github.com/simplyblock/postbrain/internal/db"
 )
 
@@ -102,4 +103,99 @@ func (ro *Router) deleteScope(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type setScopeRepoRequest struct {
+	RepoURL       string `json:"repo_url"`
+	DefaultBranch string `json:"default_branch"`
+}
+
+// setScopeRepo handles POST /v1/scopes/{id}/repo.
+// Attaches a git repository to a project-kind scope.
+func (ro *Router) setScopeRepo(w http.ResponseWriter, r *http.Request) {
+	id, err := uuidParam(r, "id")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid scope id")
+		return
+	}
+	var body setScopeRepoRequest
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if body.RepoURL == "" {
+		writeError(w, http.StatusBadRequest, "repo_url is required")
+		return
+	}
+	if body.DefaultBranch == "" {
+		body.DefaultBranch = "main"
+	}
+	s, err := db.SetScopeRepo(r.Context(), ro.pool, id, body.RepoURL, body.DefaultBranch)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, s)
+}
+
+type syncRepoRequest struct {
+	// AuthToken overrides the stored token for this single sync request.
+	AuthToken string `json:"auth_token,omitempty"`
+}
+
+// syncScopeRepo handles POST /v1/scopes/{id}/repo/sync.
+// Enqueues a background index run and returns 202 immediately.
+func (ro *Router) syncScopeRepo(w http.ResponseWriter, r *http.Request) {
+	id, err := uuidParam(r, "id")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid scope id")
+		return
+	}
+
+	scope, err := db.GetScopeByID(r.Context(), ro.pool, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if scope == nil {
+		writeError(w, http.StatusNotFound, "scope not found")
+		return
+	}
+	if scope.RepoUrl == nil || *scope.RepoUrl == "" {
+		writeError(w, http.StatusBadRequest, "no repository attached to this scope")
+		return
+	}
+
+	var body syncRepoRequest
+	_ = readJSON(r, &body) // optional body
+
+	prevCommit := ""
+	if scope.LastIndexedCommit != nil {
+		prevCommit = *scope.LastIndexedCommit
+	}
+
+	opts := codegraph.IndexOptions{
+		ScopeID:       scope.ID,
+		RepoURL:       *scope.RepoUrl,
+		DefaultBranch: scope.RepoDefaultBranch,
+		AuthToken:     body.AuthToken,
+		PrevCommit:    prevCommit,
+	}
+
+	started, status := ro.syncer.Start(ro.pool, opts)
+	if !started {
+		writeJSON(w, http.StatusConflict, status)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, status)
+}
+
+// getSyncStatus handles GET /v1/scopes/{id}/repo/sync.
+func (ro *Router) getSyncStatus(w http.ResponseWriter, r *http.Request) {
+	id, err := uuidParam(r, "id")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid scope id")
+		return
+	}
+	writeJSON(w, http.StatusOK, ro.syncer.Status(id))
 }

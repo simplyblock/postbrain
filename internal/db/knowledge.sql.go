@@ -318,6 +318,70 @@ func (q *Queries) ListAllArtifacts(ctx context.Context, arg ListAllArtifactsPara
 	return items, nil
 }
 
+const listArtifactsByStatus = `-- name: ListArtifactsByStatus :many
+SELECT id, knowledge_type, owner_scope_id, author_id,
+    visibility, status, published_at, deprecated_at, review_required,
+    title, content, summary, embedding, embedding_model_id, meta,
+    endorsement_count, access_count, last_accessed,
+    version, previous_version, source_memory_id, source_ref,
+    created_at, updated_at
+FROM knowledge_artifacts
+WHERE status = $1
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListArtifactsByStatusParams struct {
+	Status string
+	Limit  int32
+	Offset int32
+}
+
+func (q *Queries) ListArtifactsByStatus(ctx context.Context, arg ListArtifactsByStatusParams) ([]*KnowledgeArtifact, error) {
+	rows, err := q.db.Query(ctx, listArtifactsByStatus, arg.Status, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*KnowledgeArtifact{}
+	for rows.Next() {
+		var i KnowledgeArtifact
+		if err := rows.Scan(
+			&i.ID,
+			&i.KnowledgeType,
+			&i.OwnerScopeID,
+			&i.AuthorID,
+			&i.Visibility,
+			&i.Status,
+			&i.PublishedAt,
+			&i.DeprecatedAt,
+			&i.ReviewRequired,
+			&i.Title,
+			&i.Content,
+			&i.Summary,
+			&i.Embedding,
+			&i.EmbeddingModelID,
+			&i.Meta,
+			&i.EndorsementCount,
+			&i.AccessCount,
+			&i.LastAccessed,
+			&i.Version,
+			&i.PreviousVersion,
+			&i.SourceMemoryID,
+			&i.SourceRef,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listVisibleArtifacts = `-- name: ListVisibleArtifacts :many
 SELECT id, knowledge_type, owner_scope_id, author_id,
     visibility, status, published_at, deprecated_at, review_required,
@@ -630,7 +694,7 @@ SELECT ka.id, ka.knowledge_type, ka.owner_scope_id, ka.author_id,
     ka.endorsement_count, ka.access_count, ka.last_accessed,
     ka.version, ka.previous_version, ka.source_memory_id, ka.source_ref,
     ka.created_at, ka.updated_at,
-    1 - (ka.embedding <=> $3) AS vec_score
+    (1 - (ka.embedding <=> $3))::float4 AS vec_score
 FROM knowledge_artifacts ka
 JOIN scopes s ON ka.owner_scope_id = s.id, qs
 WHERE ka.status = 'published'
@@ -681,7 +745,7 @@ type RecallArtifactsByVectorRow struct {
 	SourceRef        *string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
-	VecScore         int32
+	VecScore         float32
 }
 
 // $1 = scope_id (the queried scope; visibility resolution fans out automatically)
@@ -740,9 +804,82 @@ func (q *Queries) ResetPromotedMemoryStatus(ctx context.Context, promotedTo *uui
 	return err
 }
 
+const searchArtifacts = `-- name: SearchArtifacts :many
+SELECT id, knowledge_type, owner_scope_id, author_id,
+    visibility, status, published_at, deprecated_at, review_required,
+    title, content, summary, embedding, embedding_model_id, meta,
+    endorsement_count, access_count, last_accessed,
+    version, previous_version, source_memory_id, source_ref,
+    created_at, updated_at
+FROM knowledge_artifacts
+WHERE (title ILIKE $1 OR content ILIKE $1)
+  AND ($2 = '' OR status = $2)
+ORDER BY created_at DESC
+LIMIT $3 OFFSET $4
+`
+
+type SearchArtifactsParams struct {
+	Title   string
+	Column2 interface{}
+	Limit   int32
+	Offset  int32
+}
+
+// $1 = query (wrapped in %...% by caller), $2 = status filter (” = all), $3 = limit, $4 = offset
+func (q *Queries) SearchArtifacts(ctx context.Context, arg SearchArtifactsParams) ([]*KnowledgeArtifact, error) {
+	rows, err := q.db.Query(ctx, searchArtifacts,
+		arg.Title,
+		arg.Column2,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*KnowledgeArtifact{}
+	for rows.Next() {
+		var i KnowledgeArtifact
+		if err := rows.Scan(
+			&i.ID,
+			&i.KnowledgeType,
+			&i.OwnerScopeID,
+			&i.AuthorID,
+			&i.Visibility,
+			&i.Status,
+			&i.PublishedAt,
+			&i.DeprecatedAt,
+			&i.ReviewRequired,
+			&i.Title,
+			&i.Content,
+			&i.Summary,
+			&i.Embedding,
+			&i.EmbeddingModelID,
+			&i.Meta,
+			&i.EndorsementCount,
+			&i.AccessCount,
+			&i.LastAccessed,
+			&i.Version,
+			&i.PreviousVersion,
+			&i.SourceMemoryID,
+			&i.SourceRef,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const snapshotArtifactVersion = `-- name: SnapshotArtifactVersion :exec
 INSERT INTO knowledge_history (artifact_id, version, content, summary, changed_by, change_note)
 VALUES ($1,$2,$3,$4,$5,$6)
+ON CONFLICT (artifact_id, version) DO NOTHING
 `
 
 type SnapshotArtifactVersionParams struct {

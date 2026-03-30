@@ -49,3 +49,9 @@ sql:
             go_type:
               type: "string"
               pointer: true
+          - db_type: "float4"
+            go_type:
+              type: "float32"
+          - db_type: "float8"
+            go_type:
+              type: "float64"

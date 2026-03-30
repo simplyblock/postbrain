@@ -219,18 +219,22 @@ type Relation struct {
 	SourceMemory   *uuid.UUID
 	CreatedAt      time.Time
 	SourceArtifact *uuid.UUID
+	SourceFile     *string
 }
 
 type Scope struct {
-	ID          uuid.UUID
-	Kind        string
-	ExternalID  string
-	Name        string
-	ParentID    *uuid.UUID
-	PrincipalID uuid.UUID
-	Path        string
-	Meta        []byte
-	CreatedAt   time.Time
+	ID                uuid.UUID
+	Kind              string
+	ExternalID        string
+	Name              string
+	ParentID          *uuid.UUID
+	PrincipalID       uuid.UUID
+	Path              string
+	Meta              []byte
+	CreatedAt         time.Time
+	RepoUrl           *string
+	RepoDefaultBranch string
+	LastIndexedCommit *string
 }
 
 type Session struct {

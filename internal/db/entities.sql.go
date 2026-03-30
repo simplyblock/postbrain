@@ -22,6 +22,75 @@ func (q *Queries) DeleteArtifactEntityLinks(ctx context.Context, artifactID uuid
 	return err
 }
 
+const deleteRelationsBySourceFile = `-- name: DeleteRelationsBySourceFile :exec
+DELETE FROM relations WHERE scope_id = $1 AND source_file = $2
+`
+
+type DeleteRelationsBySourceFileParams struct {
+	ScopeID    uuid.UUID
+	SourceFile *string
+}
+
+// Used by incremental re-index to invalidate stale edges before re-extraction.
+func (q *Queries) DeleteRelationsBySourceFile(ctx context.Context, arg DeleteRelationsBySourceFileParams) error {
+	_, err := q.db.Exec(ctx, deleteRelationsBySourceFile, arg.ScopeID, arg.SourceFile)
+	return err
+}
+
+const findEntitiesBySuffix = `-- name: FindEntitiesBySuffix :many
+SELECT id, scope_id, entity_type, name, canonical, meta,
+       embedding, embedding_model_id, created_at, updated_at
+FROM entities
+WHERE scope_id = $1
+  AND (
+    canonical = $2
+    OR canonical LIKE ('%.' || $2)
+    OR canonical LIKE ('%::' || $2)
+    OR canonical LIKE ('%#' || $2)
+  )
+ORDER BY length(canonical) ASC
+LIMIT 5
+`
+
+type FindEntitiesBySuffixParams struct {
+	ScopeID   uuid.UUID
+	Canonical string
+}
+
+// Heuristic resolution: match call/type targets against entities whose
+// canonical name equals $2, ends with ".$2", or ends with "::$2".
+// Returns up to 5 candidates ordered by shortest name first (most specific).
+func (q *Queries) FindEntitiesBySuffix(ctx context.Context, arg FindEntitiesBySuffixParams) ([]*Entity, error) {
+	rows, err := q.db.Query(ctx, findEntitiesBySuffix, arg.ScopeID, arg.Canonical)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*Entity{}
+	for rows.Next() {
+		var i Entity
+		if err := rows.Scan(
+			&i.ID,
+			&i.ScopeID,
+			&i.EntityType,
+			&i.Name,
+			&i.Canonical,
+			&i.Meta,
+			&i.Embedding,
+			&i.EmbeddingModelID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getEntityByCanonical = `-- name: GetEntityByCanonical :one
 SELECT id, scope_id, entity_type, name, canonical, meta,
        embedding, embedding_model_id, created_at, updated_at
@@ -179,7 +248,7 @@ func (q *Queries) ListEntitiesByScope(ctx context.Context, arg ListEntitiesBySco
 }
 
 const listRelationsByScope = `-- name: ListRelationsByScope :many
-SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact, created_at
+SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact, source_file, created_at
 FROM relations
 WHERE scope_id=$1
 ORDER BY created_at
@@ -194,6 +263,7 @@ type ListRelationsByScopeRow struct {
 	Confidence     float64
 	SourceMemory   *uuid.UUID
 	SourceArtifact *uuid.UUID
+	SourceFile     *string
 	CreatedAt      time.Time
 }
 
@@ -215,6 +285,7 @@ func (q *Queries) ListRelationsByScope(ctx context.Context, scopeID uuid.UUID) (
 			&i.Confidence,
 			&i.SourceMemory,
 			&i.SourceArtifact,
+			&i.SourceFile,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -228,7 +299,7 @@ func (q *Queries) ListRelationsByScope(ctx context.Context, scopeID uuid.UUID) (
 }
 
 const listRelationsForEntity = `-- name: ListRelationsForEntity :many
-SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact, created_at
+SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact, source_file, created_at
 FROM relations WHERE subject_id=$1 OR object_id=$1
 ORDER BY created_at
 `
@@ -242,6 +313,7 @@ type ListRelationsForEntityRow struct {
 	Confidence     float64
 	SourceMemory   *uuid.UUID
 	SourceArtifact *uuid.UUID
+	SourceFile     *string
 	CreatedAt      time.Time
 }
 
@@ -263,6 +335,7 @@ func (q *Queries) ListRelationsForEntity(ctx context.Context, subjectID uuid.UUI
 			&i.Confidence,
 			&i.SourceMemory,
 			&i.SourceArtifact,
+			&i.SourceFile,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -276,7 +349,7 @@ func (q *Queries) ListRelationsForEntity(ctx context.Context, subjectID uuid.UUI
 }
 
 const listRelationsForEntityByPredicate = `-- name: ListRelationsForEntityByPredicate :many
-SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact, created_at
+SELECT id, scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact, source_file, created_at
 FROM relations
 WHERE (subject_id = $1 OR object_id = $1) AND predicate = $2
 ORDER BY created_at
@@ -296,6 +369,7 @@ type ListRelationsForEntityByPredicateRow struct {
 	Confidence     float64
 	SourceMemory   *uuid.UUID
 	SourceArtifact *uuid.UUID
+	SourceFile     *string
 	CreatedAt      time.Time
 }
 
@@ -317,6 +391,7 @@ func (q *Queries) ListRelationsForEntityByPredicate(ctx context.Context, arg Lis
 			&i.Confidence,
 			&i.SourceMemory,
 			&i.SourceArtifact,
+			&i.SourceFile,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -377,12 +452,12 @@ func (q *Queries) UpsertEntity(ctx context.Context, arg UpsertEntityParams) (*En
 }
 
 const upsertRelation = `-- name: UpsertRelation :one
-INSERT INTO relations (scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact)
-VALUES ($1,$2,$3,$4,$5,$6,$7)
+INSERT INTO relations (scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact, source_file)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 ON CONFLICT (scope_id, subject_id, predicate, object_id)
 DO UPDATE SET confidence=EXCLUDED.confidence, source_memory=EXCLUDED.source_memory,
-              source_artifact=EXCLUDED.source_artifact
-RETURNING id, scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact, created_at
+              source_artifact=EXCLUDED.source_artifact, source_file=EXCLUDED.source_file
+RETURNING id, scope_id, subject_id, predicate, object_id, confidence, source_memory, source_artifact, source_file, created_at
 `
 
 type UpsertRelationParams struct {
@@ -393,6 +468,7 @@ type UpsertRelationParams struct {
 	Confidence     float64
 	SourceMemory   *uuid.UUID
 	SourceArtifact *uuid.UUID
+	SourceFile     *string
 }
 
 type UpsertRelationRow struct {
@@ -404,6 +480,7 @@ type UpsertRelationRow struct {
 	Confidence     float64
 	SourceMemory   *uuid.UUID
 	SourceArtifact *uuid.UUID
+	SourceFile     *string
 	CreatedAt      time.Time
 }
 
@@ -416,6 +493,7 @@ func (q *Queries) UpsertRelation(ctx context.Context, arg UpsertRelationParams) 
 		arg.Confidence,
 		arg.SourceMemory,
 		arg.SourceArtifact,
+		arg.SourceFile,
 	)
 	var i UpsertRelationRow
 	err := row.Scan(
@@ -427,6 +505,7 @@ func (q *Queries) UpsertRelation(ctx context.Context, arg UpsertRelationParams) 
 		&i.Confidence,
 		&i.SourceMemory,
 		&i.SourceArtifact,
+		&i.SourceFile,
 		&i.CreatedAt,
 	)
 	return &i, err

@@ -193,9 +193,10 @@ visible at a glance.
 
 ## Open Questions
 
-1. **Scope of resolution for v1** — heuristic name matching only, or invest in `go/packages`
-   from the start? The former ships faster; the latter produces a graph agents can actually
-   trust for impact analysis.
+1. **Scope of resolution for v1** — heuristic name matching is implemented (Option A).
+   The next step is whether to invest in `go/packages` for type-resolved edges; the heuristic
+   approach ships a usable graph today but produces a graph agents can only partially trust
+   for impact analysis.
 
 2. **Language priority** — Go only first (fits the postbrain codebase itself), then expand?
    Or design the extraction pipeline to be language-pluggable from day one?
@@ -224,29 +225,107 @@ visible at a glance.
    also return its callees)? This is a graph-augmented RAG pattern that significantly
    improves recall completeness for code tasks.
 
+9. **In-memory repo index crash cleanup** — for repos exceeding the in-memory size limit,
+   what is the temp-dir cleanup strategy if the process crashes mid-index?
+
 ---
 
 ## Proposed Implementation Phases
 
-### Phase 1 — Structural extraction, heuristic resolution
-- Integrate Tree-sitter; write extractors for Go (and optionally Python, TypeScript)
+### Phase 1 — Structural extraction, heuristic resolution [COMPLETE]
+
+- Tree-sitter extractors are implemented for 22 languages in `internal/codegraph/`:
+  Go, Python, TypeScript, TSX, JavaScript, Rust, C, C++, C#, Java, Kotlin, Bash, Lua,
+  PHP, Ruby, CSS, HTML, Dockerfile, HCL, Protobuf, SQL, TOML, YAML
 - At write time, for `content_kind=code` memories with a `file:` source_ref: extract
   symbols and edges, UpsertEntity, UpsertRelation
 - Heuristic resolution: match call targets against entities in the same scope by name suffix
 - Web UI: existing `/ui/graph` page shows populated data with no changes needed
 
-### Phase 2 — Accurate resolution (Go)
-- Use `go/packages` to produce a type-resolved call graph for Go source trees
-- Expose a `POST /v1/graph/index` endpoint that accepts a module root path and bulk-indexes
-  the entire graph
-- Add `source_file` tracking to support clean re-indexing on file change
+### Phase 2 — Repository attachment and bulk indexing
+
+Project-kind scopes can have a git repository attached. The repository is the source of
+truth for the code graph — bulk indexing walks the repo tree and extracts symbols/edges for
+all supported files.
+
+#### Schema (migration 000009)
+
+Two new nullable columns on `scopes` (only meaningful for `kind = 'project'`):
+
+```sql
+ALTER TABLE scopes ADD COLUMN repo_url            TEXT;
+ALTER TABLE scopes ADD COLUMN repo_default_branch TEXT NOT NULL DEFAULT 'main';
+ALTER TABLE scopes ADD COLUMN last_indexed_commit  TEXT;
+```
+
+No local path column — the clone is ephemeral (see below).
+
+#### go-git — in-process git, zero disk
+
+Use `github.com/go-git/go-git/v5` instead of shelling out to the git CLI:
+- No git binary dependency on the server
+- In-memory storage: `memory.NewStorage()` — git object store lives in RAM
+- In-memory worktree: `memfs.New()` from `github.com/go-git/go-git/v5/plumbing/object` — no files written to disk
+- Typed API, proper error handling
+- Shallow clone (`Depth: 1`) minimises data transferred
+
+#### Full index flow
+
+```
+POST /v1/scopes/:id/repo          { url, branch? }  — attach repo + trigger initial index
+POST /v1/scopes/:id/repo/sync     {}                 — re-index (fetch latest, diff, re-extract)
+```
+
+Full index:
+1. `git.Clone(memory.NewStorage(), memfs.New(), {URL, Depth:1, SingleBranch, NoTags})`
+2. Walk commit tree via `tree.Files().ForEach`
+3. Skip files whose extension is not in `codegraph.SupportedExtensions()`
+4. For each supported file: `f.Contents()` → `codegraph.Extract` → upsert entities + relations with `source_file = f.Name`
+5. Set `scope.last_indexed_commit = HEAD SHA`
+6. Memory is released when the clone object goes out of scope — zero disk residue
+
+#### Incremental sync flow
+
+1. Shallow clone HEAD (`Depth: 1`)
+2. Fetch the previously indexed commit: `r.Fetch({RefSpecs: [lastSHA + ":refs/prev"], Depth: 1})`
+3. `prevTree.Diff(currTree)` → list of changed/deleted files
+4. For deleted files: `DELETE FROM relations WHERE source_file = $path AND scope_id = $scope`; delete entity if no remaining relations
+5. For changed/added files: re-extract and upsert
+6. Update `last_indexed_commit`
+
+#### source_file tracking on relations (migration 000009)
+
+Required for incremental sync to invalidate stale edges:
+
+```sql
+ALTER TABLE relations ADD COLUMN source_file TEXT;
+CREATE INDEX relations_source_file_idx ON relations (scope_id, source_file)
+    WHERE source_file IS NOT NULL;
+```
+
+#### Authentication
+
+Repo URL encodes credentials for HTTPS: `https://token@github.com/org/repo`.
+Token stored in `meta JSONB` as `{"repo_auth_token": "..."}` — never in the URL column itself.
+The indexer constructs the authenticated URL at runtime.
+
+For SSH: out of scope for Phase 2.
+
+#### Memory limits
+
+Configurable `REPO_INDEX_MAX_MB` (default 500). The indexer checks the pack size advertised
+during the git handshake and aborts with a clear error if exceeded. Large repos can fall back
+to a temp-dir shallow clone that is deleted after indexing.
 
 ### Phase 3 — Query endpoints and graph-augmented recall
+
 - Implement structured traversal REST endpoints (`callers`, `callees`, `deps`, `dependents`)
+- Traversal endpoints are the prerequisite for graph-augmented recall.
 - Extend `recall` to optionally include graph neighbours of matched symbols
 - Web UI: visualisation of file/function dependency graph
 
 ### Phase 4 — Polyglot and chunk-level granularity
+
 - Add language-pluggable extraction interface; add Python, TypeScript extractors
 - Introduce function-level chunk memories linked to file-level parent
 - LSP-based resolution as an optional high-fidelity mode

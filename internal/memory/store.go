@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	pgvector "github.com/pgvector/pgvector-go"
 
+	"github.com/simplyblock/postbrain/internal/codegraph"
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/embedding"
 	"github.com/simplyblock/postbrain/internal/graph"
@@ -61,6 +62,7 @@ type memoryDB interface {
 	UpsertEntity(ctx context.Context, e *db.Entity) (*db.Entity, error)
 	LinkMemoryToEntity(ctx context.Context, memoryID, entityID uuid.UUID, role string) error
 	UpsertRelation(ctx context.Context, r *db.Relation) (*db.Relation, error)
+	FindEntitiesBySuffix(ctx context.Context, scopeID uuid.UUID, suffix string) ([]*db.Entity, error)
 }
 
 // poolMemoryDB wraps a real pgxpool.Pool to implement memoryDB.
@@ -94,6 +96,10 @@ func (p *poolMemoryDB) LinkMemoryToEntity(ctx context.Context, memoryID, entityI
 
 func (p *poolMemoryDB) UpsertRelation(ctx context.Context, r *db.Relation) (*db.Relation, error) {
 	return db.UpsertRelation(ctx, p.pool, r)
+}
+
+func (p *poolMemoryDB) FindEntitiesBySuffix(ctx context.Context, scopeID uuid.UUID, suffix string) ([]*db.Entity, error) {
+	return db.FindEntitiesBySuffix(ctx, p.pool, scopeID, suffix)
 }
 
 // Store provides memory CRUD and embedding operations.
@@ -273,6 +279,11 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 		}
 	}
 
+	// 9. Code graph extraction for code memories with a file: source_ref.
+	if contentKind == "code" && input.SourceRef != nil {
+		s.extractCodeGraph(ctx, input.Content, *input.SourceRef, input.ScopeID, created.ID)
+	}
+
 	return &CreateResult{MemoryID: created.ID, Action: "created"}, nil
 }
 
@@ -316,6 +327,9 @@ func (s *Store) HardDelete(ctx context.Context, id uuid.UUID) error {
 // same canonical string but a different entity_type, mirroring the logic in
 // knowledge/store.go. Non-fatal: errors are silently ignored.
 func (s *Store) linkSameAs(ctx context.Context, scopeID, entID uuid.UUID, canonical, entityType string) {
+	if s.pool == nil {
+		return // no pool in test mode; best-effort only
+	}
 	siblings, err := db.ListEntitiesByCanonical(ctx, s.pool, scopeID, canonical, entityType)
 	if err != nil {
 		return
@@ -341,4 +355,85 @@ func safeDeref(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// extractCodeGraph runs tree-sitter extraction on a code memory and upserts
+// the resulting symbols (as entities) and edges (as relations) into the graph.
+// All errors are best-effort — a parse failure never blocks the memory write.
+func (s *Store) extractCodeGraph(ctx context.Context, content, sourceRef string, scopeID, memoryID uuid.UUID) {
+	// source_ref format: file:path/to/file.go  or  file:path/to/file.go:42
+	filePath := strings.TrimPrefix(sourceRef, "file:")
+	if filePath == sourceRef {
+		return // not a file: ref
+	}
+	// Strip optional trailing :line or :line:col
+	if idx := strings.LastIndex(filePath, ":"); idx > 0 {
+		// Only strip if what follows looks like a number (line reference).
+		tail := filePath[idx+1:]
+		allDigits := len(tail) > 0
+		for _, c := range tail {
+			if c < '0' || c > '9' {
+				allDigits = false
+				break
+			}
+		}
+		if allDigits {
+			filePath = filePath[:idx]
+		}
+	}
+
+	syms, edges, err := codegraph.Extract(ctx, []byte(content), filePath)
+	if err != nil {
+		return // unsupported language or parse error — skip silently
+	}
+
+	// Build a map of symbol name → entity ID for relation linking.
+	symToID := make(map[string]uuid.UUID, len(syms))
+
+	for _, sym := range syms {
+		ent, err := s.creator.UpsertEntity(ctx, &db.Entity{
+			ScopeID:    scopeID,
+			EntityType: string(sym.Kind),
+			Name:       sym.Name,
+			Canonical:  sym.Name,
+		})
+		if err != nil {
+			continue
+		}
+		symToID[sym.Name] = ent.ID
+		// Link the file-level symbol (KindFile) to this memory.
+		if sym.Kind == codegraph.KindFile {
+			_ = s.creator.LinkMemoryToEntity(ctx, memoryID, ent.ID, "source")
+		}
+		// Connect to any sibling entities with the same canonical but different type.
+		s.linkSameAs(ctx, scopeID, ent.ID, sym.Name, string(sym.Kind))
+	}
+
+	// Upsert edges, resolving object names heuristically when not in symToID.
+	for _, edge := range edges {
+		subjID, ok := symToID[edge.SubjectName]
+		if !ok {
+			continue // unknown subject — skip
+		}
+
+		objID, ok := symToID[edge.ObjectName]
+		if !ok {
+			// Heuristic: search for an entity in this scope whose canonical
+			// name ends with the target name.
+			candidates, err := s.creator.FindEntitiesBySuffix(ctx, scopeID, edge.ObjectName)
+			if err != nil || len(candidates) == 0 {
+				continue // unresolved — skip
+			}
+			objID = candidates[0].ID
+		}
+
+		_, _ = s.creator.UpsertRelation(ctx, &db.Relation{
+			ScopeID:      scopeID,
+			SubjectID:    subjID,
+			Predicate:    edge.Predicate,
+			ObjectID:     objID,
+			Confidence:   1.0,
+			SourceMemory: &memoryID,
+		})
+	}
 }

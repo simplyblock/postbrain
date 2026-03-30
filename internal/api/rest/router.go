@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/auth"
+	"github.com/simplyblock/postbrain/internal/codegraph"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/embedding"
 	"github.com/simplyblock/postbrain/internal/graph"
@@ -36,14 +37,16 @@ type Router struct {
 	sharing      *sharing.Store
 	graphStore   *graph.Store
 	consolidator *memory.Consolidator
+	syncer       *codegraph.Syncer
 }
 
 // NewRouter creates a Router with all stores initialised.
 func NewRouter(pool *pgxpool.Pool, svc *embedding.EmbeddingService, cfg *config.Config) *Router {
 	r := &Router{
-		pool: pool,
-		svc:  svc,
-		cfg:  cfg,
+		pool:   pool,
+		svc:    svc,
+		cfg:    cfg,
+		syncer: codegraph.NewSyncer(),
 	}
 	if pool != nil {
 		r.memStore = memory.NewStore(pool, svc)
@@ -147,6 +150,9 @@ func (ro *Router) Handler() http.Handler {
 		r.Get("/scopes/{id}", ro.getScope)
 		r.Put("/scopes/{id}", ro.updateScope)
 		r.Delete("/scopes/{id}", ro.deleteScope)
+		r.Post("/scopes/{id}/repo", ro.setScopeRepo)
+		r.Post("/scopes/{id}/repo/sync", ro.syncScopeRepo)
+		r.Get("/scopes/{id}/repo/sync", ro.getSyncStatus)
 
 		// Principals & membership.
 		r.Get("/principals", ro.listPrincipals)

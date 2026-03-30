@@ -49,7 +49,8 @@ UPDATE knowledge_artifacts SET access_count=access_count+1, last_accessed=now(),
 
 -- name: SnapshotArtifactVersion :exec
 INSERT INTO knowledge_history (artifact_id, version, content, summary, changed_by, change_note)
-VALUES ($1,$2,$3,$4,$5,$6);
+VALUES ($1,$2,$3,$4,$5,$6)
+ON CONFLICT (artifact_id, version) DO NOTHING;
 
 -- name: CreateEndorsement :one
 INSERT INTO knowledge_endorsements (artifact_id, endorser_id, note)
@@ -70,6 +71,32 @@ SELECT id, knowledge_type, owner_scope_id, author_id,
 FROM knowledge_artifacts
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2;
+
+-- name: SearchArtifacts :many
+-- $1 = query (wrapped in %...% by caller), $2 = status filter ('' = all), $3 = limit, $4 = offset
+SELECT id, knowledge_type, owner_scope_id, author_id,
+    visibility, status, published_at, deprecated_at, review_required,
+    title, content, summary, embedding, embedding_model_id, meta,
+    endorsement_count, access_count, last_accessed,
+    version, previous_version, source_memory_id, source_ref,
+    created_at, updated_at
+FROM knowledge_artifacts
+WHERE (title ILIKE $1 OR content ILIKE $1)
+  AND ($2 = '' OR status = $2)
+ORDER BY created_at DESC
+LIMIT $3 OFFSET $4;
+
+-- name: ListArtifactsByStatus :many
+SELECT id, knowledge_type, owner_scope_id, author_id,
+    visibility, status, published_at, deprecated_at, review_required,
+    title, content, summary, embedding, embedding_model_id, meta,
+    endorsement_count, access_count, last_accessed,
+    version, previous_version, source_memory_id, source_ref,
+    created_at, updated_at
+FROM knowledge_artifacts
+WHERE status = $1
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $3;
 
 -- name: ListVisibleArtifacts :many
 SELECT id, knowledge_type, owner_scope_id, author_id,
@@ -93,7 +120,7 @@ SELECT ka.id, ka.knowledge_type, ka.owner_scope_id, ka.author_id,
     ka.endorsement_count, ka.access_count, ka.last_accessed,
     ka.version, ka.previous_version, ka.source_memory_id, ka.source_ref,
     ka.created_at, ka.updated_at,
-    1 - (ka.embedding <=> $3) AS vec_score
+    (1 - (ka.embedding <=> $3))::float4 AS vec_score
 FROM knowledge_artifacts ka
 JOIN scopes s ON ka.owner_scope_id = s.id, qs
 WHERE ka.status = 'published'

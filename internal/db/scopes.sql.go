@@ -15,7 +15,8 @@ import (
 const createScope = `-- name: CreateScope :one
 INSERT INTO scopes (kind, external_id, name, parent_id, principal_id, meta, path)
 VALUES ($1, $2, $3, NULLIF($4, '00000000-0000-0000-0000-000000000000'::uuid), $5, $6, 'placeholder')
-RETURNING id, kind, external_id, name, parent_id, principal_id, path::text, meta, created_at
+RETURNING id, kind, external_id, name, parent_id, principal_id, path::text, meta,
+          repo_url, repo_default_branch, last_indexed_commit, created_at
 `
 
 type CreateScopeParams struct {
@@ -28,15 +29,18 @@ type CreateScopeParams struct {
 }
 
 type CreateScopeRow struct {
-	ID          uuid.UUID
-	Kind        string
-	ExternalID  string
-	Name        string
-	ParentID    *uuid.UUID
-	PrincipalID uuid.UUID
-	Path        string
-	Meta        []byte
-	CreatedAt   time.Time
+	ID                uuid.UUID
+	Kind              string
+	ExternalID        string
+	Name              string
+	ParentID          *uuid.UUID
+	PrincipalID       uuid.UUID
+	Path              string
+	Meta              []byte
+	RepoUrl           *string
+	RepoDefaultBranch string
+	LastIndexedCommit *string
+	CreatedAt         time.Time
 }
 
 func (q *Queries) CreateScope(ctx context.Context, arg CreateScopeParams) (*CreateScopeRow, error) {
@@ -58,6 +62,9 @@ func (q *Queries) CreateScope(ctx context.Context, arg CreateScopeParams) (*Crea
 		&i.PrincipalID,
 		&i.Path,
 		&i.Meta,
+		&i.RepoUrl,
+		&i.RepoDefaultBranch,
+		&i.LastIndexedCommit,
 		&i.CreatedAt,
 	)
 	return &i, err
@@ -99,7 +106,8 @@ func (q *Queries) GetAncestorScopeIDs(ctx context.Context, id uuid.UUID) ([]uuid
 }
 
 const getScopeByExternalID = `-- name: GetScopeByExternalID :one
-SELECT id, kind, external_id, name, parent_id, principal_id, path::text, meta, created_at
+SELECT id, kind, external_id, name, parent_id, principal_id, path::text, meta,
+       repo_url, repo_default_branch, last_indexed_commit, created_at
 FROM scopes WHERE kind = $1 AND external_id = $2
 `
 
@@ -109,15 +117,18 @@ type GetScopeByExternalIDParams struct {
 }
 
 type GetScopeByExternalIDRow struct {
-	ID          uuid.UUID
-	Kind        string
-	ExternalID  string
-	Name        string
-	ParentID    *uuid.UUID
-	PrincipalID uuid.UUID
-	Path        string
-	Meta        []byte
-	CreatedAt   time.Time
+	ID                uuid.UUID
+	Kind              string
+	ExternalID        string
+	Name              string
+	ParentID          *uuid.UUID
+	PrincipalID       uuid.UUID
+	Path              string
+	Meta              []byte
+	RepoUrl           *string
+	RepoDefaultBranch string
+	LastIndexedCommit *string
+	CreatedAt         time.Time
 }
 
 func (q *Queries) GetScopeByExternalID(ctx context.Context, arg GetScopeByExternalIDParams) (*GetScopeByExternalIDRow, error) {
@@ -132,26 +143,33 @@ func (q *Queries) GetScopeByExternalID(ctx context.Context, arg GetScopeByExtern
 		&i.PrincipalID,
 		&i.Path,
 		&i.Meta,
+		&i.RepoUrl,
+		&i.RepoDefaultBranch,
+		&i.LastIndexedCommit,
 		&i.CreatedAt,
 	)
 	return &i, err
 }
 
 const getScopeByID = `-- name: GetScopeByID :one
-SELECT id, kind, external_id, name, parent_id, principal_id, path::text, meta, created_at
+SELECT id, kind, external_id, name, parent_id, principal_id, path::text, meta,
+       repo_url, repo_default_branch, last_indexed_commit, created_at
 FROM scopes WHERE id = $1
 `
 
 type GetScopeByIDRow struct {
-	ID          uuid.UUID
-	Kind        string
-	ExternalID  string
-	Name        string
-	ParentID    *uuid.UUID
-	PrincipalID uuid.UUID
-	Path        string
-	Meta        []byte
-	CreatedAt   time.Time
+	ID                uuid.UUID
+	Kind              string
+	ExternalID        string
+	Name              string
+	ParentID          *uuid.UUID
+	PrincipalID       uuid.UUID
+	Path              string
+	Meta              []byte
+	RepoUrl           *string
+	RepoDefaultBranch string
+	LastIndexedCommit *string
+	CreatedAt         time.Time
 }
 
 func (q *Queries) GetScopeByID(ctx context.Context, id uuid.UUID) (*GetScopeByIDRow, error) {
@@ -166,13 +184,17 @@ func (q *Queries) GetScopeByID(ctx context.Context, id uuid.UUID) (*GetScopeByID
 		&i.PrincipalID,
 		&i.Path,
 		&i.Meta,
+		&i.RepoUrl,
+		&i.RepoDefaultBranch,
+		&i.LastIndexedCommit,
 		&i.CreatedAt,
 	)
 	return &i, err
 }
 
 const listScopes = `-- name: ListScopes :many
-SELECT id, kind, external_id, name, parent_id, principal_id, path::text, meta, created_at
+SELECT id, kind, external_id, name, parent_id, principal_id, path::text, meta,
+       repo_url, repo_default_branch, last_indexed_commit, created_at
 FROM scopes
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
@@ -184,15 +206,18 @@ type ListScopesParams struct {
 }
 
 type ListScopesRow struct {
-	ID          uuid.UUID
-	Kind        string
-	ExternalID  string
-	Name        string
-	ParentID    *uuid.UUID
-	PrincipalID uuid.UUID
-	Path        string
-	Meta        []byte
-	CreatedAt   time.Time
+	ID                uuid.UUID
+	Kind              string
+	ExternalID        string
+	Name              string
+	ParentID          *uuid.UUID
+	PrincipalID       uuid.UUID
+	Path              string
+	Meta              []byte
+	RepoUrl           *string
+	RepoDefaultBranch string
+	LastIndexedCommit *string
+	CreatedAt         time.Time
 }
 
 func (q *Queries) ListScopes(ctx context.Context, arg ListScopesParams) ([]*ListScopesRow, error) {
@@ -213,6 +238,9 @@ func (q *Queries) ListScopes(ctx context.Context, arg ListScopesParams) ([]*List
 			&i.PrincipalID,
 			&i.Path,
 			&i.Meta,
+			&i.RepoUrl,
+			&i.RepoDefaultBranch,
+			&i.LastIndexedCommit,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -225,9 +253,73 @@ func (q *Queries) ListScopes(ctx context.Context, arg ListScopesParams) ([]*List
 	return items, nil
 }
 
+const setLastIndexedCommit = `-- name: SetLastIndexedCommit :exec
+UPDATE scopes SET last_indexed_commit = $2 WHERE id = $1
+`
+
+type SetLastIndexedCommitParams struct {
+	ID                uuid.UUID
+	LastIndexedCommit *string
+}
+
+func (q *Queries) SetLastIndexedCommit(ctx context.Context, arg SetLastIndexedCommitParams) error {
+	_, err := q.db.Exec(ctx, setLastIndexedCommit, arg.ID, arg.LastIndexedCommit)
+	return err
+}
+
+const setScopeRepo = `-- name: SetScopeRepo :one
+UPDATE scopes
+SET repo_url = $2, repo_default_branch = $3
+WHERE id = $1 AND kind = 'project'
+RETURNING id, kind, external_id, name, parent_id, principal_id, path::text, meta,
+          repo_url, repo_default_branch, last_indexed_commit, created_at
+`
+
+type SetScopeRepoParams struct {
+	ID                uuid.UUID
+	RepoUrl           *string
+	RepoDefaultBranch string
+}
+
+type SetScopeRepoRow struct {
+	ID                uuid.UUID
+	Kind              string
+	ExternalID        string
+	Name              string
+	ParentID          *uuid.UUID
+	PrincipalID       uuid.UUID
+	Path              string
+	Meta              []byte
+	RepoUrl           *string
+	RepoDefaultBranch string
+	LastIndexedCommit *string
+	CreatedAt         time.Time
+}
+
+func (q *Queries) SetScopeRepo(ctx context.Context, arg SetScopeRepoParams) (*SetScopeRepoRow, error) {
+	row := q.db.QueryRow(ctx, setScopeRepo, arg.ID, arg.RepoUrl, arg.RepoDefaultBranch)
+	var i SetScopeRepoRow
+	err := row.Scan(
+		&i.ID,
+		&i.Kind,
+		&i.ExternalID,
+		&i.Name,
+		&i.ParentID,
+		&i.PrincipalID,
+		&i.Path,
+		&i.Meta,
+		&i.RepoUrl,
+		&i.RepoDefaultBranch,
+		&i.LastIndexedCommit,
+		&i.CreatedAt,
+	)
+	return &i, err
+}
+
 const updateScope = `-- name: UpdateScope :one
 UPDATE scopes SET name = $2, meta = $3 WHERE id = $1
-RETURNING id, kind, external_id, name, parent_id, principal_id, path::text, meta, created_at
+RETURNING id, kind, external_id, name, parent_id, principal_id, path::text, meta,
+          repo_url, repo_default_branch, last_indexed_commit, created_at
 `
 
 type UpdateScopeParams struct {
@@ -237,15 +329,18 @@ type UpdateScopeParams struct {
 }
 
 type UpdateScopeRow struct {
-	ID          uuid.UUID
-	Kind        string
-	ExternalID  string
-	Name        string
-	ParentID    *uuid.UUID
-	PrincipalID uuid.UUID
-	Path        string
-	Meta        []byte
-	CreatedAt   time.Time
+	ID                uuid.UUID
+	Kind              string
+	ExternalID        string
+	Name              string
+	ParentID          *uuid.UUID
+	PrincipalID       uuid.UUID
+	Path              string
+	Meta              []byte
+	RepoUrl           *string
+	RepoDefaultBranch string
+	LastIndexedCommit *string
+	CreatedAt         time.Time
 }
 
 func (q *Queries) UpdateScope(ctx context.Context, arg UpdateScopeParams) (*UpdateScopeRow, error) {
@@ -260,6 +355,9 @@ func (q *Queries) UpdateScope(ctx context.Context, arg UpdateScopeParams) (*Upda
 		&i.PrincipalID,
 		&i.Path,
 		&i.Meta,
+		&i.RepoUrl,
+		&i.RepoDefaultBranch,
+		&i.LastIndexedCommit,
 		&i.CreatedAt,
 	)
 	return &i, err
