@@ -41,5 +41,8 @@ RETURNING id, kind, external_id, name, parent_id, principal_id, path::text, meta
 -- name: SetLastIndexedCommit :exec
 UPDATE scopes SET last_indexed_commit = $2 WHERE id = $1;
 
+-- name: CountChildScopes :one
+SELECT COUNT(*) FROM scopes WHERE parent_id = $1;
+
 -- name: DeleteScope :exec
 DELETE FROM scopes WHERE id = $1;

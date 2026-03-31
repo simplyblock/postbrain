@@ -728,9 +728,11 @@ func (h *Handler) renderScopes(w http.ResponseWriter, r *http.Request, scopeErr 
         Scopes         []*db.Scope
         ScopeFormError string
         SyncStatus     map[string]codegraph.SyncStatus
+        ChildCount     map[string]int64
     }{
         ScopeFormError: scopeErr,
         SyncStatus:     make(map[string]codegraph.SyncStatus),
+        ChildCount:     make(map[string]int64),
     }
 
     if h.pool != nil {
@@ -745,6 +747,9 @@ func (h *Handler) renderScopes(w http.ResponseWriter, r *http.Request, scopeErr 
                 st := h.syncer.Status(s.ID)
                 if st.State != codegraph.SyncIdle || st.CommitSHA != "" || st.Error != "" {
                     data.SyncStatus[s.ID.String()] = st
+                }
+                if n, err := db.CountChildScopes(r.Context(), h.pool, s.ID); err == nil && n > 0 {
+                    data.ChildCount[s.ID.String()] = n
                 }
             }
         }
@@ -787,6 +792,15 @@ func (h *Handler) handleDeleteScope(w http.ResponseWriter, r *http.Request) {
     }
     if h.pool == nil {
         h.renderScopes(w, r, "service unavailable")
+        return
+    }
+    children, err := db.CountChildScopes(r.Context(), h.pool, id)
+    if err != nil {
+        h.renderScopes(w, r, "could not check for child scopes")
+        return
+    }
+    if children > 0 {
+        h.renderScopes(w, r, "cannot delete scope: it has child scopes that must be deleted first")
         return
     }
     if err := db.DeleteScope(r.Context(), h.pool, id); err != nil {
@@ -923,8 +937,10 @@ func (h *Handler) handleSyncScopeRepo(w http.ResponseWriter, r *http.Request) {
     if scope.LastIndexedCommit != nil {
         prevCommit = *scope.LastIndexedCommit
     }
+    principalID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
     opts := codegraph.IndexOptions{
         ScopeID:       scope.ID,
+        AuthorID:      principalID,
         RepoURL:       *scope.RepoUrl,
         DefaultBranch: scope.RepoDefaultBranch,
         AuthToken:     r.FormValue("auth_token"),

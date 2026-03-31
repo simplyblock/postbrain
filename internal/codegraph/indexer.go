@@ -28,6 +28,9 @@ type IndexOptions struct {
 	RepoURL string
 	// DefaultBranch is the branch to check out (defaults to "main").
 	DefaultBranch string
+	// AuthorID is the principal UUID recorded as the author of created memories.
+	// If zero, memories are not created (code graph entities/relations are still indexed).
+	AuthorID uuid.UUID
 	// AuthToken is an optional bearer token injected as HTTP basic auth password.
 	AuthToken string
 	// PrevCommit is the last indexed commit SHA; if non-empty, performs an
@@ -211,22 +214,24 @@ func indexFile(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, f *ob
 	res.FilesIndexed++
 	sourceFile := f.Name
 
-	// Create a file-level memory for the source content.
-	fileSourceRef := "file:" + f.Name
-	fileMem, memErr := db.CreateMemory(ctx, pool, &db.Memory{
-		MemoryType:      "observation",
-		ScopeID:         opts.ScopeID,
-		AuthorID:        opts.ScopeID, // use scope as author for automated indexing
-		Content:         string(src),
-		ContentKind:     "code",
-		SourceRef:       &fileSourceRef,
-		PromotionStatus: "none",
-	})
+	// Create a file-level memory for the source content (only when a valid author is known).
 	var fileMemoryID *uuid.UUID
-	if memErr != nil {
-		slog.WarnContext(ctx, "codegraph: create file memory", "file", f.Name, "err", memErr)
-	} else if fileMem != nil {
-		fileMemoryID = &fileMem.ID
+	if opts.AuthorID != uuid.Nil {
+		fileSourceRef := "file:" + f.Name
+		fileMem, memErr := db.CreateMemory(ctx, pool, &db.Memory{
+			MemoryType:      "semantic",
+			ScopeID:         opts.ScopeID,
+			AuthorID:        opts.AuthorID,
+			Content:         string(src),
+			ContentKind:     "code",
+			SourceRef:       &fileSourceRef,
+			PromotionStatus: "none",
+		})
+		if memErr != nil {
+			slog.WarnContext(ctx, "codegraph: create file memory", "file", f.Name, "err", memErr)
+		} else if fileMem != nil {
+			fileMemoryID = &fileMem.ID
+		}
 	}
 
 	// Upsert symbols as entities.
@@ -251,8 +256,8 @@ func indexFile(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, f *ob
 		symToID[canonical] = ent.ID
 
 		// Link file memory to the file entity (KindFile symbols).
-		if sym.Kind == KindFile && fileMem != nil {
-			if lErr := db.LinkMemoryToEntity(ctx, pool, fileMem.ID, ent.ID, ""); lErr != nil {
+		if sym.Kind == KindFile && fileMemoryID != nil {
+			if lErr := db.LinkMemoryToEntity(ctx, pool, *fileMemoryID, ent.ID, ""); lErr != nil {
 				slog.WarnContext(ctx, "codegraph: link file memory to entity", "err", lErr)
 			}
 		}
@@ -274,9 +279,9 @@ func indexFile(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, f *ob
 				chunkContent := string(src[sym.StartByte:sym.EndByte])
 				chunkSourceRef := fmt.Sprintf("file:%s:%d", f.Name, sym.StartLine+1)
 				_, cErr := db.CreateMemory(ctx, pool, &db.Memory{
-					MemoryType:      "observation",
+					MemoryType:      "semantic",
 					ScopeID:         opts.ScopeID,
-					AuthorID:        opts.ScopeID,
+					AuthorID:        opts.AuthorID,
 					Content:         chunkContent,
 					ContentKind:     "code",
 					SourceRef:       &chunkSourceRef,

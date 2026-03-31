@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/codegraph"
 	"github.com/simplyblock/postbrain/internal/db"
 )
@@ -98,6 +99,15 @@ func (ro *Router) deleteScope(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid scope id")
 		return
 	}
+	children, err := db.CountChildScopes(r.Context(), ro.pool, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if children > 0 {
+		writeError(w, http.StatusConflict, "cannot delete scope: it has child scopes that must be deleted first")
+		return
+	}
 	if err := db.DeleteScope(r.Context(), ro.pool, id); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -174,8 +184,10 @@ func (ro *Router) syncScopeRepo(w http.ResponseWriter, r *http.Request) {
 		prevCommit = *scope.LastIndexedCommit
 	}
 
+	principalID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 	opts := codegraph.IndexOptions{
 		ScopeID:       scope.ID,
+		AuthorID:      principalID,
 		RepoURL:       *scope.RepoUrl,
 		DefaultBranch: scope.RepoDefaultBranch,
 		AuthToken:     body.AuthToken,
