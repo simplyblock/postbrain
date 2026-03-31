@@ -19,14 +19,48 @@ func (f *fakeLifecycleMembership) IsScopeAdmin(_ context.Context, _, _ uuid.UUID
 	return f.isAdmin, f.err
 }
 
-// fakeLifecycleDB implements lifecycleDB for unit tests.
+// noopLifecycleDB satisfies the full lifecycleDB interface with no-ops.
+// Embed this in test fakes so that adding a new method to lifecycleDB only
+// requires updating noopLifecycleDB, not every individual fake.
+type noopLifecycleDB struct{}
+
+func (noopLifecycleDB) getArtifact(_ context.Context, _ uuid.UUID) (*db.KnowledgeArtifact, error) {
+	return nil, nil
+}
+func (noopLifecycleDB) updateArtifactStatus(_ context.Context, _ uuid.UUID, _ string, _, _ interface{}) error {
+	return nil
+}
+func (noopLifecycleDB) createEndorsement(_ context.Context, _, _ uuid.UUID, _ *string) (*db.KnowledgeEndorsement, error) {
+	return &db.KnowledgeEndorsement{ID: uuid.New()}, nil
+}
+func (noopLifecycleDB) incrementEndorsementCount(_ context.Context, _ uuid.UUID) error { return nil }
+func (noopLifecycleDB) getArtifactAfterEndorse(_ context.Context, _ uuid.UUID) (*db.KnowledgeArtifact, error) {
+	return nil, nil
+}
+func (noopLifecycleDB) snapshotArtifactVersion(_ context.Context, _ *db.KnowledgeHistory) error {
+	return nil
+}
+func (noopLifecycleDB) flagDigestsStaleness(_ context.Context, _ uuid.UUID, _ string, _ float64, _ []byte) error {
+	return nil
+}
+func (noopLifecycleDB) deleteArtifactEntityLinks(_ context.Context, _ uuid.UUID) error { return nil }
+func (noopLifecycleDB) nullPreviousVersionRefs(_ context.Context, _ uuid.UUID) error   { return nil }
+func (noopLifecycleDB) nullPromotionRequestArtifactRef(_ context.Context, _ uuid.UUID) error {
+	return nil
+}
+func (noopLifecycleDB) resetPromotedMemoryStatus(_ context.Context, _ uuid.UUID) error { return nil }
+func (noopLifecycleDB) deleteArtifact(_ context.Context, _ uuid.UUID) error            { return nil }
+
+// fakeLifecycleDB embeds noopLifecycleDB and overrides only the methods that
+// tests need to observe or control.
 type fakeLifecycleDB struct {
-	artifact               *db.KnowledgeArtifact
-	statusUpdated          string
-	snapshotted            bool
-	endorsed               bool
-	uniqueViolate          bool // if true, CreateEndorsement returns a 23505 error
-	entityLinksDeleted     bool
+	noopLifecycleDB
+	artifact           *db.KnowledgeArtifact
+	statusUpdated      string
+	snapshotted        bool
+	endorsed           bool
+	uniqueViolate      bool // if true, createEndorsement returns the idempotent sentinel
+	entityLinksDeleted bool
 }
 
 func (f *fakeLifecycleDB) getArtifact(_ context.Context, _ uuid.UUID) (*db.KnowledgeArtifact, error) {
@@ -43,7 +77,6 @@ func (f *fakeLifecycleDB) updateArtifactStatus(_ context.Context, _ uuid.UUID, s
 
 func (f *fakeLifecycleDB) createEndorsement(_ context.Context, _, _ uuid.UUID, _ *string) (*db.KnowledgeEndorsement, error) {
 	if f.uniqueViolate {
-		// Simulate a unique-constraint violation by returning the idempotent sentinel.
 		return nil, errDuplicateEndorsement
 	}
 	f.endorsed = true
@@ -61,17 +94,18 @@ func (f *fakeLifecycleDB) getArtifactAfterEndorse(_ context.Context, _ uuid.UUID
 	return f.artifact, nil
 }
 
-func (f *fakeLifecycleDB) snapshotArtifactVersion(_ context.Context, h *db.KnowledgeHistory) error {
+func (f *fakeLifecycleDB) snapshotArtifactVersion(_ context.Context, _ *db.KnowledgeHistory) error {
 	f.snapshotted = true
-	return nil
-}
-
-func (f *fakeLifecycleDB) flagDigestsStaleness(_ context.Context, _ uuid.UUID, _ string, _ float64, _ []byte) error {
 	return nil
 }
 
 func (f *fakeLifecycleDB) deleteArtifactEntityLinks(_ context.Context, _ uuid.UUID) error {
 	f.entityLinksDeleted = true
+	return nil
+}
+
+func (f *fakeLifecycleDB) deleteArtifact(_ context.Context, _ uuid.UUID) error {
+	f.artifact = nil
 	return nil
 }
 
