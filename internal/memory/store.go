@@ -4,13 +4,16 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	pgvector "github.com/pgvector/pgvector-go"
 
+	"github.com/simplyblock/postbrain/internal/chunking"
 	"github.com/simplyblock/postbrain/internal/codegraph"
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/embedding"
@@ -220,7 +223,13 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 		return nil, fmt.Errorf("memory: create: %w", err)
 	}
 
-	// 7. Link explicit entities and auto-extracted entities.
+	// 7. Create chunk child memories for large content so recall can surface
+	// specific passages rather than the whole document's averaged embedding.
+	if utf8.RuneCountInString(input.Content) > chunking.MinContentRunes {
+		s.createChunks(ctx, created.ID, created.ScopeID, created.AuthorID, input.Content, contentKind)
+	}
+
+	// 8. Link explicit entities and auto-extracted entities.
 	linkedEntityIDs := make(map[uuid.UUID]struct{})
 
 	for _, ei := range input.Entities {
@@ -436,4 +445,38 @@ func (s *Store) extractCodeGraph(ctx context.Context, content, sourceRef string,
 			SourceMemory: &memoryID,
 		})
 	}
+}
+
+// createChunks splits large content and stores each chunk as a child memory
+// with parent_memory_id pointing back to parentID. Errors are logged, not
+// returned — chunk creation is best-effort; the parent memory already exists.
+func (s *Store) createChunks(ctx context.Context, parentID, scopeID, authorID uuid.UUID, content, contentKind string) {
+	chunks := chunking.Chunk(content, chunking.DefaultChunkRunes, chunking.DefaultOverlap)
+	if len(chunks) <= 1 {
+		return
+	}
+	for i, chunk := range chunks {
+		vec, err := s.svc.EmbedText(ctx, chunk)
+		if err != nil {
+			slog.WarnContext(ctx, "memory: chunk embed failed", "chunk", i, "parent_id", parentID, "err", err)
+			continue
+		}
+		ref := fmt.Sprintf("chunk:%d", i)
+		v := pgvector.NewVector(vec)
+		m := &db.Memory{
+			MemoryType:      "semantic",
+			ScopeID:         scopeID,
+			AuthorID:        authorID,
+			Content:         chunk,
+			ContentKind:     contentKind,
+			Embedding:       &v,
+			SourceRef:       &ref,
+			ParentMemoryID:  &parentID,
+			PromotionStatus: "none",
+		}
+		if _, err := s.creator.CreateMemory(ctx, m); err != nil {
+			slog.WarnContext(ctx, "memory: chunk store failed", "chunk", i, "parent_id", parentID, "err", err)
+		}
+	}
+	slog.InfoContext(ctx, "memory: created chunks", "parent_id", parentID, "count", len(chunks))
 }

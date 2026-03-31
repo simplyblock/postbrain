@@ -59,6 +59,7 @@ type JobsConfig struct {
 	ReembedEnabled           bool `mapstructure:"reembed_enabled"`
 	AgeCheckEnabled          bool `mapstructure:"age_check_enabled"`
 	BackfillSummariesEnabled bool `mapstructure:"backfill_summaries_enabled"`
+	ChunkBackfillEnabled     bool `mapstructure:"chunk_backfill_enabled"`
 }
 
 // LoadDatabaseURL reads only the database URL from the config file at path
