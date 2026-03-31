@@ -10,11 +10,13 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	pgvector "github.com/pgvector/pgvector-go"
 
+	"github.com/simplyblock/postbrain/internal/chunking"
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/embedding"
 	"github.com/simplyblock/postbrain/internal/graph"
@@ -183,6 +185,12 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.KnowledgeArt
 
 	// Best-effort: link extracted entities and their co-occurrence relations.
 	s.linkExtractedEntities(ctx, created.ID, input.OwnerScopeID, entities)
+
+	// Best-effort: create chunk memories so recall can surface specific
+	// passages rather than the whole document's averaged embedding.
+	if utf8.RuneCountInString(input.Content) > chunking.MinContentRunes {
+		s.createChunks(ctx, created.ID, input.OwnerScopeID, input.AuthorID, input.Content)
+	}
 
 	return created, nil
 }
@@ -370,4 +378,42 @@ func (s *Store) embedContent(ctx context.Context, text string) ([]float32, *uuid
 		}
 	}
 	return vec, nil, nil
+}
+
+// createChunks splits a large artifact's content into overlapping segments and
+// stores each one as a memory with source_ref "artifact:<id>:chunk:<n>".
+// This lets the memory recall path surface specific passages via their own
+// embeddings without replacing the artifact's own whole-document embedding.
+// Errors are logged but not returned — the artifact has already been persisted.
+func (s *Store) createChunks(ctx context.Context, artifactID, scopeID, authorID uuid.UUID, content string) {
+	if s.pool == nil {
+		return
+	}
+	chunks := chunking.Chunk(content, chunking.DefaultChunkRunes, chunking.DefaultOverlap)
+	if len(chunks) <= 1 {
+		return
+	}
+	for i, chunk := range chunks {
+		vec, err := s.svc.EmbedText(ctx, chunk)
+		if err != nil {
+			slog.WarnContext(ctx, "knowledge: chunk embed failed", "artifact_id", artifactID, "chunk", i, "err", err)
+			continue
+		}
+		ref := fmt.Sprintf("artifact:%s:chunk:%d", artifactID, i)
+		v := pgvector.NewVector(vec)
+		m := &db.Memory{
+			MemoryType:      "semantic",
+			ScopeID:         scopeID,
+			AuthorID:        authorID,
+			Content:         chunk,
+			ContentKind:     "text",
+			Embedding:       &v,
+			SourceRef:       &ref,
+			PromotionStatus: "none",
+		}
+		if _, err := db.CreateMemory(ctx, s.pool, m); err != nil {
+			slog.WarnContext(ctx, "knowledge: chunk store failed", "artifact_id", artifactID, "chunk", i, "err", err)
+		}
+	}
+	slog.InfoContext(ctx, "knowledge: created chunks", "artifact_id", artifactID, "count", len(chunks))
 }

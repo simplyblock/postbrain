@@ -90,6 +90,21 @@ func (s *Scheduler) Register() error {
 		}
 	}
 
+	if s.cfg.ChunkBackfillEnabled {
+		job := NewChunkBackfillJob(s.pool, s.svc, 0)
+		if _, err := s.cron.AddFunc("@every 24h", safeRun("chunk_backfill", func() {
+			ctx := context.Background()
+			if err := job.RunMemories(ctx); err != nil {
+				slog.Error("chunk backfill memories job failed", "error", err)
+			}
+			if err := job.RunArtifacts(ctx); err != nil {
+				slog.Error("chunk backfill artifacts job failed", "error", err)
+			}
+		})); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
