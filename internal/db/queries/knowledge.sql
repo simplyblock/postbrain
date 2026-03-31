@@ -62,6 +62,7 @@ SELECT id, artifact_id, endorser_id, note, created_at
 FROM knowledge_endorsements WHERE artifact_id=$1 AND endorser_id=$2;
 
 -- name: ListAllArtifacts :many
+-- $1 = scope_id (zero UUID = all scopes), $2 = limit, $3 = offset
 SELECT id, knowledge_type, owner_scope_id, author_id,
     visibility, status, published_at, deprecated_at, review_required,
     title, content, summary, embedding, embedding_model_id, meta,
@@ -69,11 +70,12 @@ SELECT id, knowledge_type, owner_scope_id, author_id,
     version, previous_version, source_memory_id, source_ref,
     created_at, updated_at
 FROM knowledge_artifacts
+WHERE ($1::uuid = '00000000-0000-0000-0000-000000000000' OR owner_scope_id = $1)
 ORDER BY created_at DESC
-LIMIT $1 OFFSET $2;
+LIMIT $2 OFFSET $3;
 
 -- name: SearchArtifacts :many
--- $1 = query (wrapped in %...% by caller), $2 = status filter ('' = all), $3 = limit, $4 = offset
+-- $1 = query (wrapped in %...% by caller), $2 = status filter ('' = all), $3 = scope_id (zero = all), $4 = limit, $5 = offset
 SELECT id, knowledge_type, owner_scope_id, author_id,
     visibility, status, published_at, deprecated_at, review_required,
     title, content, summary, embedding, embedding_model_id, meta,
@@ -83,10 +85,12 @@ SELECT id, knowledge_type, owner_scope_id, author_id,
 FROM knowledge_artifacts
 WHERE (title ILIKE $1 OR content ILIKE $1)
   AND ($2 = '' OR status = $2)
+  AND ($3::uuid = '00000000-0000-0000-0000-000000000000' OR owner_scope_id = $3)
 ORDER BY created_at DESC
-LIMIT $3 OFFSET $4;
+LIMIT $4 OFFSET $5;
 
 -- name: ListArtifactsByStatus :many
+-- $1 = status, $2 = scope_id (zero = all), $3 = limit, $4 = offset
 SELECT id, knowledge_type, owner_scope_id, author_id,
     visibility, status, published_at, deprecated_at, review_required,
     title, content, summary, embedding, embedding_model_id, meta,
@@ -95,8 +99,9 @@ SELECT id, knowledge_type, owner_scope_id, author_id,
     created_at, updated_at
 FROM knowledge_artifacts
 WHERE status = $1
+  AND ($2::uuid = '00000000-0000-0000-0000-000000000000' OR owner_scope_id = $2)
 ORDER BY created_at DESC
-LIMIT $2 OFFSET $3;
+LIMIT $3 OFFSET $4;
 
 -- name: ListVisibleArtifacts :many
 SELECT id, knowledge_type, owner_scope_id, author_id,

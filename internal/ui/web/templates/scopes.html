@@ -20,7 +20,7 @@
     <td class="muted" style="font-size:0.8rem" id="sync-cell-{{.ID}}">
       {{$st := index $.SyncStatus (printf "%s" .ID)}}
       {{if eq $st.State 1}}<span class="sync-running" data-scope="{{.ID}}">⟳ syncing…</span>
-      {{else if $st.Error}}<span title="{{$st.Error}}" style="color:var(--pico-color-red-500)">✕ error</span>
+      {{else if $st.Error}}<span style="color:var(--pico-color-red-500);font-size:0.75rem" title="{{$st.Error}}">✕ {{$st.Error}}</span>
       {{else if .LastIndexedCommit}}<code>{{slice (deref .LastIndexedCommit) 0 7}}</code>
       {{else}}—{{end}}
     </td>
@@ -33,12 +33,11 @@
         </button>
         {{if .RepoUrl}}
         {{$st := index $.SyncStatus (printf "%s" .ID)}}
-        <form method="POST" action="/ui/scopes/{{.ID}}/repo/sync" style="display:inline">
-          <button type="submit" style="padding:0.25rem 0.5rem;font-size:0.8rem"
-                  {{if eq $st.State 1}}disabled{{end}}>
-            {{if eq $st.State 1}}Syncing…{{else}}Sync{{end}}
-          </button>
-        </form>
+        <button style="padding:0.25rem 0.5rem;font-size:0.8rem"
+                {{if eq $st.State 1}}disabled{{end}}
+                onclick="openSyncDialog('{{.ID}}','{{deref .RepoUrl}}')">
+          {{if eq $st.State 1}}Syncing…{{else}}Sync{{end}}
+        </button>
         {{end}}
       {{end}}
       {{if index $.ChildCount (.ID.String)}}
@@ -148,7 +147,7 @@
   <h2 id="dlg-repo-title">Attach Repository</h2>
   <form id="dlg-repo-form" method="POST">
     <label>Repository URL
-      <input type="url" name="repo_url" id="dlg-repo-url" placeholder="https://github.com/org/repo" required>
+      <input type="text" name="repo_url" id="dlg-repo-url" placeholder="https://github.com/org/repo or git@github.com:org/repo.git" required>
     </label>
     <label>Default Branch
       <input type="text" name="default_branch" id="dlg-repo-branch" placeholder="main" value="main">
@@ -156,6 +155,36 @@
     <div class="dialog-footer">
       <button type="button" class="secondary" onclick="document.getElementById('dlg-repo').close()">Cancel</button>
       <button type="submit">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ── Dialog: Sync Repository ────────────────────────────── -->
+<dialog id="dlg-sync">
+  <h2>Sync Repository</h2>
+  <p id="dlg-sync-url" style="font-size:0.85rem;font-family:monospace;margin-top:-0.5rem;color:var(--pico-muted-color)"></p>
+  <form id="dlg-sync-form" method="POST">
+    <details>
+      <summary style="cursor:pointer;margin-bottom:0.75rem">Authentication (optional)</summary>
+      <label>Auth Token
+        <input type="password" name="auth_token" id="dlg-sync-token" placeholder="GitHub/GitLab personal access token"
+               autocomplete="off">
+        <small>For HTTPS clone URLs.</small>
+      </label>
+      <label>SSH Private Key
+        <textarea name="ssh_key" id="dlg-sync-sshkey" rows="6"
+                  placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;…&#10;-----END OPENSSH PRIVATE KEY-----"
+                  style="font-family:monospace;font-size:0.8rem"></textarea>
+        <small>For SSH clone URLs (git@…). Paste the full PEM-encoded private key.</small>
+      </label>
+      <label>SSH Key Passphrase
+        <input type="password" name="ssh_key_passphrase" id="dlg-sync-sshpass" placeholder="Leave blank if key is not encrypted"
+               autocomplete="off">
+      </label>
+    </details>
+    <div class="dialog-footer">
+      <button type="button" class="secondary" onclick="document.getElementById('dlg-sync').close()">Cancel</button>
+      <button type="submit">Sync</button>
     </div>
   </form>
 </dialog>
@@ -186,6 +215,15 @@
 
   running.forEach(function (el) { poll(el.dataset.scope); });
 })();
+
+function openSyncDialog(scopeId, repoUrl) {
+  document.getElementById('dlg-sync-form').action = '/ui/scopes/' + scopeId + '/repo/sync';
+  document.getElementById('dlg-sync-url').textContent = repoUrl;
+  document.getElementById('dlg-sync-token').value = '';
+  document.getElementById('dlg-sync-sshkey').value = '';
+  document.getElementById('dlg-sync-sshpass').value = '';
+  document.getElementById('dlg-sync').showModal();
+}
 
 function openRepoDialog(scopeId, repoUrl, branch) {
   document.getElementById('dlg-repo-form').action = '/ui/scopes/' + scopeId + '/repo';

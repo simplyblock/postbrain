@@ -151,6 +151,9 @@ func (ro *Router) setScopeRepo(w http.ResponseWriter, r *http.Request) {
 type syncRepoRequest struct {
 	// AuthToken overrides the stored token for this single sync request.
 	AuthToken string `json:"auth_token,omitempty"`
+	// SSHKey is a PEM-encoded private key for SSH clone URLs.
+	SSHKey           string `json:"ssh_key,omitempty"`
+	SSHKeyPassphrase string `json:"ssh_key_passphrase,omitempty"`
 }
 
 // syncScopeRepo handles POST /v1/scopes/{id}/repo/sync.
@@ -186,12 +189,14 @@ func (ro *Router) syncScopeRepo(w http.ResponseWriter, r *http.Request) {
 
 	principalID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 	opts := codegraph.IndexOptions{
-		ScopeID:       scope.ID,
-		AuthorID:      principalID,
-		RepoURL:       *scope.RepoUrl,
-		DefaultBranch: scope.RepoDefaultBranch,
-		AuthToken:     body.AuthToken,
-		PrevCommit:    prevCommit,
+		ScopeID:          scope.ID,
+		AuthorID:         principalID,
+		RepoURL:          *scope.RepoUrl,
+		DefaultBranch:    scope.RepoDefaultBranch,
+		AuthToken:        body.AuthToken,
+		SSHKey:           body.SSHKey,
+		SSHKeyPassphrase: body.SSHKeyPassphrase,
+		PrevCommit:       prevCommit,
 	}
 
 	started, status := ro.syncer.Start(ro.pool, opts)

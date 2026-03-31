@@ -318,15 +318,24 @@ const knowledgePageSize = 50
 func (h *Handler) handleKnowledge(w http.ResponseWriter, r *http.Request) {
     q := r.URL.Query().Get("q")
     status := r.URL.Query().Get("status")
+    scopeStr := r.URL.Query().Get("scope")
 
     cursor := 0
     if c, err := strconv.Atoi(r.URL.Query().Get("cursor")); err == nil && c > 0 {
         cursor = c
     }
 
+    var scopeID uuid.UUID
+    if scopeStr != "" {
+        if id, err := uuid.Parse(scopeStr); err == nil {
+            scopeID = id
+        }
+    }
+
     data := struct {
         Query       string
         Status      string
+        ScopeID     uuid.UUID
         Artifacts   []*db.KnowledgeArtifact
         Scopes      []*db.Scope
         UploadError string
@@ -337,6 +346,7 @@ func (h *Handler) handleKnowledge(w http.ResponseWriter, r *http.Request) {
     }{
         Query:      q,
         Status:     status,
+        ScopeID:    scopeID,
         PrevCursor: cursor - knowledgePageSize,
         HasPrev:    cursor > 0,
     }
@@ -345,11 +355,11 @@ func (h *Handler) handleKnowledge(w http.ResponseWriter, r *http.Request) {
         var arts []*db.KnowledgeArtifact
         var err error
         if q != "" {
-            arts, err = db.SearchArtifacts(r.Context(), h.pool, q, status, knowledgePageSize+1, cursor)
+            arts, err = db.SearchArtifacts(r.Context(), h.pool, q, status, scopeID, knowledgePageSize+1, cursor)
         } else if status != "" {
-            arts, err = db.ListArtifactsByStatus(r.Context(), h.pool, status, knowledgePageSize+1, cursor)
+            arts, err = db.ListArtifactsByStatus(r.Context(), h.pool, status, scopeID, knowledgePageSize+1, cursor)
         } else {
-            arts, err = db.ListAllArtifacts(r.Context(), h.pool, knowledgePageSize+1, cursor)
+            arts, err = db.ListAllArtifacts(r.Context(), h.pool, scopeID, knowledgePageSize+1, cursor)
         }
         if err == nil {
             if len(arts) > knowledgePageSize {
@@ -939,12 +949,14 @@ func (h *Handler) handleSyncScopeRepo(w http.ResponseWriter, r *http.Request) {
     }
     principalID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
     opts := codegraph.IndexOptions{
-        ScopeID:       scope.ID,
-        AuthorID:      principalID,
-        RepoURL:       *scope.RepoUrl,
-        DefaultBranch: scope.RepoDefaultBranch,
-        AuthToken:     r.FormValue("auth_token"),
-        PrevCommit:    prevCommit,
+        ScopeID:          scope.ID,
+        AuthorID:         principalID,
+        RepoURL:          *scope.RepoUrl,
+        DefaultBranch:    scope.RepoDefaultBranch,
+        AuthToken:        r.FormValue("auth_token"),
+        SSHKey:           r.FormValue("ssh_key"),
+        SSHKeyPassphrase: r.FormValue("ssh_key_passphrase"),
+        PrevCommit:       prevCommit,
     }
     h.syncer.Start(h.pool, opts) // fire and forget; status polled by UI
     http.Redirect(w, r, "/ui/scopes", http.StatusSeeOther)
