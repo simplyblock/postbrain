@@ -13,6 +13,12 @@
     <option{{if eq .Status "published"}} selected{{end}}>published</option>
     <option{{if eq .Status "deprecated"}} selected{{end}}>deprecated</option>
   </select>
+  <select name="scope">
+    <option value="">All scopes</option>
+    {{range .Scopes}}
+    <option value="{{.ID}}"{{if eq $.ScopeID .ID}} selected{{end}}>{{.Kind}}:{{.ExternalID}}</option>
+    {{end}}
+  </select>
   <button type="submit">Search</button>
 </form>
 <div id="results">{{template "knowledge_rows" .}}</div>

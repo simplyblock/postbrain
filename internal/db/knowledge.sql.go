@@ -264,17 +264,19 @@ SELECT id, knowledge_type, owner_scope_id, author_id,
     version, previous_version, source_memory_id, source_ref,
     created_at, updated_at
 FROM knowledge_artifacts
+WHERE ($1::uuid = '00000000-0000-0000-0000-000000000000' OR owner_scope_id = $1)
 ORDER BY created_at DESC
-LIMIT $1 OFFSET $2
+LIMIT $2 OFFSET $3
 `
 
 type ListAllArtifactsParams struct {
-	Limit  int32
-	Offset int32
+	ScopeID uuid.UUID
+	Limit   int32
+	Offset  int32
 }
 
 func (q *Queries) ListAllArtifacts(ctx context.Context, arg ListAllArtifactsParams) ([]*KnowledgeArtifact, error) {
-	rows, err := q.db.Query(ctx, listAllArtifacts, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listAllArtifacts, arg.ScopeID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -327,18 +329,20 @@ SELECT id, knowledge_type, owner_scope_id, author_id,
     created_at, updated_at
 FROM knowledge_artifacts
 WHERE status = $1
+  AND ($2::uuid = '00000000-0000-0000-0000-000000000000' OR owner_scope_id = $2)
 ORDER BY created_at DESC
-LIMIT $2 OFFSET $3
+LIMIT $3 OFFSET $4
 `
 
 type ListArtifactsByStatusParams struct {
-	Status string
-	Limit  int32
-	Offset int32
+	Status  string
+	ScopeID uuid.UUID
+	Limit   int32
+	Offset  int32
 }
 
 func (q *Queries) ListArtifactsByStatus(ctx context.Context, arg ListArtifactsByStatusParams) ([]*KnowledgeArtifact, error) {
-	rows, err := q.db.Query(ctx, listArtifactsByStatus, arg.Status, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listArtifactsByStatus, arg.Status, arg.ScopeID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -814,22 +818,25 @@ SELECT id, knowledge_type, owner_scope_id, author_id,
 FROM knowledge_artifacts
 WHERE (title ILIKE $1 OR content ILIKE $1)
   AND ($2 = '' OR status = $2)
+  AND ($3::uuid = '00000000-0000-0000-0000-000000000000' OR owner_scope_id = $3)
 ORDER BY created_at DESC
-LIMIT $3 OFFSET $4
+LIMIT $4 OFFSET $5
 `
 
 type SearchArtifactsParams struct {
 	Title   string
 	Column2 interface{}
+	ScopeID uuid.UUID
 	Limit   int32
 	Offset  int32
 }
 
-// $1 = query (wrapped in %...% by caller), $2 = status filter (” = all), $3 = limit, $4 = offset
+// $1 = query (wrapped in %...% by caller), $2 = status filter ('' = all), $3 = scope_id (zero = all), $4 = limit, $5 = offset
 func (q *Queries) SearchArtifacts(ctx context.Context, arg SearchArtifactsParams) ([]*KnowledgeArtifact, error) {
 	rows, err := q.db.Query(ctx, searchArtifacts,
 		arg.Title,
 		arg.Column2,
+		arg.ScopeID,
 		arg.Limit,
 		arg.Offset,
 	)

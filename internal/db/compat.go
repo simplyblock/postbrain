@@ -1284,33 +1284,38 @@ func GetEndorsementByEndorser(ctx context.Context, pool *pgxpool.Pool, artifactI
 	return e, err
 }
 
-// SearchArtifacts filters artifacts by a text query (ILIKE on title/content) and optional status.
-func SearchArtifacts(ctx context.Context, pool *pgxpool.Pool, query, status string, limit, offset int) ([]*KnowledgeArtifact, error) {
+// SearchArtifacts filters artifacts by a text query (ILIKE on title/content), optional status, and optional scope.
+// A zero scopeID means no scope filter.
+func SearchArtifacts(ctx context.Context, pool *pgxpool.Pool, query, status string, scopeID uuid.UUID, limit, offset int) ([]*KnowledgeArtifact, error) {
 	q := New(pool)
 	return q.SearchArtifacts(ctx, SearchArtifactsParams{
-		Title:  "%" + query + "%",
+		Title:   "%" + query + "%",
 		Column2: status,
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		ScopeID: scopeID,
+		Limit:   int32(limit),
+		Offset:  int32(offset),
 	})
 }
 
-// ListArtifactsByStatus returns artifacts filtered by a single status value.
-func ListArtifactsByStatus(ctx context.Context, pool *pgxpool.Pool, status string, limit, offset int) ([]*KnowledgeArtifact, error) {
+// ListArtifactsByStatus returns artifacts filtered by status and optional scope.
+// A zero scopeID means no scope filter.
+func ListArtifactsByStatus(ctx context.Context, pool *pgxpool.Pool, status string, scopeID uuid.UUID, limit, offset int) ([]*KnowledgeArtifact, error) {
 	q := New(pool)
 	return q.ListArtifactsByStatus(ctx, ListArtifactsByStatusParams{
-		Status: status,
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Status:  status,
+		ScopeID: scopeID,
+		Limit:   int32(limit),
+		Offset:  int32(offset),
 	})
 }
 
-// ListAllArtifacts returns all artifacts regardless of status or scope (admin view).
-func ListAllArtifacts(ctx context.Context, pool *pgxpool.Pool, limit, offset int) ([]*KnowledgeArtifact, error) {
+// ListAllArtifacts returns artifacts for the given scope (zero scopeID = all scopes, admin view).
+func ListAllArtifacts(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, limit, offset int) ([]*KnowledgeArtifact, error) {
 	q := New(pool)
 	return q.ListAllArtifacts(ctx, ListAllArtifactsParams{
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		ScopeID: scopeID,
+		Limit:   int32(limit),
+		Offset:  int32(offset),
 	})
 }
 
