@@ -14,14 +14,12 @@ These functions have no external dependencies and can be tested with plain
 
 ### chunking — splitter logic (`internal/chunking/chunker.go`)
 
-No tests exist yet. The package is pure stdlib with no external deps.
-
-- [ ] `Chunk` — text shorter than `MinContentRunes` returns single-element slice
-- [ ] `Chunk` — text split on sentence boundaries, each chunk ≤ `maxRunes`
-- [ ] `Chunk` — `overlap` sentences are carried into the next chunk
-- [ ] `Chunk` — single unsplittable sentence hard-splits by rune count
-- [ ] `splitSentences` — paragraph break (`\n\n`) is a hard boundary
-- [ ] `splitByRunes` — prefers to break at whitespace; falls back to hard limit
+- [x] `Chunk` — text shorter than `MinContentRunes` returns single-element slice
+- [x] `Chunk` — text split on sentence boundaries, each chunk ≤ `maxRunes`
+- [x] `Chunk` — `overlap` sentences are carried into the next chunk
+- [x] `Chunk` — single unsplittable sentence hard-splits by rune count
+- [x] `splitSentences` — paragraph break (`\n\n`) is a hard boundary
+- [x] `splitByRunes` — prefers to break at whitespace; falls back to hard limit
 
 File: `internal/chunking/chunker_test.go`
 
