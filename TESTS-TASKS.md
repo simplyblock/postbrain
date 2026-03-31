@@ -12,6 +12,21 @@ Legend: `[ ]` = todo · `[x]` = done
 These functions have no external dependencies and can be tested with plain
 `go test` in milliseconds.
 
+### chunking — splitter logic (`internal/chunking/chunker.go`)
+
+No tests exist yet. The package is pure stdlib with no external deps.
+
+- [ ] `Chunk` — text shorter than `MinContentRunes` returns single-element slice
+- [ ] `Chunk` — text split on sentence boundaries, each chunk ≤ `maxRunes`
+- [ ] `Chunk` — `overlap` sentences are carried into the next chunk
+- [ ] `Chunk` — single unsplittable sentence hard-splits by rune count
+- [ ] `splitSentences` — paragraph break (`\n\n`) is a hard boundary
+- [ ] `splitByRunes` — prefers to break at whitespace; falls back to hard limit
+
+File: `internal/chunking/chunker_test.go`
+
+---
+
 ### codegraph — SSH / URL helpers (`internal/codegraph/indexer.go`)
 
 - [ ] `isSSHURL` — SCP syntax, ssh:// scheme, HTTPS negative case
@@ -77,6 +92,60 @@ File: `internal/retrieval/merge_test.go` (extend existing)
 
 ---
 
+## Priority 1.5 — No DB required; uses `embedding.FakeEmbedder`
+
+Now that `embedding.FakeEmbedder` exists, these tests can run in the default
+suite with no containers. Inject it via
+`embedding.NewServiceFromEmbedders(embedding.NewFakeEmbedder(dims), nil)`.
+
+### knowledge — store unit tests (`internal/knowledge/store.go`)
+
+`store_test.go` already covers status flags and `ErrNotEditable`. Extend it:
+
+- [ ] Replace the inline `fakeEmbedder` struct with `embedding.FakeEmbedder` so
+  different inputs produce distinct vectors (catches accidental same-vector bugs)
+- [ ] `Create` with `AutoPublish=true` sets `status=published` and non-nil `PublishedAt`
+- [ ] `Create` embed error is propagated (inject a failing embedder)
+- [ ] `Create` creator error is propagated
+- [ ] `Update` with a nil getter result returns `ErrNotFound`
+- [ ] `Update` on a draft artifact succeeds and returns updated content
+
+File: `internal/knowledge/store_test.go` (extend existing)
+
+---
+
+### memory — store unit tests (`internal/memory/store.go`)
+
+`store_test.go` already covers TTL and code-embedding path. Extend it:
+
+- [ ] Replace the inline `mockEmbedder` struct with `embedding.FakeEmbedder` —
+  single migration change, no behaviour change
+- [ ] `Create` near-duplicate found → action is `"merged"`, original soft-deleted
+- [ ] `Create` embed error is propagated correctly
+- [ ] `Create` with large content and a real `chunkBackfill` mock verifies
+  child memories are created with `parent_memory_id` set
+
+File: `internal/memory/store_test.go` (extend existing)
+
+---
+
+### jobs — chunk backfill (`internal/jobs/chunk_backfill.go`)
+
+No tests exist. The job uses `chunkBackfillStore` and `textEmbedder` interfaces,
+so it is fully testable without a DB.
+
+- [ ] `RunMemories` with zero rows is a no-op (no calls to embedder)
+- [ ] `RunMemories` with one large memory creates the expected number of chunks
+  (inject a fake store that returns one row; assert `createMemory` call count)
+- [ ] `RunArtifacts` chunk `source_ref` has the format `artifact:<id>:chunk:<n>`
+- [ ] `RunMemories` embed error on one chunk is skipped; other chunks still created
+- [ ] `RunMemories` with nil embedder is a no-op (guard branch)
+- [ ] Batch pagination: store returns full batch → next page fetched; partial → stop
+
+File: `internal/jobs/chunk_backfill_test.go`
+
+---
+
 ## Priority 2 — Requires test DB (`testcontainers`)
 
 These tests use `testhelper.NewTestPool` to spin up a real Postgres instance.
@@ -139,14 +208,18 @@ File: `internal/api/mcp/handlers_unit_test.go`
 
 ---
 
-### knowledge — recall input validation (`internal/knowledge/recall.go`)
+### knowledge — recall pipeline (`internal/knowledge/recall.go`)
 
-- [ ] Empty query with non-nil scope still runs (no panic)
+`recall_test.go` only covers score arithmetic. The full `Recall` function
+requires a DB to execute the vector search, so these are integration tests.
+Use `testhelper.NewFakeEmbedder(4)` for the query embedding.
+
+- [ ] Empty query with non-nil scope runs without panic; returns empty results
 - [ ] `Limit` of 0 is clamped to a sensible default (not passed as 0 to DB)
 - [ ] Score merging: result from all three layers present, highest score wins
 - [ ] Digest suppression: source artifact is removed when its digest is in results
 
-File: `internal/knowledge/recall_test.go` (extend existing)
+File: `internal/knowledge/recall_integration_test.go`
 
 ---
 
@@ -199,14 +272,31 @@ File: `internal/codegraph/extractor_test.go` (extend existing)
 
 ## General guidelines
 
+- **Use `embedding.FakeEmbedder` for all unit tests that need an embedder** —
+  `embedding.NewFakeEmbedder(dims)` is deterministic, normalized, and dependency-free.
+  For tests that go through `EmbeddingService`, wrap it:
+  `embedding.NewServiceFromEmbedders(embedding.NewFakeEmbedder(dims), nil)`.
+  Do not define local `mockEmbedder` structs; migrate existing ones to `FakeEmbedder`.
+
+- **Use `noopXxx` base structs for interface fakes** — when a package-internal
+  interface has many methods, define a `noopXxx` struct that satisfies the full
+  interface with silent no-ops, then embed it in test fakes that only override the
+  methods under test. See `noopLifecycleDB` in `lifecycle_test.go` as the reference
+  implementation. This pattern means adding a new method to an interface only
+  requires updating `noopXxx` and the real implementation — not every test fake.
+
 - **No mocks for business logic** — prefer real types with nil/stub dependencies
   where possible; reserve mocks for I/O boundaries (DB, HTTP, git).
+
 - **Table-driven tests** — use `[]struct{ name, input, want }` for functions
   with multiple input variants.
+
 - **Integration test build tag** — any test requiring a live Postgres or git
   must be tagged `//go:build integration` so `go test ./...` stays fast.
+
 - **Test file naming** — unit tests live in `*_test.go` (same package, `_test`
   suffix); integration tests in `*_integration_test.go`.
+
 - **No test helpers without assertions** — every helper used in tests should
   call `t.Helper()` and `t.Fatal`/`t.Error` directly rather than returning
   errors for the caller to check.
