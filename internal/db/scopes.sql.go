@@ -70,6 +70,16 @@ func (q *Queries) CreateScope(ctx context.Context, arg CreateScopeParams) (*Crea
 	return &i, err
 }
 
+const countChildScopes = `-- name: CountChildScopes :one
+SELECT COUNT(*) FROM scopes WHERE parent_id = $1
+`
+
+func (q *Queries) CountChildScopes(ctx context.Context, id uuid.UUID) (int64, error) {
+	var count int64
+	err := q.db.QueryRow(ctx, countChildScopes, id).Scan(&count)
+	return count, err
+}
+
 const deleteScope = `-- name: DeleteScope :exec
 DELETE FROM scopes WHERE id = $1
 `

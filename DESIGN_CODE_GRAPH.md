@@ -414,3 +414,108 @@ LSP support per-language without it being a hard dependency.
 
 LSP resolver implementations are out of scope for the initial Phase 4 ship;
 the interface and wiring are implemented so they can be added incrementally.
+
+### Phase 5 — Chunk memory embedding pipeline
+
+Chunk memories created by the repo indexer are currently stored without embeddings.
+Phase 5 ensures every chunk memory gets a code-model embedding so it is retrievable
+by semantic search alongside file-level memories.
+
+#### 5a — Async embedding worker
+
+After the indexer creates chunk memories it enqueues their IDs for embedding.
+A background worker (same process, separate goroutine) drains the queue and calls
+the embedding service (code model) in batches. The queue is an in-process buffered
+channel; on restart, any un-embedded memories are detected via a startup sweep
+(`WHERE embedding_code IS NULL AND content_kind = 'code' AND is_active = true`).
+
+#### 5b — Embedding budget cap
+
+Configurable `REPO_CHUNK_EMBED_MAX` (default: unlimited). If the indexer would
+produce more than N chunk memories in a single run, embedding is skipped for the
+excess chunks (file-level memory embedding is unaffected). The cap prevents runaway
+API costs on very large repos.
+
+#### 5c — Recall integration
+
+`RecallMemoriesByCodeVector` already queries `embedding_code`. Once chunks have
+embeddings, code-mode and hybrid recall automatically surfaces function-level
+results without further changes to the recall path.
+
+---
+
+### Phase 6 — Graph visualisation improvements
+
+The canvas-rendered graph at `/ui/graph` shows all entities and relations for a
+scope. Phase 6 makes the graph more navigable for large codebases.
+
+#### 6a — Predicate filtering
+
+A sidebar checkbox list lets the user toggle which predicates are visible
+(`calls`, `imports`, `defines`, `uses`, `implements`, `extends`, `exports`).
+Filtering is applied client-side; no new API calls required.
+
+#### 6b — Path highlighting
+
+Clicking a node highlights all shortest paths to/from a second selected node.
+The path is computed client-side over the loaded adjacency data using BFS.
+Edges and nodes not on the path are dimmed.
+
+#### 6c — Focus / expand mode
+
+Double-clicking a node switches to a focused view showing only that node and its
+direct neighbours (depth 1). A breadcrumb trail lets the user navigate back to
+the full graph or step through the expansion history.
+
+---
+
+### Phase 7 — Repo sync scheduling
+
+Attached repositories are currently synced only on explicit `POST /v1/scopes/:id/repo/sync`
+calls. Phase 7 adds automatic background polling.
+
+#### 7a — Poll interval config
+
+New nullable column `repo_sync_interval_minutes INT` on `scopes`. A value of `0`
+or `NULL` disables automatic sync (default). Operators set this via the scopes
+API or Web UI.
+
+#### 7b — Scheduler goroutine
+
+At startup, a scheduler goroutine queries all project scopes with a non-null
+sync interval and fires `Syncer.Start` for each one that is due
+(`now() - last_indexed_at > interval`). The check runs on a 1-minute ticker;
+actual sync work is delegated to the existing `Syncer` (which prevents
+concurrent syncs per scope).
+
+#### 7c — Web UI
+
+The repo dialog on the scopes page gains an "Auto-sync every N minutes" field
+(0 = disabled). The current sync status badge is extended to show the next
+scheduled sync time when auto-sync is enabled.
+
+---
+
+### Phase 8 — LSP resolver implementations
+
+Concrete `LSPResolver` implementations for the four highest-value languages,
+plugged into the `codegraph.Resolver` interface defined in Phase 4d.
+
+| Language   | Server                       | Priority | Notes                                       |
+|------------|------------------------------|----------|---------------------------------------------|
+| Go         | `gopls`                      | 1        | Highest accuracy; requires `go.mod` in tree |
+| TypeScript | `typescript-language-server` | 2        | Covers TS + TSX + JS + JSX                  |
+| Python     | `pyright`                    | 3        | `pyright` preferred over `pylsp`            |
+| Rust       | `rust-analyzer`              | 4        | Requires `Cargo.toml` in tree               |
+
+Each implementation:
+1. Writes the in-memory git clone to a temp dir at index start
+2. Starts the language server subprocess pointed at that dir
+3. Exchanges `initialize` / `initialized` handshake
+4. For each call target, issues `textDocument/definition` → maps response URI+range
+   back to a canonical entity name via the entity table
+5. Keeps the server warm for the duration of the index run
+6. Calls `Close()` which sends `shutdown`/`exit` and removes the temp dir
+
+The implementation is opt-in: if the LSP binary is not on `PATH`, the indexer
+falls back to the import-aware pipeline silently.

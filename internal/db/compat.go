@@ -347,6 +347,11 @@ func UpdateScope(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, name str
 }
 
 // DeleteScope removes a scope by UUID.
+func CountChildScopes(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (int64, error) {
+	q := New(pool)
+	return q.CountChildScopes(ctx, id)
+}
+
 func DeleteScope(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error {
 	q := New(pool)
 	return q.DeleteScope(ctx, id)

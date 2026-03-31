@@ -41,10 +41,15 @@
         </form>
         {{end}}
       {{end}}
+      {{if index $.ChildCount (.ID.String)}}
+      <button class="danger" style="padding:0.25rem 0.5rem;font-size:0.8rem" disabled
+              title="Cannot delete: this scope has child scopes">Delete</button>
+      {{else}}
       <form method="POST" action="/ui/scopes/{{.ID}}/delete" style="display:inline"
             onsubmit="return confirm('Delete scope {{.ExternalID}}?')">
         <button type="submit" class="danger" style="padding:0.25rem 0.5rem;font-size:0.8rem">Delete</button>
       </form>
+      {{end}}
     </td>
   </tr>
   {{else}}
