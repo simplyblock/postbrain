@@ -81,3 +81,9 @@ func TestEnforceScopeAccess_ScopeIDAbsent(t *testing.T) {
 		t.Error("scope absent from non-nil list should be rejected")
 	}
 }
+
+func TestTokenStore_UpdateLastUsed_NilPool(t *testing.T) {
+	ts := NewTokenStore(nil)
+	// Must not panic when pool is nil.
+	ts.UpdateLastUsed(nil, uuid.New())
+}
