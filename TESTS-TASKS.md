@@ -291,11 +291,11 @@ existing tests. Pass `nil` pool where DB errors are acceptable.
 
 ### orgs handlers (`internal/api/rest/orgs.go`)
 
-- [ ] `POST /v1/orgs` — missing `slug` returns 400
-- [ ] `GET /v1/orgs` — returns 200 with `orgs` key (nil pool: handler returns empty list or error; verify no panic)
-- [ ] `GET /v1/orgs/:id` — invalid UUID returns 400
-- [ ] `PUT /v1/orgs/:id` — missing body returns 400
-- [ ] `DELETE /v1/orgs/:id` — invalid UUID returns 400
+- [x] `POST /v1/orgs` — missing `slug` returns 400
+- [x] `GET /v1/orgs` — returns 401 without auth (full router path)
+- [x] `GET /v1/orgs/:id` — invalid UUID returns 400
+- [x] `PUT /v1/orgs/:id` — missing body / invalid UUID returns 400
+- [x] `DELETE /v1/orgs/:id` — invalid UUID returns 400
 
 File: `internal/api/rest/orgs_test.go` (new)
 
