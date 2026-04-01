@@ -238,9 +238,9 @@ File: `internal/knowledge/lifecycle_integration_test.go` (extend)
 `RunText` and `RunCode` are 0 % covered. They batch-fetch records by comparing
 `embedding_model_id` to the active model.
 
-- [ ] `RunText` with no active text model: returns nil without touching rows
-- [ ] `RunText` with active model and one mismatched memory: row gets re-embedded
-- [ ] `RunCode` with active model and one mismatched code memory: row updated
+- [x] `RunText` with no active text model: returns nil without touching rows
+- [x] `RunText` with active model and one mismatched memory: row gets re-embedded
+- [x] `RunCode` with active model and one mismatched code memory: row updated
 
 File: `internal/jobs/reembed_integration_test.go` (new, `//go:build integration`)
 
