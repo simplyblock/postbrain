@@ -51,3 +51,22 @@ func TestScoreFormula_ZeroInvocations(t *testing.T) {
 		t.Errorf("score mismatch: got %f, want %f", score, want)
 	}
 }
+
+func TestImportanceFromInvocations(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		count int
+		want  float64
+	}{
+		{0, 0.0},
+		{50, 0.5},
+		{100, 1.0},
+		{200, 1.0}, // capped at 1.0
+	}
+	for _, tc := range cases {
+		got := importanceFromInvocations(tc.count)
+		if math.Abs(got-tc.want) > 1e-9 {
+			t.Errorf("importanceFromInvocations(%d) = %f, want %f", tc.count, got, tc.want)
+		}
+	}
+}
