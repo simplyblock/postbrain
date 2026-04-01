@@ -3,6 +3,11 @@ package jobs
 import (
 	"context"
 	"testing"
+
+	"github.com/google/uuid"
+	pgvector "github.com/pgvector/pgvector-go"
+
+	"github.com/simplyblock/postbrain/internal/db"
 )
 
 func TestNoopClassifier_ReturnsConsistent(t *testing.T) {
@@ -36,4 +41,36 @@ func TestContradictionJob_NilClassifier_UsesNoop(t *testing.T) {
 func TestContradictionJob_Signature(t *testing.T) {
 	// Compile-time check.
 	var _ = (*ContradictionJob)(nil).Run
+}
+
+func TestFilterByTopicSimilarity(t *testing.T) {
+	t.Parallel()
+	j := &ContradictionJob{}
+
+	// Parse a unit vector via pgvector.
+	makeVec := func(s string) *pgvector.Vector {
+		var v pgvector.Vector
+		if err := v.Scan(s); err != nil {
+			t.Fatalf("scan vector %q: %v", s, err)
+		}
+		return &v
+	}
+
+	artifactVec := []float32{1, 0, 0, 0}
+
+	// Identical vector → cosine sim = 1.0 > 0.6 → kept.
+	similar := &db.Memory{ID: uuid.New(), Embedding: makeVec("[1,0,0,0]")}
+	// Orthogonal vector → cosine sim = 0.0 → filtered.
+	orthogonal := &db.Memory{ID: uuid.New(), Embedding: makeVec("[0,1,0,0]")}
+	// Nil embedding → filtered (no vector to compare).
+	nilEmb := &db.Memory{ID: uuid.New(), Embedding: nil}
+
+	results := j.filterByTopicSimilarity(artifactVec, []*db.Memory{similar, orthogonal, nilEmb})
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].ID != similar.ID {
+		t.Error("expected only the similar memory to pass the topic similarity filter")
+	}
 }

@@ -251,11 +251,11 @@ File: `internal/jobs/reembed_integration_test.go` (new, `//go:build integration`
 The `ContradictionJob.Run` / `fetchArtifactBatch` / `processArtifact` /
 `fetchRecentMemories` / `filterByTopicSimilarity` are all 0 %.
 
-- [ ] `Run` on empty DB — returns nil, no panics
-- [ ] `Run` with one published artifact and one recent memory that contradicts:
+- [x] `Run` on empty DB — returns nil, no panics
+- [x] `Run` with one published artifact and one recent memory that contradicts:
   verify `FlagArtifactStaleness` was called (inject fake classifier that returns
   `"CONTRADICTS"`)
-- [ ] `filterByTopicSimilarity` — memory whose cosine distance > threshold is filtered out
+- [x] `filterByTopicSimilarity` — memory whose cosine distance > threshold is filtered out
 
 File: `internal/jobs/staleness_integration_test.go` (new)
 
