@@ -44,9 +44,10 @@ func (p *poolConsolidatorDB) CreateConsolidation(ctx context.Context, c *db.Cons
 
 // Consolidator merges near-duplicate memories within a scope.
 type Consolidator struct {
-	pool *pgxpool.Pool
-	svc  embeddingService
-	cdb  consolidatorDB // overridable for tests
+	pool        *pgxpool.Pool
+	svc         embeddingService
+	cdb         consolidatorDB // overridable for tests
+	MaxClusters int            // 0 = unlimited; >0 caps the number of clusters returned by FindClusters
 }
 
 // NewConsolidator creates a new Consolidator backed by the given pool and embedding service.
@@ -117,6 +118,9 @@ func (c *Consolidator) FindClusters(ctx context.Context, scopeID uuid.UUID) ([][
 		if len(g) >= 2 {
 			clusters = append(clusters, g)
 		}
+	}
+	if c.MaxClusters > 0 && len(clusters) > c.MaxClusters {
+		clusters = clusters[:c.MaxClusters]
 	}
 	return clusters, nil
 }

@@ -231,9 +231,9 @@ File: `internal/knowledge/recall_integration_test.go`
 
 ### memory — consolidation edge cases (`internal/memory/consolidation.go`)
 
-- [ ] Cluster of 1 item is not merged (no-op)
-- [ ] Two identical memories produce one merged output
-- [ ] `MaxClusters` limit is respected when input exceeds it
+- [x] Cluster of 1 item is not merged (no-op)
+- [x] Two identical memories produce one merged output
+- [x] `MaxClusters` limit is respected when input exceeds it (field added to Consolidator)
 
 File: `internal/memory/consolidation_test.go` (extend existing)
 
