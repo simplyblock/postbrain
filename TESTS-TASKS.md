@@ -55,15 +55,17 @@ File: `internal/codegraph/resolve_test.go`
 
 ### codegraph — syncer state machine (`internal/codegraph/syncer.go`)
 
-- [ ] `NewSyncer` returns idle status for unknown scope
-- [ ] `Start` transitions state to `SyncRunning`, returns `started=true`
-- [ ] `Start` returns `started=false` when already running (no second goroutine)
-- [ ] `Status` returns a copy (mutating the copy must not change internal state)
+- [x] `NewSyncer` returns idle status for unknown scope
+- [x] `Start` transitions state to `SyncRunning`, returns `started=true`
+- [x] `Start` returns `started=false` when already running (no second goroutine)
+- [x] `Status` returns a copy (mutating the copy must not change internal state)
+- [x] A second scope starts independently while another is running
 
 File: `internal/codegraph/syncer_test.go`
 
-Note: these tests must **not** hit a real DB — stub out `IndexRepo` or pass a nil
-pool and verify only the state-machine behaviour.
+Note: "already running" test injects state directly via the unexported `status`
+map (same package) rather than racing against a goroutine. `Start` tests use a
+hanging TCP listener so the spawned goroutine stays alive during assertion.
 
 ---
 
