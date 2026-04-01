@@ -76,6 +76,12 @@ type artifactGetter interface {
 	getArtifact(ctx context.Context, id uuid.UUID) (*db.KnowledgeArtifact, error)
 }
 
+// artifactUpdater abstracts db.UpdateArtifact so the store can be unit-tested
+// without a real database connection.
+type artifactUpdater interface {
+	updateArtifact(ctx context.Context, id uuid.UUID, title, content string, summary *string, embedding []float32, modelID *uuid.UUID) (*db.KnowledgeArtifact, error)
+}
+
 // poolArtifactCreator wraps a real pgxpool.Pool to implement artifactCreator.
 type poolArtifactCreator struct {
 	pool *pgxpool.Pool
@@ -94,12 +100,22 @@ func (p *poolArtifactGetter) getArtifact(ctx context.Context, id uuid.UUID) (*db
 	return db.GetArtifact(ctx, p.pool, id)
 }
 
+// poolArtifactUpdater wraps a real pgxpool.Pool to implement artifactUpdater.
+type poolArtifactUpdater struct {
+	pool *pgxpool.Pool
+}
+
+func (p *poolArtifactUpdater) updateArtifact(ctx context.Context, id uuid.UUID, title, content string, summary *string, embedding []float32, modelID *uuid.UUID) (*db.KnowledgeArtifact, error) {
+	return db.UpdateArtifact(ctx, p.pool, id, title, content, summary, embedding, modelID)
+}
+
 // Store provides knowledge artifact CRUD operations.
 type Store struct {
 	pool    *pgxpool.Pool
 	svc     embeddingService
 	creator artifactCreator
 	getter  artifactGetter
+	updater artifactUpdater
 }
 
 // NewStore creates a new Store backed by the given pool and embedding service.
@@ -109,6 +125,7 @@ func NewStore(pool *pgxpool.Pool, svc *embedding.EmbeddingService) *Store {
 		svc:     &embeddingServiceAdapter{svc: svc},
 		creator: &poolArtifactCreator{pool: pool},
 		getter:  &poolArtifactGetter{pool: pool},
+		updater: &poolArtifactUpdater{pool: pool},
 	}
 }
 
@@ -226,7 +243,7 @@ func (s *Store) Update(ctx context.Context, id, callerID uuid.UUID, title, conte
 		})
 	}
 
-	updated, err := db.UpdateArtifact(ctx, s.pool, id, title, content, summary, embeddingVec, modelID)
+	updated, err := s.updater.updateArtifact(ctx, id, title, content, summary, embeddingVec, modelID)
 	if err != nil {
 		return nil, fmt.Errorf("knowledge: update: %w", err)
 	}
