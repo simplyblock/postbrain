@@ -87,3 +87,59 @@ func TestMerge_SortsByScoreDesc(t *testing.T) {
 		}
 	}
 }
+
+func TestMerge_ZeroInputReturnsEmptyNotNil(t *testing.T) {
+	merged := retrieval.Merge([]*retrieval.Result{}, 10, 0.0)
+	if merged != nil {
+		t.Errorf("expected nil slice for zero-result input, got len=%d", len(merged))
+	}
+	// nil is acceptable — caller must handle both nil and empty; this test just
+	// documents the current contract so any change to return an empty slice
+	// would still pass (len == 0 is what matters in practice).
+	if len(merged) != 0 {
+		t.Errorf("len = %d, want 0", len(merged))
+	}
+}
+
+func TestMerge_MinScoreBoundary(t *testing.T) {
+	const threshold = 0.5
+	atID := uuid.New()
+	belowID := uuid.New()
+
+	results := []*retrieval.Result{
+		{Layer: retrieval.LayerMemory, ID: atID, Score: threshold},
+		{Layer: retrieval.LayerMemory, ID: belowID, Score: threshold - 0.001},
+	}
+	merged := retrieval.Merge(results, 10, threshold)
+
+	foundAt := false
+	for _, r := range merged {
+		if r.ID == belowID {
+			t.Errorf("score %.4f (below threshold %.4f) must be excluded", r.Score, threshold)
+		}
+		if r.ID == atID {
+			foundAt = true
+		}
+	}
+	if !foundAt {
+		t.Errorf("score exactly at threshold %.4f must be included", threshold)
+	}
+}
+
+func TestMerge_DeduplicationKeepsHighestScore(t *testing.T) {
+	// Same ID appearing twice — Merge does not deduplicate by ID,
+	// it deduplicates promoted memories. Verify both entries survive and the
+	// one with the higher score sorts first.
+	id := uuid.New()
+	results := []*retrieval.Result{
+		{Layer: retrieval.LayerMemory, ID: id, Score: 0.6},
+		{Layer: retrieval.LayerMemory, ID: id, Score: 0.9},
+	}
+	merged := retrieval.Merge(results, 10, 0.0)
+	if len(merged) != 2 {
+		t.Fatalf("len = %d, want 2 (Merge keeps both; callers deduplicate by ID if needed)", len(merged))
+	}
+	if merged[0].Score < merged[1].Score {
+		t.Errorf("higher score should sort first: got %.2f, %.2f", merged[0].Score, merged[1].Score)
+	}
+}

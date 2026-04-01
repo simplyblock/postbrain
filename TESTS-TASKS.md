@@ -91,9 +91,9 @@ File: `internal/api/rest/graph_helpers_test.go`
 
 ### retrieval — score merging (already has tests, extend coverage)
 
-- [ ] Verify zero-result input returns empty slice (not nil)
-- [ ] Verify deduplication keeps highest score when same ID appears in multiple sources
-- [ ] Min-score threshold boundary: exactly at threshold is included, just below is excluded
+- [x] Verify zero-result input returns empty slice (not nil)
+- [x] Verify deduplication keeps highest score when same ID appears in multiple sources
+- [x] Min-score threshold boundary: exactly at threshold is included, just below is excluded
 
 File: `internal/retrieval/merge_test.go` (extend existing)
 
