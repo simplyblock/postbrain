@@ -220,10 +220,10 @@ File: `internal/api/mcp/handlers_unit_test.go`
 requires a DB to execute the vector search, so these are integration tests.
 Use `testhelper.NewFakeEmbedder(4)` for the query embedding.
 
-- [ ] Empty query with non-nil scope runs without panic; returns empty results
-- [ ] `Limit` of 0 is clamped to a sensible default (not passed as 0 to DB)
-- [ ] Score merging: result from all three layers present, highest score wins
-- [ ] Digest suppression: source artifact is removed when its digest is in results
+- [x] Empty query with non-nil scope runs without panic; returns empty results
+- [x] `Limit` of 0 is clamped to a sensible default (not passed as 0 to DB)
+- [x] Score merging: result from all three layers present, highest score wins
+- [x] Digest suppression: source artifact is removed when its digest is in results
 
 File: `internal/knowledge/recall_integration_test.go`
 
