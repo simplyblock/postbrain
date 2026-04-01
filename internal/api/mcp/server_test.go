@@ -8,12 +8,6 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )
 
-// memDeleter is a minimal interface for soft/hard delete used in tests.
-type memDeleter interface {
-	SoftDelete(ctx context.Context, id string) error
-	HardDelete(ctx context.Context, id string) error
-}
-
 // ---- handleForget tests ----
 
 func TestHandleForget_SoftDelete(t *testing.T) {

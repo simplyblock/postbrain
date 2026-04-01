@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/simplyblock/postbrain/internal/closeutil"
 	"github.com/simplyblock/postbrain/internal/config"
 )
 
@@ -28,7 +29,7 @@ Document:
 
 // AnalysedEntity is a single entity extracted by the LLM during document analysis.
 type AnalysedEntity struct {
-	Type      string `json:"type"`      // concept|technology|topic|person|file|pr|tag
+	Type      string `json:"type"` // concept|technology|topic|person|file|pr|tag
 	Name      string `json:"name"`
 	Canonical string `json:"canonical"`
 }
@@ -85,7 +86,7 @@ func (s *OllamaSummarizer) Summarize(ctx context.Context, text string) (string, 
 	if err != nil {
 		return "", fmt.Errorf("ollama summarize: do request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer closeutil.Log(resp.Body, "ollama summarize response body")
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("ollama summarize: unexpected status %d", resp.StatusCode)
@@ -130,7 +131,7 @@ func (s *OllamaSummarizer) Analyze(ctx context.Context, text string) (*DocumentA
 	if err != nil {
 		return nil, fmt.Errorf("ollama analyze: do request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer closeutil.Log(resp.Body, "ollama analyze response body")
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("ollama analyze: unexpected status %d", resp.StatusCode)
@@ -197,7 +198,7 @@ func (s *OpenAISummarizer) Summarize(ctx context.Context, text string) (string, 
 	if err != nil {
 		return "", fmt.Errorf("openai summarize: do request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer closeutil.Log(resp.Body, "openai summarize response body")
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("openai summarize: unexpected status %d", resp.StatusCode)
@@ -252,7 +253,7 @@ func (s *OpenAISummarizer) Analyze(ctx context.Context, text string) (*DocumentA
 	if err != nil {
 		return nil, fmt.Errorf("openai analyze: do request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer closeutil.Log(resp.Body, "openai analyze response body")
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("openai analyze: unexpected status %d", resp.StatusCode)

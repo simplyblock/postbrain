@@ -197,7 +197,7 @@ func migrateDownCmd() *cobra.Command {
 				var err error
 				n, err = strconv.Atoi(args[0])
 				if err != nil || n <= 0 {
-					return fmt.Errorf("N must be a positive integer, got %q", args[0])
+					return fmt.Errorf("n must be a positive integer, got %q", args[0])
 				}
 			}
 			dbURL, err := config.LoadDatabaseURL(cfgPath)
@@ -237,7 +237,9 @@ func migrateStatusCmd() *cobra.Command {
 			}
 
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "VERSION\tNAME\tSTATUS")
+			if _, err := fmt.Fprintln(w, "VERSION\tNAME\tSTATUS"); err != nil {
+				return fmt.Errorf("write migration header: %w", err)
+			}
 			for _, m := range infos {
 				status := "pending"
 				if m.Dirty {
@@ -245,7 +247,9 @@ func migrateStatusCmd() *cobra.Command {
 				} else if m.Applied {
 					status = "applied"
 				}
-				fmt.Fprintf(w, "%d\t%s\t%s\n", m.Version, m.Name, status)
+				if _, err := fmt.Fprintf(w, "%d\t%s\t%s\n", m.Version, m.Name, status); err != nil {
+					return fmt.Errorf("write migration row: %w", err)
+				}
 			}
 			return w.Flush()
 		},
@@ -294,7 +298,7 @@ func migrateForceCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			v, err := strconv.Atoi(args[0])
 			if err != nil || v < 0 {
-				return fmt.Errorf("N must be a non-negative integer, got %q", args[0])
+				return fmt.Errorf("n must be a non-negative integer, got %q", args[0])
 			}
 			dbURL, err := config.LoadDatabaseURL(cfgPath)
 			if err != nil {
@@ -429,20 +433,24 @@ func tokenListCmd() *cobra.Command {
 			}
 
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tNAME\tPRINCIPAL\tPERMISSIONS\tCREATED\tREVOKED")
+			if _, err := fmt.Fprintln(w, "ID\tNAME\tPRINCIPAL\tPERMISSIONS\tCREATED\tREVOKED"); err != nil {
+				return fmt.Errorf("write token header: %w", err)
+			}
 			for _, t := range tokens {
 				revoked := ""
 				if t.RevokedAt != nil {
 					revoked = t.RevokedAt.Format(time.RFC3339)
 				}
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+				if _, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
 					t.ID,
 					t.Name,
 					t.PrincipalID,
 					strings.Join(t.Permissions, ","),
 					t.CreatedAt.Format(time.RFC3339),
 					revoked,
-				)
+				); err != nil {
+					return fmt.Errorf("write token row: %w", err)
+				}
 			}
 			return w.Flush()
 		},
@@ -548,8 +556,8 @@ POSTBRAIN_DATABASE_URL env var (or a config file with database.url set).`,
 				}
 				if len(existing) > 0 {
 					return fmt.Errorf(
-						"this instance already has %d token(s) — onboard is for fresh installations only.\n"+
-							"Use 'postbrain token create' to add more tokens, or pass --force to run anyway.",
+						"this instance already has %d token(s) — onboard is for fresh installations only\n"+
+							"use 'postbrain token create' to add more tokens, or pass --force to run anyway",
 						len(existing),
 					)
 				}

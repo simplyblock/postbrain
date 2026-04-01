@@ -116,7 +116,7 @@ func (e *cssExtractor) handleImportStatement(fileCanon string, n *sitter.Node) {
 			for j := 0; j < ac; j++ {
 				a := arg.Child(j)
 				if a != nil && (a.Type() == "string_value" || a.Type() == "plain_value") {
-					e.addEdge(fileCanon, "imports", strings.Trim(e.text(a), `'"`) )
+					e.addEdge(fileCanon, "imports", strings.Trim(e.text(a), `'"`))
 				}
 			}
 		}

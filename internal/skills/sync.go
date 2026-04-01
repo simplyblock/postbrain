@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/simplyblock/postbrain/internal/closeutil"
 	"github.com/simplyblock/postbrain/internal/db"
 )
 
@@ -104,7 +105,7 @@ func readInstalledVersion(slug, agentType, workdir string) int {
 	if err != nil {
 		return 0
 	}
-	defer f.Close()
+	defer closeutil.Log(f, "installed skill file")
 
 	scanner := bufio.NewScanner(f)
 	inFrontmatter := false

@@ -25,6 +25,11 @@
 
 ## Implementation Tasks
 
+### Maintenance
+
+- [x] 2026-04-01: Ran `make lint`, fixed all reported issues (errcheck/staticcheck/unused), then verified with `gofmt -w .`, `go test ./...`, and `make lint` (0 issues).
+- [x] 2026-04-01: Added shared `internal/closeutil.Log` helper to report deferred close failures; replaced swallowed production `Close()` errors and added unit tests.
+
 ### Infrastructure & Bootstrap
 
 - [x] `go.mod` — module `github.com/simplyblock/postbrain` with approved dependencies:

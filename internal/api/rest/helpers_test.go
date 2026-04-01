@@ -86,11 +86,11 @@ func TestParseScopeString(t *testing.T) {
 func TestPaginationFromRequest(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name        string
-		query       string
-		wantLimit   int
-		wantOffset  int
-		wantCursor  string
+		name       string
+		query      string
+		wantLimit  int
+		wantOffset int
+		wantCursor string
 	}{
 		{
 			name:       "no params — defaults applied",

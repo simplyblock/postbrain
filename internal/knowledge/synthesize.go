@@ -16,9 +16,9 @@ import (
 
 // Sentinel errors for synthesis validation.
 var (
-	ErrDigestSource  = errors.New("knowledge: digest sources may not themselves be digests")
-	ErrScopeLineage  = errors.New("knowledge: source scope is not in the lineage of the digest scope")
-	ErrTooFewSources = errors.New("knowledge: synthesis requires at least 2 source artifacts")
+	ErrDigestSource       = errors.New("knowledge: digest sources may not themselves be digests")
+	ErrScopeLineage       = errors.New("knowledge: source scope is not in the lineage of the digest scope")
+	ErrTooFewSources      = errors.New("knowledge: synthesis requires at least 2 source artifacts")
 	ErrSourceNotPublished = errors.New("knowledge: all source artifacts must be published")
 )
 

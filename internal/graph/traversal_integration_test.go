@@ -74,12 +74,12 @@ func setupFixtures(t *testing.T, pool *pgxpool.Pool) fixtures {
 		}
 	}
 
-	rel(f.callerA, "calls",   f.hub)      // hub has 2 callers
-	rel(f.callerB, "calls",   f.hub)
-	rel(f.hub,     "calls",   f.calleeX)  // hub has 3 callees
-	rel(f.hub,     "calls",   f.calleeY)
-	rel(f.hub,     "calls",   f.calleeZ)
-	rel(f.fileA,   "imports", f.hub)      // fileA depends on hub; hub has 1 dependent
+	rel(f.callerA, "calls", f.hub) // hub has 2 callers
+	rel(f.callerB, "calls", f.hub)
+	rel(f.hub, "calls", f.calleeX) // hub has 3 callees
+	rel(f.hub, "calls", f.calleeY)
+	rel(f.hub, "calls", f.calleeZ)
+	rel(f.fileA, "imports", f.hub) // fileA depends on hub; hub has 1 dependent
 
 	return f
 }

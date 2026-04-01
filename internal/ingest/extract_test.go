@@ -77,10 +77,17 @@ func TestExtractUnsupported(t *testing.T) {
 func makeDocx(text string) []byte {
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
-	f, _ := w.Create("word/document.xml")
-	fmt.Fprintf(f, `<?xml version="1.0"?>`+
+	f, err := w.Create("word/document.xml")
+	if err != nil {
+		panic(err)
+	}
+	if _, err := fmt.Fprintf(f, `<?xml version="1.0"?>`+
 		`<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">`+
-		`<w:body><w:p><w:r><w:t>%s</w:t></w:r></w:p></w:body></w:document>`, text)
-	w.Close()
+		`<w:body><w:p><w:r><w:t>%s</w:t></w:r></w:p></w:body></w:document>`, text); err != nil {
+		panic(err)
+	}
+	if err := w.Close(); err != nil {
+		panic(err)
+	}
 	return buf.Bytes()
 }

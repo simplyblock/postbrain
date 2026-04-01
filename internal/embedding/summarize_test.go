@@ -31,7 +31,9 @@ func TestOllamaSummarizer_Summarize(t *testing.T) {
 		if !strings.Contains(req.Prompt, "document") {
 			t.Errorf("expected prompt to contain document content, got: %q", req.Prompt)
 		}
-		json.NewEncoder(w).Encode(map[string]any{"response": "This is the summary."})
+		if err := json.NewEncoder(w).Encode(map[string]any{"response": "This is the summary."}); err != nil {
+			t.Errorf("encode response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
@@ -65,11 +67,13 @@ func TestOpenAISummarizer_Summarize(t *testing.T) {
 		if len(req.Messages) == 0 {
 			t.Error("expected at least one message")
 		}
-		json.NewEncoder(w).Encode(map[string]any{
+		if err := json.NewEncoder(w).Encode(map[string]any{
 			"choices": []map[string]any{
 				{"message": map[string]any{"content": "OpenAI summary."}},
 			},
-		})
+		}); err != nil {
+			t.Errorf("encode response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
@@ -99,7 +103,9 @@ func TestEmbeddingService_SummarizeNoModel(t *testing.T) {
 func TestEmbeddingService_SummarizeDelegates(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{"response": "delegated summary"})
+		if err := json.NewEncoder(w).Encode(map[string]any{"response": "delegated summary"}); err != nil {
+			t.Errorf("encode response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
@@ -140,8 +146,14 @@ func TestOllamaSummarizer_Analyze(t *testing.T) {
 		if !strings.Contains(req.Prompt, "entities") {
 			t.Errorf("expected analyze prompt, got: %q", req.Prompt)
 		}
-		raw, _ := json.Marshal(analysis)
-		json.NewEncoder(w).Encode(map[string]any{"response": string(raw)})
+		raw, err := json.Marshal(analysis)
+		if err != nil {
+			t.Errorf("marshal analysis: %v", err)
+			return
+		}
+		if err := json.NewEncoder(w).Encode(map[string]any{"response": string(raw)}); err != nil {
+			t.Errorf("encode response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
@@ -188,12 +200,18 @@ func TestOpenAISummarizer_Analyze(t *testing.T) {
 		if len(req.Messages) == 0 || !strings.Contains(req.Messages[0].Content, "entities") {
 			t.Errorf("expected analyze prompt in message")
 		}
-		raw, _ := json.Marshal(analysis)
-		json.NewEncoder(w).Encode(map[string]any{
+		raw, err := json.Marshal(analysis)
+		if err != nil {
+			t.Errorf("marshal analysis: %v", err)
+			return
+		}
+		if err := json.NewEncoder(w).Encode(map[string]any{
 			"choices": []map[string]any{
 				{"message": map[string]any{"content": string(raw)}},
 			},
-		})
+		}); err != nil {
+			t.Errorf("encode response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
@@ -233,8 +251,14 @@ func TestEmbeddingService_AnalyzeDelegates(t *testing.T) {
 		"entities": []map[string]any{{"type": "tag", "name": "test", "canonical": "test"}},
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		raw, _ := json.Marshal(analysis)
-		json.NewEncoder(w).Encode(map[string]any{"response": string(raw)})
+		raw, err := json.Marshal(analysis)
+		if err != nil {
+			t.Errorf("marshal analysis: %v", err)
+			return
+		}
+		if err := json.NewEncoder(w).Encode(map[string]any{"response": string(raw)}); err != nil {
+			t.Errorf("encode response: %v", err)
+		}
 	}))
 	defer srv.Close()
 

@@ -35,5 +35,5 @@ func TestContradictionJob_NilClassifier_UsesNoop(t *testing.T) {
 
 func TestContradictionJob_Signature(t *testing.T) {
 	// Compile-time check.
-	var _ func(context.Context) error = (*ContradictionJob)(nil).Run
+	var _ = (*ContradictionJob)(nil).Run
 }

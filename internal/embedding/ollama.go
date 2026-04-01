@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/simplyblock/postbrain/internal/closeutil"
 	"github.com/simplyblock/postbrain/internal/config"
 )
 
@@ -74,7 +75,7 @@ func (e *OllamaEmbedder) Embed(ctx context.Context, text string) ([]float32, err
 	if err != nil {
 		return nil, fmt.Errorf("ollama: do request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer closeutil.Log(resp.Body, "ollama embedding response body")
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("ollama: unexpected status %d", resp.StatusCode)

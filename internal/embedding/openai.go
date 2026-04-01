@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/simplyblock/postbrain/internal/closeutil"
 	"github.com/simplyblock/postbrain/internal/config"
 )
 
@@ -142,7 +143,7 @@ func (e *OpenAIEmbedder) embedBatchOnce(ctx context.Context, texts []string) ([]
 	if err != nil {
 		return nil, fmt.Errorf("openai: do request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer closeutil.Log(resp.Body, "openai embedding response body")
 
 	if resp.StatusCode != http.StatusOK {
 		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))

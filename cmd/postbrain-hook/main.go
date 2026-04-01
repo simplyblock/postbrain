@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
+	"github.com/simplyblock/postbrain/internal/closeutil"
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/skills"
 )
@@ -129,7 +130,7 @@ func runSnapshot(cmd *cobra.Command, args []string) error {
 		resp, err := client.get(ctx, fmt.Sprintf("/v1/memories/recall?query=%s&scope=%s&limit=1&min_score=0.99",
 			sourceRef, scopeFlag))
 		if err == nil {
-			defer resp.Body.Close()
+			defer closeutil.Log(resp.Body, "snapshot dedup response body")
 			var result struct {
 				Results []struct {
 					SourceRef string `json:"source_ref"`
@@ -156,7 +157,7 @@ func runSnapshot(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("snapshot: post memory: %w", err)
 	}
-	defer resp.Body.Close()
+	defer closeutil.Log(resp.Body, "snapshot create memory response body")
 	slog.Info("snapshot: memory recorded", "tool", hookData.ToolName, "source_ref", sourceRef)
 	return nil
 }
@@ -186,7 +187,7 @@ func runSummarizeSession(ctx context.Context, sessionID string) error {
 	if err != nil {
 		return fmt.Errorf("summarize-session: list memories: %w", err)
 	}
-	defer resp.Body.Close()
+	defer closeutil.Log(resp.Body, "summarize session list memories response body")
 
 	var result struct {
 		Results []struct {
@@ -211,7 +212,7 @@ func runSummarizeSession(ctx context.Context, sessionID string) error {
 	if err != nil {
 		return fmt.Errorf("summarize-session: summarize: %w", err)
 	}
-	defer summarizeResp.Body.Close()
+	defer closeutil.Log(summarizeResp.Body, "summarize session response body")
 	slog.Info("summarize-session: session summarized", "scope", scopeFlag)
 	return nil
 }
@@ -250,7 +251,7 @@ func runSkillSync(ctx context.Context, agentType, workdir string) error {
 	if err != nil {
 		return fmt.Errorf("skill sync: list skills: %w", err)
 	}
-	defer resp.Body.Close()
+	defer closeutil.Log(resp.Body, "skill sync list response body")
 
 	var result struct {
 		Data []struct {
@@ -332,7 +333,7 @@ func skillInstallCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			defer resp.Body.Close()
+			defer closeutil.Log(resp.Body, "skill install search response body")
 
 			var result struct {
 				Data []struct {
