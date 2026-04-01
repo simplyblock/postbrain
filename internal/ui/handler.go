@@ -406,9 +406,19 @@ func (h *Handler) handleKnowledgeDetail(w http.ResponseWriter, r *http.Request) 
 		data.Artifact = art
 
 		if art.KnowledgeType == "digest" {
-			data.Sources, _ = db.ListDigestSources(r.Context(), h.pool, id)
+			sources, err := db.ListDigestSources(r.Context(), h.pool, id)
+			if err != nil {
+				http.Error(w, "failed to load digest sources", http.StatusInternalServerError)
+				return
+			}
+			data.Sources = sources
 		} else {
-			data.Digests, _ = db.ListDigestsForSource(r.Context(), h.pool, id)
+			digests, err := db.ListDigestsForSource(r.Context(), h.pool, id)
+			if err != nil {
+				http.Error(w, "failed to load digests", http.StatusInternalServerError)
+				return
+			}
+			data.Digests = digests
 		}
 	}
 
@@ -451,14 +461,19 @@ func (h *Handler) handleCollections(w http.ResponseWriter, r *http.Request) {
 
 	if h.pool != nil {
 		var colls []*db.KnowledgeCollection
+		var err error
 		scopeStr := r.URL.Query().Get("scope_id")
 		if scopeStr != "" {
-			sid, err := uuid.Parse(scopeStr)
-			if err == nil {
-				colls, _ = db.ListCollections(r.Context(), h.pool, sid)
+			sid, parseErr := uuid.Parse(scopeStr)
+			if parseErr == nil {
+				colls, err = db.ListCollections(r.Context(), h.pool, sid)
 			}
 		} else {
-			colls, _ = db.ListAllCollections(r.Context(), h.pool)
+			colls, err = db.ListAllCollections(r.Context(), h.pool)
+		}
+		if err != nil {
+			http.Error(w, "failed to load collections", http.StatusInternalServerError)
+			return
 		}
 		data.Collections = colls
 	}
