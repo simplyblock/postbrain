@@ -125,12 +125,11 @@ File: `internal/knowledge/store_test.go` (extend existing)
 
 `store_test.go` already covers TTL and code-embedding path. Extend it:
 
-- [ ] Replace the inline `mockEmbedder` struct with `embedding.FakeEmbedder` —
+- [x] Replace the inline `mockEmbedder` struct with `embedding.FakeEmbedder` —
   single migration change, no behaviour change
-- [ ] `Create` near-duplicate found → action is `"merged"`, original soft-deleted
-- [ ] `Create` embed error is propagated correctly
-- [ ] `Create` with large content and a real `chunkBackfill` mock verifies
-  child memories are created with `parent_memory_id` set
+- [x] `Create` near-duplicate found → action is `"updated"` (code returns "updated", not "merged"), UpdateMemoryContent called, no new insert
+- [x] `Create` embed error is propagated correctly
+- [x] `Create` with large content verifies child memories are created with `parent_memory_id` set
 
 File: `internal/memory/store_test.go` (extend existing)
 

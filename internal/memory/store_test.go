@@ -2,74 +2,86 @@ package memory
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/simplyblock/postbrain/internal/chunking"
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/embedding"
 )
 
-// ── Mock embedding service ───────────────────────────────────────────────────
+// ── embedding service helpers ─────────────────────────────────────────────────
 
-type mockEmbedder struct {
-	slug string
-}
-
-func (m *mockEmbedder) Embed(_ context.Context, _ string) ([]float32, error) {
-	return []float32{0.1, 0.2, 0.3}, nil
-}
-func (m *mockEmbedder) EmbedBatch(_ context.Context, texts []string) ([][]float32, error) {
-	result := make([][]float32, len(texts))
-	for i := range texts {
-		result[i] = []float32{0.1, 0.2, 0.3}
-	}
-	return result, nil
-}
-func (m *mockEmbedder) ModelSlug() string { return m.slug }
-func (m *mockEmbedder) Dimensions() int   { return 3 }
-
-var _ embedding.Embedder = (*mockEmbedder)(nil)
-
-func newMockEmbeddingService(withCode bool) *embedding.EmbeddingService {
-	text := &mockEmbedder{slug: "text-model"}
+func newFakeEmbeddingService(withCode bool) *embedding.EmbeddingService {
+	text := embedding.NewFakeEmbedder(4)
 	if withCode {
-		code := &mockEmbedder{slug: "code-model"}
+		code := embedding.NewFakeEmbedder(4)
 		return embedding.NewServiceFromEmbedders(text, code)
 	}
 	return embedding.NewServiceFromEmbedders(text, nil)
 }
 
-// ── Mock memory creator (captures CreateMemory args) ────────────────────────
+// newMockEmbeddingService is an alias kept for compatibility with consolidate_test.go
+// and recall_test.go. New tests should use newFakeEmbeddingService directly.
+var newMockEmbeddingService = newFakeEmbeddingService
 
-type capturedMemory struct {
-	m *db.Memory
+// noopMemoryEmbeddingService satisfies embeddingService with silent no-ops.
+// Test fakes embed it and override only the method under test.
+type noopMemoryEmbeddingService struct{}
+
+func (noopMemoryEmbeddingService) EmbedText(_ context.Context, _ string) ([]float32, error) {
+	return []float32{0.1, 0.2, 0.3, 0.4}, nil
+}
+func (noopMemoryEmbeddingService) EmbedCode(_ context.Context, _ string) ([]float32, error) {
+	return []float32{0.1, 0.2, 0.3, 0.4}, nil
+}
+func (noopMemoryEmbeddingService) TextEmbedder() embeddingIface {
+	return embedding.NewFakeEmbedder(4)
+}
+func (noopMemoryEmbeddingService) CodeEmbedder() embeddingIface { return nil }
+
+// errorEmbeddingService fails EmbedText.
+type errorEmbeddingService struct{ noopMemoryEmbeddingService }
+
+func (errorEmbeddingService) EmbedText(_ context.Context, _ string) ([]float32, error) {
+	return nil, errors.New("embed failed")
 }
 
+// ── memoryDB mock ─────────────────────────────────────────────────────────────
+
 type mockCreator struct {
-	created *capturedMemory
-	stored  []*db.Memory // all soft-deleted memories
+	// All memories passed to CreateMemory, in call order.
+	createdAll []*db.Memory
+	// near-duplicates to return from FindNearDuplicates (nil = no dupes).
+	dupes []*db.Memory
+	// updated tracks calls to UpdateMemoryContent.
+	updated []*db.Memory
 }
 
 func (mc *mockCreator) CreateMemory(_ context.Context, m *db.Memory) (*db.Memory, error) {
 	m.ID = uuid.New()
 	m.CreatedAt = time.Now()
 	m.UpdatedAt = time.Now()
-	mc.created = &capturedMemory{m: m}
+	mc.createdAll = append(mc.createdAll, m)
 	return m, nil
 }
 
 func (mc *mockCreator) FindNearDuplicates(_ context.Context, _ uuid.UUID, _ []float32, _ float64, _ *uuid.UUID) ([]*db.Memory, error) {
-	return nil, nil
+	return mc.dupes, nil
 }
 
 func (mc *mockCreator) UpdateMemoryContent(_ context.Context, id uuid.UUID, content string, embedding, embeddingCode []float32, textModelID, codeModelID *uuid.UUID, contentKind string) (*db.Memory, error) {
-	return &db.Memory{ID: id, Content: content, ContentKind: contentKind}, nil
+	m := &db.Memory{ID: id, Content: content, ContentKind: contentKind}
+	mc.updated = append(mc.updated, m)
+	return m, nil
 }
 
 func (mc *mockCreator) SoftDeleteMemory(_ context.Context, id uuid.UUID) error {
-	mc.stored = append(mc.stored, &db.Memory{ID: id})
+	mc.createdAll = append(mc.createdAll, &db.Memory{ID: id})
 	return nil
 }
 
@@ -91,15 +103,17 @@ func (mc *mockCreator) FindEntitiesBySuffix(_ context.Context, _ uuid.UUID, _ st
 	return nil, nil
 }
 
-// ── Tests ────────────────────────────────────────────────────────────────────
+// ── store constructor ─────────────────────────────────────────────────────────
 
 func newTestStore(withCode bool, creator memoryDB) *Store {
-	svc := newMockEmbeddingService(withCode)
+	svc := newFakeEmbeddingService(withCode)
 	return &Store{
 		svc:     &embeddingServiceAdapter{svc: svc},
 		creator: creator,
 	}
 }
+
+// ── TTL tests ─────────────────────────────────────────────────────────────────
 
 func TestCreate_WorkingMemory_DefaultTTL(t *testing.T) {
 	mc := &mockCreator{}
@@ -121,11 +135,10 @@ func TestCreate_WorkingMemory_DefaultTTL(t *testing.T) {
 		t.Fatalf("expected action 'created', got %q", result.Action)
 	}
 
-	created := mc.created.m
+	created := mc.createdAll[0]
 	if created.ExpiresAt.IsZero() {
 		t.Fatal("expected ExpiresAt to be set for working memory")
 	}
-	// Should be ~3600s from now.
 	expected := before.Add(3600 * time.Second)
 	diff := created.ExpiresAt.Sub(expected)
 	if diff < -5*time.Second || diff > 5*time.Second {
@@ -151,7 +164,7 @@ func TestCreate_WorkingMemory_ExplicitTTL(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	created := mc.created.m
+	created := mc.createdAll[0]
 	if created.ExpiresAt.IsZero() {
 		t.Fatal("expected ExpiresAt to be set")
 	}
@@ -179,18 +192,18 @@ func TestCreate_NonWorkingMemory_ExpiresAtNil(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	created := mc.created.m
+	created := mc.createdAll[0]
 	if created.ExpiresAt != nil {
 		t.Fatalf("expected ExpiresAt to be nil for semantic memory, got %v", created.ExpiresAt)
 	}
 }
 
+// ── code embedding test ───────────────────────────────────────────────────────
+
 func TestCreate_CodeContent_CodeEmbeddingCalled(t *testing.T) {
 	mc := &mockCreator{}
-	// Provide a code embedder so code embedding is attempted.
 	s := newTestStore(true, mc)
 
-	// Use a file: source ref pointing to a .go file so content is classified as code.
 	ref := "file:src/auth.go:10"
 	input := CreateInput{
 		Content:    "func main() { }",
@@ -204,11 +217,108 @@ func TestCreate_CodeContent_CodeEmbeddingCalled(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	created := mc.created.m
+	created := mc.createdAll[0]
 	if created.ContentKind != "code" {
 		t.Fatalf("expected content_kind=code, got %q", created.ContentKind)
 	}
 	if len(created.EmbeddingCode.Slice()) == 0 {
 		t.Fatal("expected EmbeddingCode to be populated for code content")
+	}
+}
+
+// ── near-duplicate tests ──────────────────────────────────────────────────────
+
+func TestCreate_NearDuplicateFound_ActionIsUpdated(t *testing.T) {
+	t.Parallel()
+	existingID := uuid.New()
+	mc := &mockCreator{
+		dupes: []*db.Memory{{ID: existingID, Content: "similar content"}},
+	}
+	s := newTestStore(false, mc)
+
+	result, err := s.Create(context.Background(), CreateInput{
+		Content:    "nearly identical content",
+		MemoryType: "semantic",
+		ScopeID:    uuid.New(),
+		AuthorID:   uuid.New(),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Action != "updated" {
+		t.Errorf("Action = %q, want %q", result.Action, "updated")
+	}
+	if result.MemoryID != existingID {
+		t.Errorf("MemoryID = %v, want existing ID %v", result.MemoryID, existingID)
+	}
+	if len(mc.updated) != 1 {
+		t.Errorf("UpdateMemoryContent called %d times, want 1", len(mc.updated))
+	}
+	// No new memory should have been created.
+	if len(mc.createdAll) != 0 {
+		t.Errorf("CreateMemory called %d times, want 0 (duplicate path skips insert)", len(mc.createdAll))
+	}
+}
+
+// ── embed error test ──────────────────────────────────────────────────────────
+
+func TestCreate_EmbedErrorPropagated(t *testing.T) {
+	t.Parallel()
+	mc := &mockCreator{}
+	s := &Store{
+		svc:     errorEmbeddingService{},
+		creator: mc,
+	}
+
+	_, err := s.Create(context.Background(), CreateInput{
+		Content:    "some content",
+		MemoryType: "semantic",
+		ScopeID:    uuid.New(),
+		AuthorID:   uuid.New(),
+	})
+	if err == nil {
+		t.Fatal("expected error from failing embedder, got nil")
+	}
+	if !strings.Contains(err.Error(), "embed text") {
+		t.Errorf("error %q should mention embed text", err.Error())
+	}
+}
+
+// ── chunk backfill test ───────────────────────────────────────────────────────
+
+func TestCreate_LargeContent_ChunkChildrenHaveParentID(t *testing.T) {
+	t.Parallel()
+	mc := &mockCreator{}
+	s := newTestStore(false, mc)
+
+	// Build content that exceeds MinContentRunes so chunking kicks in.
+	// Use multiple long sentences so the chunker produces at least 2 chunks.
+	sentenceRunes := chunking.MinContentRunes/4 + 50
+	sentence := strings.Repeat("word ", sentenceRunes/5) + ". "
+	content := strings.Repeat(sentence, 5) // well above MinContentRunes
+
+	_, err := s.Create(context.Background(), CreateInput{
+		Content:    content,
+		MemoryType: "semantic",
+		ScopeID:    uuid.New(),
+		AuthorID:   uuid.New(),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// First call is the parent memory, subsequent calls are chunk children.
+	if len(mc.createdAll) < 2 {
+		t.Fatalf("expected at least 2 CreateMemory calls (parent + chunks), got %d", len(mc.createdAll))
+	}
+	parentID := mc.createdAll[0].ID
+	for i, m := range mc.createdAll[1:] {
+		if m.ParentMemoryID == nil {
+			t.Errorf("chunk[%d]: ParentMemoryID = nil, want %v", i, parentID)
+			continue
+		}
+		if *m.ParentMemoryID != parentID {
+			t.Errorf("chunk[%d]: ParentMemoryID = %v, want %v", i, *m.ParentMemoryID, parentID)
+		}
 	}
 }
