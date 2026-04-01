@@ -42,7 +42,7 @@ File: `internal/codegraph/indexer_ssh_test.go`
 - [x] `Resolver.Resolve` local table is case-sensitive (`"MyFunc"` ≠ `"myfunc"`)
 - [x] `Resolver.Resolve` returns the right ID among multiple entries in the local table
 - [x] `filePath` parameter is irrelevant to stage 1 (any path works for a local hit)
-- [ ] Stages 2/3 (import-aware + suffix fallback) — require a real DB; move to
+- [x] Stages 2/3 (import-aware + suffix fallback) — require a real DB; move to
   `resolve_integration_test.go` (`//go:build integration`)
 
 Note: a nil `*pgxpool.Pool` panics in stage 2 (`pgxpool.(*Pool).QueryRow` dereferences
@@ -190,7 +190,7 @@ They don't need `testcontainers` and can run in the default test suite.
 
 - [x] `GET /v1/knowledge/search` — missing `q` still returns 200 (recall with empty query)
 - [x] `POST /v1/scopes/:id/repo` — missing `repo_url` returns 400
-- [ ] `POST /v1/scopes/:id/repo/sync` — scope not found returns 404 (needs DB; move to integration)
+- [x] `POST /v1/scopes/:id/repo/sync` — scope not found returns 404 (needs DB; move to integration)
 - [x] `GET /v1/scopes/:id/repo/sync` — always returns JSON (no panic with unknown scope)
 - [x] `POST /v1/memories` — malformed JSON body returns 400
 - [x] `GET /v1/memories/recall` — missing `q` returns 400 (added validation to handler)

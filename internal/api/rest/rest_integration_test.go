@@ -10,6 +10,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/simplyblock/postbrain/internal/api/rest"
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/config"
@@ -265,6 +267,21 @@ func TestScopes_CRUD(t *testing.T) {
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusNoContent {
 			t.Errorf("expected 204, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("sync nonexistent scope returns 404", func(t *testing.T) {
+		nonexistentID := uuid.New().String()
+		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/scopes/"+nonexistentID+"/repo/sync", nil)
+		req.Header.Set("Authorization", authHeader)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("expected 404, got %d", resp.StatusCode)
 		}
 	})
 }
