@@ -475,23 +475,21 @@ func (h *Handler) handleCollectionDetail(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	data := struct {
-		Collection *db.KnowledgeCollection
-		Artifacts  []*db.KnowledgeArtifact
-	}{}
-
-	if h.pool != nil {
-		coll, err := db.GetCollection(r.Context(), h.pool, id)
-		if err != nil || coll == nil {
-			http.NotFound(w, r)
-			return
-		}
-		data.Collection = coll
-		arts, _ := db.ListCollectionItems(r.Context(), h.pool, id)
-		data.Artifacts = arts
+	if h.pool == nil {
+		http.NotFound(w, r)
+		return
 	}
 
-	h.render(w, r, "collection_detail", "Collection", data)
+	coll, err := db.GetCollection(r.Context(), h.pool, id)
+	if err != nil || coll == nil {
+		http.NotFound(w, r)
+		return
+	}
+	arts, _ := db.ListCollectionItems(r.Context(), h.pool, id)
+	h.render(w, r, "collection_detail", "Collection", struct {
+		Collection *db.KnowledgeCollection
+		Artifacts  []*db.KnowledgeArtifact
+	}{coll, arts})
 }
 
 // handlePromotions serves GET /ui/promotions.
