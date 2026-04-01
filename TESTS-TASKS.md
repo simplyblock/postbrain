@@ -161,12 +161,12 @@ Mark the test file with `//go:build integration` so they're skipped by default.
 
 All six public functions are currently untested.
 
-- [ ] `ResolveSymbol` — exact canonical match, suffix fallback, not-found returns nil
-- [ ] `Callers` — entity with 2 callers, entity with no callers, unknown symbol
-- [ ] `Callees` — entity with 3 callees, entity with no callees
-- [ ] `Dependencies` — file with imports, file with no imports
-- [ ] `Dependents` — symbol with dependents, symbol with none
-- [ ] `NeighboursForEntity` — mixed incoming/outgoing edges, entity with no edges
+- [x] `ResolveSymbol` — exact canonical match, suffix fallback, not-found returns nil
+- [x] `Callers` — entity with 2 callers, entity with no callers, unknown symbol
+- [x] `Callees` — entity with 3 callees, entity with no callees
+- [x] `Dependencies` — file with imports, file with no imports
+- [x] `Dependents` — symbol with dependents, symbol with none
+- [x] `NeighboursForEntity` — mixed incoming/outgoing edges, entity with no edges
 
 File: `internal/graph/traversal_integration_test.go`
 

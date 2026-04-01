@@ -56,6 +56,8 @@ func stripTestUnsupported(sql string) string {
 		"pg_partman",
 		"cron.schedule",
 		"partman.",
+		"create_partition", // pg_partman function not prefixed with schema name
+		"part_config",      // pg_partman internal table
 		"pg_prewarm",
 		"shared_preload_libraries",
 	}
