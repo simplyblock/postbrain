@@ -48,7 +48,7 @@ RETURNING id, memory_type, scope_id, author_id,
 UPDATE memories
 SET content=$2, embedding=$3, embedding_model_id=$4,
     embedding_code=$5, embedding_code_model_id=$6,
-    content_kind=$7, version=version+1, updated_at=now()
+    content_kind=$7, summary=$8, meta=$9, version=version+1, updated_at=now()
 WHERE id=$1
 RETURNING id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,

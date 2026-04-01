@@ -19,6 +19,7 @@ type entityRequest struct {
 
 type createMemoryRequest struct {
 	Content    string          `json:"content"`
+	Summary    *string         `json:"summary"`
 	MemoryType string          `json:"memory_type"`
 	Scope      string          `json:"scope"`
 	Importance float64         `json:"importance"`
@@ -80,6 +81,7 @@ func (ro *Router) createMemory(w http.ResponseWriter, r *http.Request) {
 
 	result, err := ro.memStore.Create(r.Context(), memory.CreateInput{
 		Content:    body.Content,
+		Summary:    body.Summary,
 		MemoryType: memoryType,
 		ScopeID:    scope.ID,
 		AuthorID:   principalID,
@@ -158,6 +160,7 @@ func (ro *Router) getMemory(w http.ResponseWriter, r *http.Request) {
 
 type updateMemoryRequest struct {
 	Content    string  `json:"content"`
+	Summary    *string `json:"summary"`
 	Importance float64 `json:"importance"`
 }
 
@@ -172,7 +175,7 @@ func (ro *Router) updateMemory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	updated, err := ro.memStore.Update(r.Context(), id, body.Content, body.Importance)
+	updated, err := ro.memStore.Update(r.Context(), id, body.Content, body.Summary, body.Importance)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

@@ -349,7 +349,7 @@ func UpdateScope(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, name str
 // DeleteScope removes a scope by UUID.
 func CountChildScopes(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (int64, error) {
 	q := New(pool)
-	return q.CountChildScopes(ctx, id)
+	return q.CountChildScopes(ctx, &id)
 }
 
 func DeleteScope(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) error {
@@ -608,8 +608,11 @@ func CreateMemory(ctx context.Context, pool *pgxpool.Pool, m *Memory) (*Memory, 
 	return memoryFromCreateMemoryRow(created), nil
 }
 
-// UpdateMemoryContent updates content and embeddings.
-func UpdateMemoryContent(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, content string, embedding, embeddingCode []float32, textModelID, codeModelID *uuid.UUID, contentKind string) (*Memory, error) {
+// UpdateMemoryContent updates content, summary, metadata, and embeddings.
+func UpdateMemoryContent(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, content string, summary *string, embedding, embeddingCode []float32, textModelID, codeModelID *uuid.UUID, contentKind string, meta []byte) (*Memory, error) {
+	if meta == nil {
+		meta = []byte("{}")
+	}
 	q := New(pool)
 	m, err := q.UpdateMemoryContent(ctx, UpdateMemoryContentParams{
 		ID:                   id,
@@ -619,6 +622,8 @@ func UpdateMemoryContent(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, 
 		EmbeddingCode:        vecPtr(embeddingCode),
 		EmbeddingCodeModelID: codeModelID,
 		ContentKind:          contentKind,
+		Summary:              summary,
+		Meta:                 meta,
 	})
 	if err == pgx.ErrNoRows {
 		return nil, nil
@@ -1292,7 +1297,7 @@ func SearchArtifacts(ctx context.Context, pool *pgxpool.Pool, query, status stri
 	return q.SearchArtifacts(ctx, SearchArtifactsParams{
 		Title:   "%" + query + "%",
 		Column2: status,
-		ScopeID: scopeID,
+		Column3: scopeID,
 		Limit:   int32(limit),
 		Offset:  int32(offset),
 	})
@@ -1304,7 +1309,7 @@ func ListArtifactsByStatus(ctx context.Context, pool *pgxpool.Pool, status strin
 	q := New(pool)
 	return q.ListArtifactsByStatus(ctx, ListArtifactsByStatusParams{
 		Status:  status,
-		ScopeID: scopeID,
+		Column2: scopeID,
 		Limit:   int32(limit),
 		Offset:  int32(offset),
 	})
@@ -1314,7 +1319,7 @@ func ListArtifactsByStatus(ctx context.Context, pool *pgxpool.Pool, status strin
 func ListAllArtifacts(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, limit, offset int) ([]*KnowledgeArtifact, error) {
 	q := New(pool)
 	return q.ListAllArtifacts(ctx, ListAllArtifactsParams{
-		ScopeID: scopeID,
+		Column1: scopeID,
 		Limit:   int32(limit),
 		Offset:  int32(offset),
 	})

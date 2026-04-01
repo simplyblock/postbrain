@@ -3,6 +3,7 @@ package memory
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -60,7 +61,7 @@ func (a *embeddingServiceAdapter) CodeEmbedder() embeddingIface {
 type memoryDB interface {
 	CreateMemory(ctx context.Context, m *db.Memory) (*db.Memory, error)
 	FindNearDuplicates(ctx context.Context, scopeID uuid.UUID, embedding []float32, threshold float64, excludeID *uuid.UUID) ([]*db.Memory, error)
-	UpdateMemoryContent(ctx context.Context, id uuid.UUID, content string, embedding, embeddingCode []float32, textModelID, codeModelID *uuid.UUID, contentKind string) (*db.Memory, error)
+	UpdateMemoryContent(ctx context.Context, id uuid.UUID, content string, summary *string, embedding, embeddingCode []float32, textModelID, codeModelID *uuid.UUID, contentKind string, meta []byte) (*db.Memory, error)
 	SoftDeleteMemory(ctx context.Context, id uuid.UUID) error
 	UpsertEntity(ctx context.Context, e *db.Entity) (*db.Entity, error)
 	LinkMemoryToEntity(ctx context.Context, memoryID, entityID uuid.UUID, role string) error
@@ -81,8 +82,8 @@ func (p *poolMemoryDB) FindNearDuplicates(ctx context.Context, scopeID uuid.UUID
 	return db.FindNearDuplicates(ctx, p.pool, scopeID, embedding, threshold, excludeID)
 }
 
-func (p *poolMemoryDB) UpdateMemoryContent(ctx context.Context, id uuid.UUID, content string, embedding, embeddingCode []float32, textModelID, codeModelID *uuid.UUID, contentKind string) (*db.Memory, error) {
-	return db.UpdateMemoryContent(ctx, p.pool, id, content, embedding, embeddingCode, textModelID, codeModelID, contentKind)
+func (p *poolMemoryDB) UpdateMemoryContent(ctx context.Context, id uuid.UUID, content string, summary *string, embedding, embeddingCode []float32, textModelID, codeModelID *uuid.UUID, contentKind string, meta []byte) (*db.Memory, error) {
+	return db.UpdateMemoryContent(ctx, p.pool, id, content, summary, embedding, embeddingCode, textModelID, codeModelID, contentKind, meta)
 }
 
 func (p *poolMemoryDB) SoftDeleteMemory(ctx context.Context, id uuid.UUID) error {
@@ -132,6 +133,7 @@ type EntityInput struct {
 // CreateInput holds the fields required to create a new memory.
 type CreateInput struct {
 	Content    string
+	Summary    *string
 	MemoryType string // semantic|episodic|procedural|working
 	ScopeID    uuid.UUID
 	AuthorID   uuid.UUID
@@ -148,11 +150,30 @@ type CreateResult struct {
 	Action   string // "created" | "updated"
 }
 
+func withLongStyleMeta(meta []byte) []byte {
+	const fallback = `{"content_style":"long"}`
+	if len(bytes.TrimSpace(meta)) == 0 {
+		return []byte(fallback)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(meta, &decoded); err != nil {
+		return []byte(fallback)
+	}
+	decoded["content_style"] = "long"
+	encoded, err := json.Marshal(decoded)
+	if err != nil {
+		return []byte(fallback)
+	}
+	return encoded
+}
+
 // Create embeds, deduplicates, and persists a memory.
 func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, error) {
 	if input.Importance == 0 {
 		input.Importance = 0.5
 	}
+	input.Meta = withLongStyleMeta(input.Meta)
 
 	// 1. Classify content kind.
 	contentKind := embedding.ClassifyContent(input.Content, safeDeref(input.SourceRef))
@@ -193,7 +214,7 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 	}
 	if len(dupes) > 0 {
 		existing := dupes[0]
-		updated, err := s.creator.UpdateMemoryContent(ctx, existing.ID, input.Content, textVec, codeVec, nil, nil, contentKind)
+		updated, err := s.creator.UpdateMemoryContent(ctx, existing.ID, input.Content, input.Summary, textVec, codeVec, nil, nil, contentKind, input.Meta)
 		if err != nil {
 			return nil, fmt.Errorf("memory: update duplicate: %w", err)
 		}
@@ -207,6 +228,7 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 		ScopeID:     input.ScopeID,
 		AuthorID:    input.AuthorID,
 		Content:     input.Content,
+		Summary:     input.Summary,
 		Embedding:   &textVecVal,
 		ContentKind: contentKind,
 		Meta:        input.Meta,
@@ -297,8 +319,9 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 }
 
 // Update re-embeds and persists updated content for a memory.
-func (s *Store) Update(ctx context.Context, id uuid.UUID, content string, importance float64) (*db.Memory, error) {
+func (s *Store) Update(ctx context.Context, id uuid.UUID, content string, summary *string, importance float64) (*db.Memory, error) {
 	contentKind := embedding.ClassifyContent(content, "")
+	meta := withLongStyleMeta(nil)
 
 	textVec, err := s.svc.EmbedText(ctx, content)
 	if err != nil {
@@ -316,7 +339,7 @@ func (s *Store) Update(ctx context.Context, id uuid.UUID, content string, import
 		}
 	}
 
-	return s.creator.UpdateMemoryContent(ctx, id, content, textVec, codeVec, nil, nil, contentKind)
+	return s.creator.UpdateMemoryContent(ctx, id, content, summary, textVec, codeVec, nil, nil, contentKind, meta)
 }
 
 // SoftDelete marks a memory as inactive.
