@@ -135,9 +135,9 @@ File: `internal/skills/lifecycle_test.go` (extend)
 
 `recall_test.go` covers `computeSkillScore`. `importanceFromInvocations` is 0 %.
 
-- [ ] `importanceFromInvocations(0)` → 0.0
-- [ ] `importanceFromInvocations(50)` → 0.5
-- [ ] `importanceFromInvocations(100)` → 1.0 (exact boundary)
+- [x] `importanceFromInvocations(0)` → 0.0
+- [x] `importanceFromInvocations(50)` → 0.5
+- [x] `importanceFromInvocations(100)` → 1.0 (exact boundary)
 - [ ] `importanceFromInvocations(200)` → 1.0 (capped)
 
 File: `internal/skills/recall_test.go` (extend)
