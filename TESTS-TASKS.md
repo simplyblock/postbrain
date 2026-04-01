@@ -356,8 +356,15 @@ File: `internal/api/rest/collections_test.go` (new)
 
 ### synthesis handlers (`internal/api/rest/synthesis.go`)
 
-- [ ] `POST /v1/synthesis` — missing `scope` returns 400
-- [ ] `GET /v1/synthesis/:id` — invalid UUID returns 400
+- [x] `POST /v1/knowledge/synthesize` — invalid JSON returns 400
+- [x] `POST /v1/knowledge/synthesize` — missing/invalid scope_id returns 400
+- [x] `POST /v1/knowledge/synthesize` — fewer than 2 source_ids returns 400
+- [x] `POST /v1/knowledge/synthesize` — invalid source_id returns 400
+- [x] `POST /v1/knowledge/synthesize` — no auth returns 401
+- [x] `GET /v1/knowledge/:id/sources` — invalid UUID returns 400
+- [x] `GET /v1/knowledge/:id/sources` — no auth returns 401
+- [x] `GET /v1/knowledge/:id/digests` — invalid UUID returns 400
+- [x] `GET /v1/knowledge/:id/digests` — no auth returns 401
 
 File: `internal/api/rest/synthesis_test.go` (new)
 
