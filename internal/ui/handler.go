@@ -485,7 +485,11 @@ func (h *Handler) handleCollectionDetail(w http.ResponseWriter, r *http.Request)
 		http.NotFound(w, r)
 		return
 	}
-	arts, _ := db.ListCollectionItems(r.Context(), h.pool, id)
+	arts, err := db.ListCollectionItems(r.Context(), h.pool, id)
+	if err != nil {
+		http.Error(w, "failed to load collection items", http.StatusInternalServerError)
+		return
+	}
 	h.render(w, r, "collection_detail", "Collection", struct {
 		Collection *db.KnowledgeCollection
 		Artifacts  []*db.KnowledgeArtifact
