@@ -297,20 +297,18 @@ func (h *Handler) handleMemoryDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := struct {
-		Memory *db.Memory
-	}{}
-
-	if h.pool != nil {
-		mem, err := db.GetMemory(r.Context(), h.pool, id)
-		if err != nil || mem == nil {
-			http.NotFound(w, r)
-			return
-		}
-		data.Memory = mem
+	if h.pool == nil {
+		http.NotFound(w, r)
+		return
 	}
 
-	h.render(w, r, "memory_detail", "Memory", data)
+	mem, err := db.GetMemory(r.Context(), h.pool, id)
+	if err != nil || mem == nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	h.render(w, r, "memory_detail", "Memory", struct{ Memory *db.Memory }{mem})
 }
 
 // handleKnowledge serves GET /ui/knowledge.

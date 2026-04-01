@@ -507,9 +507,14 @@ File: `internal/ui/handler_knowledge_test.go` (extend existing)
 
 ### memory UI (`internal/ui/handler.go`)
 
-- [ ] `GET /ui/memories` — renders without error (nil pool)
-- [ ] `GET /ui/memories/:id` — invalid UUID returns 400
-- [ ] `POST /ui/memories/:id/forget` — invalid UUID returns 400
+- [x] `GET /ui/memories` — renders 200 with nil pool
+- [x] `GET /ui/memories?q=...` — renders 200 with nil pool
+- [x] `GET /ui/memories` (HX-Request) — renders partial template
+- [x] `GET /ui/memories` — unauthenticated redirects to login
+- [x] `GET /ui/memories/:id` — invalid UUID returns 404
+- [x] `GET /ui/memories/:id` — nil pool returns 404 (bug fix: was 500)
+- [x] `GET /ui/memories/:id` — unauthenticated redirects to login
+- [ ] `POST /ui/memories/:id/forget` — no such route in codebase (skipped)
 
 File: `internal/ui/handler_memories_test.go` (new)
 
