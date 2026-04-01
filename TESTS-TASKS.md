@@ -225,9 +225,9 @@ File: `internal/knowledge/visibility_integration_test.go` (new)
 `lifecycle_integration_test.go` covers `Endorse`/`AutoPublish` end-to-end.
 The `RetractToDraft`, `Republish`, `Delete` transitions need a real artifact.
 
-- [ ] `SubmitForReview` → `RetractToDraft` → verify status `"draft"`
-- [ ] `Republish` — create artifact, publish, deprecate, then republish; status `"published"`
-- [ ] `Delete` — artifact + cascade records removed; subsequent `GetByID` returns nil
+- [x] `SubmitForReview` → `RetractToDraft` → verify status `"draft"`
+- [x] `Republish` — create artifact, publish, deprecate, then republish; status `"published"`
+- [x] `Delete` — artifact + cascade records removed; subsequent `GetByID` returns nil
 
 File: `internal/knowledge/lifecycle_integration_test.go` (extend)
 
