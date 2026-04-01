@@ -209,6 +209,17 @@ func requestWithChiParam(t *testing.T, paramName, paramValue string) *http.Reque
 	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 }
 
+// twoChiParams builds an *http.Request with two chi URL parameters injected.
+// It returns both the route context (unused by most callers) and the request.
+func twoChiParams(t *testing.T, k1, v1, k2, v2 string) (*chi.Context, *http.Request) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add(k1, v1)
+	rctx.URLParams.Add(k2, v2)
+	return rctx, req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+}
+
 func TestUUIDParam(t *testing.T) {
 	t.Parallel()
 	want := uuid.New()
