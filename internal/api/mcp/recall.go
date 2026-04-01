@@ -22,6 +22,9 @@ func (s *Server) handleRecall(ctx context.Context, req mcpgo.CallToolRequest) (*
 	args := req.GetArguments()
 
 	query, _ := args["query"].(string)
+	if query == "" {
+		return mcpgo.NewToolResultError("recall: 'query' is required"), nil
+	}
 	scopeStr, _ := args["scope"].(string)
 
 	limit := 10
