@@ -55,12 +55,16 @@ func (noopLifecycleDB) deleteArtifact(_ context.Context, _ uuid.UUID) error     
 // tests need to observe or control.
 type fakeLifecycleDB struct {
 	noopLifecycleDB
-	artifact           *db.KnowledgeArtifact
-	statusUpdated      string
-	snapshotted        bool
-	endorsed           bool
-	uniqueViolate      bool // if true, createEndorsement returns the idempotent sentinel
-	entityLinksDeleted bool
+	artifact                      *db.KnowledgeArtifact
+	statusUpdated                 string
+	snapshotted                   bool
+	endorsed                      bool
+	uniqueViolate                 bool // if true, createEndorsement returns the idempotent sentinel
+	entityLinksDeleted            bool
+	nulledPreviousVersionRefs     bool
+	nulledPromotionRequestRef     bool
+	resetPromotedMemoryStatusDone bool
+	artifactDeleted               bool
 }
 
 func (f *fakeLifecycleDB) getArtifact(_ context.Context, _ uuid.UUID) (*db.KnowledgeArtifact, error) {
@@ -104,7 +108,23 @@ func (f *fakeLifecycleDB) deleteArtifactEntityLinks(_ context.Context, _ uuid.UU
 	return nil
 }
 
+func (f *fakeLifecycleDB) nullPreviousVersionRefs(_ context.Context, _ uuid.UUID) error {
+	f.nulledPreviousVersionRefs = true
+	return nil
+}
+
+func (f *fakeLifecycleDB) nullPromotionRequestArtifactRef(_ context.Context, _ uuid.UUID) error {
+	f.nulledPromotionRequestRef = true
+	return nil
+}
+
+func (f *fakeLifecycleDB) resetPromotedMemoryStatus(_ context.Context, _ uuid.UUID) error {
+	f.resetPromotedMemoryStatusDone = true
+	return nil
+}
+
 func (f *fakeLifecycleDB) deleteArtifact(_ context.Context, _ uuid.UUID) error {
+	f.artifactDeleted = true
 	f.artifact = nil
 	return nil
 }
@@ -317,6 +337,212 @@ func TestDeprecate_RemovesEntityLinks(t *testing.T) {
 		t.Error("expected artifact entity links to be deleted on deprecation")
 	}
 }
+
+// ── RetractToDraft ────────────────────────────────────────────────────────────
+
+func TestRetractToDraft_ArtifactNotFound(t *testing.T) {
+	t.Parallel()
+	lc, _ := newTestLifecycle(nil /* artifact not found */, false)
+	err := lc.RetractToDraft(context.Background(), uuid.New(), uuid.New())
+	if !errors.Is(err, ErrInvalidTransition) {
+		t.Errorf("expected ErrInvalidTransition, got %v", err)
+	}
+}
+
+func TestRetractToDraft_WrongStatus(t *testing.T) {
+	t.Parallel()
+	for _, status := range []string{"draft", "published", "deprecated"} {
+		status := status
+		t.Run(status, func(t *testing.T) {
+			t.Parallel()
+			artifact := &db.KnowledgeArtifact{
+				ID:           uuid.New(),
+				AuthorID:     uuid.New(),
+				OwnerScopeID: uuid.New(),
+				Status:       status,
+			}
+			lc, _ := newTestLifecycle(artifact, false)
+			err := lc.RetractToDraft(context.Background(), artifact.ID, artifact.AuthorID)
+			if !errors.Is(err, ErrInvalidTransition) {
+				t.Errorf("status=%s: expected ErrInvalidTransition, got %v", status, err)
+			}
+		})
+	}
+}
+
+func TestRetractToDraft_AuthorCanRetract(t *testing.T) {
+	t.Parallel()
+	authorID := uuid.New()
+	artifact := &db.KnowledgeArtifact{
+		ID:           uuid.New(),
+		AuthorID:     authorID,
+		OwnerScopeID: uuid.New(),
+		Status:       "in_review",
+	}
+	lc, fdb := newTestLifecycle(artifact, false /* not admin */)
+
+	err := lc.RetractToDraft(context.Background(), artifact.ID, authorID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fdb.statusUpdated != "draft" {
+		t.Errorf("expected statusUpdated=draft, got %q", fdb.statusUpdated)
+	}
+}
+
+func TestRetractToDraft_NonAuthorNonAdminForbidden(t *testing.T) {
+	t.Parallel()
+	artifact := &db.KnowledgeArtifact{
+		ID:           uuid.New(),
+		AuthorID:     uuid.New(),
+		OwnerScopeID: uuid.New(),
+		Status:       "in_review",
+	}
+	lc, _ := newTestLifecycle(artifact, false /* not admin */)
+
+	err := lc.RetractToDraft(context.Background(), artifact.ID, uuid.New() /* different caller */)
+	if !errors.Is(err, ErrForbidden) {
+		t.Errorf("expected ErrForbidden, got %v", err)
+	}
+}
+
+func TestRetractToDraft_AdminCanRetract(t *testing.T) {
+	t.Parallel()
+	artifact := &db.KnowledgeArtifact{
+		ID:           uuid.New(),
+		AuthorID:     uuid.New(),
+		OwnerScopeID: uuid.New(),
+		Status:       "in_review",
+	}
+	lc, fdb := newTestLifecycle(artifact, true /* admin */)
+
+	err := lc.RetractToDraft(context.Background(), artifact.ID, uuid.New() /* non-author admin */)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fdb.statusUpdated != "draft" {
+		t.Errorf("expected statusUpdated=draft, got %q", fdb.statusUpdated)
+	}
+}
+
+// ── Republish ─────────────────────────────────────────────────────────────────
+
+func TestRepublish_ArtifactNotFound(t *testing.T) {
+	t.Parallel()
+	lc, _ := newTestLifecycle(nil, true)
+	err := lc.Republish(context.Background(), uuid.New(), uuid.New())
+	if !errors.Is(err, ErrInvalidTransition) {
+		t.Errorf("expected ErrInvalidTransition, got %v", err)
+	}
+}
+
+func TestRepublish_WrongStatus(t *testing.T) {
+	t.Parallel()
+	for _, status := range []string{"draft", "in_review", "published"} {
+		status := status
+		t.Run(status, func(t *testing.T) {
+			t.Parallel()
+			artifact := &db.KnowledgeArtifact{
+				ID:           uuid.New(),
+				OwnerScopeID: uuid.New(),
+				Status:       status,
+			}
+			lc, _ := newTestLifecycle(artifact, true)
+			err := lc.Republish(context.Background(), artifact.ID, uuid.New())
+			if !errors.Is(err, ErrInvalidTransition) {
+				t.Errorf("status=%s: expected ErrInvalidTransition, got %v", status, err)
+			}
+		})
+	}
+}
+
+func TestRepublish_NonAdminForbidden(t *testing.T) {
+	t.Parallel()
+	artifact := &db.KnowledgeArtifact{
+		ID:           uuid.New(),
+		OwnerScopeID: uuid.New(),
+		Status:       "deprecated",
+	}
+	lc, _ := newTestLifecycle(artifact, false /* not admin */)
+
+	err := lc.Republish(context.Background(), artifact.ID, uuid.New())
+	if !errors.Is(err, ErrForbidden) {
+		t.Errorf("expected ErrForbidden, got %v", err)
+	}
+}
+
+func TestRepublish_AdminTransitionsToPublished(t *testing.T) {
+	t.Parallel()
+	artifact := &db.KnowledgeArtifact{
+		ID:           uuid.New(),
+		OwnerScopeID: uuid.New(),
+		Status:       "deprecated",
+	}
+	lc, fdb := newTestLifecycle(artifact, true /* admin */)
+
+	err := lc.Republish(context.Background(), artifact.ID, uuid.New())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fdb.statusUpdated != "published" {
+		t.Errorf("expected statusUpdated=published, got %q", fdb.statusUpdated)
+	}
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+func TestDelete_NonAdminForbidden(t *testing.T) {
+	t.Parallel()
+	artifact := &db.KnowledgeArtifact{
+		ID:           uuid.New(),
+		OwnerScopeID: uuid.New(),
+		Status:       "published",
+	}
+	lc, _ := newTestLifecycle(artifact, false /* not admin */)
+
+	err := lc.Delete(context.Background(), artifact.ID, uuid.New())
+	if !errors.Is(err, ErrForbidden) {
+		t.Errorf("expected ErrForbidden, got %v", err)
+	}
+}
+
+func TestDelete_ArtifactNotFound(t *testing.T) {
+	t.Parallel()
+	lc, _ := newTestLifecycle(nil, true)
+	err := lc.Delete(context.Background(), uuid.New(), uuid.New())
+	if !errors.Is(err, ErrInvalidTransition) {
+		t.Errorf("expected ErrInvalidTransition, got %v", err)
+	}
+}
+
+func TestDelete_AdminCascadesAllPreDeleteSteps(t *testing.T) {
+	t.Parallel()
+	artifact := &db.KnowledgeArtifact{
+		ID:           uuid.New(),
+		OwnerScopeID: uuid.New(),
+		Status:       "published",
+	}
+	lc, fdb := newTestLifecycle(artifact, true /* admin */)
+
+	err := lc.Delete(context.Background(), artifact.ID, uuid.New())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !fdb.nulledPreviousVersionRefs {
+		t.Error("expected nullPreviousVersionRefs to be called")
+	}
+	if !fdb.nulledPromotionRequestRef {
+		t.Error("expected nullPromotionRequestArtifactRef to be called")
+	}
+	if !fdb.resetPromotedMemoryStatusDone {
+		t.Error("expected resetPromotedMemoryStatus to be called")
+	}
+	if !fdb.artifactDeleted {
+		t.Error("expected deleteArtifact to be called")
+	}
+}
+
+// ── EmergencyRollback ─────────────────────────────────────────────────────────
 
 // TestEmergencyRollback_ClearsPublishedAt verifies that EmergencyRollback sets status=draft.
 func TestEmergencyRollback_ClearsPublishedAt(t *testing.T) {
