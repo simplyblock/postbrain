@@ -182,12 +182,12 @@ File: `internal/principals/store_integration_test.go` (new), `membership_integra
 
 ### sharing — grant round-trip integration tests (`internal/sharing/grants.go`)
 
-- [ ] `Create` with memory grant — inserted record scannable, fields round-trip
-- [ ] `Create` with artifact grant — same
-- [ ] `Revoke` — deletes the record; subsequent `List` does not return it
-- [ ] `List` — returns grants for the grantee scope, pagination works
-- [ ] `IsMemoryAccessible` — true when grant exists and not expired; false when expired
-- [ ] `IsArtifactAccessible` — true when grant exists; false when no grant
+- [x] `Create` with memory grant — inserted record scannable, fields round-trip
+- [x] `Create` with artifact grant — same
+- [x] `Revoke` — deletes the record; subsequent `List` does not return it
+- [x] `List` — returns grants for the grantee scope, pagination works
+- [x] `IsMemoryAccessible` — true when grant exists and not expired; false when expired
+- [x] `IsArtifactAccessible` — true when grant exists; false when no grant
 
 File: `internal/sharing/grants_integration_test.go` (new)
 
