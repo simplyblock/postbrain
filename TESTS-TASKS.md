@@ -138,7 +138,7 @@ File: `internal/skills/lifecycle_test.go` (extend)
 - [x] `importanceFromInvocations(0)` → 0.0
 - [x] `importanceFromInvocations(50)` → 0.5
 - [x] `importanceFromInvocations(100)` → 1.0 (exact boundary)
-- [ ] `importanceFromInvocations(200)` → 1.0 (capped)
+- [x] `importanceFromInvocations(200)` → 1.0 (capped)
 
 File: `internal/skills/recall_test.go` (extend)
 
