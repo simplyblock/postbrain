@@ -372,11 +372,26 @@ File: `internal/api/rest/synthesis_test.go` (new)
 
 ### skills handlers (`internal/api/rest/skills.go`)
 
-- [ ] `POST /v1/skills` — missing `title` returns 400
-- [ ] `GET /v1/skills/recall` — missing `q` returns 400
-- [ ] `GET /v1/skills/:id` — invalid UUID returns 400
-- [ ] `POST /v1/skills/:id/review` — invalid UUID returns 400
-- [ ] `POST /v1/skills/:id/endorse` — invalid UUID returns 400
+- [x] `POST /v1/skills` — missing scope/slug/name returns 400
+- [x] `POST /v1/skills` — invalid scope format returns 400
+- [x] `POST /v1/skills` — invalid JSON returns 400
+- [x] `POST /v1/skills` — no auth returns 401
+- [x] `GET /v1/skills/search` — invalid scope format returns 400
+- [x] `GET /v1/skills/search` — nil embedding service returns 503
+- [x] `GET /v1/skills/search` — no auth returns 401
+- [x] `GET /v1/skills/:id` — invalid UUID returns 400
+- [x] `GET /v1/skills/:id` — no auth returns 401
+- [x] `PATCH /v1/skills/:id` — invalid UUID returns 400
+- [x] `PATCH /v1/skills/:id` — invalid JSON returns 400
+- [x] `PATCH /v1/skills/:id` — no auth returns 401
+- [x] `POST /v1/skills/:id/endorse` — invalid UUID returns 400
+- [x] `POST /v1/skills/:id/endorse` — no auth returns 401
+- [x] `POST /v1/skills/:id/deprecate` — invalid UUID returns 400
+- [x] `POST /v1/skills/:id/deprecate` — no auth returns 401
+- [x] `POST /v1/skills/:id/install` — invalid UUID returns 400
+- [x] `POST /v1/skills/:id/install` — no auth returns 401
+- [x] `POST /v1/skills/:id/invoke` — invalid UUID returns 400
+- [x] `POST /v1/skills/:id/invoke` — no auth returns 401
 
 File: `internal/api/rest/skills_test.go` (new)
 
