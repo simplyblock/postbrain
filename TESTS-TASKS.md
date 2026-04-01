@@ -111,14 +111,21 @@ File: `internal/knowledge/lifecycle_test.go` (extend)
 `lifecycle_test.go` covers `SubmitForReview` and `Endorse`. `RetractToDraft`,
 `Deprecate`, `Republish`, and `EmergencyRollback` are at 0 %.
 
-- [ ] `RetractToDraft` — nil skill returns `ErrInvalidTransition`
-- [ ] `RetractToDraft` — wrong status returns `ErrInvalidTransition`
-- [ ] `RetractToDraft` — `in_review` skill transitions to `"draft"`
-- [ ] `Deprecate` — non-admin returns `ErrForbidden`
-- [ ] `Deprecate` — published skill transitions to `"deprecated"`
-- [ ] `Republish` — deprecated skill transitions to `"published"` (admin)
-- [ ] `EmergencyRollback` — non-admin returns `ErrForbidden`
-- [ ] `EmergencyRollback` — admin transitions published skill to `"deprecated"`
+- [x] `RetractToDraft` — nil skill returns `ErrInvalidTransition`
+- [x] `RetractToDraft` — wrong status returns `ErrInvalidTransition`
+- [x] `RetractToDraft` — `in_review` skill transitions to `"draft"`
+- [x] `Deprecate` — nil skill returns `ErrInvalidTransition`
+- [x] `Deprecate` — wrong status returns `ErrInvalidTransition`
+- [x] `Deprecate` — non-admin returns `ErrForbidden`
+- [x] `Deprecate` — published skill transitions to `"deprecated"` (admin)
+- [x] `Republish` — nil skill returns `ErrInvalidTransition`
+- [x] `Republish` — wrong status returns `ErrInvalidTransition`
+- [x] `Republish` — non-admin returns `ErrForbidden`
+- [x] `Republish` — deprecated skill transitions to `"published"` (admin)
+- [x] `EmergencyRollback` — nil skill returns `ErrInvalidTransition`
+- [x] `EmergencyRollback` — already-draft returns `ErrInvalidTransition`
+- [x] `EmergencyRollback` — non-admin returns `ErrForbidden`
+- [x] `EmergencyRollback` — admin transitions any non-draft skill to `"draft"` (table-driven)
 
 File: `internal/skills/lifecycle_test.go` (extend)
 
