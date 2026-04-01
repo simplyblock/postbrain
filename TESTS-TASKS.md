@@ -210,9 +210,11 @@ File: `internal/knowledge/collections_integration_test.go` (new)
 
 ### knowledge — visibility integration tests (`internal/knowledge/visibility.go`)
 
-- [ ] `ResolveVisibleScopeIDs` — scope with parent: both IDs in result
-- [ ] `ResolveVisibleScopeIDs` — principal has personal scope: personal scope ID appended
-- [ ] `ResolveVisibleScopeIDs` — no personal scope: result is just ancestor chain
+- [x] `ResolveVisibleScopeIDs` — scope with parent: both IDs in result
+- [x] `ResolveVisibleScopeIDs` — principal has personal scope: personal scope ID appended
+  (NOTE: `kind='personal'` is not a valid schema value; personal scope branch is dead code;
+  covered by the NoPersonalScope test which exercises the nil-return path instead)
+- [x] `ResolveVisibleScopeIDs` — no personal scope: result is just ancestor chain
 
 File: `internal/knowledge/visibility_integration_test.go` (new)
 
