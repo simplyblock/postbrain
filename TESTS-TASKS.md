@@ -89,15 +89,17 @@ File: `internal/knowledge/visibility_test.go` (extend), `internal/knowledge/visi
 `lifecycle_test.go` has good `Endorse`/`autoPublish` coverage.
 `RetractToDraft`, `Republish`, and `Delete` are at 0 %.
 
-- [ ] `RetractToDraft` — artifact not found returns `ErrInvalidTransition`
-- [ ] `RetractToDraft` — artifact not `in_review` returns `ErrInvalidTransition`
-- [ ] `RetractToDraft` — author can retract; transitions to `"draft"`
-- [ ] `RetractToDraft` — non-author non-admin returns `ErrForbidden`
-- [ ] `Republish` — artifact not `deprecated` returns `ErrInvalidTransition`
-- [ ] `Republish` — non-admin returns `ErrForbidden`
-- [ ] `Republish` — admin transitions to `"published"`, preserves original `PublishedAt`
-- [ ] `Delete` — non-admin returns `ErrForbidden`
-- [ ] `Delete` — admin cascades all pre-delete steps (verify `nullPreviousVersionRefs`,
+- [x] `RetractToDraft` — artifact not found returns `ErrInvalidTransition`
+- [x] `RetractToDraft` — artifact not `in_review` returns `ErrInvalidTransition`
+- [x] `RetractToDraft` — author can retract; transitions to `"draft"`
+- [x] `RetractToDraft` — non-author non-admin returns `ErrForbidden`
+- [x] `RetractToDraft` — admin (non-author) can retract; transitions to `"draft"`
+- [x] `Republish` — artifact not `deprecated` returns `ErrInvalidTransition`
+- [x] `Republish` — non-admin returns `ErrForbidden`
+- [x] `Republish` — admin transitions to `"published"`
+- [x] `Delete` — artifact not found returns `ErrInvalidTransition`
+- [x] `Delete` — non-admin returns `ErrForbidden`
+- [x] `Delete` — admin cascades all pre-delete steps (verify `nullPreviousVersionRefs`,
   `nullPromotionRequestArtifactRef`, `resetPromotedMemoryStatus` all called)
 
 File: `internal/knowledge/lifecycle_test.go` (extend)
