@@ -1,4 +1,4 @@
-.PHONY: build test lint fmt migrate-up migrate-down docker-up docker-down generate
+.PHONY: build test test-integration lint fmt migrate-up migrate-down docker-up docker-down generate
 
 build:
 	go build -o postbrain ./cmd/postbrain
@@ -6,6 +6,9 @@ build:
 
 test:
 	go test ./...
+
+test-integration:
+	go test -tags integration ./...
 
 lint:
 	golangci-lint run ./...
