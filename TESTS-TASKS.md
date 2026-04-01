@@ -38,9 +38,16 @@ File: `internal/codegraph/indexer_ssh_test.go`
 
 ### codegraph — symbol resolver (`internal/codegraph/resolve.go`)
 
-- [ ] `Resolver.Resolve` with a fully-populated local symbol table (local hit, no DB needed)
-- [ ] `Resolver.Resolve` cache: second call for the same name must not re-query
-- [ ] `Resolver.Resolve` returns `(uuid.Nil, false)` for unknown symbol when pool is nil
+- [x] `Resolver.Resolve` local hit — returns the correct ID immediately, never touches pool
+- [x] `Resolver.Resolve` local table is case-sensitive (`"MyFunc"` ≠ `"myfunc"`)
+- [x] `Resolver.Resolve` returns the right ID among multiple entries in the local table
+- [x] `filePath` parameter is irrelevant to stage 1 (any path works for a local hit)
+- [ ] Stages 2/3 (import-aware + suffix fallback) — require a real DB; move to
+  `resolve_integration_test.go` (`//go:build integration`)
+
+Note: a nil `*pgxpool.Pool` panics in stage 2 (`pgxpool.(*Pool).QueryRow` dereferences
+the receiver). Stage 1 is safely unit-tested; stages 2/3 need `testcontainers`.
+The "cache" item in the original plan does not apply — `Resolver` has no cache.
 
 File: `internal/codegraph/resolve_test.go`
 
