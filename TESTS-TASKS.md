@@ -514,7 +514,7 @@ File: `internal/ui/handler_knowledge_test.go` (extend existing)
 - [x] `GET /ui/memories/:id` — invalid UUID returns 404
 - [x] `GET /ui/memories/:id` — nil pool returns 404 (bug fix: was 500)
 - [x] `GET /ui/memories/:id` — unauthenticated redirects to login
-- [ ] `POST /ui/memories/:id/forget` — no such route in codebase (skipped)
+- [ ] `POST /ui/memories/:id/forget` — **route not implemented** in UI (MCP has it; UI handler missing)
 
 File: `internal/ui/handler_memories_test.go` (new)
 
