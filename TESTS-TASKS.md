@@ -416,10 +416,19 @@ File: `internal/api/rest/upload_test.go` (new)
 `/v1/graph/callers`, `/v1/graph/callees`, `/v1/graph/dependencies`,
 `/v1/graph/dependents` are 0 %.
 
-- [ ] `GET /v1/graph/callers` — missing `symbol` returns 400
-- [ ] `GET /v1/graph/callees` — missing `scope` returns 400
-- [ ] `GET /v1/graph/dependencies` — missing `symbol` returns 400
-- [ ] `GET /v1/graph/dependents` — missing `scope` returns 400
+- [x] `GET /v1/entities` — invalid scope_id returns 400
+- [x] `GET /v1/entities` — no auth returns 401
+- [x] `GET /v1/graph` — missing scope_id returns 400
+- [x] `GET /v1/graph` — invalid scope_id returns 400
+- [x] `GET /v1/graph` — no auth returns 401
+- [x] `GET /v1/graph/callers` — missing/invalid params returns 400 (table-driven)
+- [x] `GET /v1/graph/callers` — no auth returns 401
+- [x] `GET /v1/graph/callees` — missing params returns 400
+- [x] `GET /v1/graph/callees` — no auth returns 401
+- [x] `GET /v1/graph/deps` — missing params returns 400
+- [x] `GET /v1/graph/deps` — no auth returns 401
+- [x] `GET /v1/graph/dependents` — missing params returns 400
+- [x] `GET /v1/graph/dependents` — no auth returns 401
 
 File: `internal/api/rest/graph_handlers_test.go` (new, extend existing `graph_helpers_test.go` or new file)
 
