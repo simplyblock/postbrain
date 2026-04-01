@@ -362,6 +362,270 @@ func TestExtract_Dispatch(t *testing.T) {
 	}
 }
 
+// ─── Go edge cases ────────────────────────────────────────────────────────────
+
+const goGenericReceiverSrc = `package repo
+
+type Repo[T any] struct{}
+
+func (r *Repo[T]) Method() {}
+`
+
+// TestExtractGo_GenericPointerReceiver verifies that a method on a generic
+// pointer receiver (*Repo[T]) is emitted with kind "method" and a name that
+// includes both the receiver type and the method name.
+func TestExtractGo_GenericPointerReceiver(t *testing.T) {
+	syms, _, err := codegraph.ExtractGo(context.Background(), []byte(goGenericReceiverSrc), "repo/generic.go")
+	if err != nil {
+		t.Fatalf("ExtractGo: %v", err)
+	}
+
+	var found bool
+	for _, s := range syms {
+		if string(s.Kind) == "method" && slices.ContainsFunc([]string{
+			"repo.(*Repo).Method",
+			"repo.(Repo).Method",
+		}, func(want string) bool { return s.Name == want }) {
+			found = true
+		}
+	}
+	if !found {
+		names := make([]string, len(syms))
+		for i, s := range syms {
+			names[i] = s.Name + "(" + string(s.Kind) + ")"
+		}
+		t.Errorf("expected a method symbol with receiver Repo and name Method; got: %v", names)
+	}
+}
+
+const goNamedReturnSrc = `package math
+
+func Divide(a, b int) (result int, err error) {
+	result = a / b
+	return
+}
+`
+
+// TestExtractGo_NamedReturnValues_NoDuplicates verifies that named return
+// value identifiers (result, err) are not emitted as separate symbols.
+func TestExtractGo_NamedReturnValues_NoDuplicates(t *testing.T) {
+	syms, _, err := codegraph.ExtractGo(context.Background(), []byte(goNamedReturnSrc), "math/ops.go")
+	if err != nil {
+		t.Fatalf("ExtractGo: %v", err)
+	}
+
+	for _, s := range syms {
+		if s.Name == "math.result" || s.Name == "math.err" {
+			t.Errorf("unexpected symbol %q — named return values must not be emitted as symbols", s.Name)
+		}
+	}
+
+	// The function itself must still be present.
+	var foundFn bool
+	for _, s := range syms {
+		if s.Name == "math.Divide" && string(s.Kind) == "function" {
+			foundFn = true
+		}
+	}
+	if !foundFn {
+		t.Error("expected symbol math.Divide with kind function")
+	}
+}
+
+const goIotaSrc = `package color
+
+const (
+	Red   = iota
+	Green
+	Blue
+)
+`
+
+// TestExtractGo_ConstIota_AllVariable verifies that all names in a const/iota
+// block are emitted with kind "variable".
+func TestExtractGo_ConstIota_AllVariable(t *testing.T) {
+	syms, _, err := codegraph.ExtractGo(context.Background(), []byte(goIotaSrc), "color/color.go")
+	if err != nil {
+		t.Fatalf("ExtractGo: %v", err)
+	}
+
+	kindOf := make(map[string]string)
+	for _, s := range syms {
+		kindOf[s.Name] = string(s.Kind)
+	}
+
+	for _, name := range []string{"color.Red", "color.Green", "color.Blue"} {
+		if kindOf[name] != "variable" {
+			t.Errorf("symbol %q: want kind %q, got %q", name, "variable", kindOf[name])
+		}
+	}
+}
+
+// ─── TypeScript edge cases ────────────────────────────────────────────────────
+
+const tsExportDefaultFnSrc = `export default function greet(name: string): string {
+  return "hello " + name;
+}
+`
+
+// TestExtractTypeScript_ExportDefaultFunction verifies that an
+// `export default function` declaration is extracted as a function symbol.
+func TestExtractTypeScript_ExportDefaultFunction(t *testing.T) {
+	syms, _, err := codegraph.ExtractTypeScript(context.Background(), []byte(tsExportDefaultFnSrc), "src/greet.ts")
+	if err != nil {
+		t.Fatalf("ExtractTypeScript: %v", err)
+	}
+
+	var found bool
+	for _, s := range syms {
+		if s.Name == "greet.greet" && string(s.Kind) == "function" {
+			found = true
+		}
+	}
+	if !found {
+		kindOf := make(map[string]string)
+		for _, s := range syms {
+			kindOf[s.Name] = string(s.Kind)
+		}
+		t.Errorf("expected symbol greet.greet with kind function; got: %v", kindOf)
+	}
+}
+
+const tsExtendsImplementsSrc = `class Animal {}
+interface Serializable {}
+
+class Dog extends Animal implements Serializable {
+  bark(): void {}
+}
+`
+
+// TestExtractTypeScript_ClassExtendsImplements verifies that both the extends
+// and implements edges are emitted for a class with both clauses.
+func TestExtractTypeScript_ClassExtendsImplements(t *testing.T) {
+	_, edges, err := codegraph.ExtractTypeScript(context.Background(), []byte(tsExtendsImplementsSrc), "src/dog.ts")
+	if err != nil {
+		t.Fatalf("ExtractTypeScript: %v", err)
+	}
+
+	type kv struct{ pred, obj string }
+	bySubj := make(map[string][]kv)
+	for _, e := range edges {
+		bySubj[e.SubjectName] = append(bySubj[e.SubjectName], kv{e.Predicate, e.ObjectName})
+	}
+
+	dogEdges := bySubj["dog.Dog"]
+	if !slices.ContainsFunc(dogEdges, func(e kv) bool { return e.pred == "extends" && e.obj == "Animal" }) {
+		t.Errorf("expected dog.Dog → extends → Animal; got: %v", dogEdges)
+	}
+	if !slices.ContainsFunc(dogEdges, func(e kv) bool { return e.pred == "implements" && e.obj == "Serializable" }) {
+		t.Errorf("expected dog.Dog → implements → Serializable; got: %v", dogEdges)
+	}
+}
+
+// ─── Rust edge cases ─────────────────────────────────────────────────────────
+
+const rsImplTraitSrc = `pub trait Greeter {
+    fn greet(&self) -> String;
+}
+
+pub struct Hello {}
+
+impl Greeter for Hello {
+    fn greet(&self) -> String {
+        String::from("hello")
+    }
+}
+`
+
+// TestExtractRust_ImplTraitFor verifies that `impl Trait for Type` emits an
+// implements edge from the type to the trait, and that methods inside the
+// impl block have kind "method".
+func TestExtractRust_ImplTraitFor(t *testing.T) {
+	syms, edges, err := codegraph.ExtractRust(context.Background(), []byte(rsImplTraitSrc), "src/hello.rs")
+	if err != nil {
+		t.Fatalf("ExtractRust: %v", err)
+	}
+
+	type kv struct{ pred, obj string }
+	bySubj := make(map[string][]kv)
+	for _, e := range edges {
+		bySubj[e.SubjectName] = append(bySubj[e.SubjectName], kv{e.Predicate, e.ObjectName})
+	}
+
+	helloEdges := bySubj["hello::Hello"]
+	if !slices.ContainsFunc(helloEdges, func(e kv) bool { return e.pred == "implements" && e.obj == "Greeter" }) {
+		t.Errorf("expected hello::Hello → implements → Greeter; got: %v", helloEdges)
+	}
+
+	kindOf := make(map[string]string)
+	for _, s := range syms {
+		kindOf[s.Name] = string(s.Kind)
+	}
+	if kindOf["hello::Hello::greet"] != "method" {
+		t.Errorf("expected hello::Hello::greet → method, got %q", kindOf["hello::Hello::greet"])
+	}
+}
+
+// ─── Python edge cases ────────────────────────────────────────────────────────
+
+const pyDecoratedFnSrc = `def my_decorator(func):
+    return func
+
+@my_decorator
+def foo():
+    pass
+`
+
+// TestExtractPython_DecoratedFunction verifies that a function wrapped in a
+// decorator is still extracted with kind "function".
+func TestExtractPython_DecoratedFunction(t *testing.T) {
+	syms, _, err := codegraph.ExtractPython(context.Background(), []byte(pyDecoratedFnSrc), "src/decorators.py")
+	if err != nil {
+		t.Fatalf("ExtractPython: %v", err)
+	}
+
+	kindOf := make(map[string]string)
+	for _, s := range syms {
+		kindOf[s.Name] = string(s.Kind)
+	}
+
+	if kindOf["decorators.foo"] != "function" {
+		t.Errorf("expected decorators.foo → function, got %q; all symbols: %v", kindOf["decorators.foo"], kindOf)
+	}
+}
+
+// ─── Java edge cases ─────────────────────────────────────────────────────────
+
+const javaAnonClassSrc = `package com.example;
+
+public class Outer {
+    public void doWork() {
+        Runnable r = new Runnable() {
+            public void run() {}
+        };
+    }
+}
+`
+
+// TestExtractJava_AnonymousInnerClass verifies that the presence of an
+// anonymous inner class does not prevent the outer class symbol from being
+// extracted.
+func TestExtractJava_AnonymousInnerClass(t *testing.T) {
+	syms, _, err := codegraph.ExtractJava(context.Background(), []byte(javaAnonClassSrc), "src/Outer.java")
+	if err != nil {
+		t.Fatalf("ExtractJava: %v", err)
+	}
+
+	kindOf := make(map[string]string)
+	for _, s := range syms {
+		kindOf[s.Name] = string(s.Kind)
+	}
+
+	if kindOf["com.example.Outer"] != "class" {
+		t.Errorf("expected com.example.Outer → class, got %q; all symbols: %v", kindOf["com.example.Outer"], kindOf)
+	}
+}
+
 func TestExtract_UnsupportedExtension(t *testing.T) {
 	_, _, err := codegraph.Extract(context.Background(), []byte(""), "file.unknown")
 	if err == nil {

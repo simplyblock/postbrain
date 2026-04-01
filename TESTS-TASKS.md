@@ -261,16 +261,16 @@ File: `internal/ui/handler_knowledge_test.go`, `handler_scopes_test.go`
 `extract_languages_test.go` already has smoke tests for most languages.
 Add focused tests for edge cases that have caused regressions.
 
-- [ ] **Go** (`extract_go.go`): generic receiver `func (r *Repo[T]) Method()` — symbol
+- [x] **Go** (`extract_go.go`): generic receiver `func (r *Repo[T]) Method()` — symbol
   name and kind are correct
-- [ ] **Go**: function with named return values — no duplicate symbols
-- [ ] **Go**: `const` block with iota — all names extracted as `variable`
-- [ ] **TypeScript**: `export default function` — extracted as function
-- [ ] **TypeScript**: `class Foo extends Bar implements Baz` — both `extends` and
+- [x] **Go**: function with named return values — no duplicate symbols
+- [x] **Go**: `const` block with iota — all names extracted as `variable`
+- [x] **TypeScript**: `export default function` — extracted as function
+- [x] **TypeScript**: `class Foo extends Bar implements Baz` — both `extends` and
   `implements` edges emitted
-- [ ] **Rust**: `impl Trait for Type` — `implements` edge present, method symbols correct
-- [ ] **Python**: decorated function `@decorator\ndef foo()` — extracted as function
-- [ ] **Java**: anonymous inner class — outer class symbol still extracted
+- [x] **Rust**: `impl Trait for Type` — `implements` edge present, method symbols correct
+- [x] **Python**: decorated function `@decorator\ndef foo()` — extracted as function
+- [x] **Java**: anonymous inner class — outer class symbol still extracted
 
 File: `internal/codegraph/extractor_test.go` (extend existing)
 
