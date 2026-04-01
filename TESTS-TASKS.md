@@ -522,9 +522,15 @@ File: `internal/ui/handler_memories_test.go` (new)
 
 ### collections UI (`internal/ui/handler.go`)
 
-- [ ] `GET /ui/collections` — renders list (nil pool, empty result)
-- [ ] `GET /ui/collections/new` — renders form (200)
-- [ ] `POST /ui/collections` — missing name returns form error
+- [x] `GET /ui/collections` — renders 200 with nil pool
+- [x] `GET /ui/collections?scope_id=...` — renders 200 with nil pool
+- [x] `GET /ui/collections?scope_id=invalid` — renders 200 (silently ignored with nil pool)
+- [x] `GET /ui/collections` — unauthenticated redirects to login
+- [x] `GET /ui/collections/:id` — invalid UUID returns 404
+- [x] `GET /ui/collections/:id` — nil pool returns 404 (bug fix: was 500)
+- [x] `GET /ui/collections/:id` — unauthenticated redirects to login
+- [ ] `GET /ui/collections/new` — **route not implemented** in UI
+- [ ] `POST /ui/collections` — **route not implemented** in UI
 
 File: `internal/ui/handler_collections_test.go` (new)
 
