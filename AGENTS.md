@@ -45,12 +45,19 @@ Additional rules:
 - If an existing test breaks as a side effect, fix it before committing —
   do not work around it or skip it.
 
-### Formatting
+### Formatting and Linting
 - Run the code formatter before every commit:
   ```
   gofmt -w .
   ```
 - Code that does not pass `gofmt` must not be committed.
+- Run the linter before every commit:
+  ```
+  make lint
+  ```
+- Linting **must pass**. Do not commit code with lint errors. Fix all issues
+  before committing — do not suppress warnings unless there is a documented
+  reason.
 
 ### Committing
 - Commit after each completed task or prompt iteration where changes were made.
@@ -141,7 +148,7 @@ Additional rules:
 | Commit message summary | ≤ 72 characters, imperative mood ("Add X", "Fix Y") |
 | Commit message body | Required — explain what and why, not just what |
 | `Co-authored-by` trailer | Required on every agent commit |
-| Pre-commit checklist | 1. `go test ./...` passes · 2. `gofmt -w .` applied · 3. `TASKS.md` updated |
+| Pre-commit checklist | 1. `go test ./...` passes · 2. `gofmt -w .` applied · 3. `make lint` passes · 4. `TASKS.md` updated |
 
 ---
 
@@ -151,6 +158,7 @@ Before every `git commit`, verify all of the following:
 
 - [ ] `go test ./...` — full test suite passes, including newly written tests
 - [ ] `gofmt -w .` — formatter applied, no outstanding diffs
+- [ ] `make lint` — linter passes with zero errors
 - [ ] `TASKS.md` — updated to reflect completed and newly discovered work
 - [ ] Changes are focused — no unrelated modifications staged
 - [ ] `DESIGN.md` — not modified unless approved and necessary
