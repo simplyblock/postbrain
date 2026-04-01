@@ -36,7 +36,9 @@ func (f *fakeLifecycleDB) getSkill(_ context.Context, _ uuid.UUID) (*db.Skill, e
 }
 func (f *fakeLifecycleDB) updateSkillStatus(_ context.Context, _ uuid.UUID, status string, _, _ interface{}) error {
 	f.statusUpdated = status
-	f.skill.Status = status
+	if f.skill != nil {
+		f.skill.Status = status
+	}
 	return nil
 }
 func (f *fakeLifecycleDB) getSkillEndorsementByEndorser(_ context.Context, _, _ uuid.UUID) (*db.SkillEndorsement, error) {
@@ -112,6 +114,113 @@ func TestEndorse_AutoPublish(t *testing.T) {
 	}
 }
 
+// ── SubmitForReview ───────────────────────────────────────────────────────────
+
+func TestSubmitForReview_NilSkill(t *testing.T) {
+	t.Parallel()
+	lc, _ := newTestLifecycle(nil, 0, false)
+	err := lc.SubmitForReview(context.Background(), uuid.New(), uuid.New())
+	if !errors.Is(err, ErrInvalidTransition) {
+		t.Errorf("expected ErrInvalidTransition, got %v", err)
+	}
+}
+
+func TestSubmitForReview_WrongStatus(t *testing.T) {
+	t.Parallel()
+	for _, status := range []string{"in_review", "published", "deprecated"} {
+		status := status
+		t.Run(status, func(t *testing.T) {
+			t.Parallel()
+			skill := &db.Skill{ID: uuid.New(), Status: status}
+			lc, _ := newTestLifecycle(skill, 0, false)
+			err := lc.SubmitForReview(context.Background(), skill.ID, uuid.New())
+			if !errors.Is(err, ErrInvalidTransition) {
+				t.Errorf("status=%s: expected ErrInvalidTransition, got %v", status, err)
+			}
+		})
+	}
+}
+
+func TestSubmitForReview_DraftTransitionsToInReview(t *testing.T) {
+	t.Parallel()
+	skill := &db.Skill{ID: uuid.New(), AuthorID: uuid.New(), Status: "draft"}
+	lc, fdb := newTestLifecycle(skill, 0, false)
+	err := lc.SubmitForReview(context.Background(), skill.ID, skill.AuthorID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fdb.statusUpdated != "in_review" {
+		t.Errorf("expected statusUpdated=in_review, got %q", fdb.statusUpdated)
+	}
+}
+
+// ── RetractToDraft ────────────────────────────────────────────────────────────
+
+func TestRetractToDraft_NilSkill(t *testing.T) {
+	t.Parallel()
+	lc, _ := newTestLifecycle(nil, 0, false)
+	err := lc.RetractToDraft(context.Background(), uuid.New(), uuid.New())
+	if !errors.Is(err, ErrInvalidTransition) {
+		t.Errorf("expected ErrInvalidTransition, got %v", err)
+	}
+}
+
+func TestRetractToDraft_WrongStatus(t *testing.T) {
+	t.Parallel()
+	for _, status := range []string{"draft", "published", "deprecated"} {
+		status := status
+		t.Run(status, func(t *testing.T) {
+			t.Parallel()
+			skill := &db.Skill{ID: uuid.New(), Status: status}
+			lc, _ := newTestLifecycle(skill, 0, false)
+			err := lc.RetractToDraft(context.Background(), skill.ID, uuid.New())
+			if !errors.Is(err, ErrInvalidTransition) {
+				t.Errorf("status=%s: expected ErrInvalidTransition, got %v", status, err)
+			}
+		})
+	}
+}
+
+func TestRetractToDraft_InReviewTransitionsToDraft(t *testing.T) {
+	t.Parallel()
+	skill := &db.Skill{ID: uuid.New(), Status: "in_review"}
+	lc, fdb := newTestLifecycle(skill, 0, false)
+	err := lc.RetractToDraft(context.Background(), skill.ID, uuid.New())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fdb.statusUpdated != "draft" {
+		t.Errorf("expected statusUpdated=draft, got %q", fdb.statusUpdated)
+	}
+}
+
+// ── Deprecate ─────────────────────────────────────────────────────────────────
+
+func TestDeprecate_NilSkill(t *testing.T) {
+	t.Parallel()
+	lc, _ := newTestLifecycle(nil, 0, true)
+	err := lc.Deprecate(context.Background(), uuid.New(), uuid.New())
+	if !errors.Is(err, ErrInvalidTransition) {
+		t.Errorf("expected ErrInvalidTransition, got %v", err)
+	}
+}
+
+func TestDeprecate_WrongStatus(t *testing.T) {
+	t.Parallel()
+	for _, status := range []string{"draft", "in_review", "deprecated"} {
+		status := status
+		t.Run(status, func(t *testing.T) {
+			t.Parallel()
+			skill := &db.Skill{ID: uuid.New(), ScopeID: uuid.New(), Status: status}
+			lc, _ := newTestLifecycle(skill, 0, true)
+			err := lc.Deprecate(context.Background(), skill.ID, uuid.New())
+			if !errors.Is(err, ErrInvalidTransition) {
+				t.Errorf("status=%s: expected ErrInvalidTransition, got %v", status, err)
+			}
+		})
+	}
+}
+
 func TestDeprecate_NonAdmin(t *testing.T) {
 	t.Parallel()
 	skill := &db.Skill{
@@ -123,5 +232,130 @@ func TestDeprecate_NonAdmin(t *testing.T) {
 	err := lc.Deprecate(context.Background(), skill.ID, uuid.New())
 	if !errors.Is(err, ErrForbidden) {
 		t.Errorf("expected ErrForbidden, got %v", err)
+	}
+}
+
+func TestDeprecate_AdminSucceeds(t *testing.T) {
+	t.Parallel()
+	skill := &db.Skill{
+		ID:      uuid.New(),
+		ScopeID: uuid.New(),
+		Status:  "published",
+	}
+	lc, fdb := newTestLifecycle(skill, 0, true)
+	err := lc.Deprecate(context.Background(), skill.ID, uuid.New())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fdb.statusUpdated != "deprecated" {
+		t.Errorf("expected statusUpdated=deprecated, got %q", fdb.statusUpdated)
+	}
+}
+
+// ── Republish ─────────────────────────────────────────────────────────────────
+
+func TestRepublish_NilSkill(t *testing.T) {
+	t.Parallel()
+	lc, _ := newTestLifecycle(nil, 0, true)
+	err := lc.Republish(context.Background(), uuid.New(), uuid.New())
+	if !errors.Is(err, ErrInvalidTransition) {
+		t.Errorf("expected ErrInvalidTransition, got %v", err)
+	}
+}
+
+func TestRepublish_WrongStatus(t *testing.T) {
+	t.Parallel()
+	for _, status := range []string{"draft", "in_review", "published"} {
+		status := status
+		t.Run(status, func(t *testing.T) {
+			t.Parallel()
+			skill := &db.Skill{ID: uuid.New(), ScopeID: uuid.New(), Status: status}
+			lc, _ := newTestLifecycle(skill, 0, true)
+			err := lc.Republish(context.Background(), skill.ID, uuid.New())
+			if !errors.Is(err, ErrInvalidTransition) {
+				t.Errorf("status=%s: expected ErrInvalidTransition, got %v", status, err)
+			}
+		})
+	}
+}
+
+func TestRepublish_NonAdmin(t *testing.T) {
+	t.Parallel()
+	skill := &db.Skill{
+		ID:      uuid.New(),
+		ScopeID: uuid.New(),
+		Status:  "deprecated",
+	}
+	lc, _ := newTestLifecycle(skill, 0, false)
+	err := lc.Republish(context.Background(), skill.ID, uuid.New())
+	if !errors.Is(err, ErrForbidden) {
+		t.Errorf("expected ErrForbidden, got %v", err)
+	}
+}
+
+func TestRepublish_AdminSucceeds(t *testing.T) {
+	t.Parallel()
+	skill := &db.Skill{
+		ID:      uuid.New(),
+		ScopeID: uuid.New(),
+		Status:  "deprecated",
+	}
+	lc, fdb := newTestLifecycle(skill, 0, true)
+	err := lc.Republish(context.Background(), skill.ID, uuid.New())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fdb.statusUpdated != "published" {
+		t.Errorf("expected statusUpdated=published, got %q", fdb.statusUpdated)
+	}
+}
+
+// ── EmergencyRollback ─────────────────────────────────────────────────────────
+
+func TestEmergencyRollback_NilSkill(t *testing.T) {
+	t.Parallel()
+	lc, _ := newTestLifecycle(nil, 0, true)
+	err := lc.EmergencyRollback(context.Background(), uuid.New(), uuid.New())
+	if !errors.Is(err, ErrInvalidTransition) {
+		t.Errorf("expected ErrInvalidTransition, got %v", err)
+	}
+}
+
+func TestEmergencyRollback_AlreadyDraft(t *testing.T) {
+	t.Parallel()
+	skill := &db.Skill{ID: uuid.New(), ScopeID: uuid.New(), Status: "draft"}
+	lc, _ := newTestLifecycle(skill, 0, true)
+	err := lc.EmergencyRollback(context.Background(), skill.ID, uuid.New())
+	if !errors.Is(err, ErrInvalidTransition) {
+		t.Errorf("expected ErrInvalidTransition, got %v", err)
+	}
+}
+
+func TestEmergencyRollback_NonAdmin(t *testing.T) {
+	t.Parallel()
+	skill := &db.Skill{ID: uuid.New(), ScopeID: uuid.New(), Status: "published"}
+	lc, _ := newTestLifecycle(skill, 0, false)
+	err := lc.EmergencyRollback(context.Background(), skill.ID, uuid.New())
+	if !errors.Is(err, ErrForbidden) {
+		t.Errorf("expected ErrForbidden, got %v", err)
+	}
+}
+
+func TestEmergencyRollback_AdminTransitionsToDraft(t *testing.T) {
+	t.Parallel()
+	for _, status := range []string{"in_review", "published", "deprecated"} {
+		status := status
+		t.Run(status, func(t *testing.T) {
+			t.Parallel()
+			skill := &db.Skill{ID: uuid.New(), ScopeID: uuid.New(), Status: status}
+			lc, fdb := newTestLifecycle(skill, 0, true)
+			err := lc.EmergencyRollback(context.Background(), skill.ID, uuid.New())
+			if err != nil {
+				t.Fatalf("status=%s: unexpected error: %v", status, err)
+			}
+			if fdb.statusUpdated != "draft" {
+				t.Errorf("status=%s: expected statusUpdated=draft, got %q", status, fdb.statusUpdated)
+			}
+		})
 	}
 }
