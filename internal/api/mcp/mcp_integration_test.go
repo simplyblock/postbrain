@@ -9,6 +9,7 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
 	mcpapi "github.com/simplyblock/postbrain/internal/api/mcp"
+	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
@@ -26,6 +27,7 @@ func TestMCP_Remember_Recall_Forget(t *testing.T) {
 	srv := mcpapi.NewServer(pool, svc, cfg)
 	mcpSrv := srv.MCPServer()
 
+	ctx = context.WithValue(ctx, auth.ContextKeyPrincipalID, principal.ID)
 	scopeStr := "project:" + scope.ExternalID
 
 	// Test remember.
@@ -90,6 +92,7 @@ func TestMCP_Publish_Endorse_AutoPublish(t *testing.T) {
 	srv := mcpapi.NewServer(pool, svc, cfg)
 	mcpSrv := srv.MCPServer()
 
+	ctx = context.WithValue(ctx, auth.ContextKeyPrincipalID, principal.ID)
 	scopeStr := "project:" + scope.ExternalID
 
 	// Publish an artifact.

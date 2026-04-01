@@ -100,7 +100,7 @@ func TestREST_E2E(t *testing.T) {
 		if createdMemoryID == "" {
 			t.Skip("memory not created")
 		}
-		req, _ := http.NewRequest(http.MethodGet, srv.URL+"/v1/memories/recall?query=PostgreSQL&scope=project:e2e-project", nil)
+		req, _ := http.NewRequest(http.MethodGet, srv.URL+"/v1/memories/recall?q=PostgreSQL&scope=project:e2e-project", nil)
 		req.Header.Set("Authorization", authHeader)
 
 		resp, err := http.DefaultClient.Do(req)
@@ -177,10 +177,10 @@ func TestScopes_CRUD(t *testing.T) {
 		}
 		var result map[string]any
 		json.NewDecoder(resp.Body).Decode(&result)
-		if result["id"] == nil {
-			t.Error("expected id in response")
+		if result["ID"] == nil {
+			t.Error("expected ID in response")
 		}
-		createdScopeID, _ = result["id"].(string)
+		createdScopeID, _ = result["ID"].(string)
 	})
 
 	t.Run("list scopes returns 200", func(t *testing.T) {

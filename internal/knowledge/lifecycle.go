@@ -209,9 +209,13 @@ func (l *Lifecycle) Endorse(ctx context.Context, artifactID, endorserID uuid.UUI
 		return nil, ErrInvalidTransition
 	}
 
-	isAdmin, err := l.membership.IsScopeAdmin(ctx, endorserID, artifact.OwnerScopeID)
-	if err != nil {
-		return nil, err
+	isAdmin := false
+	if l.membership != nil {
+		var err error
+		isAdmin, err = l.membership.IsScopeAdmin(ctx, endorserID, artifact.OwnerScopeID)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if !isAdmin {
