@@ -56,10 +56,10 @@ File: `internal/auth/tokens_test.go` (extend), `middleware_test.go` (extend), `t
 The `Revoke`/`List`/`IsMemoryAccessible`/`IsArtifactAccessible` functions are
 fully untested (all need a real DB).
 
-- [ ] `Create` — only MemoryID set: validation passes (no `ErrInvalidGrant`), nil-pool
+- [x] `Create` — only MemoryID set: validation passes (no `ErrInvalidGrant`), nil-pool
   panic is expected (shows DB path reached)
-- [ ] `Create` — only ArtifactID set: validation passes (same pattern)
-- [ ] `Revoke` / `List` / `IsMemoryAccessible` / `IsArtifactAccessible` — move to
+- [x] `Create` — only ArtifactID set: validation passes (same pattern)
+- [x] `Revoke` / `List` / `IsMemoryAccessible` / `IsArtifactAccessible` — move to
   `sharing_integration_test.go` (these are thin wrappers over raw SQL; one
   round-trip test each is sufficient)
 
