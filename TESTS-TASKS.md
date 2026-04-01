@@ -265,10 +265,10 @@ File: `internal/jobs/staleness_integration_test.go` (new)
 
 `Store.Recall` is 0 % covered end-to-end.
 
-- [ ] Empty query returns empty slice (no panic)
-- [ ] Single published skill appears in results when query matches title
-- [ ] `Installed` filter: `true` returns only installed skills; `false` returns only uninstalled
-- [ ] `Limit` is respected: more than `Limit` candidates → result capped
+- [x] Empty query returns empty slice (no panic)
+- [x] Single published skill appears in results when query matches title
+- [x] `Installed` filter: `true` returns only installed skills; `false` returns only uninstalled
+- [x] `Limit` is respected: more than `Limit` candidates → result capped
 
 File: `internal/skills/skills_integration_test.go` (extend existing)
 
@@ -276,9 +276,9 @@ File: `internal/skills/skills_integration_test.go` (extend existing)
 
 ### skills — store Update/GetBySlug/GetByID integration tests (`internal/skills/store.go`)
 
-- [ ] `Update` — changes title and description; returns updated record
-- [ ] `GetBySlug` — returns the correct skill; unknown slug returns nil
-- [ ] `GetByID` — returns the correct skill; unknown ID returns nil
+- [x] `Update` — changes title and description; returns updated record
+- [x] `GetBySlug` — returns the correct skill; unknown slug returns nil
+- [x] `GetByID` — returns the correct skill; unknown ID returns nil
 
 File: `internal/skills/skills_integration_test.go` (extend existing)
 
