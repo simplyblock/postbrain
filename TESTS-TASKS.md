@@ -399,8 +399,13 @@ File: `internal/api/rest/skills_test.go` (new)
 
 ### upload handler (`internal/api/rest/upload.go`)
 
-- [ ] `POST /v1/upload` — no multipart form returns 400
-- [ ] `POST /v1/upload` — valid form but nil pool: handler handles gracefully (no panic)
+- [x] `POST /v1/knowledge/upload` — no auth returns 401
+- [x] `POST /v1/knowledge/upload` — non-multipart body returns 400
+- [x] `POST /v1/knowledge/upload` — missing file field returns 400
+- [x] `POST /v1/knowledge/upload` — unsupported file type returns 400
+- [x] `POST /v1/knowledge/upload` — empty text content returns 400
+- [x] `POST /v1/knowledge/upload` — missing scope returns 400
+- [x] `POST /v1/knowledge/upload` — invalid scope format returns 400
 
 File: `internal/api/rest/upload_test.go` (new)
 
