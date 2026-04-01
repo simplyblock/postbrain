@@ -204,11 +204,11 @@ File: `internal/api/rest/knowledge_test.go`, `scopes_test.go` (extend), `memorie
 The existing tests cover the full integration path. Add focused unit tests that
 verify parameter validation without a running DB.
 
-- [ ] `handleRecall` — missing required `query` param returns a tool error
-- [ ] `handleRemember` — missing `content` param returns a tool error
-- [ ] `handleForget` — invalid memory UUID in params returns a tool error
-- [ ] `handlePublish` — missing `artifact_id` returns a tool error
-- [ ] `handleSummarize` — missing `scope` param returns a tool error
+- [x] `handleRecall` — missing required `query` param returns a tool error (added validation to handler)
+- [x] `handleRemember` — missing `content` param returns a tool error (already in server_test.go; empty-string variant added)
+- [x] `handleForget` — invalid memory UUID in params returns a tool error
+- [x] `handlePublish` — missing `title`/`scope` returns a tool error
+- [x] `handleSummarize` — missing `scope` param returns a tool error
 
 File: `internal/api/mcp/handlers_unit_test.go`
 
