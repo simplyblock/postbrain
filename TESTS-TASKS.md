@@ -148,10 +148,10 @@ File: `internal/skills/recall_test.go` (extend)
 
 `CosineSimilarity` is 0 % covered.
 
-- [ ] Two identical unit vectors → 1.0
-- [ ] Orthogonal vectors → 0.0
-- [ ] Zero vector (denominator guard) → 0.0 (no panic/NaN)
-- [ ] Negative dot product → result clamped at 0 or negative (verify behavior)
+- [x] Two identical unit vectors → 1.0
+- [x] Orthogonal vectors → 0.0
+- [x] Zero vector (denominator guard) → 0.0 (no panic/NaN)
+- [x] Negative dot product → result clamped at 0 or negative (verify behavior)
 
 File: `internal/retrieval/merge_test.go` (extend existing)
 
