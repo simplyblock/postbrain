@@ -109,13 +109,13 @@ suite with no containers. Inject it via
 
 `store_test.go` already covers status flags and `ErrNotEditable`. Extend it:
 
-- [ ] Replace the inline `fakeEmbedder` struct with `embedding.FakeEmbedder` so
+- [x] Replace the inline `fakeEmbedder` struct with `embedding.FakeEmbedder` so
   different inputs produce distinct vectors (catches accidental same-vector bugs)
-- [ ] `Create` with `AutoPublish=true` sets `status=published` and non-nil `PublishedAt`
-- [ ] `Create` embed error is propagated (inject a failing embedder)
-- [ ] `Create` creator error is propagated
-- [ ] `Update` with a nil getter result returns `ErrNotFound`
-- [ ] `Update` on a draft artifact succeeds and returns updated content
+- [x] `Create` with `AutoPublish=true` sets `status=published` and non-nil `PublishedAt`
+- [x] `Create` embed error is propagated (inject a failing embedder)
+- [x] `Create` creator error is propagated
+- [x] `Update` with a nil getter result returns `ErrNotFound`
+- [x] `Update` on a draft artifact succeeds and returns updated content
 
 File: `internal/knowledge/store_test.go` (extend existing)
 
