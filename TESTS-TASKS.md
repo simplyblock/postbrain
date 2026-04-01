@@ -82,8 +82,8 @@ File: `internal/api/rest/helpers_test.go`
 
 ### api/rest — graph response helpers (`internal/api/rest/graph.go`)
 
-- [ ] `traversalResult` — nil input, entity with no neighbours, entity with both directions
-- [ ] `scopeAndSymbol` — valid query params, missing `scope`, missing `symbol`
+- [x] `traversalResult` — entity with no neighbours, entity with both directions
+- [x] `scopeAndSymbol` — valid query params, missing `scope`, missing `symbol`, invalid UUID
 
 File: `internal/api/rest/graph_helpers_test.go`
 
