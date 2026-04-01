@@ -64,6 +64,10 @@ func (s *Server) handleRemember(ctx context.Context, req mcpgo.CallToolRequest) 
 	if v, ok := args["source_ref"].(string); ok && v != "" {
 		sourceRef = &v
 	}
+	var summary *string
+	if v, ok := args["summary"].(string); ok && v != "" {
+		summary = &v
+	}
 
 	var entities []memory.EntityInput
 	if v, ok := args["entities"].([]any); ok {
@@ -91,6 +95,7 @@ func (s *Server) handleRemember(ctx context.Context, req mcpgo.CallToolRequest) 
 
 	input := memory.CreateInput{
 		Content:    content,
+		Summary:    summary,
 		MemoryType: memoryType,
 		ScopeID:    scope.ID,
 		AuthorID:   principalID,

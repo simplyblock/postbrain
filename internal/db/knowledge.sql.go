@@ -270,13 +270,14 @@ LIMIT $2 OFFSET $3
 `
 
 type ListAllArtifactsParams struct {
-	ScopeID uuid.UUID
+	Column1 uuid.UUID
 	Limit   int32
 	Offset  int32
 }
 
+// $1 = scope_id (zero UUID = all scopes), $2 = limit, $3 = offset
 func (q *Queries) ListAllArtifacts(ctx context.Context, arg ListAllArtifactsParams) ([]*KnowledgeArtifact, error) {
-	rows, err := q.db.Query(ctx, listAllArtifacts, arg.ScopeID, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listAllArtifacts, arg.Column1, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -336,13 +337,19 @@ LIMIT $3 OFFSET $4
 
 type ListArtifactsByStatusParams struct {
 	Status  string
-	ScopeID uuid.UUID
+	Column2 uuid.UUID
 	Limit   int32
 	Offset  int32
 }
 
+// $1 = status, $2 = scope_id (zero = all), $3 = limit, $4 = offset
 func (q *Queries) ListArtifactsByStatus(ctx context.Context, arg ListArtifactsByStatusParams) ([]*KnowledgeArtifact, error) {
-	rows, err := q.db.Query(ctx, listArtifactsByStatus, arg.Status, arg.ScopeID, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listArtifactsByStatus,
+		arg.Status,
+		arg.Column2,
+		arg.Limit,
+		arg.Offset,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -826,7 +833,7 @@ LIMIT $4 OFFSET $5
 type SearchArtifactsParams struct {
 	Title   string
 	Column2 interface{}
-	ScopeID uuid.UUID
+	Column3 uuid.UUID
 	Limit   int32
 	Offset  int32
 }
@@ -836,7 +843,7 @@ func (q *Queries) SearchArtifacts(ctx context.Context, arg SearchArtifactsParams
 	rows, err := q.db.Query(ctx, searchArtifacts,
 		arg.Title,
 		arg.Column2,
-		arg.ScopeID,
+		arg.Column3,
 		arg.Limit,
 		arg.Offset,
 	)

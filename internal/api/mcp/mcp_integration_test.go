@@ -4,13 +4,16 @@ package mcp_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
+	"github.com/google/uuid"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
 	mcpapi "github.com/simplyblock/postbrain/internal/api/mcp"
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/config"
+	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
@@ -38,8 +41,10 @@ func TestMCP_Remember_Recall_Forget(t *testing.T) {
 
 	req := mcpgo.CallToolRequest{}
 	req.Params.Name = "remember"
+	firstSummary := "Long-form note about goroutine communication."
 	req.Params.Arguments = map[string]any{
 		"content":     "E2E test: Go channels are goroutine-safe communication primitives",
+		"summary":     firstSummary,
 		"scope":       scopeStr,
 		"memory_type": "semantic",
 	}
@@ -55,6 +60,65 @@ func TestMCP_Remember_Recall_Forget(t *testing.T) {
 	// Verify content is non-empty.
 	if len(result.Content) == 0 {
 		t.Fatal("expected non-empty result content")
+	}
+	text, ok := result.Content[0].(mcpgo.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent, got %T", result.Content[0])
+	}
+	var rememberOut map[string]any
+	if err := json.Unmarshal([]byte(text.Text), &rememberOut); err != nil {
+		t.Fatalf("remember output is not JSON: %v", err)
+	}
+	memIDStr, _ := rememberOut["memory_id"].(string)
+	memID, err := uuid.Parse(memIDStr)
+	if err != nil {
+		t.Fatalf("invalid memory_id %q: %v", memIDStr, err)
+	}
+	mem, err := db.GetMemory(ctx, pool, memID)
+	if err != nil {
+		t.Fatalf("GetMemory: %v", err)
+	}
+	if mem == nil {
+		t.Fatal("expected memory to exist after remember")
+	}
+	if mem.Summary == nil || *mem.Summary != firstSummary {
+		t.Fatalf("summary = %v, want %q", mem.Summary, firstSummary)
+	}
+	var meta map[string]any
+	if err := json.Unmarshal(mem.Meta, &meta); err != nil {
+		t.Fatalf("memory meta is not valid JSON: %v", err)
+	}
+	if got, _ := meta["content_style"].(string); got != "long" {
+		t.Fatalf("meta.content_style = %q, want %q", got, "long")
+	}
+
+	// Remember same content again to hit near-duplicate update path and ensure
+	// summary can be updated there too.
+	secondSummary := "Updated long-form guidance for goroutine communication."
+	req2 := mcpgo.CallToolRequest{}
+	req2.Params.Name = "remember"
+	req2.Params.Arguments = map[string]any{
+		"content":     "E2E test: Go channels are goroutine-safe communication primitives",
+		"summary":     secondSummary,
+		"scope":       scopeStr,
+		"memory_type": "semantic",
+	}
+	result2, err := rememberTool.Handler(ctx, req2)
+	if err != nil {
+		t.Fatalf("remember duplicate failed: %v", err)
+	}
+	if result2 == nil || result2.IsError {
+		t.Fatalf("remember duplicate returned error result: %+v", result2)
+	}
+	memAfter, err := db.GetMemory(ctx, pool, memID)
+	if err != nil {
+		t.Fatalf("GetMemory after duplicate remember: %v", err)
+	}
+	if memAfter == nil {
+		t.Fatal("expected memory after duplicate remember")
+	}
+	if memAfter.Summary == nil || *memAfter.Summary != secondSummary {
+		t.Fatalf("summary after duplicate remember = %v, want %q", memAfter.Summary, secondSummary)
 	}
 
 	// Test recall.

@@ -74,8 +74,8 @@ func (mc *mockCreator) FindNearDuplicates(_ context.Context, _ uuid.UUID, _ []fl
 	return mc.dupes, nil
 }
 
-func (mc *mockCreator) UpdateMemoryContent(_ context.Context, id uuid.UUID, content string, embedding, embeddingCode []float32, textModelID, codeModelID *uuid.UUID, contentKind string) (*db.Memory, error) {
-	m := &db.Memory{ID: id, Content: content, ContentKind: contentKind}
+func (mc *mockCreator) UpdateMemoryContent(_ context.Context, id uuid.UUID, content string, summary *string, embedding, embeddingCode []float32, textModelID, codeModelID *uuid.UUID, contentKind string, meta []byte) (*db.Memory, error) {
+	m := &db.Memory{ID: id, Content: content, Summary: summary, ContentKind: contentKind, Meta: meta}
 	mc.updated = append(mc.updated, m)
 	return m, nil
 }

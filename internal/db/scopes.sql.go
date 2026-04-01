@@ -12,6 +12,17 @@ import (
 	"github.com/google/uuid"
 )
 
+const countChildScopes = `-- name: CountChildScopes :one
+SELECT COUNT(*) FROM scopes WHERE parent_id = $1
+`
+
+func (q *Queries) CountChildScopes(ctx context.Context, parentID *uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countChildScopes, parentID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createScope = `-- name: CreateScope :one
 INSERT INTO scopes (kind, external_id, name, parent_id, principal_id, meta, path)
 VALUES ($1, $2, $3, NULLIF($4, '00000000-0000-0000-0000-000000000000'::uuid), $5, $6, 'placeholder')
@@ -68,16 +79,6 @@ func (q *Queries) CreateScope(ctx context.Context, arg CreateScopeParams) (*Crea
 		&i.CreatedAt,
 	)
 	return &i, err
-}
-
-const countChildScopes = `-- name: CountChildScopes :one
-SELECT COUNT(*) FROM scopes WHERE parent_id = $1
-`
-
-func (q *Queries) CountChildScopes(ctx context.Context, id uuid.UUID) (int64, error) {
-	var count int64
-	err := q.db.QueryRow(ctx, countChildScopes, id).Scan(&count)
-	return count, err
 }
 
 const deleteScope = `-- name: DeleteScope :exec

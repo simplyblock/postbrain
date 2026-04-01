@@ -27,6 +27,19 @@
 
 ### Maintenance
 
+- [x] 2026-04-01: Memory API update (REST + MCP) for long-style preference and optional summary.
+  - Added strict-TDD integration coverage for:
+    - REST `/v1/memories` create + patch update persisting `summary`
+    - MCP `remember` create + near-duplicate update persisting `summary`
+    - default memory meta preference `{"content_style":"long"}` on create/update
+  - Implemented request/schema/store/DB changes:
+    - REST: `summary` added to create/update request payloads
+    - MCP: `remember` accepts optional `summary` argument and tool schema documents it
+    - Memory store: create/update now enforce `meta.content_style = "long"` and persist optional `summary`
+    - DB query path: `UpdateMemoryContent` now updates `summary` and `meta`
+  - Validation:
+    - `go test -tags integration ./internal/api/rest ./internal/api/mcp` passed
+    - `go test ./...` and `make lint` currently fail due unrelated pre-existing untracked test file `cmd/postbrain-hook/main_test.go` referencing undefined `parseSkillID`.
 - [x] 2026-04-01: Ran `make lint`, fixed all reported issues (errcheck/staticcheck/unused), then verified with `gofmt -w .`, `go test ./...`, and `make lint` (0 issues).
 - [x] 2026-04-01: Added shared `internal/closeutil.Log` helper to report deferred close failures; replaced swallowed production `Close()` errors and added unit tests.
 
