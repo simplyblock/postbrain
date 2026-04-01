@@ -101,6 +101,10 @@ func (ro *Router) createMemory(w http.ResponseWriter, r *http.Request) {
 func (ro *Router) recallMemories(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := q.Get("q")
+	if query == "" {
+		writeError(w, http.StatusBadRequest, "q is required")
+		return
+	}
 	scopeStr := q.Get("scope")
 	pg := paginationFromRequest(r)
 

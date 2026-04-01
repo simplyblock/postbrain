@@ -188,12 +188,12 @@ File: `internal/codegraph/indexer_integration_test.go`
 These tests pass `nil` for the pool and assert the appropriate HTTP error codes.
 They don't need `testcontainers` and can run in the default test suite.
 
-- [ ] `GET /v1/knowledge/search` — missing `q` still returns 200 (recall with empty query)
-- [ ] `POST /v1/scopes/:id/repo` — missing `repo_url` returns 400
-- [ ] `POST /v1/scopes/:id/repo/sync` — scope not found returns 404
-- [ ] `GET /v1/scopes/:id/repo/sync` — always returns JSON (no panic with unknown scope)
-- [ ] `POST /v1/memories` — malformed JSON body returns 400
-- [ ] `GET /v1/memories/recall` — missing `q` returns 400
+- [x] `GET /v1/knowledge/search` — missing `q` still returns 200 (recall with empty query)
+- [x] `POST /v1/scopes/:id/repo` — missing `repo_url` returns 400
+- [ ] `POST /v1/scopes/:id/repo/sync` — scope not found returns 404 (needs DB; move to integration)
+- [x] `GET /v1/scopes/:id/repo/sync` — always returns JSON (no panic with unknown scope)
+- [x] `POST /v1/memories` — malformed JSON body returns 400
+- [x] `GET /v1/memories/recall` — missing `q` returns 400 (added validation to handler)
 
 File: `internal/api/rest/knowledge_test.go`, `scopes_test.go` (extend), `memories_test.go` (extend)
 
