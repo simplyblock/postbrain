@@ -1,7 +1,29 @@
 # Test Coverage Tasks
 
-Incremental plan for adding unit tests across the Go codebase.
+Incremental plan for improving code coverage across the Go codebase.
 Each item is self-contained and can be picked up independently.
+
+Coverage baseline (integration run, 2026-04-01):
+
+| Package                  | Coverage |
+|--------------------------|----------|
+| `internal/ui`            | 8.6 %    |
+| `internal/sharing`       | 18.2 %   |
+| `internal/jobs`          | 19.5 %   |
+| `internal/api/rest`      | 21.2 %   |
+| `internal/api/mcp`       | 22.8 %   |
+| `internal/skills`        | 38.0 %   |
+| `internal/knowledge`     | 45.2 %   |
+| `internal/skills`        | 47.2 %   |
+| `internal/retrieval`     | 56.8 %   |
+| `internal/codegraph`     | 53.8 %   |
+| `internal/auth`          | 59.1 %   |
+| `internal/graph`         | 65.2 %   |
+| `internal/memory`        | 65.2 %   |
+| `internal/config`        | 68.2 %   |
+| `internal/embedding`     | 77.1 %   |
+| `internal/principals`    | 0.0 %    |
+| `internal/db`            | 3.1 %    |
 
 Legend: `[ ]` = todo · `[x]` = done
 
@@ -9,300 +31,432 @@ Legend: `[ ]` = todo · `[x]` = done
 
 ## Priority 1 — Pure logic, no DB required
 
-These functions have no external dependencies and can be tested with plain
-`go test` in milliseconds.
+### auth — TokenStore and middleware unit tests (`internal/auth/`)
 
-### chunking — splitter logic (`internal/chunking/chunker.go`)
+Existing `tokens_test.go` only tests `GenerateToken`/`HashToken`.
+`middleware_test.go` covers `bearerTokenMiddlewareWithStore` but leaves several
+branches untested.
 
-- [x] `Chunk` — text shorter than `MinContentRunes` returns single-element slice
-- [x] `Chunk` — text split on sentence boundaries, each chunk ≤ `maxRunes`
-- [x] `Chunk` — `overlap` sentences are carried into the next chunk
-- [x] `Chunk` — single unsplittable sentence hard-splits by rune count
-- [x] `splitSentences` — paragraph break (`\n\n`) is a hard boundary
-- [x] `splitByRunes` — prefers to break at whitespace; falls back to hard limit
+- [ ] `TokenStore.Lookup` — nil token returned by `db.LookupToken` returns `nil, nil`
+- [ ] `TokenStore.Lookup` — revoked token (`RevokedAt` set) returns `nil, nil`
+- [ ] `TokenStore.Lookup` — expired token (`ExpiresAt` in past) returns `nil, nil`
+- [ ] `TokenStore.UpdateLastUsed` — nil pool is a no-op (no panic)
+- [ ] `bearerTokenMiddlewareWithStore` — `Bearer ` prefix but empty token string returns 401
+- [ ] `EnforceScopeAccess` — nil `ScopeIds` always returns nil (unrestricted token)
+- [ ] `EnforceScopeAccess` — non-nil list not containing requested scope returns error
+- [ ] `EnforceScopeAccess` — non-nil list containing requested scope returns nil
 
-File: `internal/chunking/chunker_test.go`
-
----
-
-### codegraph — SSH / URL helpers (`internal/codegraph/indexer.go`)
-
-- [x] `isSSHURL` — SCP syntax, ssh:// scheme, HTTPS negative case
-- [x] `sshUserFromURL` — `git@github.com:…`, `ssh://user@host/…`, no-@ fallback
-- [x] `sanitizeURL` — strips user:pass from HTTPS URLs, leaves SSH URLs unchanged
-- [x] `parseSSHKey` — valid unencrypted key, valid encrypted key + passphrase, garbage input
-
-File: `internal/codegraph/indexer_ssh_test.go`
+File: `internal/auth/tokens_test.go` (extend), `middleware_test.go` (extend)
 
 ---
 
-### codegraph — symbol resolver (`internal/codegraph/resolve.go`)
+### sharing — grant validation unit tests (`internal/sharing/grants.go`)
 
-- [x] `Resolver.Resolve` local hit — returns the correct ID immediately, never touches pool
-- [x] `Resolver.Resolve` local table is case-sensitive (`"MyFunc"` ≠ `"myfunc"`)
-- [x] `Resolver.Resolve` returns the right ID among multiple entries in the local table
-- [x] `filePath` parameter is irrelevant to stage 1 (any path works for a local hit)
-- [x] Stages 2/3 (import-aware + suffix fallback) — require a real DB; move to
-  `resolve_integration_test.go` (`//go:build integration`)
+`grants_test.go` covers the `ErrInvalidGrant` validation path.
+The `Revoke`/`List`/`IsMemoryAccessible`/`IsArtifactAccessible` functions are
+fully untested (all need a real DB).
 
-Note: a nil `*pgxpool.Pool` panics in stage 2 (`pgxpool.(*Pool).QueryRow` dereferences
-the receiver). Stage 1 is safely unit-tested; stages 2/3 need `testcontainers`.
-The "cache" item in the original plan does not apply — `Resolver` has no cache.
+- [ ] `Create` — only MemoryID set: validation passes (no `ErrInvalidGrant`), nil-pool
+  panic is expected (shows DB path reached)
+- [ ] `Create` — only ArtifactID set: validation passes (same pattern)
+- [ ] `Revoke` / `List` / `IsMemoryAccessible` / `IsArtifactAccessible` — move to
+  `sharing_integration_test.go` (these are thin wrappers over raw SQL; one
+  round-trip test each is sufficient)
 
-File: `internal/codegraph/resolve_test.go`
-
----
-
-### codegraph — syncer state machine (`internal/codegraph/syncer.go`)
-
-- [x] `NewSyncer` returns idle status for unknown scope
-- [x] `Start` transitions state to `SyncRunning`, returns `started=true`
-- [x] `Start` returns `started=false` when already running (no second goroutine)
-- [x] `Status` returns a copy (mutating the copy must not change internal state)
-- [x] A second scope starts independently while another is running
-
-File: `internal/codegraph/syncer_test.go`
-
-Note: "already running" test injects state directly via the unexported `status`
-map (same package) rather than racing against a goroutine. `Start` tests use a
-hanging TCP listener so the spawned goroutine stays alive during assertion.
+File: `internal/sharing/grants_test.go` (extend), create `internal/sharing/grants_integration_test.go`
 
 ---
 
-### api/rest — helper functions (`internal/api/rest/helpers.go`, `memories.go`)
+### knowledge — visibility deduplication unit tests (`internal/knowledge/visibility.go`)
 
-- [x] `parseScopeString` — valid `kind:externalID`, value containing colon, missing colon, empty string
-- [x] `paginationFromRequest` — defaults, valid params, clamp at 0/101/negative, non-numeric, cursor forwarded
-- [x] `uuidParam` — valid UUID, invalid string, empty/missing param
-- [x] `entityRequestsToInput` — nil slice, empty slice, single entry, empty-name skipped, multiple entries
+`visibility_test.go` only tests `deduplicateScopeIDs`. `ResolveVisibleScopeIDs`
+and `getPersonalScope` are 0 % covered.
 
-File: `internal/api/rest/helpers_test.go`
+- [ ] `deduplicateScopeIDs` — empty input returns empty slice (not nil)
+- [ ] `deduplicateScopeIDs` — all-duplicate input returns single element
+- [ ] `ResolveVisibleScopeIDs` and `getPersonalScope` — require DB; add to
+  `visibility_integration_test.go`: scope with no personal scope, scope with a
+  personal scope present
 
----
-
-### api/rest — graph response helpers (`internal/api/rest/graph.go`)
-
-- [x] `traversalResult` — entity with no neighbours, entity with both directions
-- [x] `scopeAndSymbol` — valid query params, missing `scope`, missing `symbol`, invalid UUID
-
-File: `internal/api/rest/graph_helpers_test.go`
+File: `internal/knowledge/visibility_test.go` (extend), create `internal/knowledge/visibility_integration_test.go`
 
 ---
 
-### retrieval — score merging (already has tests, extend coverage)
+### knowledge — lifecycle state machine unit tests (`internal/knowledge/lifecycle.go`)
 
-- [x] Verify zero-result input returns empty slice (not nil)
-- [x] Verify deduplication keeps highest score when same ID appears in multiple sources
-- [x] Min-score threshold boundary: exactly at threshold is included, just below is excluded
+`lifecycle_test.go` has good `Endorse`/`autoPublish` coverage.
+`RetractToDraft`, `Republish`, and `Delete` are at 0 %.
+
+- [ ] `RetractToDraft` — artifact not found returns `ErrInvalidTransition`
+- [ ] `RetractToDraft` — artifact not `in_review` returns `ErrInvalidTransition`
+- [ ] `RetractToDraft` — author can retract; transitions to `"draft"`
+- [ ] `RetractToDraft` — non-author non-admin returns `ErrForbidden`
+- [ ] `Republish` — artifact not `deprecated` returns `ErrInvalidTransition`
+- [ ] `Republish` — non-admin returns `ErrForbidden`
+- [ ] `Republish` — admin transitions to `"published"`, preserves original `PublishedAt`
+- [ ] `Delete` — non-admin returns `ErrForbidden`
+- [ ] `Delete` — admin cascades all pre-delete steps (verify `nullPreviousVersionRefs`,
+  `nullPromotionRequestArtifactRef`, `resetPromotedMemoryStatus` all called)
+
+File: `internal/knowledge/lifecycle_test.go` (extend)
+
+---
+
+### skills — lifecycle state machine unit tests (`internal/skills/lifecycle.go`)
+
+`lifecycle_test.go` covers `SubmitForReview` and `Endorse`. `RetractToDraft`,
+`Deprecate`, `Republish`, and `EmergencyRollback` are at 0 %.
+
+- [ ] `RetractToDraft` — nil skill returns `ErrInvalidTransition`
+- [ ] `RetractToDraft` — wrong status returns `ErrInvalidTransition`
+- [ ] `RetractToDraft` — `in_review` skill transitions to `"draft"`
+- [ ] `Deprecate` — non-admin returns `ErrForbidden`
+- [ ] `Deprecate` — published skill transitions to `"deprecated"`
+- [ ] `Republish` — deprecated skill transitions to `"published"` (admin)
+- [ ] `EmergencyRollback` — non-admin returns `ErrForbidden`
+- [ ] `EmergencyRollback` — admin transitions published skill to `"deprecated"`
+
+File: `internal/skills/lifecycle_test.go` (extend)
+
+---
+
+### skills — recall scoring helpers (`internal/skills/recall.go`)
+
+`recall_test.go` covers `computeSkillScore`. `importanceFromInvocations` is 0 %.
+
+- [ ] `importanceFromInvocations(0)` → 0.0
+- [ ] `importanceFromInvocations(50)` → 0.5
+- [ ] `importanceFromInvocations(100)` → 1.0 (exact boundary)
+- [ ] `importanceFromInvocations(200)` → 1.0 (capped)
+
+File: `internal/skills/recall_test.go` (extend)
+
+---
+
+### retrieval — CosineSimilarity (`internal/retrieval/merge.go`)
+
+`CosineSimilarity` is 0 % covered.
+
+- [ ] Two identical unit vectors → 1.0
+- [ ] Orthogonal vectors → 0.0
+- [ ] Zero vector (denominator guard) → 0.0 (no panic/NaN)
+- [ ] Negative dot product → result clamped at 0 or negative (verify behavior)
 
 File: `internal/retrieval/merge_test.go` (extend existing)
 
 ---
 
-## Priority 1.5 — No DB required; uses `embedding.FakeEmbedder`
-
-Now that `embedding.FakeEmbedder` exists, these tests can run in the default
-suite with no containers. Inject it via
-`embedding.NewServiceFromEmbedders(embedding.NewFakeEmbedder(dims), nil)`.
-
-### knowledge — store unit tests (`internal/knowledge/store.go`)
-
-`store_test.go` already covers status flags and `ErrNotEditable`. Extend it:
-
-- [x] Replace the inline `fakeEmbedder` struct with `embedding.FakeEmbedder` so
-  different inputs produce distinct vectors (catches accidental same-vector bugs)
-- [x] `Create` with `AutoPublish=true` sets `status=published` and non-nil `PublishedAt`
-- [x] `Create` embed error is propagated (inject a failing embedder)
-- [x] `Create` creator error is propagated
-- [x] `Update` with a nil getter result returns `ErrNotFound`
-- [x] `Update` on a draft artifact succeeds and returns updated content
-
-File: `internal/knowledge/store_test.go` (extend existing)
-
----
-
-### memory — store unit tests (`internal/memory/store.go`)
-
-`store_test.go` already covers TTL and code-embedding path. Extend it:
-
-- [x] Replace the inline `mockEmbedder` struct with `embedding.FakeEmbedder` —
-  single migration change, no behaviour change
-- [x] `Create` near-duplicate found → action is `"updated"` (code returns "updated", not "merged"), UpdateMemoryContent called, no new insert
-- [x] `Create` embed error is propagated correctly
-- [x] `Create` with large content verifies child memories are created with `parent_memory_id` set
-
-File: `internal/memory/store_test.go` (extend existing)
-
----
-
-### jobs — chunk backfill (`internal/jobs/chunk_backfill.go`)
-
-No tests exist. The job uses `chunkBackfillStore` and `textEmbedder` interfaces,
-so it is fully testable without a DB.
-
-- [x] `RunMemories` with zero rows is a no-op (no calls to embedder)
-- [x] `RunMemories` with one large memory creates the expected number of chunks
-  (inject a fake store that returns one row; assert `createMemory` call count)
-- [x] `RunArtifacts` chunk `source_ref` has the format `artifact:<id>:chunk:<n>`
-- [x] `RunMemories` embed error on one chunk is skipped; other chunks still created
-- [x] `RunMemories` with nil embedder is a no-op (guard branch)
-- [x] Batch pagination: store returns full batch → next page fetched; partial → stop
-
-File: `internal/jobs/chunk_backfill_test.go`
-
----
-
 ## Priority 2 — Requires test DB (`testcontainers`)
 
-These tests use `testhelper.NewTestPool` to spin up a real Postgres instance.
-Mark the test file with `//go:build integration` so they're skipped by default.
+Mark files `//go:build integration`.
 
-### graph — traversal (`internal/graph/traversal.go`)
+### principals — CRUD + membership integration tests
 
-All six public functions are currently untested.
+`store_test.go` uses `TEST_DATABASE_URL`; migrate it to `testcontainers` for
+consistency. `membership_test.go` tests only the cycle-detection logic without a DB.
 
-- [x] `ResolveSymbol` — exact canonical match, suffix fallback, not-found returns nil
-- [x] `Callers` — entity with 2 callers, entity with no callers, unknown symbol
-- [x] `Callees` — entity with 3 callees, entity with no callees
-- [x] `Dependencies` — file with imports, file with no imports
-- [x] `Dependents` — symbol with dependents, symbol with none
-- [x] `NeighboursForEntity` — mixed incoming/outgoing edges, entity with no edges
+- [ ] `Store.Create` / `GetByID` / `GetBySlug` / `Update` / `List` / `Delete` —
+  full round-trip using `testhelper.NewTestPool`; replace env-var-gated
+  `testPool` helper with `testhelper.NewTestPool` (use `//go:build integration`)
+- [ ] `MembershipStore.AddMembership` — valid role inserts membership
+- [ ] `MembershipStore.AddMembership` — cycle detection with real ancestor query
+- [ ] `MembershipStore.RemoveMembership` — removes the record
+- [ ] `MembershipStore.EffectiveScopeIDs` — returns scopes for principal and its parents
+- [ ] `MembershipStore.IsScopeAdmin` — scope owner is admin; explicit admin role is admin;
+  member role is not admin
 
-File: `internal/graph/traversal_integration_test.go`
-
----
-
-### codegraph — indexer end-to-end (`internal/codegraph/indexer.go`)
-
-- [x] `IndexRepo` with a local bare git repo (use `git init --bare` + fixture commits)
-  — verifies symbols and relations are written to DB
-- [x] Incremental diff: index, make a change, re-index — only changed file is re-processed
-- [x] `MaxBytesPerFile` cap: a file over the limit is counted in `FilesSkipped`
-
-File: `internal/codegraph/indexer_integration_test.go`
+File: `internal/principals/store_integration_test.go` (new), `membership_integration_test.go` (new)
 
 ---
 
-### api/rest — handler unit tests with nil pool (no DB needed)
+### sharing — grant round-trip integration tests (`internal/sharing/grants.go`)
 
-These tests pass `nil` for the pool and assert the appropriate HTTP error codes.
-They don't need `testcontainers` and can run in the default test suite.
+- [ ] `Create` with memory grant — inserted record scannable, fields round-trip
+- [ ] `Create` with artifact grant — same
+- [ ] `Revoke` — deletes the record; subsequent `List` does not return it
+- [ ] `List` — returns grants for the grantee scope, pagination works
+- [ ] `IsMemoryAccessible` — true when grant exists and not expired; false when expired
+- [ ] `IsArtifactAccessible` — true when grant exists; false when no grant
 
-- [x] `GET /v1/knowledge/search` — missing `q` still returns 200 (recall with empty query)
-- [x] `POST /v1/scopes/:id/repo` — missing `repo_url` returns 400
-- [x] `POST /v1/scopes/:id/repo/sync` — scope not found returns 404 (needs DB; move to integration)
-- [x] `GET /v1/scopes/:id/repo/sync` — always returns JSON (no panic with unknown scope)
-- [x] `POST /v1/memories` — malformed JSON body returns 400
-- [x] `GET /v1/memories/recall` — missing `q` returns 400 (added validation to handler)
-
-File: `internal/api/rest/knowledge_test.go`, `scopes_test.go` (extend), `memories_test.go` (extend)
+File: `internal/sharing/grants_integration_test.go` (new)
 
 ---
 
-### api/mcp — handler smoke tests (`internal/api/mcp/`)
+### knowledge — collections integration tests (`internal/knowledge/collections.go`)
 
-The existing tests cover the full integration path. Add focused unit tests that
-verify parameter validation without a running DB.
+`CollectionStore` methods `GetByID`, `GetBySlug`, `List`, `AddItem`, `RemoveItem`,
+`ListItems` are all 0 %.
 
-- [x] `handleRecall` — missing required `query` param returns a tool error (added validation to handler)
-- [x] `handleRemember` — missing `content` param returns a tool error (already in server_test.go; empty-string variant added)
-- [x] `handleForget` — invalid memory UUID in params returns a tool error
-- [x] `handlePublish` — missing `title`/`scope` returns a tool error
-- [x] `handleSummarize` — missing `scope` param returns a tool error
+- [ ] `Create` → `GetByID` round-trip
+- [ ] `GetBySlug` — returns same record as `GetByID`
+- [ ] `List` — returns created collection(s) for the scope
+- [ ] `AddItem` / `ListItems` — artifact appears in list after `AddItem`
+- [ ] `RemoveItem` — artifact absent from list after `RemoveItem`
 
-File: `internal/api/mcp/handlers_unit_test.go`
-
----
-
-### knowledge — recall pipeline (`internal/knowledge/recall.go`)
-
-`recall_test.go` only covers score arithmetic. The full `Recall` function
-requires a DB to execute the vector search, so these are integration tests.
-Use `testhelper.NewFakeEmbedder(4)` for the query embedding.
-
-- [x] Empty query with non-nil scope runs without panic; returns empty results
-- [x] `Limit` of 0 is clamped to a sensible default (not passed as 0 to DB)
-- [x] Score merging: result from all three layers present, highest score wins
-- [x] Digest suppression: source artifact is removed when its digest is in results
-
-File: `internal/knowledge/recall_integration_test.go`
+File: `internal/knowledge/collections_integration_test.go` (new)
 
 ---
 
-### memory — consolidation edge cases (`internal/memory/consolidation.go`)
+### knowledge — visibility integration tests (`internal/knowledge/visibility.go`)
 
-- [x] Cluster of 1 item is not merged (no-op)
-- [x] Two identical memories produce one merged output
-- [x] `MaxClusters` limit is respected when input exceeds it (field added to Consolidator)
+- [ ] `ResolveVisibleScopeIDs` — scope with parent: both IDs in result
+- [ ] `ResolveVisibleScopeIDs` — principal has personal scope: personal scope ID appended
+- [ ] `ResolveVisibleScopeIDs` — no personal scope: result is just ancestor chain
 
-File: `internal/memory/consolidation_test.go` (extend existing)
-
----
-
-## Priority 3 — UI handler coverage (`internal/ui/handler.go`)
-
-The UI handler is tested for auth redirects. Add coverage for page rendering and
-form handling. These tests use `httptest` with a nil pool (DB errors are
-gracefully handled by all render functions).
-
-- [x] `GET /ui/knowledge` — renders without scope param (zero scope = all)
-- [x] `GET /ui/knowledge?scope=<uuid>` — selected scope is passed to template data
-- [x] `GET /ui/knowledge?q=foo&status=published` — query and status passed through
-- [x] `POST /ui/scopes/:id/repo` — missing `repo_url` shows form error (not 500)
-- [x] `POST /ui/scopes/:id/repo/sync` — fires sync and redirects (nil pool returns error gracefully)
-- [x] `GET /ui/scopes/:id/repo/sync/status` — returns JSON even for unknown scope
-
-File: `internal/ui/handler_knowledge_test.go`, `handler_scopes_test.go`
+File: `internal/knowledge/visibility_integration_test.go` (new)
 
 ---
 
-## Priority 4 — Remaining language extractors
+### knowledge — Lifecycle integration tests for missing transitions
 
-`extract_languages_test.go` already has smoke tests for most languages.
-Add focused tests for edge cases that have caused regressions.
+`lifecycle_integration_test.go` covers `Endorse`/`AutoPublish` end-to-end.
+The `RetractToDraft`, `Republish`, `Delete` transitions need a real artifact.
 
-- [x] **Go** (`extract_go.go`): generic receiver `func (r *Repo[T]) Method()` — symbol
-  name and kind are correct
-- [x] **Go**: function with named return values — no duplicate symbols
-- [x] **Go**: `const` block with iota — all names extracted as `variable`
-- [x] **TypeScript**: `export default function` — extracted as function
-- [x] **TypeScript**: `class Foo extends Bar implements Baz` — both `extends` and
-  `implements` edges emitted
-- [x] **Rust**: `impl Trait for Type` — `implements` edge present, method symbols correct
-- [x] **Python**: decorated function `@decorator\ndef foo()` — extracted as function
-- [x] **Java**: anonymous inner class — outer class symbol still extracted
+- [ ] `SubmitForReview` → `RetractToDraft` → verify status `"draft"`
+- [ ] `Republish` — create artifact, publish, deprecate, then republish; status `"published"`
+- [ ] `Delete` — artifact + cascade records removed; subsequent `GetByID` returns nil
 
-File: `internal/codegraph/extractor_test.go` (extend existing)
+File: `internal/knowledge/lifecycle_integration_test.go` (extend)
+
+---
+
+### jobs — reembed integration test (`internal/jobs/reembed.go`)
+
+`RunText` and `RunCode` are 0 % covered. They batch-fetch records by comparing
+`embedding_model_id` to the active model.
+
+- [ ] `RunText` with no active text model: returns nil without touching rows
+- [ ] `RunText` with active model and one mismatched memory: row gets re-embedded
+- [ ] `RunCode` with active model and one mismatched code memory: row updated
+
+File: `internal/jobs/reembed_integration_test.go` (new, `//go:build integration`)
+
+---
+
+### jobs — staleness / contradiction integration test (`internal/jobs/staleness.go`)
+
+The `ContradictionJob.Run` / `fetchArtifactBatch` / `processArtifact` /
+`fetchRecentMemories` / `filterByTopicSimilarity` are all 0 %.
+
+- [ ] `Run` on empty DB — returns nil, no panics
+- [ ] `Run` with one published artifact and one recent memory that contradicts:
+  verify `FlagArtifactStaleness` was called (inject fake classifier that returns
+  `"CONTRADICTS"`)
+- [ ] `filterByTopicSimilarity` — memory whose cosine distance > threshold is filtered out
+
+File: `internal/jobs/staleness_integration_test.go` (new)
+
+---
+
+### skills — Recall integration test (`internal/skills/recall.go`)
+
+`Store.Recall` is 0 % covered end-to-end.
+
+- [ ] Empty query returns empty slice (no panic)
+- [ ] Single published skill appears in results when query matches title
+- [ ] `Installed` filter: `true` returns only installed skills; `false` returns only uninstalled
+- [ ] `Limit` is respected: more than `Limit` candidates → result capped
+
+File: `internal/skills/skills_integration_test.go` (extend existing)
+
+---
+
+### skills — store Update/GetBySlug/GetByID integration tests (`internal/skills/store.go`)
+
+- [ ] `Update` — changes title and description; returns updated record
+- [ ] `GetBySlug` — returns the correct skill; unknown slug returns nil
+- [ ] `GetByID` — returns the correct skill; unknown ID returns nil
+
+File: `internal/skills/skills_integration_test.go` (extend existing)
+
+---
+
+## Priority 3 — REST handler coverage gaps (`internal/api/rest/`)
+
+All handlers below are at 0 %; they follow the same httptest pattern used in
+existing tests. Pass `nil` pool where DB errors are acceptable.
+
+### orgs handlers (`internal/api/rest/orgs.go`)
+
+- [ ] `POST /v1/orgs` — missing `slug` returns 400
+- [ ] `GET /v1/orgs` — returns 200 with `orgs` key (nil pool: handler returns empty list or error; verify no panic)
+- [ ] `GET /v1/orgs/:id` — invalid UUID returns 400
+- [ ] `PUT /v1/orgs/:id` — missing body returns 400
+- [ ] `DELETE /v1/orgs/:id` — invalid UUID returns 400
+
+File: `internal/api/rest/orgs_test.go` (new)
+
+---
+
+### sessions handlers (`internal/api/rest/sessions.go`)
+
+- [ ] `POST /v1/tokens` — missing `name` returns 400
+- [ ] `DELETE /v1/tokens/:id` — invalid UUID returns 400
+
+File: `internal/api/rest/sessions_test.go` (new)
+
+---
+
+### sharing handlers (`internal/api/rest/sharing.go`)
+
+- [ ] `POST /v1/sharing/grants` — missing required field returns 400
+- [ ] `GET /v1/sharing/grants` — missing `scope` returns 400
+- [ ] `DELETE /v1/sharing/grants/:id` — invalid UUID returns 400
+
+File: `internal/api/rest/sharing_test.go` (new)
+
+---
+
+### collections handlers (`internal/api/rest/collections.go`)
+
+- [ ] `POST /v1/collections` — missing `slug` returns 400
+- [ ] `GET /v1/collections/:id` — invalid UUID returns 400
+- [ ] `POST /v1/collections/:id/items` — missing `artifact_id` returns 400
+- [ ] `DELETE /v1/collections/:id/items/:artifact_id` — invalid artifact UUID returns 400
+
+File: `internal/api/rest/collections_test.go` (new)
+
+---
+
+### synthesis handlers (`internal/api/rest/synthesis.go`)
+
+- [ ] `POST /v1/synthesis` — missing `scope` returns 400
+- [ ] `GET /v1/synthesis/:id` — invalid UUID returns 400
+
+File: `internal/api/rest/synthesis_test.go` (new)
+
+---
+
+### skills handlers (`internal/api/rest/skills.go`)
+
+- [ ] `POST /v1/skills` — missing `title` returns 400
+- [ ] `GET /v1/skills/recall` — missing `q` returns 400
+- [ ] `GET /v1/skills/:id` — invalid UUID returns 400
+- [ ] `POST /v1/skills/:id/review` — invalid UUID returns 400
+- [ ] `POST /v1/skills/:id/endorse` — invalid UUID returns 400
+
+File: `internal/api/rest/skills_test.go` (new)
+
+---
+
+### upload handler (`internal/api/rest/upload.go`)
+
+- [ ] `POST /v1/upload` — no multipart form returns 400
+- [ ] `POST /v1/upload` — valid form but nil pool: handler handles gracefully (no panic)
+
+File: `internal/api/rest/upload_test.go` (new)
+
+---
+
+### graph handler remaining branches (`internal/api/rest/graph.go`)
+
+`/v1/graph/callers`, `/v1/graph/callees`, `/v1/graph/dependencies`,
+`/v1/graph/dependents` are 0 %.
+
+- [ ] `GET /v1/graph/callers` — missing `symbol` returns 400
+- [ ] `GET /v1/graph/callees` — missing `scope` returns 400
+- [ ] `GET /v1/graph/dependencies` — missing `symbol` returns 400
+- [ ] `GET /v1/graph/dependents` — missing `scope` returns 400
+
+File: `internal/api/rest/graph_handlers_test.go` (new, extend existing `graph_helpers_test.go` or new file)
+
+---
+
+## Priority 4 — MCP handler coverage gaps (`internal/api/mcp/`)
+
+### mcp — endorse, promote, knowledge-detail, list-scopes, collect, session, skill handlers
+
+All below are at 0 %. The existing `handlers_unit_test.go` and `server_test.go`
+pattern (nil pool, direct tool handler call with injected context) applies.
+
+- [ ] `handleEndorse` — missing `artifact_id` param returns tool error
+- [ ] `handleEndorse` — invalid UUID returns tool error
+- [ ] `handlePromote` — missing `memory_id` returns tool error
+- [ ] `handleKnowledgeDetail` — missing `artifact_id` returns tool error
+- [ ] `handleListScopes` — succeeds with nil pool (returns tool error gracefully, not panic)
+- [ ] `handleCollect` — missing `scope` param returns tool error
+- [ ] `handleSynthesise` — missing `scope` param returns tool error
+- [ ] `handleSkillSearch` — missing `query` param returns tool error
+- [ ] `handleSkillInstall` — missing `slug` param returns tool error
+- [ ] `handleSkillInvoke` — missing `slug` param returns tool error
+
+File: `internal/api/mcp/handlers_unit_test.go` (extend)
+
+---
+
+## Priority 5 — UI handler coverage gaps (`internal/ui/`)
+
+`internal/ui` is at 8.6 %. The handler has many routes that are untested.
+Use `httptest` with a nil-pool `Handler`.
+
+### auth flow (`internal/ui/auth.go`, `tokens.go`)
+
+- [ ] `GET /ui/login` — renders login form (200)
+- [ ] `POST /ui/login` — missing token field returns form error (not 500)
+- [ ] `GET /ui/logout` — clears session cookie and redirects
+- [ ] `GET /ui/tokens` — unauthenticated redirects to login
+- [ ] `POST /ui/tokens` — missing name field returns form error
+
+File: `internal/ui/handler_auth_test.go` (new)
+
+---
+
+### knowledge CRUD UI (`internal/ui/handler.go`)
+
+- [ ] `GET /ui/knowledge/new` — renders form (200)
+- [ ] `POST /ui/knowledge` — missing title returns form error
+- [ ] `GET /ui/knowledge/:id` — invalid UUID returns 400 or redirect
+- [ ] `POST /ui/knowledge/:id/submit` — invalid UUID returns 400
+- [ ] `POST /ui/knowledge/:id/retract` — invalid UUID returns 400
+- [ ] `POST /ui/knowledge/:id/endorse` — invalid UUID returns 400
+- [ ] `POST /ui/knowledge/:id/deprecate` — invalid UUID returns 400
+- [ ] `POST /ui/knowledge/:id/delete` — invalid UUID returns 400
+
+File: `internal/ui/handler_knowledge_test.go` (extend existing)
+
+---
+
+### memory UI (`internal/ui/handler.go`)
+
+- [ ] `GET /ui/memories` — renders without error (nil pool)
+- [ ] `GET /ui/memories/:id` — invalid UUID returns 400
+- [ ] `POST /ui/memories/:id/forget` — invalid UUID returns 400
+
+File: `internal/ui/handler_memories_test.go` (new)
+
+---
+
+### collections UI (`internal/ui/handler.go`)
+
+- [ ] `GET /ui/collections` — renders list (nil pool, empty result)
+- [ ] `GET /ui/collections/new` — renders form (200)
+- [ ] `POST /ui/collections` — missing name returns form error
+
+File: `internal/ui/handler_collections_test.go` (new)
 
 ---
 
 ## General guidelines
 
-- **Use `embedding.FakeEmbedder` for all unit tests that need an embedder** —
-  `embedding.NewFakeEmbedder(dims)` is deterministic, normalized, and dependency-free.
-  For tests that go through `EmbeddingService`, wrap it:
-  `embedding.NewServiceFromEmbedders(embedding.NewFakeEmbedder(dims), nil)`.
-  Do not define local `mockEmbedder` structs; migrate existing ones to `FakeEmbedder`.
+- **Use `embedding.FakeEmbedder`** for all unit tests that need an embedder —
+  `embedding.NewFakeEmbedder(dims)` is deterministic, normalized, dependency-free.
+  Wrap for `EmbeddingService`: `embedding.NewServiceFromEmbedders(embedding.NewFakeEmbedder(dims), nil)`.
 
-- **Use `noopXxx` base structs for interface fakes** — when a package-internal
-  interface has many methods, define a `noopXxx` struct that satisfies the full
-  interface with silent no-ops, then embed it in test fakes that only override the
-  methods under test. See `noopLifecycleDB` in `lifecycle_test.go` as the reference
-  implementation. This pattern means adding a new method to an interface only
-  requires updating `noopXxx` and the real implementation — not every test fake.
+- **Use `noopXxx` base structs for interface fakes** — embed a `noopXxx` struct
+  that satisfies the full interface, override only the methods under test.
+  See `noopLifecycleDB` in `lifecycle_test.go` as the reference implementation.
 
-- **No mocks for business logic** — prefer real types with nil/stub dependencies
-  where possible; reserve mocks for I/O boundaries (DB, HTTP, git).
+- **Integration test build tag** — any test requiring a live Postgres must be
+  tagged `//go:build integration`.
+
+- **Test file naming** — unit tests in `*_test.go`; integration tests in
+  `*_integration_test.go`.
 
 - **Table-driven tests** — use `[]struct{ name, input, want }` for functions
   with multiple input variants.
 
-- **Integration test build tag** — any test requiring a live Postgres or git
-  must be tagged `//go:build integration` so `go test ./...` stays fast.
+- **No mocks for business logic** — prefer real types with nil/stub dependencies;
+  reserve mocks for I/O boundaries.
 
-- **Test file naming** — unit tests live in `*_test.go` (same package, `_test`
-  suffix); integration tests in `*_integration_test.go`.
-
-- **No test helpers without assertions** — every helper used in tests should
-  call `t.Helper()` and `t.Fatal`/`t.Error` directly rather than returning
-  errors for the caller to check.
+- **No test helpers without assertions** — every helper calls `t.Helper()` and
+  `t.Fatal`/`t.Error` directly.
