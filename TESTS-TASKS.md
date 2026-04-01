@@ -245,12 +245,12 @@ The UI handler is tested for auth redirects. Add coverage for page rendering and
 form handling. These tests use `httptest` with a nil pool (DB errors are
 gracefully handled by all render functions).
 
-- [ ] `GET /ui/knowledge` — renders without scope param (zero scope = all)
-- [ ] `GET /ui/knowledge?scope=<uuid>` — selected scope is passed to template data
-- [ ] `GET /ui/knowledge?q=foo&status=published` — query and status passed through
-- [ ] `POST /ui/scopes/:id/repo` — missing `repo_url` shows form error (not 500)
-- [ ] `POST /ui/scopes/:id/repo/sync` — fires sync and redirects (nil pool returns error gracefully)
-- [ ] `GET /ui/scopes/:id/repo/sync/status` — returns JSON even for unknown scope
+- [x] `GET /ui/knowledge` — renders without scope param (zero scope = all)
+- [x] `GET /ui/knowledge?scope=<uuid>` — selected scope is passed to template data
+- [x] `GET /ui/knowledge?q=foo&status=published` — query and status passed through
+- [x] `POST /ui/scopes/:id/repo` — missing `repo_url` shows form error (not 500)
+- [x] `POST /ui/scopes/:id/repo/sync` — fires sync and redirects (nil pool returns error gracefully)
+- [x] `GET /ui/scopes/:id/repo/sync/status` — returns JSON even for unknown scope
 
 File: `internal/ui/handler_knowledge_test.go`, `handler_scopes_test.go`
 
