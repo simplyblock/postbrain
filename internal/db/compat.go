@@ -489,6 +489,7 @@ func EndSession(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, meta []by
 	q := New(pool)
 	return q.EndSession(ctx, EndSessionParams{
 		ID:      id,
+		Column2: time.Now().UTC(),
 		Column3: meta,
 	})
 }
