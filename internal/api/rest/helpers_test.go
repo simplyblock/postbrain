@@ -2,13 +2,37 @@ package rest
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
+
+// assertJSONError asserts that the response body contains a JSON object with an "error" key.
+func assertJSONError(t *testing.T, w *httptest.ResponseRecorder) {
+	t.Helper()
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("response body is not valid JSON: %v (body=%q)", err, w.Body.String())
+	}
+	if _, ok := body["error"]; !ok {
+		t.Errorf("expected 'error' key in response body, got: %v", body)
+	}
+}
+
+// withBody returns a copy of req with its body replaced by the given string and
+// Content-Type set to application/json.
+func withBody(req *http.Request, body string) *http.Request {
+	req2 := req.Clone(req.Context())
+	req2.Body = io.NopCloser(strings.NewReader(body))
+	req2.Header.Set("Content-Type", "application/json")
+	return req2
+}
 
 // ── parseScopeString ──────────────────────────────────────────────────────────
 
