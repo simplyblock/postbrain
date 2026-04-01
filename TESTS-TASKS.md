@@ -303,8 +303,14 @@ File: `internal/api/rest/orgs_test.go` (new)
 
 ### sessions handlers (`internal/api/rest/sessions.go`)
 
-- [ ] `POST /v1/tokens` — missing `name` returns 400
-- [ ] `DELETE /v1/tokens/:id` — invalid UUID returns 400
+- [x] `POST /v1/sessions` — missing `scope` returns 400
+- [x] `POST /v1/sessions` — invalid scope format returns 400
+- [x] `POST /v1/sessions` — invalid JSON returns 400
+- [x] `POST /v1/sessions` — no auth returns 401
+- [x] `PATCH /v1/sessions/:id` — invalid UUID returns 400
+- [x] `PATCH /v1/sessions/:id` — invalid JSON returns 400
+- [x] `PATCH /v1/sessions/:id` — invalid ended_at returns 400
+- [x] `PATCH /v1/sessions/:id` — no auth returns 401
 
 File: `internal/api/rest/sessions_test.go` (new)
 
