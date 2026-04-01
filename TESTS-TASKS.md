@@ -166,14 +166,14 @@ Mark files `//go:build integration`.
 `store_test.go` uses `TEST_DATABASE_URL`; migrate it to `testcontainers` for
 consistency. `membership_test.go` tests only the cycle-detection logic without a DB.
 
-- [ ] `Store.Create` / `GetByID` / `GetBySlug` / `Update` / `List` / `Delete` —
+- [x] `Store.Create` / `GetByID` / `GetBySlug` / `Update` / `List` / `Delete` —
   full round-trip using `testhelper.NewTestPool`; replace env-var-gated
   `testPool` helper with `testhelper.NewTestPool` (use `//go:build integration`)
-- [ ] `MembershipStore.AddMembership` — valid role inserts membership
-- [ ] `MembershipStore.AddMembership` — cycle detection with real ancestor query
-- [ ] `MembershipStore.RemoveMembership` — removes the record
-- [ ] `MembershipStore.EffectiveScopeIDs` — returns scopes for principal and its parents
-- [ ] `MembershipStore.IsScopeAdmin` — scope owner is admin; explicit admin role is admin;
+- [x] `MembershipStore.AddMembership` — valid role inserts membership
+- [x] `MembershipStore.AddMembership` — cycle detection with real ancestor query
+- [x] `MembershipStore.RemoveMembership` — removes the record
+- [x] `MembershipStore.EffectiveScopeIDs` — returns scopes for principal and its parents
+- [x] `MembershipStore.IsScopeAdmin` — scope owner is admin; explicit admin role is admin;
   member role is not admin
 
 File: `internal/principals/store_integration_test.go` (new), `membership_integration_test.go` (new)
