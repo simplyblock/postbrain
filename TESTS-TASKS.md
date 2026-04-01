@@ -140,13 +140,13 @@ File: `internal/memory/store_test.go` (extend existing)
 No tests exist. The job uses `chunkBackfillStore` and `textEmbedder` interfaces,
 so it is fully testable without a DB.
 
-- [ ] `RunMemories` with zero rows is a no-op (no calls to embedder)
-- [ ] `RunMemories` with one large memory creates the expected number of chunks
+- [x] `RunMemories` with zero rows is a no-op (no calls to embedder)
+- [x] `RunMemories` with one large memory creates the expected number of chunks
   (inject a fake store that returns one row; assert `createMemory` call count)
-- [ ] `RunArtifacts` chunk `source_ref` has the format `artifact:<id>:chunk:<n>`
-- [ ] `RunMemories` embed error on one chunk is skipped; other chunks still created
-- [ ] `RunMemories` with nil embedder is a no-op (guard branch)
-- [ ] Batch pagination: store returns full batch → next page fetched; partial → stop
+- [x] `RunArtifacts` chunk `source_ref` has the format `artifact:<id>:chunk:<n>`
+- [x] `RunMemories` embed error on one chunk is skipped; other chunks still created
+- [x] `RunMemories` with nil embedder is a no-op (guard branch)
+- [x] Batch pagination: store returns full batch → next page fetched; partial → stop
 
 File: `internal/jobs/chunk_backfill_test.go`
 
