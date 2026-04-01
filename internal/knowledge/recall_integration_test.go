@@ -72,7 +72,7 @@ func TestRecall_LimitZeroClampedToDefault(t *testing.T) {
 	scope := testhelper.CreateTestScope(t, pool, "project", "recall-limit-"+uuid.New().String(), nil, principal.ID)
 	store := knowledge.NewStore(pool, svc)
 
-	makePublished(t, ctx, store, scope.ID, "note", recallText)
+	makePublished(t, ctx, store, scope.ID, "semantic", recallText)
 
 	results, err := store.Recall(ctx, pool, knowledge.RecallInput{
 		Query:   recallText,
@@ -101,7 +101,7 @@ func TestRecall_ScoreMerging(t *testing.T) {
 
 	// Content equals the query so FakeEmbedder produces identical vectors
 	// (cosine distance = 0) AND the text matches for FTS/trigram.
-	artifact := makePublished(t, ctx, store, scope.ID, "note", recallText)
+	artifact := makePublished(t, ctx, store, scope.ID, "semantic", recallText)
 
 	results, err := store.Recall(ctx, pool, knowledge.RecallInput{
 		Query:   recallText,
@@ -153,7 +153,7 @@ func TestRecall_DigestSuppression(t *testing.T) {
 	store := knowledge.NewStore(pool, svc)
 
 	// Both artifacts share content so both appear in recall results.
-	source := makePublished(t, ctx, store, scope.ID, "note", recallText)
+	source := makePublished(t, ctx, store, scope.ID, "semantic", recallText)
 	digest := makePublished(t, ctx, store, scope.ID, "digest", recallText)
 
 	// Record the digest → source relationship.
