@@ -174,10 +174,10 @@ File: `internal/graph/traversal_integration_test.go`
 
 ### codegraph — indexer end-to-end (`internal/codegraph/indexer.go`)
 
-- [ ] `IndexRepo` with a local bare git repo (use `git init --bare` + fixture commits)
+- [x] `IndexRepo` with a local bare git repo (use `git init --bare` + fixture commits)
   — verifies symbols and relations are written to DB
-- [ ] Incremental diff: index, make a change, re-index — only changed file is re-processed
-- [ ] `MaxBytesPerFile` cap: a file over the limit is counted in `FilesSkipped`
+- [x] Incremental diff: index, make a change, re-index — only changed file is re-processed
+- [x] `MaxBytesPerFile` cap: a file over the limit is counted in `FilesSkipped`
 
 File: `internal/codegraph/indexer_integration_test.go`
 
