@@ -441,16 +441,28 @@ File: `internal/api/rest/graph_handlers_test.go` (new, extend existing `graph_he
 All below are at 0 %. The existing `handlers_unit_test.go` and `server_test.go`
 pattern (nil pool, direct tool handler call with injected context) applies.
 
-- [ ] `handleEndorse` — missing `artifact_id` param returns tool error
-- [ ] `handleEndorse` — invalid UUID returns tool error
-- [ ] `handlePromote` — missing `memory_id` returns tool error
-- [ ] `handleKnowledgeDetail` — missing `artifact_id` returns tool error
-- [ ] `handleListScopes` — succeeds with nil pool (returns tool error gracefully, not panic)
-- [ ] `handleCollect` — missing `scope` param returns tool error
-- [ ] `handleSynthesise` — missing `scope` param returns tool error
-- [ ] `handleSkillSearch` — missing `query` param returns tool error
-- [ ] `handleSkillInstall` — missing `slug` param returns tool error
-- [ ] `handleSkillInvoke` — missing `slug` param returns tool error
+- [x] `handleEndorse` — missing `artifact_id` returns tool error
+- [x] `handleEndorse` — invalid UUID returns tool error
+- [x] `handleEndorse` — nil pool/lifecycle returns tool error
+- [x] `handlePromote` — missing memory_id / target_scope / target_visibility returns tool error
+- [x] `handlePromote` — invalid memory_id UUID returns tool error
+- [x] `handleKnowledgeDetail` — missing artifact_id returns tool error
+- [x] `handleKnowledgeDetail` — invalid UUID returns tool error
+- [x] `handleKnowledgeDetail` — nil knwStore returns tool error
+- [x] `handleListScopes` — nil pool returns tool error (no panic)
+- [x] `handleCollect` — missing action returns tool error
+- [x] `handleCollect` — unknown action returns tool error
+- [x] `handleSynthesizeTopic` — missing scope returns tool error
+- [x] `handleSynthesizeTopic` — fewer than 2 source_ids returns tool error
+- [x] `handleSynthesizeTopic` — missing source_ids returns tool error
+- [x] `handleSkillSearch` — missing/empty query returns tool error
+- [x] `handleSkillSearch` — nil pool/store/svc returns tool error
+- [x] `handleSkillInstall` — nil pool/store returns tool error
+- [x] `handleSkillInstall` — missing slug and skill_id returns tool error
+- [x] `handleSkillInstall` — invalid skill_id UUID returns tool error
+- [x] `handleSkillInvoke` — missing slug returns tool error
+- [x] `handleSkillInvoke` — missing scope returns tool error
+- [x] `handleSkillInvoke` — nil pool/store returns tool error
 
 File: `internal/api/mcp/handlers_unit_test.go` (extend)
 
