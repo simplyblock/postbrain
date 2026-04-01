@@ -1,11 +1,17 @@
 package rest
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+
+	"github.com/simplyblock/postbrain/internal/codegraph"
 )
 
 // TestListScopes_NoAuth_Returns401 verifies unauthenticated requests to GET /v1/scopes return 401.
@@ -84,5 +90,55 @@ func TestDeleteScope_NoAuth_Returns401(t *testing.T) {
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
+// TestSetScopeRepo_MissingRepoURL_Returns400 verifies that omitting repo_url
+// in the POST /v1/scopes/:id/repo body returns 400 before any DB call.
+func TestSetScopeRepo_MissingRepoURL_Returns400(t *testing.T) {
+	ro := &Router{}
+
+	req := httptest.NewRequest(http.MethodPost, "/",
+		strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", uuid.New().String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	w := httptest.NewRecorder()
+
+	ro.setScopeRepo(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+	if _, ok := body["error"]; !ok {
+		t.Error("expected 'error' key in 400 response body")
+	}
+}
+
+// TestGetSyncStatus_UnknownScope_ReturnsJSON verifies that getSyncStatus
+// always responds with valid JSON even for a scope that was never synced.
+func TestGetSyncStatus_UnknownScope_ReturnsJSON(t *testing.T) {
+	ro := &Router{syncer: codegraph.NewSyncer()}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req = requestWithChiParam(t, "id", uuid.New().String())
+	w := httptest.NewRecorder()
+
+	ro.getSyncStatus(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+		t.Errorf("Content-Type = %q, want %q", ct, "application/json")
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("response body is not valid JSON: %v\nbody: %s", err, w.Body.String())
 	}
 }
