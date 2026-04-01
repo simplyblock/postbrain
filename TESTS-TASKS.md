@@ -71,10 +71,10 @@ hanging TCP listener so the spawned goroutine stays alive during assertion.
 
 ### api/rest — helper functions (`internal/api/rest/helpers.go`, `memories.go`)
 
-- [ ] `parseScopeString` — valid `kind:externalID`, missing colon, empty string
-- [ ] `paginationFromRequest` — default limit/offset, valid query params, clamp at max
-- [ ] `uuidParam` — valid UUID in path, invalid string, missing param
-- [ ] `entityRequestsToInput` — empty slice, single entry, multiple entries with all fields
+- [x] `parseScopeString` — valid `kind:externalID`, value containing colon, missing colon, empty string
+- [x] `paginationFromRequest` — defaults, valid params, clamp at 0/101/negative, non-numeric, cursor forwarded
+- [x] `uuidParam` — valid UUID, invalid string, empty/missing param
+- [x] `entityRequestsToInput` — nil slice, empty slice, single entry, empty-name skipped, multiple entries
 
 File: `internal/api/rest/helpers_test.go`
 
