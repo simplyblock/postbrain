@@ -1906,14 +1906,6 @@ func ListPrincipals(ctx context.Context, pool *pgxpool.Pool, limit, offset int) 
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 
-// derefTime returns the zero time.Time if t is nil, else *t.
-func derefTime(t *time.Time) time.Time {
-	if t == nil {
-		return time.Time{}
-	}
-	return *t
-}
-
 // memoryFromRow is a shared helper that copies all common fields from any memory-like struct.
 // Used by the typed conversion helpers below.
 

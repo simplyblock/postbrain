@@ -25,6 +25,7 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 
+	"github.com/simplyblock/postbrain/internal/closeutil"
 	"github.com/simplyblock/postbrain/internal/db"
 )
 
@@ -220,7 +221,7 @@ func indexFile(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, f *ob
 		res.FilesSkipped++
 		return nil
 	}
-	defer rc.Close()
+	defer closeutil.Log(rc, "git blob reader")
 
 	src, err := io.ReadAll(rc)
 	if err != nil {
@@ -407,7 +408,7 @@ func sshAuth(repoURL, sshKey, passphrase string) (transport.AuthMethod, error) {
 			if s, err := agent.NewClient(conn).Signers(); err == nil {
 				signers = append(signers, s...)
 			}
-			conn.Close()
+			closeutil.Log(conn, "ssh agent socket")
 		}
 	}
 

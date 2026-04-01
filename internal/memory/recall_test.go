@@ -91,19 +91,6 @@ func (m *mockRecallDB) IncrementMemoryAccess(_ context.Context, _ uuid.UUID) err
 	return nil
 }
 
-// mockScopeDB returns predetermined scope IDs.
-type mockScopeDB struct {
-	ids []uuid.UUID
-}
-
-func (m *mockScopeDB) GetAncestorScopeIDs(_ context.Context, _ uuid.UUID) ([]uuid.UUID, error) {
-	return m.ids, nil
-}
-
-func (m *mockScopeDB) PersonalScopeIDs(_ context.Context, _ uuid.UUID) ([]uuid.UUID, error) {
-	return nil, nil
-}
-
 // newTestRecallStore creates a Store wired for recall testing.
 func newTestRecallStore(rdb recallDB) *Store {
 	svc := newMockEmbeddingService(true)

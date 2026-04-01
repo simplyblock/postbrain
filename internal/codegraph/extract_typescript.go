@@ -7,8 +7,8 @@ import (
 
 	sitter "github.com/smacker/go-tree-sitter"
 	"github.com/smacker/go-tree-sitter/javascript"
-	ts "github.com/smacker/go-tree-sitter/typescript/typescript"
 	"github.com/smacker/go-tree-sitter/typescript/tsx"
+	ts "github.com/smacker/go-tree-sitter/typescript/typescript"
 )
 
 // ExtractTypeScript parses TypeScript (.ts / .tsx) source and returns symbols and edges.
@@ -48,14 +48,6 @@ type jsExtractor struct {
 
 func (e *jsExtractor) text(n *sitter.Node) string {
 	return string(e.src[n.StartByte():n.EndByte()])
-}
-
-func (e *jsExtractor) fieldText(n *sitter.Node, field string) string {
-	c := n.ChildByFieldName(field)
-	if c == nil {
-		return ""
-	}
-	return e.text(c)
 }
 
 func (e *jsExtractor) addSymbol(name string, kind SymbolKind) {

@@ -86,4 +86,3 @@ func isValidationError(err error, target **skills.ValidationError) bool {
 	}
 	return false
 }
-

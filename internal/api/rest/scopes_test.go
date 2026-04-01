@@ -125,8 +125,7 @@ func TestSetScopeRepo_MissingRepoURL_Returns400(t *testing.T) {
 func TestGetSyncStatus_UnknownScope_ReturnsJSON(t *testing.T) {
 	ro := &Router{syncer: codegraph.NewSyncer()}
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req = requestWithChiParam(t, "id", uuid.New().String())
+	req := requestWithChiParam(t, "id", uuid.New().String())
 	w := httptest.NewRecorder()
 
 	ro.getSyncStatus(w, req)

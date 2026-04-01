@@ -84,7 +84,7 @@ func hangingListener(t *testing.T) *net.TCPListener {
 			if err != nil {
 				return // listener closed
 			}
-			conn.Close() // accept then immediately close — causes a quick error
+			_ = conn.Close() // accept then immediately close — causes a quick error
 		}
 	}()
 	return ln.(*net.TCPListener)
@@ -93,7 +93,9 @@ func hangingListener(t *testing.T) *net.TCPListener {
 func TestSyncer_Start_ReturnsTrueForNewScope(t *testing.T) {
 	t.Parallel()
 	ln := hangingListener(t)
-	defer ln.Close()
+	defer func() {
+		_ = ln.Close()
+	}()
 
 	s := NewSyncer()
 	opts := IndexOptions{
@@ -144,7 +146,9 @@ func TestSyncer_Start_SecondScopeStartsIndependently(t *testing.T) {
 	s.status[scopeA] = &SyncStatus{State: SyncRunning, StartedAt: &now}
 
 	ln := hangingListener(t)
-	defer ln.Close()
+	defer func() {
+		_ = ln.Close()
+	}()
 
 	// Scope B should start regardless.
 	started, status := s.Start(nil, IndexOptions{

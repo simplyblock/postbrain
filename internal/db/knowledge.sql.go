@@ -831,7 +831,7 @@ type SearchArtifactsParams struct {
 	Offset  int32
 }
 
-// $1 = query (wrapped in %...% by caller), $2 = status filter ('' = all), $3 = scope_id (zero = all), $4 = limit, $5 = offset
+// $1 = query (wrapped in %...% by caller), $2 = status filter (” = all), $3 = scope_id (zero = all), $4 = limit, $5 = offset
 func (q *Queries) SearchArtifacts(ctx context.Context, arg SearchArtifactsParams) ([]*KnowledgeArtifact, error) {
 	rows, err := q.db.Query(ctx, searchArtifacts,
 		arg.Title,

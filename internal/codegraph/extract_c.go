@@ -46,14 +46,6 @@ func (e *cExtractor) text(n *sitter.Node) string {
 	return string(e.src[n.StartByte():n.EndByte()])
 }
 
-func (e *cExtractor) fieldText(n *sitter.Node, field string) string {
-	c := n.ChildByFieldName(field)
-	if c == nil {
-		return ""
-	}
-	return e.text(c)
-}
-
 func (e *cExtractor) addSymbol(name string, kind SymbolKind) {
 	e.symbols = append(e.symbols, Symbol{Name: name, Kind: kind, File: e.filename})
 }

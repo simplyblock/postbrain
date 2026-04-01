@@ -14,7 +14,7 @@ import (
 type Neighbour struct {
 	Entity     *db.Entity
 	Predicate  string
-	Direction  string  // "outgoing" (subject→object) or "incoming" (object←subject)
+	Direction  string // "outgoing" (subject→object) or "incoming" (object←subject)
 	Confidence float64
 	SourceFile *string
 }
@@ -147,11 +147,12 @@ func buildResult(ctx context.Context, pool *pgxpool.Pool, entity *db.Entity, rel
 	for _, r := range rels {
 		var neighbourID uuid.UUID
 		dir := direction
-		if direction == "outgoing" {
+		switch direction {
+		case "outgoing":
 			neighbourID = r.ObjectID
-		} else if direction == "incoming" {
+		case "incoming":
 			neighbourID = r.SubjectID
-		} else {
+		default:
 			// mixed: determine direction from relation
 			if r.SubjectID == entity.ID {
 				neighbourID = r.ObjectID

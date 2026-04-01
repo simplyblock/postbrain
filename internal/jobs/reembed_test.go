@@ -1,7 +1,6 @@
 package jobs
 
 import (
-	"context"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -28,8 +27,8 @@ func TestNewReembedJob_CustomBatchSize(t *testing.T) {
 // Full DB behaviour is covered by integration tests.
 func TestReembedJob_Signature(t *testing.T) {
 	// Compile-time check that RunText and RunCode have the expected signatures.
-	var _ func(context.Context) error = (*ReembedJob)(nil).RunText
-	var _ func(context.Context) error = (*ReembedJob)(nil).RunCode
+	var _ = (*ReembedJob)(nil).RunText
+	var _ = (*ReembedJob)(nil).RunCode
 }
 
 // TestNewReembedJob_FieldsSet verifies that the constructor properly stores

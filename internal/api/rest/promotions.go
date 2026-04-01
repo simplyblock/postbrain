@@ -34,10 +34,6 @@ func (ro *Router) listPromotions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"promotions": promotions})
 }
 
-type approvePromotionRequest struct {
-	Note *string `json:"note"`
-}
-
 func (ro *Router) approvePromotion(w http.ResponseWriter, r *http.Request) {
 	id, err := uuidParam(r, "id")
 	if err != nil {

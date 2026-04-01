@@ -18,10 +18,10 @@ func (h *Handler) handleTokens(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) renderTokens(w http.ResponseWriter, r *http.Request, formErr, newRawToken string) {
 	data := struct {
-		Tokens      []*db.Token
-		Scopes      []*db.Scope
-		FormError   string
-		NewToken    string // shown once after creation
+		Tokens    []*db.Token
+		Scopes    []*db.Scope
+		FormError string
+		NewToken  string // shown once after creation
 	}{FormError: formErr, NewToken: newRawToken}
 
 	if h.pool != nil {

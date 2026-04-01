@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
+	"github.com/simplyblock/postbrain/internal/closeutil"
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/ingest"
 	"github.com/simplyblock/postbrain/internal/knowledge"
@@ -27,7 +28,7 @@ func (ro *Router) uploadKnowledge(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "file field is required")
 		return
 	}
-	defer file.Close()
+	defer closeutil.Log(file, "knowledge upload multipart file")
 
 	data, err := io.ReadAll(io.LimitReader(file, maxUploadSize))
 	if err != nil {
