@@ -475,11 +475,16 @@ Use `httptest` with a nil-pool `Handler`.
 
 ### auth flow (`internal/ui/auth.go`, `tokens.go`)
 
-- [ ] `GET /ui/login` — renders login form (200)
-- [ ] `POST /ui/login` — missing token field returns form error (not 500)
-- [ ] `GET /ui/logout` — clears session cookie and redirects
-- [ ] `GET /ui/tokens` — unauthenticated redirects to login
-- [ ] `POST /ui/tokens` — missing name field returns form error
+- [x] `GET /ui/login` — renders login form (200)
+- [x] `POST /ui/login` — missing/empty token re-renders form with error (not 500)
+- [x] `POST /ui/login` — nil pool re-renders form with service unavailable
+- [ ] `GET /ui/logout` — no such route in codebase (skipped)
+- [x] `GET /ui/tokens` — unauthenticated redirects to login
+- [x] `POST /ui/tokens` — missing name re-renders form with error
+- [x] `POST /ui/tokens` — invalid scope_id re-renders form with error
+- [x] `POST /ui/tokens` — invalid expiry date re-renders form with error
+- [x] `POST /ui/tokens/:id/revoke` — invalid UUID returns 400
+- [x] `POST /ui/tokens/:id/revoke` — nil pool returns 503
 
 File: `internal/ui/handler_auth_test.go` (new)
 
