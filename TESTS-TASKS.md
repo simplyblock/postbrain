@@ -37,16 +37,16 @@ Existing `tokens_test.go` only tests `GenerateToken`/`HashToken`.
 `middleware_test.go` covers `bearerTokenMiddlewareWithStore` but leaves several
 branches untested.
 
-- [ ] `TokenStore.Lookup` — nil token returned by `db.LookupToken` returns `nil, nil`
-- [ ] `TokenStore.Lookup` — revoked token (`RevokedAt` set) returns `nil, nil`
-- [ ] `TokenStore.Lookup` — expired token (`ExpiresAt` in past) returns `nil, nil`
-- [ ] `TokenStore.UpdateLastUsed` — nil pool is a no-op (no panic)
-- [ ] `bearerTokenMiddlewareWithStore` — `Bearer ` prefix but empty token string returns 401
-- [ ] `EnforceScopeAccess` — nil `ScopeIds` always returns nil (unrestricted token)
-- [ ] `EnforceScopeAccess` — non-nil list not containing requested scope returns error
-- [ ] `EnforceScopeAccess` — non-nil list containing requested scope returns nil
+- [x] `TokenStore.Lookup` — nil token returned by `db.LookupToken` returns `nil, nil`
+- [x] `TokenStore.Lookup` — revoked token (`RevokedAt` set) returns `nil, nil`
+- [x] `TokenStore.Lookup` — expired token (`ExpiresAt` in past) returns `nil, nil`
+- [x] `TokenStore.UpdateLastUsed` — nil pool is a no-op (no panic)
+- [x] `bearerTokenMiddlewareWithStore` — `Bearer ` prefix but empty token string returns 401
+- [x] `EnforceScopeAccess` — nil `ScopeIds` always returns nil (unrestricted token)
+- [x] `EnforceScopeAccess` — non-nil list not containing requested scope returns error
+- [x] `EnforceScopeAccess` — non-nil list containing requested scope returns nil
 
-File: `internal/auth/tokens_test.go` (extend), `middleware_test.go` (extend)
+File: `internal/auth/tokens_test.go` (extend), `middleware_test.go` (extend), `tokens_integration_test.go` (new)
 
 ---
 

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -105,6 +106,38 @@ func TestMiddleware_UnknownToken(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer pb_unknowntoken")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d; want 401", w.Code)
+	}
+}
+
+func TestMiddleware_BearerPrefixEmptyToken(t *testing.T) {
+	// "Bearer " with nothing after the space — rawToken == "".
+	store := &fakeTokenLookup{}
+	mw := bearerTokenMiddlewareWithStore(store, nil)
+	handler := mw(okHandler)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer ")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d; want 401", w.Code)
+	}
+}
+
+func TestMiddleware_LookupError_Returns401(t *testing.T) {
+	// Lookup returns an error — should still 401, not 500.
+	store := &fakeTokenLookup{err: errors.New("db down")}
+	mw := bearerTokenMiddlewareWithStore(store, nil)
+	handler := mw(okHandler)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer pb_sometoken")
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
