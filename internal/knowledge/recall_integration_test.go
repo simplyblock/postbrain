@@ -19,12 +19,12 @@ const recallText = "knowledge recall integration artifact"
 
 // makePublished creates a knowledge artifact in the given scope with
 // status=published using AutoPublish=true.
-func makePublished(t *testing.T, ctx context.Context, store *knowledge.Store, scopeID uuid.UUID, knowledgeType, content string) *db.KnowledgeArtifact {
+func makePublished(t *testing.T, ctx context.Context, store *knowledge.Store, scopeID, authorID uuid.UUID, knowledgeType, content string) *db.KnowledgeArtifact {
 	t.Helper()
 	a, err := store.Create(ctx, knowledge.CreateInput{
 		KnowledgeType: knowledgeType,
 		OwnerScopeID:  scopeID,
-		AuthorID:      uuid.Nil,
+		AuthorID:      authorID,
 		Visibility:    "project",
 		Title:         "inttest-" + knowledgeType,
 		Content:       content,
@@ -72,7 +72,7 @@ func TestRecall_LimitZeroClampedToDefault(t *testing.T) {
 	scope := testhelper.CreateTestScope(t, pool, "project", "recall-limit-"+uuid.New().String(), nil, principal.ID)
 	store := knowledge.NewStore(pool, svc)
 
-	makePublished(t, ctx, store, scope.ID, "semantic", recallText)
+	makePublished(t, ctx, store, scope.ID, principal.ID, "semantic", recallText)
 
 	results, err := store.Recall(ctx, pool, knowledge.RecallInput{
 		Query:   recallText,
@@ -101,7 +101,7 @@ func TestRecall_ScoreMerging(t *testing.T) {
 
 	// Content equals the query so FakeEmbedder produces identical vectors
 	// (cosine distance = 0) AND the text matches for FTS/trigram.
-	artifact := makePublished(t, ctx, store, scope.ID, "semantic", recallText)
+	artifact := makePublished(t, ctx, store, scope.ID, principal.ID, "semantic", recallText)
 
 	results, err := store.Recall(ctx, pool, knowledge.RecallInput{
 		Query:   recallText,
@@ -153,8 +153,8 @@ func TestRecall_DigestSuppression(t *testing.T) {
 	store := knowledge.NewStore(pool, svc)
 
 	// Both artifacts share content so both appear in recall results.
-	source := makePublished(t, ctx, store, scope.ID, "semantic", recallText)
-	digest := makePublished(t, ctx, store, scope.ID, "digest", recallText)
+	source := makePublished(t, ctx, store, scope.ID, principal.ID, "semantic", recallText)
+	digest := makePublished(t, ctx, store, scope.ID, principal.ID, "digest", recallText)
 
 	// Record the digest → source relationship.
 	if err := db.InsertDigestSources(ctx, pool, digest.ID, []uuid.UUID{source.ID}); err != nil {
