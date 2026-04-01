@@ -27,10 +27,10 @@ File: `internal/chunking/chunker_test.go`
 
 ### codegraph — SSH / URL helpers (`internal/codegraph/indexer.go`)
 
-- [ ] `isSSHURL` — SCP syntax, ssh:// scheme, HTTPS negative case
-- [ ] `sshUserFromURL` — `git@github.com:…`, `ssh://user@host/…`, no-@ fallback
-- [ ] `sanitizeURL` — strips user:pass from HTTPS URLs, leaves SSH URLs unchanged
-- [ ] `parseSSHKey` — valid unencrypted key, valid encrypted key + passphrase, garbage input
+- [x] `isSSHURL` — SCP syntax, ssh:// scheme, HTTPS negative case
+- [x] `sshUserFromURL` — `git@github.com:…`, `ssh://user@host/…`, no-@ fallback
+- [x] `sanitizeURL` — strips user:pass from HTTPS URLs, leaves SSH URLs unchanged
+- [x] `parseSSHKey` — valid unencrypted key, valid encrypted key + passphrase, garbage input
 
 File: `internal/codegraph/indexer_ssh_test.go`
 
