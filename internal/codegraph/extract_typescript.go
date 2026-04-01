@@ -218,20 +218,26 @@ func (e *jsExtractor) handleClass(fileCanon string, n *sitter.Node) {
 	e.addSymbolNode(qualified, KindClass, n)
 	e.addEdge(fileCanon, "defines", qualified)
 
-	// Superclass → extends edge.
-	heritage := n.ChildByFieldName("heritage")
-	if heritage == nil {
-		// TypeScript: class_heritage
-		count := int(n.ChildCount())
-		for i := 0; i < count; i++ {
+	// Superclass → extends / implements edges.
+	// Collect all heritage-related nodes: a single "heritage" field (JS), or
+	// direct class_heritage / extends_clause / implements_clause children (TS).
+	var heritageNodes []*sitter.Node
+	if h := n.ChildByFieldName("heritage"); h != nil {
+		heritageNodes = append(heritageNodes, h)
+	} else {
+		ccount := int(n.ChildCount())
+		for i := 0; i < ccount; i++ {
 			child := n.Child(i)
-			if child != nil && (child.Type() == "class_heritage" || child.Type() == "extends_clause") {
-				heritage = child
-				break
+			if child == nil {
+				continue
+			}
+			switch child.Type() {
+			case "class_heritage", "extends_clause", "implements_clause":
+				heritageNodes = append(heritageNodes, child)
 			}
 		}
 	}
-	if heritage != nil {
+	for _, heritage := range heritageNodes {
 		hcount := int(heritage.ChildCount())
 		for i := 0; i < hcount; i++ {
 			child := heritage.Child(i)
@@ -240,7 +246,16 @@ func (e *jsExtractor) handleClass(fileCanon string, n *sitter.Node) {
 			}
 			switch child.Type() {
 			case "identifier", "member_expression", "type_identifier":
-				e.addEdge(qualified, "extends", e.text(child))
+				// JavaScript-style or direct identifier inside a clause.
+				pred := "extends"
+				if heritage.Type() == "implements_clause" {
+					pred = "implements"
+				}
+				e.addEdge(qualified, pred, e.text(child))
+			case "extends_clause":
+				e.walkHeritageclause(qualified, "extends", child)
+			case "implements_clause":
+				e.walkHeritageclause(qualified, "implements", child)
 			}
 		}
 	}
@@ -282,6 +297,22 @@ func (e *jsExtractor) handleMethodDef(fileCanon, className string, n *sitter.Nod
 	body := n.ChildByFieldName("body")
 	if body != nil {
 		e.collectCalls(qualified, body)
+	}
+}
+
+// walkHeritageclause emits pred edges for all identifiers inside an
+// extends_clause or implements_clause node.
+func (e *jsExtractor) walkHeritageclause(qualified, pred string, n *sitter.Node) {
+	count := int(n.ChildCount())
+	for i := 0; i < count; i++ {
+		child := n.Child(i)
+		if child == nil {
+			continue
+		}
+		switch child.Type() {
+		case "identifier", "type_identifier", "member_expression":
+			e.addEdge(qualified, pred, e.text(child))
+		}
 	}
 }
 

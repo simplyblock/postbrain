@@ -216,6 +216,12 @@ func goRecvTypeName(f *ast.Field) string {
 		if id, ok := t.X.(*ast.Ident); ok {
 			return "*" + id.Name
 		}
+		// Handle generic pointer receiver: *Repo[T]
+		if idx, ok := t.X.(*ast.IndexExpr); ok {
+			if id, ok := idx.X.(*ast.Ident); ok {
+				return "*" + id.Name
+			}
+		}
 	case *ast.Ident:
 		return t.Name
 	case *ast.IndexExpr: // generic: T[X]
