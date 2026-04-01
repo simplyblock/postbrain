@@ -72,13 +72,15 @@ File: `internal/sharing/grants_test.go` (extend), create `internal/sharing/grant
 `visibility_test.go` only tests `deduplicateScopeIDs`. `ResolveVisibleScopeIDs`
 and `getPersonalScope` are 0 % covered.
 
-- [ ] `deduplicateScopeIDs` — empty input returns empty slice (not nil)
-- [ ] `deduplicateScopeIDs` — all-duplicate input returns single element
-- [ ] `ResolveVisibleScopeIDs` and `getPersonalScope` — require DB; add to
-  `visibility_integration_test.go`: scope with no personal scope, scope with a
-  personal scope present
+- [x] `deduplicateScopeIDs` — empty input returns empty slice (not nil)
+- [x] `deduplicateScopeIDs` — all-duplicate input returns single element
+- [x] `deduplicateScopeIDs` — order preserved across duplicates
+- [x] `ResolveVisibleScopeIDs` — root scope (no parent, no personal scope) returns exactly that scope
+- [x] `ResolveVisibleScopeIDs` — child scope returns both child and parent IDs
+- [x] `ResolveVisibleScopeIDs` — no personal scope: getPersonalScope nil-return path covered
+  (Note: 'personal' is not a valid scope kind in the schema; personal scope path is unreachable)
 
-File: `internal/knowledge/visibility_test.go` (extend), create `internal/knowledge/visibility_integration_test.go`
+File: `internal/knowledge/visibility_test.go` (extend), `internal/knowledge/visibility_integration_test.go` (new)
 
 ---
 
