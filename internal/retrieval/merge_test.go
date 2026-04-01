@@ -126,6 +126,65 @@ func TestMerge_MinScoreBoundary(t *testing.T) {
 	}
 }
 
+func TestCosineSimilarity(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name    string
+		a, b    []float32
+		wantMin float64
+		wantMax float64
+	}{
+		{
+			name:    "identical unit vectors",
+			a:       []float32{1, 0},
+			b:       []float32{1, 0},
+			wantMin: 1.0,
+			wantMax: 1.0,
+		},
+		{
+			name:    "orthogonal vectors",
+			a:       []float32{1, 0},
+			b:       []float32{0, 1},
+			wantMin: 0.0,
+			wantMax: 0.0,
+		},
+		{
+			name:    "zero vector denominator guard",
+			a:       []float32{0, 0},
+			b:       []float32{1, 1},
+			wantMin: 0.0,
+			wantMax: 0.0,
+		},
+		{
+			name:    "nil vector",
+			a:       nil,
+			b:       []float32{1, 0},
+			wantMin: 0.0,
+			wantMax: 0.0,
+		},
+		{
+			name:    "negative dot product",
+			a:       []float32{1, 0},
+			b:       []float32{-1, 0},
+			wantMin: -1.0,
+			wantMax: -1.0,
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := retrieval.CosineSimilarity(tc.a, tc.b)
+			if math.IsNaN(got) {
+				t.Fatalf("CosineSimilarity returned NaN")
+			}
+			if math.Abs(got-tc.wantMin) > 1e-6 && (got < tc.wantMin || got > tc.wantMax) {
+				t.Errorf("got %v, want in [%v, %v]", got, tc.wantMin, tc.wantMax)
+			}
+		})
+	}
+}
+
 func TestMerge_DeduplicationKeepsHighestScore(t *testing.T) {
 	// Same ID appearing twice — Merge does not deduplicate by ID,
 	// it deduplicates promoted memories. Verify both entries survive and the
