@@ -52,6 +52,9 @@ type IndexOptions struct {
 	// MaxBytesPerFile caps the maximum file size that will be parsed.
 	// Files larger than this are silently skipped. 0 → 512 KiB.
 	MaxBytesPerFile int64
+	// Depth controls the git clone depth. 0 defaults to 1 (shallow, production default).
+	// Set higher in tests to make previous commits reachable for incremental diffs.
+	Depth int
 }
 
 const defaultMaxBytes int64 = 512 * 1024
@@ -76,11 +79,15 @@ func IndexRepo(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions) (*Ind
 		opts.DefaultBranch = "main"
 	}
 
+	depth := opts.Depth
+	if depth <= 0 {
+		depth = 1
+	}
 	cloneOpts := &gogit.CloneOptions{
 		URL:           opts.RepoURL,
 		SingleBranch:  true,
 		Tags:          gogit.NoTags,
-		Depth:         1,
+		Depth:         depth,
 		ReferenceName: plumbing.NewBranchReferenceName(opts.DefaultBranch),
 	}
 	if isSSHURL(opts.RepoURL) {
