@@ -318,9 +318,14 @@ File: `internal/api/rest/sessions_test.go` (new)
 
 ### sharing handlers (`internal/api/rest/sharing.go`)
 
-- [ ] `POST /v1/sharing/grants` — missing required field returns 400
-- [ ] `GET /v1/sharing/grants` — missing `scope` returns 400
-- [ ] `DELETE /v1/sharing/grants/:id` — invalid UUID returns 400
+- [x] `POST /v1/sharing/grants` — missing grantee_scope_id returns 400
+- [x] `POST /v1/sharing/grants` — invalid grantee_scope_id/memory_id/artifact_id/expires_at returns 400
+- [x] `POST /v1/sharing/grants` — invalid JSON returns 400
+- [x] `POST /v1/sharing/grants` — no auth returns 401
+- [x] `GET /v1/sharing/grants` — invalid grantee_scope_id query param returns 400
+- [x] `GET /v1/sharing/grants` — no auth returns 401
+- [x] `DELETE /v1/sharing/grants/:id` — invalid UUID returns 400
+- [x] `DELETE /v1/sharing/grants/:id` — no auth returns 401
 
 File: `internal/api/rest/sharing_test.go` (new)
 
