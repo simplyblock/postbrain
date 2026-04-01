@@ -333,10 +333,22 @@ File: `internal/api/rest/sharing_test.go` (new)
 
 ### collections handlers (`internal/api/rest/collections.go`)
 
-- [ ] `POST /v1/collections` — missing `slug` returns 400
-- [ ] `GET /v1/collections/:id` — invalid UUID returns 400
-- [ ] `POST /v1/collections/:id/items` — missing `artifact_id` returns 400
-- [ ] `DELETE /v1/collections/:id/items/:artifact_id` — invalid artifact UUID returns 400
+- [x] `POST /v1/collections` — missing scope/slug/name returns 400
+- [x] `POST /v1/collections` — invalid scope format returns 400
+- [x] `POST /v1/collections` — invalid JSON returns 400
+- [x] `POST /v1/collections` — no auth returns 401
+- [x] `GET /v1/collections` — invalid scope format returns 400
+- [x] `GET /v1/collections` — no auth returns 401
+- [x] `GET /v1/collections/:slug` — slug without scope returns 400
+- [x] `GET /v1/collections/:slug` — slug with invalid scope format returns 400
+- [x] `GET /v1/collections/:slug` — no auth returns 401
+- [x] `POST /v1/collections/:id/items` — invalid collection id returns 400
+- [x] `POST /v1/collections/:id/items` — invalid artifact_id returns 400
+- [x] `POST /v1/collections/:id/items` — invalid JSON returns 400
+- [x] `POST /v1/collections/:id/items` — no auth returns 401
+- [x] `DELETE /v1/collections/:id/items/:artifact_id` — invalid collection id returns 400
+- [x] `DELETE /v1/collections/:id/items/:artifact_id` — invalid artifact_id returns 400
+- [x] `DELETE /v1/collections/:id/items/:artifact_id` — no auth returns 401
 
 File: `internal/api/rest/collections_test.go` (new)
 
