@@ -198,11 +198,11 @@ File: `internal/sharing/grants_integration_test.go` (new)
 `CollectionStore` methods `GetByID`, `GetBySlug`, `List`, `AddItem`, `RemoveItem`,
 `ListItems` are all 0 %.
 
-- [ ] `Create` → `GetByID` round-trip
-- [ ] `GetBySlug` — returns same record as `GetByID`
-- [ ] `List` — returns created collection(s) for the scope
-- [ ] `AddItem` / `ListItems` — artifact appears in list after `AddItem`
-- [ ] `RemoveItem` — artifact absent from list after `RemoveItem`
+- [x] `Create` → `GetByID` round-trip
+- [x] `GetBySlug` — returns same record as `GetByID`
+- [x] `List` — returns created collection(s) for the scope
+- [x] `AddItem` / `ListItems` — artifact appears in list after `AddItem`
+- [x] `RemoveItem` — artifact absent from list after `RemoveItem`
 
 File: `internal/knowledge/collections_integration_test.go` (new)
 
