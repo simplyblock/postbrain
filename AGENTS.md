@@ -9,10 +9,32 @@ any other agent). Rules here are not suggestions — they are required behaviour
 ## Always Do
 
 ### Test-Driven Development
-- Implement tests **first**, then implement the feature to make them pass.
-- Every new function, method, or behaviour must have a corresponding test before
-  the implementation is written.
+
+All development follows **strict TDD** — no exceptions:
+
+1. **Red** — write a failing test that specifies the desired behaviour.
+   A test that does not yet compile (missing type, function, or method) counts
+   as red. Confirm it fails before proceeding.
+2. **Green** — write the minimum implementation to make the test pass.
+   Do not write more code than the test requires.
+3. **Refactor** — clean up implementation and tests, keeping everything green.
+
+Additional rules:
+- Never write implementation code before the test exists.
+- Tests drive API design — write the test as a caller would use the code.
+- Bug fixes: write a failing regression test first, then fix the code.
+- New features: write the full test suite first, then implement.
 - Tests live alongside the code they test (`foo_test.go` next to `foo.go`).
+- Unit tests: no external dependencies, tagged with no build tag, run with
+  `go test ./...` (`make test`).
+- Integration tests: require Postgres, tagged `//go:build integration`, file
+  names end in `_integration_test.go`, use `testhelper.NewTestPool`, run with
+  `make test-integration`.
+- Use `embedding.FakeEmbedder` for any test that needs an embedder.
+- Use `noopXxx` base structs for interface fakes (see `noopLifecycleDB` in
+  `internal/knowledge/lifecycle_test.go` as the reference implementation).
+- Table-driven tests for functions with multiple input variants.
+- Every test helper must call `t.Helper()` and `t.Fatal`/`t.Error` directly.
 
 ### Test Suite
 - Run the **full test suite** before staging and committing any changes:
