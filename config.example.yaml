@@ -29,3 +29,31 @@ jobs:
   reembed_enabled:       true
   age_check_enabled:     true
   backfill_summaries_enabled: true
+
+oauth:
+  base_url: "https://postbrain.example.com"
+  providers:
+    github:
+      enabled: true
+      client_id: "Iv1.abc123"
+      client_secret: "ghsec_..."
+      scopes: ["read:user", "user:email"]
+
+    google:
+      enabled: false
+      client_id: ""
+      client_secret: ""
+      scopes: ["openid", "email", "profile"]
+
+    gitlab:
+      enabled: false
+      client_id: ""
+      client_secret: ""
+      instance_url: "https://gitlab.com"
+      scopes: ["read_user"]
+
+  server:
+    auth_code_ttl: 10m
+    state_ttl: 15m
+    token_ttl: 0
+    dynamic_registration: true
