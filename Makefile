@@ -54,9 +54,6 @@ ensure-markitdown:
 		echo "creating markitdown venv at $(MARKITDOWN_VENV)"; \
 		python3 -m venv "$(MARKITDOWN_VENV)"; \
 	fi
-
-ensure-gopls: gopls
-	@echo "using gopls from $(GOPLS)"
 	@if [ ! -f "$(MARKITDOWN_STAMP)" ]; then \
 		echo "installing markitdown[all]==$(MARKITDOWN_VERSION) into $(MARKITDOWN_VENV)"; \
 		"$(MARKITDOWN_VENV)/bin/python" -m pip install --upgrade pip "markitdown[all]==$(MARKITDOWN_VERSION)"; \
@@ -64,6 +61,9 @@ ensure-gopls: gopls
 	else \
 		echo "using markitdown from $(MARKITDOWN_VENV)"; \
 	fi
+
+ensure-gopls: gopls
+	@echo "using gopls from $(GOPLS)"
 
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
