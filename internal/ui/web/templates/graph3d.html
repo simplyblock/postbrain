@@ -1,0 +1,44 @@
+{{define "graph3d"}}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;gap:1rem;flex-wrap:wrap">
+  <h1 style="margin:0">Entity Graph 3D</h1>
+  <div style="display:flex;gap:0.75rem;align-items:center">
+    <a role="button" class="secondary" href="/ui/graph{{if .ScopeID}}?scope_id={{.ScopeID}}{{end}}" style="margin:0">Open 2D View</a>
+    <form class="toolbar" method="GET" action="/ui/graph3d" style="margin:0">
+      <select name="scope_id" onchange="this.form.submit()">
+        {{range .Scopes}}
+        <option value="{{.ID}}"{{if eq $.ScopeID (printf "%s" .ID)}} selected{{end}}>{{.Kind}}:{{.ExternalID}} — {{.Name}}</option>
+        {{end}}
+      </select>
+    </form>
+  </div>
+</div>
+<p class="muted">{{.NodeCount}} entities · {{.EdgeCount}} relations</p>
+
+<div id="graph3d-container" style="width:100%;height:72vh;border:1px solid var(--border);border-radius:var(--border-radius);overflow:hidden;background:var(--card-background-color);position:relative"></div>
+
+<script src="https://unpkg.com/3d-force-graph"></script>
+<script>
+(function () {
+  const raw = {{.GraphJSON}};
+  if (!raw || !raw.nodes || raw.nodes.length === 0) return;
+
+  const container = document.getElementById("graph3d-container");
+  const graph = ForceGraph3D()(container)
+    .graphData(raw)
+    .nodeLabel(n => `${n.name} (${n.type})`)
+    .nodeAutoColorBy("type")
+    .linkLabel(l => l.predicate)
+    .linkOpacity(0.45)
+    .linkWidth(l => l.predicate === "same_as" ? 2.6 : 1.2)
+    .linkDirectionalParticles(1)
+    .linkDirectionalParticleWidth(1.2)
+    .linkDirectionalParticleSpeed(0.003)
+    .backgroundColor("#0b1020");
+
+  // Keep the camera readable for small and large graphs.
+  graph.d3Force("charge").strength(-180);
+  graph.d3Force("link").distance(l => l.predicate === "same_as" ? 22 : 95);
+  graph.cooldownTicks(140);
+})();
+</script>
+{{end}}
