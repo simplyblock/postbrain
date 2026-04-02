@@ -130,6 +130,10 @@ func (ro *Router) getArtifact(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "artifact not found")
 		return
 	}
+	if err := ro.authorizeObjectScope(r.Context(), a.OwnerScopeID); err != nil {
+		writeScopeAuthzError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, a)
 }
 
@@ -148,6 +152,19 @@ func (ro *Router) updateArtifact(w http.ResponseWriter, r *http.Request) {
 	var body updateArtifactRequest
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	existing, err := ro.knwStore.GetByID(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if existing == nil {
+		writeError(w, http.StatusNotFound, "artifact not found")
+		return
+	}
+	if err := ro.authorizeObjectScope(r.Context(), existing.OwnerScopeID); err != nil {
+		writeScopeAuthzError(w, err)
 		return
 	}
 	callerID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)

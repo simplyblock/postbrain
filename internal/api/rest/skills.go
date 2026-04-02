@@ -131,6 +131,10 @@ func (ro *Router) getSkill(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "skill not found")
 		return
 	}
+	if err := ro.authorizeObjectScope(r.Context(), skill.ScopeID); err != nil {
+		writeScopeAuthzError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, skill)
 }
 
@@ -148,6 +152,19 @@ func (ro *Router) updateSkill(w http.ResponseWriter, r *http.Request) {
 	var body updateSkillRequest
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	existing, err := ro.sklStore.GetByID(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if existing == nil {
+		writeError(w, http.StatusNotFound, "skill not found")
+		return
+	}
+	if err := ro.authorizeObjectScope(r.Context(), existing.ScopeID); err != nil {
+		writeScopeAuthzError(w, err)
 		return
 	}
 	callerID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)

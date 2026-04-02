@@ -163,6 +163,10 @@ func (ro *Router) getMemory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "memory not found")
 		return
 	}
+	if err := ro.authorizeObjectScope(r.Context(), m.ScopeID); err != nil {
+		writeScopeAuthzError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, m)
 }
 
@@ -183,6 +187,19 @@ func (ro *Router) updateMemory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	existing, err := db.GetMemory(r.Context(), ro.pool, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if existing == nil {
+		writeError(w, http.StatusNotFound, "memory not found")
+		return
+	}
+	if err := ro.authorizeObjectScope(r.Context(), existing.ScopeID); err != nil {
+		writeScopeAuthzError(w, err)
+		return
+	}
 	updated, err := ro.memStore.Update(r.Context(), id, body.Content, body.Summary, body.Importance)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -198,6 +215,19 @@ func (ro *Router) deleteMemory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hard := r.URL.Query().Get("hard") == "true"
+	existing, err := db.GetMemory(r.Context(), ro.pool, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if existing == nil {
+		writeError(w, http.StatusNotFound, "memory not found")
+		return
+	}
+	if err := ro.authorizeObjectScope(r.Context(), existing.ScopeID); err != nil {
+		writeScopeAuthzError(w, err)
+		return
+	}
 	if hard {
 		if err := ro.memStore.HardDelete(r.Context(), id); err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())

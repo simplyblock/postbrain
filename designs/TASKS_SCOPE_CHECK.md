@@ -119,20 +119,26 @@ Impact: Direct UUID access may bypass scope boundaries.
 
 ### Tasks
 
-- [ ] Introduce ownership-scope authorization checks after fetching object by ID:
+- [x] Introduce ownership-scope authorization checks after fetching object by ID:
   - memory: check `memory.scope_id`
   - artifact: check `artifact.owner_scope_id`
   - skill: check `skill.scope_id`
   - collection: check `collection.scope_id`
-- [ ] Add helper:
-  - `authorizeObjectScope(ctx, pool, objectScopeID) error`
-- [ ] Add regression tests per endpoint:
+- [x] Add helper:
+  - `authorizeObjectScope(ctx, objectScopeID) error`
+- [x] Add regression tests per endpoint:
   - out-of-scope ID returns `403`, not `404/200`
   - in-scope ID remains successful
+  - Added REST integration matrix in `internal/api/rest/scope_authz_integration_test.go` for:
+    - `GET/PATCH/DELETE /v1/memories/{id}`
+    - `GET/PATCH /v1/knowledge/{id}`
+    - `GET/PATCH /v1/skills/{id}`
+    - `GET /v1/collections/{id}`
+    - `POST/DELETE /v1/collections/{id}/items...`
 
 ### Acceptance Criteria
 
-- UUID-based operations cannot cross scope boundaries.
+- UUID-based operations cannot cross scope boundaries for currently identified ID-based handlers.
 
 ---
 

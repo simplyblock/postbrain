@@ -100,6 +100,10 @@ func (ro *Router) getCollection(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "collection not found")
 			return
 		}
+		if err := ro.authorizeObjectScope(r.Context(), coll.ScopeID); err != nil {
+			writeScopeAuthzError(w, err)
+			return
+		}
 		writeJSON(w, http.StatusOK, coll)
 		return
 	}
@@ -155,6 +159,19 @@ func (ro *Router) addCollectionItem(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid artifact_id")
 		return
 	}
+	coll, err := ro.knwColl.GetByID(r.Context(), collID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if coll == nil {
+		writeError(w, http.StatusNotFound, "collection not found")
+		return
+	}
+	if err := ro.authorizeObjectScope(r.Context(), coll.ScopeID); err != nil {
+		writeScopeAuthzError(w, err)
+		return
+	}
 	adderID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 	if err := ro.knwColl.AddItem(r.Context(), collID, artID, adderID); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -172,6 +189,19 @@ func (ro *Router) removeCollectionItem(w http.ResponseWriter, r *http.Request) {
 	artID, err := uuidParam(r, "artifact_id")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid artifact_id")
+		return
+	}
+	coll, err := ro.knwColl.GetByID(r.Context(), collID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if coll == nil {
+		writeError(w, http.StatusNotFound, "collection not found")
+		return
+	}
+	if err := ro.authorizeObjectScope(r.Context(), coll.ScopeID); err != nil {
+		writeScopeAuthzError(w, err)
 		return
 	}
 	if err := ro.knwColl.RemoveItem(r.Context(), collID, artID); err != nil {
