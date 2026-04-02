@@ -41,10 +41,57 @@
   controls.enableRotate = true;
   controls.enableZoom = true;
 
+  function centerGraphAtOrigin() {
+    const g = graph.graphData();
+    if (!g || !g.nodes || g.nodes.length === 0) return;
+
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    for (const n of g.nodes) {
+      if (!Number.isFinite(n.x) || !Number.isFinite(n.y) || !Number.isFinite(n.z)) continue;
+      if (n.x < minX) minX = n.x;
+      if (n.y < minY) minY = n.y;
+      if (n.z < minZ) minZ = n.z;
+      if (n.x > maxX) maxX = n.x;
+      if (n.y > maxY) maxY = n.y;
+      if (n.z > maxZ) maxZ = n.z;
+    }
+    if (!Number.isFinite(minX)) return;
+
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    const cz = (minZ + maxZ) / 2;
+
+    for (const n of g.nodes) {
+      if (!Number.isFinite(n.x) || !Number.isFinite(n.y) || !Number.isFinite(n.z)) continue;
+      n.x -= cx; n.y -= cy; n.z -= cz;
+      if (Number.isFinite(n.fx)) n.fx -= cx;
+      if (Number.isFinite(n.fy)) n.fy -= cy;
+      if (Number.isFinite(n.fz)) n.fz -= cz;
+    }
+    controls.target.set(0, 0, 0);
+    controls.update();
+    graph.refresh();
+  }
+
   // Keep the camera readable for small and large graphs.
   graph.d3Force("charge").strength(-180);
   graph.d3Force("link").distance(l => l.predicate === "same_as" ? 22 : 95);
+  graph.d3Force("x", d3.forceX(0).strength(0.06));
+  graph.d3Force("y", d3.forceY(0).strength(0.06));
+  graph.d3Force("z", d3.forceZ(0).strength(0.06));
   graph.cooldownTicks(140);
+  graph.onEngineStop(() => {
+    // Rebase node coordinates around origin, then fit camera around centered graph.
+    centerGraphAtOrigin();
+    graph.zoomToFit(800, 40);
+  });
+  // Also perform an early fit for fast visual feedback on first render.
+  setTimeout(() => {
+    controls.target.set(0, 0, 0);
+    controls.update();
+    graph.zoomToFit(250, 60);
+  }, 200);
 })();
 </script>
 {{end}}
