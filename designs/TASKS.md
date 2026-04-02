@@ -79,6 +79,11 @@
 - [x] 2026-04-02: Locked 3D graph camera panning in `/ui/graph3d`:
   - `controls.enablePan = false`
   - keep rotation + zoom enabled (`enableRotate`, `enableZoom`)
+- [x] 2026-04-02: Added automatic initial/final 3D graph camera fit:
+  - use `zoomToFit` shortly after mount and again on physics engine stop
+  - rebase node coordinates around bounding-box centroid on engine stop
+  - lock orbit target to origin and apply `forceX/forceY/forceZ` centering
+  - keeps graph centered when panning is disabled
 - [x] 2026-04-02: Extended `Makefile` to auto-install `gopls` locally when needed:
   - Added pinned tool vars: `GOPLS`, `GOPLS_VERSION`
   - Added `gopls` install target using existing `go-install-tool` pattern
