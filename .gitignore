@@ -38,3 +38,6 @@ config.yaml
 
 # Claude local settings
 .claude/settings.local.json
+
+# Build tools
+bin/
