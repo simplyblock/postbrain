@@ -134,6 +134,19 @@
   - Added tests:
     - unit: `TestRecall_IntersectAuthorizedScopeIDs`, `TestRecall_EmptyIntersectionSkipsDBQueries`
     - integration: `TestREST_Recall_IntersectsFanOutWithPrincipalScopes` (prevents ancestor-scope leakage)
+- [x] 2026-04-02: Completed Finding 6 end-to-end API scope-auth security suite (TDD-first):
+  - Added reusable multi-hop fixture graph helper:
+    - `internal/testhelper.CreateScopeAuthzGraph(...)`
+    - creates chain `user -> team -> company` and unrelated branch scopes/principals
+  - Added REST end-to-end chain matrix:
+    - `TestREST_ScopeAuthz_WriteEndpoints_MultiHopChainMatrix`
+    - asserts positive (`user/team/company`) and negative (unrelated branch) for scope-taking REST write routes
+  - Added MCP end-to-end chain matrix:
+    - `TestMCP_ScopeAuthz_MultiHopChainMatrix`
+    - asserts positive (`user/team/company`) and negative (unrelated branch) for scope-taking MCP tools
+  - Added dedicated CI scope-auth gate in `.github/workflows/ci.yml`:
+    - unit: `go test ./internal/api/scopeauth ./internal/memory`
+    - integration: `go test -tags integration ./internal/api/rest ./internal/api/mcp -run "Test(REST|MCP)_ScopeAuthz_|TestREST_Recall_IntersectsFanOutWithPrincipalScopes"`
 - [x] 2026-04-02: Added comprehensive principal scope-visibility integration matrix:
   - Table-driven coverage for principal chains: single-node (`user|team|department|company`) and multi-hop (`user->team`, `team->department`, `user->team->company`, up to `user->team->department->company`)
   - For each principal in chain, asserted `EffectiveScopeIDs` includes self+ancestors only (no descendants)

@@ -790,3 +790,175 @@ func TestREST_Recall_IntersectsFanOutWithPrincipalScopes(t *testing.T) {
 		t.Fatalf("expected team-scope memory %s in results", teamMemRes.MemoryID)
 	}
 }
+
+func TestREST_ScopeAuthz_WriteEndpoints_MultiHopChainMatrix(t *testing.T) {
+	ctx := context.Background()
+	pool := testhelper.NewTestPool(t)
+	svc := testhelper.NewMockEmbeddingService()
+	cfg := &config.Config{}
+	testhelper.CreateTestEmbeddingModel(t, pool)
+
+	graph := testhelper.CreateScopeAuthzGraph(t, pool, "rest-scope-multihop", "member")
+
+	rawToken, hashToken, err := auth.GenerateToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// nil scope_ids keeps token unrestricted so this test exercises principal-chain authz.
+	_, err = db.CreateToken(ctx, pool, graph.UserPrincipal.ID, hashToken, "rest-scope-multihop-token", nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	handler := rest.NewRouter(pool, svc, cfg).Handler()
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	authHeader := "Bearer " + rawToken
+
+	type endpointCase struct {
+		name       string
+		path       string
+		reqBuilder func(scopeStr string) (*http.Request, error)
+	}
+	cases := []endpointCase{
+		{
+			name: "create memory",
+			path: "/v1/memories",
+			reqBuilder: func(scopeStr string) (*http.Request, error) {
+				body := map[string]any{
+					"content":     "chain matrix memory content",
+					"scope":       scopeStr,
+					"memory_type": "semantic",
+				}
+				b, _ := json.Marshal(body)
+				req, err := http.NewRequest(http.MethodPost, srv.URL+"/v1/memories", bytes.NewReader(b))
+				if err != nil {
+					return nil, err
+				}
+				req.Header.Set("Content-Type", "application/json")
+				return req, nil
+			},
+		},
+		{
+			name: "create artifact",
+			path: "/v1/knowledge",
+			reqBuilder: func(scopeStr string) (*http.Request, error) {
+				body := map[string]any{
+					"title":          "chain matrix artifact",
+					"content":        "chain matrix content",
+					"knowledge_type": "semantic",
+					"scope":          scopeStr,
+				}
+				b, _ := json.Marshal(body)
+				req, err := http.NewRequest(http.MethodPost, srv.URL+"/v1/knowledge", bytes.NewReader(b))
+				if err != nil {
+					return nil, err
+				}
+				req.Header.Set("Content-Type", "application/json")
+				return req, nil
+			},
+		},
+		{
+			name: "create skill",
+			path: "/v1/skills",
+			reqBuilder: func(scopeStr string) (*http.Request, error) {
+				body := map[string]any{
+					"scope": scopeStr,
+					"slug":  "chain-matrix-skill-" + uuid.New().String(),
+					"name":  "Chain Matrix Skill",
+				}
+				b, _ := json.Marshal(body)
+				req, err := http.NewRequest(http.MethodPost, srv.URL+"/v1/skills", bytes.NewReader(b))
+				if err != nil {
+					return nil, err
+				}
+				req.Header.Set("Content-Type", "application/json")
+				return req, nil
+			},
+		},
+		{
+			name: "create collection",
+			path: "/v1/collections",
+			reqBuilder: func(scopeStr string) (*http.Request, error) {
+				body := map[string]any{
+					"scope": scopeStr,
+					"slug":  "chain-matrix-coll-" + uuid.New().String(),
+					"name":  "Chain Matrix Collection",
+				}
+				b, _ := json.Marshal(body)
+				req, err := http.NewRequest(http.MethodPost, srv.URL+"/v1/collections", bytes.NewReader(b))
+				if err != nil {
+					return nil, err
+				}
+				req.Header.Set("Content-Type", "application/json")
+				return req, nil
+			},
+		},
+		{
+			name: "create session",
+			path: "/v1/sessions",
+			reqBuilder: func(scopeStr string) (*http.Request, error) {
+				body := map[string]any{"scope": scopeStr}
+				b, _ := json.Marshal(body)
+				req, err := http.NewRequest(http.MethodPost, srv.URL+"/v1/sessions", bytes.NewReader(b))
+				if err != nil {
+					return nil, err
+				}
+				req.Header.Set("Content-Type", "application/json")
+				return req, nil
+			},
+		},
+	}
+
+	allowedScopes := []string{
+		"project:" + graph.UserScope.ExternalID,
+		"project:" + graph.TeamScope.ExternalID,
+		"project:" + graph.CompanyScope.ExternalID,
+	}
+	deniedScope := "project:" + graph.UnrelatedScope.ExternalID
+
+	for _, tc := range cases {
+		tc := tc
+		for _, scopeStr := range allowedScopes {
+			scopeStr := scopeStr
+			t.Run(tc.name+" allows "+scopeStr, func(t *testing.T) {
+				req, err := tc.reqBuilder(scopeStr)
+				if err != nil {
+					t.Fatal(err)
+				}
+				req.Header.Set("Authorization", authHeader)
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer resp.Body.Close()
+				if resp.StatusCode != http.StatusCreated {
+					t.Fatalf("%s status = %d, want %d", tc.path, resp.StatusCode, http.StatusCreated)
+				}
+			})
+		}
+
+		t.Run(tc.name+" denies unrelated branch", func(t *testing.T) {
+			req, err := tc.reqBuilder(deniedScope)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Authorization", authHeader)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusForbidden {
+				t.Fatalf("%s status = %d, want %d", tc.path, resp.StatusCode, http.StatusForbidden)
+			}
+			var out map[string]any
+			_ = json.NewDecoder(resp.Body).Decode(&out)
+			errMsg, _ := out["error"].(string)
+			if !strings.Contains(errMsg, "scope access denied") {
+				t.Fatalf("%s error = %q, want scope access denied", tc.path, errMsg)
+			}
+		})
+	}
+}

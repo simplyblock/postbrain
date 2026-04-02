@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/principals"
 )
 
 // CreateTestPrincipal inserts a principal and returns it.
@@ -80,4 +81,47 @@ func CreateTestEmbeddingModel(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
 		t.Fatalf("create embedding model: %v", err)
 	}
 	return id
+}
+
+// ScopeAuthzGraph is a reusable principal/scope fixture for API authz tests.
+// Chain: user -> team -> company, plus unrelated principal/scope.
+type ScopeAuthzGraph struct {
+	UserPrincipal      *db.Principal
+	TeamPrincipal      *db.Principal
+	CompanyPrincipal   *db.Principal
+	UnrelatedPrincipal *db.Principal
+
+	UserScope      *db.Scope
+	TeamScope      *db.Scope
+	CompanyScope   *db.Scope
+	UnrelatedScope *db.Scope
+}
+
+// CreateScopeAuthzGraph creates a reusable multi-hop authorization fixture.
+// The role is used for both memberships in the chain: user->team and team->company.
+func CreateScopeAuthzGraph(t *testing.T, pool *pgxpool.Pool, prefix, role string) *ScopeAuthzGraph {
+	t.Helper()
+	ctx := context.Background()
+
+	graph := &ScopeAuthzGraph{
+		UserPrincipal:      CreateTestPrincipal(t, pool, "user", prefix+"-user-"+uuid.New().String()),
+		TeamPrincipal:      CreateTestPrincipal(t, pool, "team", prefix+"-team-"+uuid.New().String()),
+		CompanyPrincipal:   CreateTestPrincipal(t, pool, "company", prefix+"-company-"+uuid.New().String()),
+		UnrelatedPrincipal: CreateTestPrincipal(t, pool, "team", prefix+"-unrelated-"+uuid.New().String()),
+	}
+
+	graph.CompanyScope = CreateTestScope(t, pool, "project", prefix+"-company-scope-"+uuid.New().String(), nil, graph.CompanyPrincipal.ID)
+	graph.TeamScope = CreateTestScope(t, pool, "project", prefix+"-team-scope-"+uuid.New().String(), &graph.CompanyScope.ID, graph.TeamPrincipal.ID)
+	graph.UserScope = CreateTestScope(t, pool, "project", prefix+"-user-scope-"+uuid.New().String(), &graph.TeamScope.ID, graph.UserPrincipal.ID)
+	graph.UnrelatedScope = CreateTestScope(t, pool, "project", prefix+"-unrelated-scope-"+uuid.New().String(), nil, graph.UnrelatedPrincipal.ID)
+
+	ms := principals.NewMembershipStore(pool)
+	if err := ms.AddMembership(ctx, graph.UserPrincipal.ID, graph.TeamPrincipal.ID, role, nil); err != nil {
+		t.Fatalf("add membership user->team: %v", err)
+	}
+	if err := ms.AddMembership(ctx, graph.TeamPrincipal.ID, graph.CompanyPrincipal.ID, role, nil); err != nil {
+		t.Fatalf("add membership team->company: %v", err)
+	}
+
+	return graph
 }
