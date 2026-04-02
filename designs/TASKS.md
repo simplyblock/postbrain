@@ -27,6 +27,11 @@
 
 ### Maintenance
 
+- [x] 2026-04-02: Extended `Makefile` to auto-provision a dedicated markitdown venv for tests:
+  - Added `ensure-markitdown` target used by both `test` and `test-integration`
+  - Added `MARKITDOWN_VENV`, `MARKITDOWN_STAMP`, `MARKITDOWN_VERSION` variables
+  - Test commands now prepend the venv `bin/` to `PATH`
+  - Bootstrap installs pinned `markitdown[all]==0.1.5` so DOCX extraction tests have required extras
 - [x] 2026-04-02: Fixed silently discarded errors (TDD: failing tests first):
   - `internal/memory/store.go`: log `slog.Warn` on `co_occurs_with` and code-graph `UpsertRelation` failures
   - `internal/knowledge/store.go`: log `slog.Warn` on `same_as` / `co_occurs_with` `UpsertRelation` failures

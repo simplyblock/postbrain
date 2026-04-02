@@ -41,3 +41,4 @@ config.yaml
 
 # Build tools
 bin/
+.venv-*/
