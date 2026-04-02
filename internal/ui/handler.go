@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -18,13 +19,16 @@ import (
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/closeutil"
 	"github.com/simplyblock/postbrain/internal/codegraph"
+	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/embedding"
 	"github.com/simplyblock/postbrain/internal/ingest"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 	"github.com/simplyblock/postbrain/internal/memory"
+	"github.com/simplyblock/postbrain/internal/oauth"
 	"github.com/simplyblock/postbrain/internal/principals"
 	"github.com/simplyblock/postbrain/internal/retrieval"
+	"github.com/simplyblock/postbrain/internal/social"
 )
 
 //go:embed web/templates
@@ -35,15 +39,22 @@ var staticFS embed.FS
 
 // Handler holds all dependencies for the UI.
 type Handler struct {
-	pool      *pgxpool.Pool
-	templates *template.Template
-	staticFS  fs.FS
-	knwLife   *knowledge.Lifecycle
-	knwStore  *knowledge.Store
-	knwProm   *knowledge.Promoter
-	memStore  *memory.Store
-	svc       *embedding.EmbeddingService
-	syncer    *codegraph.Syncer
+	pool       *pgxpool.Pool
+	templates  *template.Template
+	staticFS   fs.FS
+	knwLife    *knowledge.Lifecycle
+	knwStore   *knowledge.Store
+	knwProm    *knowledge.Promoter
+	memStore   *memory.Store
+	svc        *embedding.EmbeddingService
+	syncer     *codegraph.Syncer
+	oauthCfg   config.OAuthConfig
+	providers  map[string]social.Provider
+	stateStore oauthStateStore
+	codeStore  oauthCodeStore
+	clients    oauthClientLookup
+	issuer     oauthIssuer
+	identities socialIdentityStore
 }
 
 // NewHandler creates a UI Handler with parsed templates.
@@ -71,7 +82,7 @@ func NewHandler(pool *pgxpool.Pool, svc *embedding.EmbeddingService) (*Handler, 
 	if err != nil {
 		return nil, err
 	}
-	h := &Handler{pool: pool, templates: tmpl, staticFS: sub, syncer: codegraph.NewSyncer()}
+	h := &Handler{pool: pool, templates: tmpl, staticFS: sub, syncer: codegraph.NewSyncer(), providers: map[string]social.Provider{}}
 	if pool != nil {
 		membership := principals.NewMembershipStore(pool)
 		h.knwLife = knowledge.NewLifecycle(pool, membership)
@@ -85,6 +96,32 @@ func NewHandler(pool *pgxpool.Pool, svc *embedding.EmbeddingService) (*Handler, 
 	return h, nil
 }
 
+// NewHandlerWithOAuth creates a UI handler with OAuth/social dependencies wired.
+func NewHandlerWithOAuth(
+	pool *pgxpool.Pool,
+	svc *embedding.EmbeddingService,
+	oauthCfg config.OAuthConfig,
+	providers map[string]social.Provider,
+	stateStore *oauth.StateStore,
+	clientStore *oauth.ClientStore,
+	codeStore *oauth.CodeStore,
+	issuer *oauth.Issuer,
+	identities *social.IdentityStore,
+) (*Handler, error) {
+	h, err := NewHandler(pool, svc)
+	if err != nil {
+		return nil, err
+	}
+	h.oauthCfg = oauthCfg
+	h.providers = providers
+	h.stateStore = stateStore
+	h.clients = clientStore
+	h.codeStore = codeStore
+	h.issuer = issuer
+	h.identities = identities
+	return h, nil
+}
+
 // ServeHTTP routes /ui/* requests.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Serve static files.
@@ -95,6 +132,26 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Login form and POST.
 	if r.URL.Path == "/ui/login" {
 		h.handleLogin(w, r)
+		return
+	}
+	// Social login routes are unauthenticated.
+	if strings.HasPrefix(r.URL.Path, "/ui/auth/") && r.Method == http.MethodGet {
+		if strings.HasSuffix(r.URL.Path, "/callback") {
+			h.handleSocialCallback(w, r)
+			return
+		}
+		h.handleSocialStart(w, r)
+		return
+	}
+	if r.URL.Path == "/ui/oauth/authorize" && r.Method == http.MethodGet {
+		next := "/ui/oauth/authorize"
+		if raw := r.URL.RawQuery; raw != "" {
+			next += "?" + raw
+		}
+		if !h.authenticatedRedirect(w, r, "/ui/login?next="+url.QueryEscape(next)) {
+			return
+		}
+		h.handleConsentGet(w, r)
 		return
 	}
 	// Auth check for all other routes.
@@ -178,6 +235,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleSetScopeRepo(w, r)
 	case strings.HasSuffix(r.URL.Path, "/owner") && strings.HasPrefix(r.URL.Path, "/ui/scopes/") && r.Method == http.MethodPost:
 		h.handleSetScopeOwner(w, r)
+	case r.URL.Path == "/ui/oauth/authorize" && r.Method == http.MethodPost:
+		h.handleConsentPost(w, r)
 	case r.URL.Path == "/ui/memberships" && r.Method == http.MethodPost:
 		h.handleAddMembership(w, r)
 	case r.URL.Path == "/ui/memberships/delete" && r.Method == http.MethodPost:

@@ -1,0 +1,17 @@
+{{define "oauth_consent"}}
+<h1>Authorize Client</h1>
+<p><strong>Client:</strong> {{.ClientName}}</p>
+
+<h2>Requested Scopes</h2>
+<ul>
+  {{range .Scopes}}
+  <li>{{.}}</li>
+  {{end}}
+</ul>
+
+<form method="POST" action="/ui/oauth/authorize">
+  <input type="hidden" name="state" value="{{.State}}">
+  <button type="submit" name="action" value="approve">Approve</button>
+  <button type="submit" name="action" value="deny">Deny</button>
+</form>
+{{end}}

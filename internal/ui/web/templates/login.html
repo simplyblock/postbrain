@@ -1,8 +1,21 @@
 {{define "login"}}
 <h1>Sign in to Postbrain</h1>
+{{if .Providers}}
+<section>
+  <h2>Social Login</h2>
+  <div>
+    {{range .Providers}}
+    <a href="/ui/auth/{{.}}">Login with {{.}}</a><br>
+    {{end}}
+  </div>
+</section>
+{{end}}
+<section>
+  <h2>Bearer Token</h2>
 <form method="POST" action="/ui/login">
   <label>Bearer Token<input type="password" name="token" required autofocus></label>
   <button type="submit">Sign in</button>
   {{if .Error}}<div class="alert alert-error">{{.Error}}</div>{{end}}
 </form>
+</section>
 {{end}}

@@ -23,6 +23,7 @@ var ErrNotFound = errors.New("oauth: state not found")
 type stateQueries interface {
 	IssueState(ctx context.Context, arg db.IssueStateParams) (*db.OauthState, error)
 	ConsumeState(ctx context.Context, stateHash string) (*db.OauthState, error)
+	GetStateByHash(ctx context.Context, stateHash string) (*db.OauthState, error)
 }
 
 // StateRecord is a consumed oauth_states record.
@@ -80,6 +81,33 @@ func (s *StateStore) Issue(ctx context.Context, kind string, payload map[string]
 // Consume resolves and marks a state as used.
 func (s *StateStore) Consume(ctx context.Context, rawState string) (*StateRecord, error) {
 	row, err := s.q.ConsumeState(ctx, hashSHA256Hex(rawState))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	payload := map[string]any{}
+	if len(row.Payload) > 0 {
+		if err := json.Unmarshal(row.Payload, &payload); err != nil {
+			return nil, fmt.Errorf("unmarshal state payload: %w", err)
+		}
+	}
+
+	return &StateRecord{
+		ID:        row.ID,
+		Kind:      row.Kind,
+		Payload:   payload,
+		ExpiresAt: row.ExpiresAt,
+		UsedAt:    row.UsedAt,
+		CreatedAt: row.CreatedAt,
+	}, nil
+}
+
+// Peek resolves a not-yet-consumed state without marking it used.
+func (s *StateStore) Peek(ctx context.Context, rawState string) (*StateRecord, error) {
+	row, err := s.q.GetStateByHash(ctx, hashSHA256Hex(rawState))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound

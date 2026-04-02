@@ -43,6 +43,17 @@ func (f *fakeStateQueries) ConsumeState(_ context.Context, stateHash string) (*d
 	return row, nil
 }
 
+func (f *fakeStateQueries) GetStateByHash(_ context.Context, stateHash string) (*db.OauthState, error) {
+	row, ok := f.rows[stateHash]
+	if !ok {
+		return nil, pgx.ErrNoRows
+	}
+	if row.UsedAt != nil || !row.ExpiresAt.After(f.now()) {
+		return nil, pgx.ErrNoRows
+	}
+	return row, nil
+}
+
 func newTestStateStore(now time.Time) (*StateStore, *fakeStateQueries) {
 	fake := &fakeStateQueries{
 		rows: map[string]*db.OauthState{},
@@ -129,5 +140,31 @@ func TestStateStore_Issue_HashesRawState(t *testing.T) {
 	}
 	if _, ok := fake.rows[hashSHA256Hex(rawState)]; !ok {
 		t.Fatal("expected hashed state key to be stored")
+	}
+}
+
+func TestStateStore_Peek_ValidState(t *testing.T) {
+	now := time.Date(2026, 4, 2, 10, 0, 0, 0, time.UTC)
+	store, _ := newTestStateStore(now)
+	ctx := context.Background()
+
+	rawState, err := store.Issue(ctx, "social", map[string]any{"k": "v"}, 15*time.Minute)
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+	got, err := store.Peek(ctx, rawState)
+	if err != nil {
+		t.Fatalf("Peek: %v", err)
+	}
+	if got.Payload["k"] != "v" {
+		t.Fatalf("payload = %v", got.Payload)
+	}
+}
+
+func TestStateStore_Peek_NotFound(t *testing.T) {
+	now := time.Date(2026, 4, 2, 10, 0, 0, 0, time.UTC)
+	store, _ := newTestStateStore(now)
+	if _, err := store.Peek(context.Background(), "missing"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Peek error = %v, want ErrNotFound", err)
 	}
 }
