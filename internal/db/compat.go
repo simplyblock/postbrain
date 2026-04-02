@@ -346,6 +346,32 @@ func UpdateScope(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, name str
 	}, nil
 }
 
+// UpdateScopeOwner updates the owner principal of a scope.
+func UpdateScopeOwner(ctx context.Context, pool *pgxpool.Pool, id, principalID uuid.UUID) (*Scope, error) {
+	q := New(pool)
+	row, err := q.UpdateScopeOwner(ctx, UpdateScopeOwnerParams{ID: id, PrincipalID: principalID})
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &Scope{
+		ID:                row.ID,
+		Kind:              row.Kind,
+		ExternalID:        row.ExternalID,
+		Name:              row.Name,
+		ParentID:          row.ParentID,
+		PrincipalID:       row.PrincipalID,
+		Path:              row.Path,
+		Meta:              row.Meta,
+		RepoUrl:           row.RepoUrl,
+		RepoDefaultBranch: row.RepoDefaultBranch,
+		LastIndexedCommit: row.LastIndexedCommit,
+		CreatedAt:         row.CreatedAt,
+	}, nil
+}
+
 // DeleteScope removes a scope by UUID.
 func CountChildScopes(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (int64, error) {
 	q := New(pool)

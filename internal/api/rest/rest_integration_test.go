@@ -214,6 +214,7 @@ func TestScopes_CRUD(t *testing.T) {
 	cfg := &config.Config{}
 
 	principal := testhelper.CreateTestPrincipal(t, pool, "user", "scopes-e2e-user")
+	otherPrincipal := testhelper.CreateTestPrincipal(t, pool, "user", "scopes-e2e-owner2")
 	rawToken, hashToken, err := auth.GenerateToken()
 	if err != nil {
 		t.Fatal(err)
@@ -312,6 +313,34 @@ func TestScopes_CRUD(t *testing.T) {
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			t.Errorf("expected 200, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("update scope owner returns 200", func(t *testing.T) {
+		if createdScopeID == "" {
+			t.Skip("scope not created")
+		}
+		body := map[string]any{"principal_id": otherPrincipal.ID.String()}
+		b, _ := json.Marshal(body)
+		req, _ := http.NewRequest(http.MethodPut, srv.URL+"/v1/scopes/"+createdScopeID+"/owner", bytes.NewReader(b))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", authHeader)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+		var result map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		gotOwner, _ := result["PrincipalID"].(string)
+		if gotOwner != otherPrincipal.ID.String() {
+			t.Fatalf("PrincipalID = %q, want %q", gotOwner, otherPrincipal.ID.String())
 		}
 	})
 

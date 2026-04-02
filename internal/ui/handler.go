@@ -174,6 +174,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleSyncScopeRepo(w, r)
 	case strings.HasSuffix(r.URL.Path, "/repo") && strings.HasPrefix(r.URL.Path, "/ui/scopes/") && r.Method == http.MethodPost:
 		h.handleSetScopeRepo(w, r)
+	case strings.HasSuffix(r.URL.Path, "/owner") && strings.HasPrefix(r.URL.Path, "/ui/scopes/") && r.Method == http.MethodPost:
+		h.handleSetScopeOwner(w, r)
 	case r.URL.Path == "/ui/memberships" && r.Method == http.MethodPost:
 		h.handleAddMembership(w, r)
 	case r.URL.Path == "/ui/memberships/delete" && r.Method == http.MethodPost:
@@ -772,16 +774,21 @@ func (h *Handler) renderScopes(w http.ResponseWriter, r *http.Request, scopeErr 
 		ScopeFormError string
 		SyncStatus     map[string]codegraph.SyncStatus
 		ChildCount     map[string]int64
+		OwnerNames     map[string]string
 	}{
 		ScopeFormError: scopeErr,
 		SyncStatus:     make(map[string]codegraph.SyncStatus),
 		ChildCount:     make(map[string]int64),
+		OwnerNames:     make(map[string]string),
 	}
 
 	if h.pool != nil {
 		principals, err := db.ListPrincipals(r.Context(), h.pool, 50, 0)
 		if err == nil {
 			data.Principals = principals
+			for _, p := range principals {
+				data.OwnerNames[p.ID.String()] = p.DisplayName
+			}
 		}
 		scopes, err := db.ListScopes(r.Context(), h.pool, 50, 0)
 		if err == nil {
@@ -847,6 +854,40 @@ func (h *Handler) handleDeleteScope(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := db.DeleteScope(r.Context(), h.pool, id); err != nil {
+		h.renderScopes(w, r, err.Error())
+		return
+	}
+	http.Redirect(w, r, "/ui/scopes", http.StatusSeeOther)
+}
+
+// handleSetScopeOwner serves POST /ui/scopes/{id}/owner.
+func (h *Handler) handleSetScopeOwner(w http.ResponseWriter, r *http.Request) {
+	trimmed := strings.TrimPrefix(r.URL.Path, "/ui/scopes/")
+	idStr := strings.TrimSuffix(trimmed, "/owner")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		h.renderScopes(w, r, "invalid scope id")
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		h.renderScopes(w, r, "bad form data")
+		return
+	}
+	principalIDStr := r.FormValue("principal_id")
+	if principalIDStr == "" {
+		h.renderScopes(w, r, "principal_id is required")
+		return
+	}
+	principalID, err := uuid.Parse(principalIDStr)
+	if err != nil {
+		h.renderScopes(w, r, "invalid principal_id")
+		return
+	}
+	if h.pool == nil {
+		h.renderScopes(w, r, "service unavailable")
+		return
+	}
+	if _, err := db.UpdateScopeOwner(r.Context(), h.pool, id, principalID); err != nil {
 		h.renderScopes(w, r, err.Error())
 		return
 	}

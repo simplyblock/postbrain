@@ -31,6 +31,11 @@ UPDATE scopes SET name = $2, meta = $3 WHERE id = $1
 RETURNING id, kind, external_id, name, parent_id, principal_id, path::text, meta,
           repo_url, repo_default_branch, last_indexed_commit, created_at;
 
+-- name: UpdateScopeOwner :one
+UPDATE scopes SET principal_id = $2 WHERE id = $1
+RETURNING id, kind, external_id, name, parent_id, principal_id, path::text, meta,
+          repo_url, repo_default_branch, last_indexed_commit, created_at;
+
 -- name: SetScopeRepo :one
 UPDATE scopes
 SET repo_url = $2, repo_default_branch = $3
