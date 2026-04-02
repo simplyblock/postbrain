@@ -47,7 +47,7 @@ func (ro *Router) createArtifact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
-		writeScopeAuthzError(w, err)
+		writeScopeAuthzError(w, r, scope.ID, err)
 		return
 	}
 
@@ -97,7 +97,7 @@ func (ro *Router) searchArtifacts(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
-			writeScopeAuthzError(w, err)
+			writeScopeAuthzError(w, r, scope.ID, err)
 			return
 		}
 		scopeID = scope.ID
@@ -131,7 +131,7 @@ func (ro *Router) getArtifact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := ro.authorizeObjectScope(r.Context(), a.OwnerScopeID); err != nil {
-		writeScopeAuthzError(w, err)
+		writeScopeAuthzError(w, r, a.OwnerScopeID, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, a)
@@ -164,7 +164,7 @@ func (ro *Router) updateArtifact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := ro.authorizeObjectScope(r.Context(), existing.OwnerScopeID); err != nil {
-		writeScopeAuthzError(w, err)
+		writeScopeAuthzError(w, r, existing.OwnerScopeID, err)
 		return
 	}
 	callerID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)

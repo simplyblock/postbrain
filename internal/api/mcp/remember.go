@@ -46,7 +46,7 @@ func (s *Server) handleRemember(ctx context.Context, req mcpgo.CallToolRequest) 
 		return mcpgo.NewToolResultError(fmt.Sprintf("remember: scope '%s' not found", scopeStr)), nil
 	}
 	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-		return scopeAuthzToolError(err), nil
+		return scopeAuthzToolError(ctx, "remember", scope.ID, err), nil
 	}
 
 	// Get principal from context.

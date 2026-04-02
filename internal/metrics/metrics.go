@@ -54,4 +54,13 @@ var (
 		},
 		[]string{"layer"},
 	)
+
+	// ScopeAuthzDenied tracks denied scope authorization attempts per API surface and endpoint/tool.
+	ScopeAuthzDenied = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "postbrain_scope_authz_denied_total",
+			Help: "Total number of denied scope authorization attempts",
+		},
+		[]string{"surface", "endpoint"},
+	)
 )

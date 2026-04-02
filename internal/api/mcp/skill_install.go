@@ -55,7 +55,7 @@ func (s *Server) handleSkillInstall(ctx context.Context, req mcpgo.CallToolReque
 				return mcpgo.NewToolResultError("skill_install: scope not found"), nil
 			}
 			if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-				return scopeAuthzToolError(err), nil
+				return scopeAuthzToolError(ctx, "skill_install", scope.ID, err), nil
 			}
 			scopeID = scope.ID
 		}

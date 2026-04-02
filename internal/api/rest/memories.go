@@ -68,7 +68,7 @@ func (ro *Router) createMemory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
-		writeScopeAuthzError(w, err)
+		writeScopeAuthzError(w, r, scope.ID, err)
 		return
 	}
 
@@ -134,7 +134,7 @@ func (ro *Router) recallMemories(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
-			writeScopeAuthzError(w, err)
+			writeScopeAuthzError(w, r, scope.ID, err)
 			return
 		}
 		scopeID = scope.ID
@@ -170,7 +170,7 @@ func (ro *Router) getMemory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := ro.authorizeObjectScope(r.Context(), m.ScopeID); err != nil {
-		writeScopeAuthzError(w, err)
+		writeScopeAuthzError(w, r, m.ScopeID, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, m)
@@ -203,7 +203,7 @@ func (ro *Router) updateMemory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := ro.authorizeObjectScope(r.Context(), existing.ScopeID); err != nil {
-		writeScopeAuthzError(w, err)
+		writeScopeAuthzError(w, r, existing.ScopeID, err)
 		return
 	}
 	updated, err := ro.memStore.Update(r.Context(), id, body.Content, body.Summary, body.Importance)
@@ -231,7 +231,7 @@ func (ro *Router) deleteMemory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := ro.authorizeObjectScope(r.Context(), existing.ScopeID); err != nil {
-		writeScopeAuthzError(w, err)
+		writeScopeAuthzError(w, r, existing.ScopeID, err)
 		return
 	}
 	if hard {
@@ -283,7 +283,7 @@ func (ro *Router) promoteMemory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
-		writeScopeAuthzError(w, err)
+		writeScopeAuthzError(w, r, scope.ID, err)
 		return
 	}
 
@@ -341,7 +341,7 @@ func (ro *Router) handleSummarizeMemories(w http.ResponseWriter, req *http.Reque
 		return
 	}
 	if err := ro.authorizeRequestedScope(req.Context(), scope.ID); err != nil {
-		writeScopeAuthzError(w, err)
+		writeScopeAuthzError(w, req, scope.ID, err)
 		return
 	}
 

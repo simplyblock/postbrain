@@ -38,7 +38,7 @@ func (s *Server) handleSkillInvoke(ctx context.Context, req mcpgo.CallToolReques
 		return mcpgo.NewToolResultError("skill_invoke: scope not found"), nil
 	}
 	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-		return scopeAuthzToolError(err), nil
+		return scopeAuthzToolError(ctx, "skill_invoke", scope.ID, err), nil
 	}
 
 	skill, err := s.sklStore.GetBySlug(ctx, scope.ID, slug)
