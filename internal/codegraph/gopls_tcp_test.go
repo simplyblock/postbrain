@@ -28,7 +28,7 @@ func TestGoplsTCPResolver_Resolve_UsesWorkspaceSymbol(t *testing.T) {
 
 	go serveFakeLSP(t, server)
 
-	r := newGoplsTCPResolverWithConn(client, 2*time.Second)
+	r := newGoplsTCPResolverWithConn(client, 2*time.Second, "")
 	got, err := r.Resolve(context.Background(), "main.go", "Println")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
@@ -75,6 +75,9 @@ func serveFakeLSP(t *testing.T, conn net.Conn) {
 					"containerName": "fmt",
 				},
 			})
+		case "textDocument/definition":
+			// Make definition path fail for this unit test so fallback path is exercised.
+			writeLSPResult(t, conn, id, []map[string]any{})
 		case "shutdown":
 			writeLSPResult(t, conn, id, nil)
 		case "exit":

@@ -28,9 +28,9 @@ Introduce an initial Go-only LSP resolver over TCP to improve callsite/callee re
   - [x] Add `IndexOptions` knob for Go LSP endpoint (TCP address).
   - [x] Start resolver once per index run, pass into per-file resolution, and close on completion.
   - [x] Degrade gracefully to existing resolver path if LSP cannot be used.
-- [ ] Add integration-style test (guarded/skippable when `gopls` unavailable):
-  - [ ] Tiny Go fixture repo with cross-file calls.
-  - [ ] Assert at least one call edge resolved via LSP path.
+- [x] Add integration-style test (guarded/skippable when `gopls` unavailable):
+  - [x] Tiny Go fixture repo with cross-file calls.
+  - [x] Assert at least one call edge resolves differently with LSP enabled vs disabled.
 - [ ] Add observability:
   - [ ] log one warning per run when LSP init fails
   - [ ] counters in index result/logs for LSP-assisted resolutions (initial minimal metric/log field)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,14 +61,17 @@ type IndexOptions struct {
 	// GoLSPAddr enables optional Go LSP resolution via a TCP gopls endpoint.
 	// Example: "127.0.0.1:37373". Empty disables LSP for this run.
 	GoLSPAddr string
+	// GoLSPRootURI is the LSP workspace root URI used during initialize.
+	// If empty and RepoURL points at a local path, a file:// URI is derived.
+	GoLSPRootURI string
 	// GoLSPTimeout controls request/dial timeouts for GoLSPAddr.
 	GoLSPTimeout time.Duration
 }
 
 const defaultMaxBytes int64 = 512 * 1024
 
-var newGoplsTCPResolverFn = func(addr string, timeout time.Duration) (LSPResolver, error) {
-	return NewGoplsTCPResolver(addr, timeout)
+var newGoplsTCPResolverFn = func(addr string, timeout time.Duration, rootURI string) (LSPResolver, error) {
+	return NewGoplsTCPResolver(addr, timeout, rootURI)
 }
 
 // IndexResult summarises what was written during an index run.
@@ -377,7 +381,11 @@ func lspResolverForIndex(ctx context.Context, opts IndexOptions) LSPResolver {
 	if opts.GoLSPAddr == "" {
 		return nil
 	}
-	resolver, err := newGoplsTCPResolverFn(opts.GoLSPAddr, opts.GoLSPTimeout)
+	rootURI := opts.GoLSPRootURI
+	if rootURI == "" && filepath.IsAbs(opts.RepoURL) {
+		rootURI = (&url.URL{Scheme: "file", Path: filepath.ToSlash(opts.RepoURL)}).String()
+	}
+	resolver, err := newGoplsTCPResolverFn(opts.GoLSPAddr, opts.GoLSPTimeout, rootURI)
 	if err != nil {
 		slog.WarnContext(ctx, "codegraph: gopls resolver unavailable; continuing without lsp",
 			"addr", opts.GoLSPAddr, "err", err)
