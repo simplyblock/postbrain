@@ -38,7 +38,7 @@ func (h *Handler) authenticatedRedirect(w http.ResponseWriter, r *http.Request, 
 
 // handleLogin serves GET and POST /ui/login.
 func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
-	renderLogin := func(errMsg string) {
+	renderLogin := func(errMsg string, next string) {
 		providers := make([]string, 0, len(h.providers))
 		for name := range h.providers {
 			providers = append(providers, name)
@@ -46,29 +46,34 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		sort.Strings(providers)
 		h.render(w, r, "login", "Login", map[string]any{
 			"Error":     errMsg,
+			"Next":      next,
 			"Providers": providers,
 		})
 	}
 
+	next := r.URL.Query().Get("next")
 	if r.Method == http.MethodPost {
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "bad form", http.StatusBadRequest)
 			return
 		}
+		if formNext := r.FormValue("next"); formNext != "" {
+			next = formNext
+		}
 		raw := r.FormValue("token")
 		if raw == "" {
-			renderLogin("Token is required")
+			renderLogin("Token is required", next)
 			return
 		}
 		if h.pool == nil {
-			renderLogin("Service unavailable")
+			renderLogin("Service unavailable", next)
 			return
 		}
 		hash := auth.HashToken(raw)
 		store := auth.NewTokenStore(h.pool)
 		token, err := store.Lookup(r.Context(), hash)
 		if err != nil || token == nil {
-			renderLogin("Invalid token")
+			renderLogin("Invalid token", next)
 			return
 		}
 		http.SetCookie(w, &http.Cookie{
@@ -78,8 +83,12 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
 		})
-		http.Redirect(w, r, "/ui", http.StatusSeeOther)
+		redirectTarget := "/ui"
+		if next != "" {
+			redirectTarget = next
+		}
+		http.Redirect(w, r, redirectTarget, http.StatusSeeOther)
 		return
 	}
-	renderLogin("")
+	renderLogin("", next)
 }

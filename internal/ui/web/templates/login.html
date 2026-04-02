@@ -13,6 +13,7 @@
 <section>
   <h2>Bearer Token</h2>
 <form method="POST" action="/ui/login">
+  {{if .Next}}<input type="hidden" name="next" value="{{.Next}}">{{end}}
   <label>Bearer Token<input type="password" name="token" required autofocus></label>
   <button type="submit">Sign in</button>
   {{if .Error}}<div class="alert alert-error">{{.Error}}</div>{{end}}

@@ -27,6 +27,15 @@
 
 ### Maintenance
 
+- [x] 2026-04-02: Post-implementation OAuth verification fixes (design parity):
+  - `internal/ui/auth.go` + login template now preserve and honor `next` so `/ui/login?next=...` resumes consent flow after token login.
+  - `internal/oauth/server.go` token exchange updated so confidential clients can rely on valid `client_secret` without mandatory PKCE verifier (PKCE remains enforced for public clients).
+  - `internal/ui/oauth_consent.go` + `oauth_consent.html` now render human-readable scope labels on consent screen.
+  - Added/updated tests:
+    - `internal/ui/handler_auth_test.go` (hidden `next` field render)
+    - `internal/ui/auth_integration_test.go` (login redirect to `next`)
+    - `internal/oauth/server_test.go` (confidential client valid secret + no verifier succeeds)
+    - `internal/ui/oauth_consent_test.go` (human-readable scope labels assertion)
 - [x] 2026-04-02: Completed OAuth implementation baseline and integrations (`designs/TASKS_OAUTH.md` all items checked):
   - Implemented OAuth/social data model, config, sqlc queries, and core authorization-server package (`internal/oauth`).
   - Implemented social provider stack and identity linking (`internal/social`) with integration tests.

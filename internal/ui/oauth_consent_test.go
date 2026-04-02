@@ -118,6 +118,9 @@ func TestHandleConsentGet_ValidState_RendersConsentPage(t *testing.T) {
 	if !strings.Contains(body, "Authorize Client") || !strings.Contains(body, "Approve") {
 		t.Fatalf("unexpected body: %s", body)
 	}
+	if !strings.Contains(body, "Memories Read") || !strings.Contains(body, "Knowledge Write") {
+		t.Fatalf("expected human-readable scope labels, got body: %s", body)
+	}
 }
 
 func TestHandleConsentPost_NoSession_RedirectsToLogin(t *testing.T) {

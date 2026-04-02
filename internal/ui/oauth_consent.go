@@ -41,7 +41,7 @@ func (h *Handler) handleConsentGet(w http.ResponseWriter, r *http.Request) {
 		State      string
 		ClientName string
 		Scopes     []string
-	}{State: rawState, ClientName: clientName, Scopes: payload.Scopes})
+	}{State: rawState, ClientName: clientName, Scopes: humanizeScopes(payload.Scopes)})
 }
 
 func (h *Handler) handleConsentPost(w http.ResponseWriter, r *http.Request) {
@@ -164,4 +164,29 @@ func principalIDFromRequest(r *http.Request) uuid.UUID {
 func anyString(v any) string {
 	s, _ := v.(string)
 	return s
+}
+
+func humanizeScopes(scopes []string) []string {
+	out := make([]string, 0, len(scopes))
+	for _, scope := range scopes {
+		switch scope {
+		case oauth.ScopeMemoriesRead:
+			out = append(out, "Memories Read")
+		case oauth.ScopeMemoriesWrite:
+			out = append(out, "Memories Write")
+		case oauth.ScopeKnowledgeRead:
+			out = append(out, "Knowledge Read")
+		case oauth.ScopeKnowledgeWrite:
+			out = append(out, "Knowledge Write")
+		case oauth.ScopeSkillsRead:
+			out = append(out, "Skills Read")
+		case oauth.ScopeSkillsWrite:
+			out = append(out, "Skills Write")
+		case oauth.ScopeAdmin:
+			out = append(out, "Admin")
+		default:
+			out = append(out, scope)
+		}
+	}
+	return out
 }
