@@ -16,15 +16,17 @@
 
 <div id="graph3d-container" style="width:100%;height:72vh;border:1px solid var(--border);border-radius:var(--border-radius);overflow:hidden;background:var(--card-background-color);position:relative"></div>
 
-<script src="https://unpkg.com/3d-force-graph"></script>
+<script src="//cdn.jsdelivr.net/npm/3d-force-graph"></script>
 <script>
 (function () {
   const raw = {{.GraphJSON}};
   if (!raw || !raw.nodes || raw.nodes.length === 0) return;
 
   const container = document.getElementById("graph3d-container");
-  const graph = ForceGraph3D()(container)
+  const graph = new ForceGraph3D(container)
     .graphData(raw)
+    .width(container.clientWidth)
+    .height(container.clientHeight)
     .nodeLabel(n => `${n.name} (${n.type})`)
     .nodeAutoColorBy("type")
     .linkLabel(l => l.predicate)
@@ -33,66 +35,13 @@
     .linkDirectionalParticles(1)
     .linkDirectionalParticleWidth(1.2)
     .linkDirectionalParticleSpeed(0.003)
-    .backgroundColor("#0b1020");
+    .showNavInfo(false)
+    .enableNodeDrag(false)
+    .backgroundColor("#0f1117");
 
   // Keep user interaction constrained to rotate + zoom.
   const controls = graph.controls();
-  controls.enablePan = false;
-  controls.enableRotate = true;
-  controls.enableZoom = true;
-
-  function focusCameraOnGraph(ms) {
-    const g = graph.graphData();
-    if (!g || !g.nodes || g.nodes.length === 0) return;
-
-    let minX = Infinity, minY = Infinity, minZ = Infinity;
-    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-    for (const n of g.nodes) {
-      if (!Number.isFinite(n.x) || !Number.isFinite(n.y) || !Number.isFinite(n.z)) continue;
-      if (n.x < minX) minX = n.x;
-      if (n.y < minY) minY = n.y;
-      if (n.z < minZ) minZ = n.z;
-      if (n.x > maxX) maxX = n.x;
-      if (n.y > maxY) maxY = n.y;
-      if (n.z > maxZ) maxZ = n.z;
-    }
-    if (!Number.isFinite(minX)) return;
-
-    const cx = (minX + maxX) / 2;
-    const cy = (minY + maxY) / 2;
-    const cz = (minZ + maxZ) / 2;
-    const sx = maxX - minX;
-    const sy = maxY - minY;
-    const sz = maxZ - minZ;
-    const maxSpan = Math.max(sx, sy, sz, 1);
-    const cam = graph.camera();
-    const fovRad = (cam.fov || 60) * (Math.PI / 180);
-    const dist = (maxSpan * 0.7) / Math.tan(fovRad / 2);
-
-    controls.target.set(cx, cy, cz);
-    controls.update();
-    graph.cameraPosition(
-      { x: cx, y: cy, z: cz + dist },
-      { x: cx, y: cy, z: cz },
-      ms || 0
-    );
-  }
-
-  // Keep the camera readable for small and large graphs.
-  graph.d3Force("charge").strength(-180);
-  graph.d3Force("link").distance(l => l.predicate === "same_as" ? 22 : 95);
-  graph.d3Force("x", d3.forceX(0).strength(0.06));
-  graph.d3Force("y", d3.forceY(0).strength(0.06));
-  graph.d3Force("z", d3.forceZ(0).strength(0.06));
-  graph.cooldownTicks(140);
-  graph.onEngineStop(() => {
-    // Deterministically center the camera on the graph bounds.
-    focusCameraOnGraph(700);
-  });
-  // Early center for first render before forces fully settle.
-  setTimeout(() => {
-    focusCameraOnGraph(250);
-  }, 200);
+  controls.noPan = true;
 })();
 </script>
 {{end}}
