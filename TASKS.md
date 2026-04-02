@@ -27,6 +27,7 @@
 
 ### Maintenance
 
+- [x] 2026-04-02: Updated `DESIGN_CODE_GRAPH.md` Phase 5a to prioritize chunk embedding by graph centrality (high in/out link degree first), with tie-breakers and caveat that degree is a strong but imperfect importance proxy.
 - [x] 2026-04-02: Updated `DESIGN_CODE_GRAPH.md` Phase 5b to split chunk embedding budget control into two caps:
   - `REPO_CHUNK_EMBED_MAX_GLOBAL` (fleet-wide/global window cap)
   - `REPO_CHUNK_EMBED_MAX_PER_REPO` (single-repo per-sync cap)
