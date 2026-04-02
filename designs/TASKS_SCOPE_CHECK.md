@@ -173,12 +173,20 @@ Impact: Retrieval scope fan-out may diverge from principal membership policy.
 
 ### Tasks
 
-- [ ] Decide policy explicitly:
+- [x] Decide policy explicitly:
   - Option A: keep scope-tree fan-out for retrieval, enforce principal auth at boundary only.
   - Option B: combine scope-tree fan-out with principal effective scope intersection.
-- [ ] Implement chosen policy in memory recall path:
-  - likely intersection: `fanOutScopes ∩ authorizedScopes`
-- [ ] Add tests for chain and unrelated-branch cases verifying returned results are authz-safe.
+- [x] Implement chosen policy in memory recall path:
+  - Chosen: Option B (intersection).
+  - Implemented: `fanOutScopes ∩ authorizedScopes` in `memory.Recall`.
+  - Wired authorized scope IDs into memory recall call sites (REST + MCP).
+- [x] Add tests for chain and unrelated-branch cases verifying returned results are authz-safe.
+  - Added unit tests in `internal/memory/recall_test.go`:
+    - `TestRecall_IntersectAuthorizedScopeIDs`
+    - `TestRecall_EmptyIntersectionSkipsDBQueries`
+  - Added REST integration regression:
+    - `TestREST_Recall_IntersectsFanOutWithPrincipalScopes`
+    - verifies ancestor-scope memory is not leaked when principal effective scopes do not include the ancestor.
 
 ### Acceptance Criteria
 

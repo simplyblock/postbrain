@@ -19,6 +19,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/memory"
 	"github.com/simplyblock/postbrain/internal/principals"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
@@ -678,5 +679,114 @@ func TestREST_ScopeAuthz_MultiHopPrincipalChain(t *testing.T) {
 				})
 			}
 		})
+	}
+}
+
+func TestREST_Recall_IntersectsFanOutWithPrincipalScopes(t *testing.T) {
+	ctx := context.Background()
+	pool := testhelper.NewTestPool(t)
+	svc := testhelper.NewMockEmbeddingService()
+	cfg := &config.Config{}
+	testhelper.CreateTestEmbeddingModel(t, pool)
+
+	user := testhelper.CreateTestPrincipal(t, pool, "user", "fanout-intersect-user-"+uuid.New().String())
+	team := testhelper.CreateTestPrincipal(t, pool, "team", "fanout-intersect-team-"+uuid.New().String())
+	company := testhelper.CreateTestPrincipal(t, pool, "company", "fanout-intersect-company-"+uuid.New().String())
+
+	companyScope := testhelper.CreateTestScope(t, pool, "project", "fanout-intersect-company-scope-"+uuid.New().String(), nil, company.ID)
+	teamScope := testhelper.CreateTestScope(t, pool, "project", "fanout-intersect-team-scope-"+uuid.New().String(), &companyScope.ID, team.ID)
+
+	ms := principals.NewMembershipStore(pool)
+	if err := ms.AddMembership(ctx, user.ID, team.ID, "member", nil); err != nil {
+		t.Fatalf("add membership user->team: %v", err)
+	}
+
+	memStore := memory.NewStore(pool, svc)
+	if _, err := memStore.Create(ctx, memory.CreateInput{
+		Content:    "ancestor confidential recall marker",
+		MemoryType: "semantic",
+		ScopeID:    companyScope.ID,
+		AuthorID:   company.ID,
+	}); err != nil {
+		t.Fatalf("create company memory: %v", err)
+	}
+	teamMemRes, err := memStore.Create(ctx, memory.CreateInput{
+		Content:    "team public recall marker",
+		MemoryType: "semantic",
+		ScopeID:    teamScope.ID,
+		AuthorID:   team.ID,
+	})
+	if err != nil {
+		t.Fatalf("create team memory: %v", err)
+	}
+
+	rawToken, hashToken, err := auth.GenerateToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.CreateToken(ctx, pool, user.ID, hashToken, "fanout-intersect-token", nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	handler := rest.NewRouter(pool, svc, cfg).Handler()
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	req, err := http.NewRequest(
+		http.MethodGet,
+		srv.URL+"/v1/memories/recall?q=recall+marker&scope=project:"+teamScope.ExternalID,
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+rawToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var out map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	resultsAny, _ := out["results"].([]any)
+	if len(resultsAny) == 0 {
+		t.Fatal("expected non-empty recall results")
+	}
+
+	foundTeamMemory := false
+	for _, item := range resultsAny {
+		row, _ := item.(map[string]any)
+		memObj, _ := row["Memory"].(map[string]any)
+		if memObj == nil {
+			memObj, _ = row["memory"].(map[string]any)
+		}
+		if memObj == nil {
+			continue
+		}
+		scopeID, _ := memObj["ScopeID"].(string)
+		if scopeID == "" {
+			scopeID, _ = memObj["scope_id"].(string)
+		}
+		if scopeID == companyScope.ID.String() {
+			t.Fatalf("unexpected ancestor-scope memory leaked into recall results: scope_id=%s", scopeID)
+		}
+		memID, _ := memObj["ID"].(string)
+		if memID == "" {
+			memID, _ = memObj["id"].(string)
+		}
+		if memID == teamMemRes.MemoryID.String() {
+			foundTeamMemory = true
+		}
+	}
+	if !foundTeamMemory {
+		t.Fatalf("expected team-scope memory %s in results", teamMemRes.MemoryID)
 	}
 }

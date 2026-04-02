@@ -13,15 +13,16 @@ import (
 
 // RecallInput parameters for retrieving memories.
 type RecallInput struct {
-	Query         string
-	ScopeID       uuid.UUID
-	PrincipalID   uuid.UUID
-	MemoryTypes   []string // filter; nil = all
-	SearchMode    string   // "text" | "code" | "hybrid" (default: "hybrid")
-	Limit         int      // default 10
-	MinScore      float64  // default 0.0
-	MaxScopeDepth int
-	StrictScope   bool
+	Query              string
+	ScopeID            uuid.UUID
+	PrincipalID        uuid.UUID
+	AuthorizedScopeIDs []uuid.UUID // optional intersection guard for fan-out scopes
+	MemoryTypes        []string    // filter; nil = all
+	SearchMode         string      // "text" | "code" | "hybrid" (default: "hybrid")
+	Limit              int         // default 10
+	MinScore           float64     // default 0.0
+	MaxScopeDepth      int
+	StrictScope        bool
 }
 
 // MemoryResult is a single recall result with its combined score.
@@ -106,6 +107,12 @@ func (s *Store) Recall(ctx context.Context, input RecallInput) ([]*MemoryResult,
 	}
 	if err != nil {
 		return nil, err
+	}
+	if len(input.AuthorizedScopeIDs) > 0 {
+		scopeIDs = intersectScopeIDs(scopeIDs, input.AuthorizedScopeIDs)
+		if len(scopeIDs) == 0 {
+			return nil, nil
+		}
 	}
 
 	rdb := s.recallDB
@@ -244,4 +251,18 @@ func containsString(slice []string, s string) bool {
 		}
 	}
 	return false
+}
+
+func intersectScopeIDs(base, allowed []uuid.UUID) []uuid.UUID {
+	allowedSet := make(map[uuid.UUID]struct{}, len(allowed))
+	for _, id := range allowed {
+		allowedSet[id] = struct{}{}
+	}
+	out := make([]uuid.UUID, 0, len(base))
+	for _, id := range base {
+		if _, ok := allowedSet[id]; ok {
+			out = append(out, id)
+		}
+	}
+	return out
 }
