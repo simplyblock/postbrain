@@ -40,8 +40,8 @@
   - `GET /ui/collections/new` → `handleCollectionNew` + `collections_new.html` template
   - `POST /ui/collections` → `handleCreateCollection` (validates name, slug, scope_id)
   - Bug fix: `handleKnowledgeDetail` with nil pool now returns 404 instead of template-exec 500
-- [x] 2026-04-02: Updated `DESIGN_CODE_GRAPH.md` Phase 5a to prioritize chunk embedding by graph centrality (high in/out link degree first), with tie-breakers and caveat that degree is a strong but imperfect importance proxy.
-- [x] 2026-04-02: Updated `DESIGN_CODE_GRAPH.md` Phase 5b to split chunk embedding budget control into two caps:
+- [x] 2026-04-02: Updated `designs/DESIGN_CODE_GRAPH.md` Phase 5a to prioritize chunk embedding by graph centrality (high in/out link degree first), with tie-breakers and caveat that degree is a strong but imperfect importance proxy.
+- [x] 2026-04-02: Updated `designs/DESIGN_CODE_GRAPH.md` Phase 5b to split chunk embedding budget control into two caps:
   - `REPO_CHUNK_EMBED_MAX_GLOBAL` (fleet-wide/global window cap)
   - `REPO_CHUNK_EMBED_MAX_PER_REPO` (single-repo per-sync cap)
 - [x] 2026-04-01: Memory API update (REST + MCP) for long-style preference and optional summary.
@@ -514,7 +514,7 @@ All tests follow TDD: test file written before implementation file.
 
 ## Web UI Tasks
 
-Technology: Go `html/template` + HTMX + Pico.css, all embedded via `//go:embed`. Served at `/ui` from the existing binary. See DESIGN.md § Web UI for full specification.
+Technology: Go `html/template` + HTMX + Pico.css, all embedded via `//go:embed`. Served at `/ui` from the existing binary. See designs/DESIGN.md § Web UI for full specification.
 
 ### Prerequisites
 
@@ -571,7 +571,7 @@ Technology: Go `html/template` + HTMX + Pico.css, all embedded via `//go:embed`.
 
 ## TUI Tasks
 
-Technology: `bubbletea` + `lipgloss` + `bubbles` (Charmbracelet suite). New binary `postbrain-tui`. Communicates via REST API only — no direct DB access. See DESIGN.md § TUI for full specification.
+Technology: `bubbletea` + `lipgloss` + `bubbles` (Charmbracelet suite). New binary `postbrain-tui`. Communicates via REST API only — no direct DB access. See designs/DESIGN.md § TUI for full specification.
 
 ### New dependencies (add to `go.mod`)
 
