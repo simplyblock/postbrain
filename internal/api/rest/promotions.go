@@ -23,6 +23,10 @@ func (ro *Router) listPromotions(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "scope not found")
 			return
 		}
+		if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
+			writeScopeAuthzError(w, err)
+			return
+		}
 		targetScopeID = scope.ID
 	}
 

@@ -47,6 +47,9 @@ func (s *Server) handleSummarize(ctx context.Context, req mcpgo.CallToolRequest)
 	if scope == nil {
 		return mcpgo.NewToolResultError(fmt.Sprintf("summarize: scope '%s' not found", scopeStr)), nil
 	}
+	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
+		return scopeAuthzToolError(err), nil
+	}
 
 	consolidator := memory.NewConsolidator(s.pool, s.svc)
 	clusters, err := consolidator.FindClusters(ctx, scope.ID)

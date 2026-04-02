@@ -61,6 +61,10 @@ func (ro *Router) uploadKnowledge(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "scope not found")
 		return
 	}
+	if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
+		writeScopeAuthzError(w, err)
+		return
+	}
 
 	title := r.FormValue("title")
 	if title == "" {

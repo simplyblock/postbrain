@@ -38,6 +38,9 @@ func (s *Server) handleSessionBegin(ctx context.Context, req mcpgo.CallToolReque
 	if scope == nil {
 		return mcpgo.NewToolResultError(fmt.Sprintf("session_begin: scope '%s' not found", scopeStr)), nil
 	}
+	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
+		return scopeAuthzToolError(err), nil
+	}
 
 	principalID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 

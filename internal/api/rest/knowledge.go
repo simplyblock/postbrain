@@ -46,6 +46,10 @@ func (ro *Router) createArtifact(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "scope not found")
 		return
 	}
+	if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
+		writeScopeAuthzError(w, err)
+		return
+	}
 
 	authorID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 
@@ -90,6 +94,10 @@ func (ro *Router) searchArtifacts(w http.ResponseWriter, r *http.Request) {
 		scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 		if err != nil || scope == nil {
 			writeError(w, http.StatusBadRequest, "scope not found")
+			return
+		}
+		if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
+			writeScopeAuthzError(w, err)
 			return
 		}
 		scopeID = scope.ID

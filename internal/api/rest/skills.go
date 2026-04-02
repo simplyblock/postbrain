@@ -42,6 +42,10 @@ func (ro *Router) createSkill(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "scope not found")
 		return
 	}
+	if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
+		writeScopeAuthzError(w, err)
+		return
+	}
 
 	visibility := body.Visibility
 	if visibility == "" {
@@ -85,6 +89,10 @@ func (ro *Router) searchSkills(w http.ResponseWriter, r *http.Request) {
 		scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 		if err != nil || scope == nil {
 			writeError(w, http.StatusBadRequest, "scope not found")
+			return
+		}
+		if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
+			writeScopeAuthzError(w, err)
 			return
 		}
 		scopeIDs = []uuid.UUID{scope.ID}
