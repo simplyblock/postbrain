@@ -39,6 +39,10 @@
   - Added inventory guard tests ensuring scope-taking handlers call `authorizeRequestedScope`:
     - `internal/api/rest/scopeauth_inventory_test.go`
     - `internal/api/mcp/scopeauth_inventory_test.go`
+- [x] 2026-04-02: Fixed MCP integration fixtures after scope-auth hardening:
+  - `internal/api/mcp/mcp_integration_test.go` now injects authenticated token context (`auth.ContextKeyToken`) alongside principal ID
+  - Test token includes explicit `scope_ids` for the created scope so scope auth reflects real authenticated requests
+  - Verified `make test-integration` passes end-to-end
 - [x] 2026-04-02: Added comprehensive principal scope-visibility integration matrix:
   - Table-driven coverage for principal chains: single-node (`user|team|department|company`) and multi-hop (`user->team`, `team->department`, `user->team->company`, up to `user->team->department->company`)
   - For each principal in chain, asserted `EffectiveScopeIDs` includes self+ancestors only (no descendants)
