@@ -27,6 +27,12 @@
 
 ### Maintenance
 
+- [x] 2026-04-02: Started scope-security hardening Finding 1 with TDD:
+  - Added shared API helper package `internal/api/scopeauth`
+  - Added `AuthorizeRequestedScope(token, requestedScopeID, effectiveScopeIDs)` enforcing both:
+    - token `scope_ids` restrictions (`auth.EnforceScopeAccess`)
+    - principal effective-scope inclusion
+  - Added unit tests covering allow/deny matrix and explicit sentinel error assertions
 - [x] 2026-04-02: Added comprehensive principal scope-visibility integration matrix:
   - Table-driven coverage for principal chains: single-node (`user|team|department|company`) and multi-hop (`user->team`, `team->department`, `user->team->company`, up to `user->team->department->company`)
   - For each principal in chain, asserted `EffectiveScopeIDs` includes self+ancestors only (no descendants)
