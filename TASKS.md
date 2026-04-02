@@ -27,6 +27,9 @@
 
 ### Maintenance
 
+- [x] 2026-04-02: Updated `DESIGN_CODE_GRAPH.md` Phase 5b to split chunk embedding budget control into two caps:
+  - `REPO_CHUNK_EMBED_MAX_GLOBAL` (fleet-wide/global window cap)
+  - `REPO_CHUNK_EMBED_MAX_PER_REPO` (single-repo per-sync cap)
 - [x] 2026-04-01: Memory API update (REST + MCP) for long-style preference and optional summary.
   - Added strict-TDD integration coverage for:
     - REST `/v1/memories` create + patch update persisting `summary`
