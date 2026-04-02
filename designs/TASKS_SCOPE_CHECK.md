@@ -201,12 +201,18 @@ Impact: Good unit/integration coverage for store layer, limited API security ass
 
 ### Tasks
 
-- [ ] Add API-level security integration suite:
+- [x] Add API-level security integration suite:
   - `internal/api/rest/scope_authz_integration_test.go`
   - `internal/api/mcp/scope_authz_integration_test.go`
-- [ ] Build reusable fixture graph:
+- [x] Build reusable fixture graph:
   - principals + scopes + memberships for chains and unrelated branch
-- [ ] Assert both positive and negative cases for each scope-taking route/tool.
+  - Added `internal/testhelper.CreateScopeAuthzGraph(...)`.
+- [x] Assert both positive and negative cases for each scope-taking route/tool.
+  - Added REST chain matrix test:
+    - `TestREST_ScopeAuthz_WriteEndpoints_MultiHopChainMatrix`
+  - Added MCP chain matrix test:
+    - `TestMCP_ScopeAuthz_MultiHopChainMatrix`
+  - Existing endpoint/tool scope-authz suites retained and expanded from Findings 2–5.
 
 ### Acceptance Criteria
 
@@ -217,7 +223,10 @@ Impact: Good unit/integration coverage for store layer, limited API security ass
 ## Cross-Cutting Tasks
 
 - [ ] Add a route/tool inventory in code comments or test table listing every scope-taking operation.
-- [ ] Add CI gate for scope authz tests (unit + integration tags).
+- [x] Add CI gate for scope authz tests (unit + integration tags).
+  - Added GitHub Actions job `scope-authz` in `.github/workflows/ci.yml`:
+    - unit: `go test ./internal/api/scopeauth ./internal/memory`
+    - integration: `go test -tags integration ./internal/api/rest ./internal/api/mcp -run "Test(REST|MCP)_ScopeAuthz_|TestREST_Recall_IntersectsFanOutWithPrincipalScopes"`
 - [ ] Add logging fields for denied scope attempts:
   - principal_id
   - requested_scope_id

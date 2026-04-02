@@ -14,6 +14,7 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
 	mcpapi "github.com/simplyblock/postbrain/internal/api/mcp"
+	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/testhelper"
@@ -328,4 +329,147 @@ func firstToolText(result *mcpgo.CallToolResult) string {
 	}
 	text, _ := result.Content[0].(mcpgo.TextContent)
 	return text.Text
+}
+
+func TestMCP_ScopeAuthz_MultiHopChainMatrix(t *testing.T) {
+	ctx := context.Background()
+	pool := testhelper.NewTestPool(t)
+	svc := testhelper.NewMockEmbeddingService()
+	cfg := &config.Config{}
+	testhelper.CreateTestEmbeddingModel(t, pool)
+
+	graph := testhelper.CreateScopeAuthzGraph(t, pool, "mcp-scope-multihop", "member")
+
+	srv := mcpapi.NewServer(pool, svc, cfg)
+	mcpSrv := srv.MCPServer()
+	ctxAuth := withAuthContextUnrestricted(ctx, graph.UserPrincipal.ID)
+
+	allowedScopes := []string{
+		"project:" + graph.UserScope.ExternalID,
+		"project:" + graph.TeamScope.ExternalID,
+		"project:" + graph.CompanyScope.ExternalID,
+	}
+	deniedScope := "project:" + graph.UnrelatedScope.ExternalID
+
+	type toolCase struct {
+		name    string
+		argsFor func(scope string) map[string]any
+	}
+	cases := []toolCase{
+		{
+			name: "remember",
+			argsFor: func(scope string) map[string]any {
+				return map[string]any{
+					"content":     "mcp chain matrix remember",
+					"scope":       scope,
+					"memory_type": "semantic",
+				}
+			},
+		},
+		{
+			name: "publish",
+			argsFor: func(scope string) map[string]any {
+				return map[string]any{
+					"title":          "mcp chain matrix artifact",
+					"content":        "artifact content",
+					"knowledge_type": "semantic",
+					"scope":          scope,
+				}
+			},
+		},
+		{
+			name: "recall",
+			argsFor: func(scope string) map[string]any {
+				return map[string]any{
+					"query":  "chain matrix",
+					"scope":  scope,
+					"layers": []any{"memory"},
+				}
+			},
+		},
+		{
+			name: "context",
+			argsFor: func(scope string) map[string]any {
+				return map[string]any{
+					"scope": scope,
+					"query": "chain matrix",
+				}
+			},
+		},
+		{
+			name: "skill_search",
+			argsFor: func(scope string) map[string]any {
+				return map[string]any{
+					"query": "chain matrix",
+					"scope": scope,
+				}
+			},
+		},
+		{
+			name: "session_begin",
+			argsFor: func(scope string) map[string]any {
+				return map[string]any{"scope": scope}
+			},
+		},
+		{
+			name: "summarize",
+			argsFor: func(scope string) map[string]any {
+				return map[string]any{
+					"scope":   scope,
+					"dry_run": true,
+					"topic":   "chain matrix",
+				}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		tool := mcpSrv.GetTool(tc.name)
+		if tool == nil {
+			t.Fatalf("tool %q not registered", tc.name)
+		}
+
+		for _, scopeStr := range allowedScopes {
+			scopeStr := scopeStr
+			t.Run(tc.name+" allows "+scopeStr, func(t *testing.T) {
+				req := mcpgo.CallToolRequest{}
+				req.Params.Name = tc.name
+				req.Params.Arguments = tc.argsFor(scopeStr)
+				result, err := tool.Handler(ctxAuth, req)
+				if err != nil {
+					t.Fatalf("%s handler error: %v", tc.name, err)
+				}
+				if result == nil || result.IsError {
+					t.Fatalf("%s expected success for scope %s, got %+v", tc.name, scopeStr, result)
+				}
+			})
+		}
+
+		t.Run(tc.name+" denies unrelated branch", func(t *testing.T) {
+			req := mcpgo.CallToolRequest{}
+			req.Params.Name = tc.name
+			req.Params.Arguments = tc.argsFor(deniedScope)
+			result, err := tool.Handler(ctxAuth, req)
+			if err != nil {
+				t.Fatalf("%s handler error: %v", tc.name, err)
+			}
+			if result == nil || !result.IsError {
+				t.Fatalf("%s expected error result, got %+v", tc.name, result)
+			}
+			msg := firstToolText(result)
+			if !strings.Contains(msg, "forbidden: scope access denied") {
+				t.Fatalf("%s error text = %q, want forbidden scope access denied", tc.name, msg)
+			}
+		})
+	}
+}
+
+func withAuthContextUnrestricted(ctx context.Context, principalID uuid.UUID) context.Context {
+	ctx = context.WithValue(ctx, auth.ContextKeyPrincipalID, principalID)
+	token := &db.Token{
+		PrincipalID: principalID,
+		ScopeIds:    nil,
+	}
+	return context.WithValue(ctx, auth.ContextKeyToken, token)
 }
