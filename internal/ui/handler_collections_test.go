@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 // ── handleCollections ─────────────────────────────────────────────────────────
@@ -112,5 +114,113 @@ func TestHandleCollectionDetail_UnauthenticatedViaRouter_RedirectsToLogin(t *tes
 	}
 	if loc := w.Header().Get("Location"); loc != "/ui/login" {
 		t.Errorf("Location = %q, want %q", loc, "/ui/login")
+	}
+}
+
+// ── handleCollectionNew ───────────────────────────────────────────────────────
+
+func TestHandleCollectionNew_Renders200(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/ui/collections/new", nil)
+	w := httptest.NewRecorder()
+
+	h.handleCollectionNew(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Errorf("Content-Type = %q, want text/html", ct)
+	}
+}
+
+func TestHandleCollectionNew_UnauthenticatedViaRouter_RedirectsToLogin(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/ui/collections/new", nil)
+	w := httptest.NewRecorder()
+
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusSeeOther)
+	}
+	if loc := w.Header().Get("Location"); loc != "/ui/login" {
+		t.Errorf("Location = %q, want /ui/login", loc)
+	}
+}
+
+// ── handleCreateCollection ────────────────────────────────────────────────────
+
+func TestHandleCreateCollection_MissingName_RendersFormError(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	req := httptest.NewRequest(http.MethodPost, "/ui/collections",
+		strings.NewReader("slug=my-coll&scope_id="+uuid.New().String()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	h.handleCreateCollection(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d (form should re-render)", w.Code, http.StatusOK)
+	}
+	if !strings.Contains(w.Body.String(), "name") {
+		t.Error("expected form error mentioning 'name'")
+	}
+}
+
+func TestHandleCreateCollection_MissingSlug_RendersFormError(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	req := httptest.NewRequest(http.MethodPost, "/ui/collections",
+		strings.NewReader("name=My+Collection&scope_id="+uuid.New().String()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	h.handleCreateCollection(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if !strings.Contains(w.Body.String(), "slug") {
+		t.Error("expected form error mentioning 'slug'")
+	}
+}
+
+func TestHandleCreateCollection_MissingScope_RendersFormError(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	req := httptest.NewRequest(http.MethodPost, "/ui/collections",
+		strings.NewReader("name=My+Collection&slug=my-coll"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	h.handleCreateCollection(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if !strings.Contains(w.Body.String(), "scope") {
+		t.Error("expected form error mentioning 'scope'")
+	}
+}
+
+func TestHandleCreateCollection_UnauthenticatedViaRouter_RedirectsToLogin(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	req := httptest.NewRequest(http.MethodPost, "/ui/collections",
+		strings.NewReader("name=My+Collection&slug=my-coll"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusSeeOther)
+	}
+	if loc := w.Header().Get("Location"); loc != "/ui/login" {
+		t.Errorf("Location = %q, want /ui/login", loc)
 	}
 }

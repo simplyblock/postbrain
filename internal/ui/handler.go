@@ -110,12 +110,18 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleMemoryDetail(w, r)
 	case r.URL.Path == "/ui/knowledge/upload" && r.Method == http.MethodPost:
 		h.handleUploadKnowledge(w, r)
+	case r.URL.Path == "/ui/knowledge/new":
+		h.handleKnowledgeNew(w, r)
+	case r.URL.Path == "/ui/knowledge" && r.Method == http.MethodPost:
+		h.handleCreateKnowledge(w, r)
 	case r.URL.Path == "/ui/knowledge":
 		h.handleKnowledge(w, r)
 	case strings.HasSuffix(r.URL.Path, "/endorse") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
 		h.handleEndorseArtifact(w, r)
 	case strings.HasSuffix(r.URL.Path, "/review") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
 		h.handleKnowledgeReview(w, r)
+	case strings.HasSuffix(r.URL.Path, "/retract") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
+		h.handleKnowledgeRetract(w, r)
 	case strings.HasSuffix(r.URL.Path, "/deprecate") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
 		h.handleKnowledgeDeprecate(w, r)
 	case strings.HasSuffix(r.URL.Path, "/republish") && strings.HasPrefix(r.URL.Path, "/ui/knowledge/") && r.Method == http.MethodPost:
@@ -126,8 +132,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleKnowledgeHistory(w, r)
 	case strings.HasPrefix(r.URL.Path, "/ui/knowledge/"):
 		h.handleKnowledgeDetail(w, r)
+	case r.URL.Path == "/ui/collections" && r.Method == http.MethodPost:
+		h.handleCreateCollection(w, r)
 	case r.URL.Path == "/ui/collections":
 		h.handleCollections(w, r)
+	case r.URL.Path == "/ui/collections/new":
+		h.handleCollectionNew(w, r)
+	case strings.HasSuffix(r.URL.Path, "/forget") && strings.HasPrefix(r.URL.Path, "/ui/memories/") && r.Method == http.MethodPost:
+		h.handleMemoryForget(w, r)
 	case strings.HasPrefix(r.URL.Path, "/ui/collections/"):
 		h.handleCollectionDetail(w, r)
 	case r.URL.Path == "/ui/promotions":
@@ -387,6 +399,11 @@ func (h *Handler) handleKnowledgeDetail(w http.ResponseWriter, r *http.Request) 
 	idStr := strings.TrimPrefix(r.URL.Path, "/ui/knowledge/")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	if h.pool == nil {
 		http.NotFound(w, r)
 		return
 	}
@@ -1155,6 +1172,177 @@ func (h *Handler) handleKnowledgeDelete(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	http.Redirect(w, r, "/ui/knowledge", http.StatusSeeOther)
+}
+
+// handleKnowledgeRetract serves POST /ui/knowledge/{id}/retract.
+func (h *Handler) handleKnowledgeRetract(w http.ResponseWriter, r *http.Request) {
+	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/retract")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		http.Error(w, "invalid artifact id", http.StatusBadRequest)
+		return
+	}
+	if h.knwLife == nil {
+		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	callerID := h.principalFromCookie(r)
+	if err := h.knwLife.RetractToDraft(r.Context(), id, callerID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/ui/knowledge/"+id.String(), http.StatusSeeOther)
+}
+
+// handleKnowledgeNew serves GET /ui/knowledge/new.
+func (h *Handler) handleKnowledgeNew(w http.ResponseWriter, r *http.Request) {
+	h.renderKnowledgeNew(w, r, "")
+}
+
+func (h *Handler) renderKnowledgeNew(w http.ResponseWriter, r *http.Request, formError string) {
+	data := struct {
+		FormError string
+		Scopes    []*db.Scope
+	}{FormError: formError}
+	if h.pool != nil {
+		if scopes, err := db.ListScopes(r.Context(), h.pool, 200, 0); err == nil {
+			data.Scopes = scopes
+		}
+	}
+	h.render(w, r, "knowledge_new", "New Knowledge Article", data)
+}
+
+// handleCreateKnowledge serves POST /ui/knowledge.
+func (h *Handler) handleCreateKnowledge(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	title := strings.TrimSpace(r.FormValue("title"))
+	if title == "" {
+		h.renderKnowledgeNew(w, r, "title is required")
+		return
+	}
+	scopeStr := strings.TrimSpace(r.FormValue("scope_id"))
+	if scopeStr == "" {
+		h.renderKnowledgeNew(w, r, "scope is required")
+		return
+	}
+	scopeID, err := uuid.Parse(scopeStr)
+	if err != nil {
+		h.renderKnowledgeNew(w, r, "invalid scope id")
+		return
+	}
+	if h.knwStore == nil {
+		h.renderKnowledgeNew(w, r, "service unavailable")
+		return
+	}
+	content := r.FormValue("content")
+	visibility := r.FormValue("visibility")
+	if visibility == "" {
+		visibility = "team"
+	}
+	authorID := h.principalFromCookie(r)
+	art, err := h.knwStore.Create(r.Context(), knowledge.CreateInput{
+		KnowledgeType: "semantic",
+		OwnerScopeID:  scopeID,
+		AuthorID:      authorID,
+		Visibility:    visibility,
+		Title:         title,
+		Content:       content,
+	})
+	if err != nil {
+		h.renderKnowledgeNew(w, r, err.Error())
+		return
+	}
+	http.Redirect(w, r, "/ui/knowledge/"+art.ID.String(), http.StatusSeeOther)
+}
+
+// handleMemoryForget serves POST /ui/memories/{id}/forget.
+func (h *Handler) handleMemoryForget(w http.ResponseWriter, r *http.Request) {
+	trimmed := strings.TrimPrefix(r.URL.Path, "/ui/memories/")
+	idStr := strings.TrimSuffix(trimmed, "/forget")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		http.Error(w, "invalid memory id", http.StatusBadRequest)
+		return
+	}
+	if h.pool == nil {
+		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if err := db.SoftDeleteMemory(r.Context(), h.pool, id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/ui/memories", http.StatusSeeOther)
+}
+
+// handleCollectionNew serves GET /ui/collections/new.
+func (h *Handler) handleCollectionNew(w http.ResponseWriter, r *http.Request) {
+	h.renderCollectionNew(w, r, "")
+}
+
+func (h *Handler) renderCollectionNew(w http.ResponseWriter, r *http.Request, formError string) {
+	data := struct {
+		FormError string
+		Scopes    []*db.Scope
+	}{FormError: formError}
+	if h.pool != nil {
+		if scopes, err := db.ListScopes(r.Context(), h.pool, 200, 0); err == nil {
+			data.Scopes = scopes
+		}
+	}
+	h.render(w, r, "collections_new", "New Collection", data)
+}
+
+// handleCreateCollection serves POST /ui/collections.
+func (h *Handler) handleCreateCollection(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	name := strings.TrimSpace(r.FormValue("name"))
+	if name == "" {
+		h.renderCollectionNew(w, r, "name is required")
+		return
+	}
+	slug := strings.TrimSpace(r.FormValue("slug"))
+	if slug == "" {
+		h.renderCollectionNew(w, r, "slug is required")
+		return
+	}
+	scopeStr := strings.TrimSpace(r.FormValue("scope_id"))
+	if scopeStr == "" {
+		h.renderCollectionNew(w, r, "scope is required")
+		return
+	}
+	scopeID, err := uuid.Parse(scopeStr)
+	if err != nil {
+		h.renderCollectionNew(w, r, "invalid scope id")
+		return
+	}
+	if h.pool == nil {
+		h.renderCollectionNew(w, r, "service unavailable")
+		return
+	}
+	visibility := r.FormValue("visibility")
+	if visibility == "" {
+		visibility = "team"
+	}
+	ownerID := h.principalFromCookie(r)
+	coll, err := db.CreateCollection(r.Context(), h.pool, &db.KnowledgeCollection{
+		ScopeID:    scopeID,
+		OwnerID:    ownerID,
+		Name:       name,
+		Slug:       slug,
+		Visibility: visibility,
+	})
+	if err != nil {
+		h.renderCollectionNew(w, r, err.Error())
+		return
+	}
+	http.Redirect(w, r, "/ui/collections/"+coll.ID.String(), http.StatusSeeOther)
 }
 
 // handleQuery serves GET /ui/query — the recall playground.

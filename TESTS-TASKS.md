@@ -492,14 +492,14 @@ File: `internal/ui/handler_auth_test.go` (new)
 
 ### knowledge CRUD UI (`internal/ui/handler.go`)
 
-- [ ] `GET /ui/knowledge/new` — renders form (200)
-- [ ] `POST /ui/knowledge` — missing title returns form error
-- [ ] `GET /ui/knowledge/:id` — invalid UUID returns 400 or redirect
-- [ ] `POST /ui/knowledge/:id/submit` — invalid UUID returns 400
-- [ ] `POST /ui/knowledge/:id/retract` — invalid UUID returns 400
-- [ ] `POST /ui/knowledge/:id/endorse` — invalid UUID returns 400
-- [ ] `POST /ui/knowledge/:id/deprecate` — invalid UUID returns 400
-- [ ] `POST /ui/knowledge/:id/delete` — invalid UUID returns 400
+- [x] `GET /ui/knowledge/new` — renders form (200)
+- [x] `POST /ui/knowledge` — missing title returns form error
+- [x] `GET /ui/knowledge/:id` — invalid UUID returns 404; nil pool returns 404 (bug fix: was 500)
+- [x] `POST /ui/knowledge/:id/review` — invalid UUID returns 400 (task called it "submit")
+- [x] `POST /ui/knowledge/:id/retract` — invalid UUID returns 400; nil pool returns 503 (new route)
+- [x] `POST /ui/knowledge/:id/endorse` — invalid UUID returns 400
+- [x] `POST /ui/knowledge/:id/deprecate` — invalid UUID returns 400
+- [x] `POST /ui/knowledge/:id/delete` — invalid UUID returns 400
 
 File: `internal/ui/handler_knowledge_test.go` (extend existing)
 
@@ -514,7 +514,7 @@ File: `internal/ui/handler_knowledge_test.go` (extend existing)
 - [x] `GET /ui/memories/:id` — invalid UUID returns 404
 - [x] `GET /ui/memories/:id` — nil pool returns 404 (bug fix: was 500)
 - [x] `GET /ui/memories/:id` — unauthenticated redirects to login
-- [ ] `POST /ui/memories/:id/forget` — **route not implemented** in UI (MCP has it; UI handler missing)
+- [x] `POST /ui/memories/:id/forget` — invalid UUID returns 400; nil pool returns 503 (route implemented)
 
 File: `internal/ui/handler_memories_test.go` (new)
 
@@ -529,8 +529,8 @@ File: `internal/ui/handler_memories_test.go` (new)
 - [x] `GET /ui/collections/:id` — invalid UUID returns 404
 - [x] `GET /ui/collections/:id` — nil pool returns 404 (bug fix: was 500)
 - [x] `GET /ui/collections/:id` — unauthenticated redirects to login
-- [ ] `GET /ui/collections/new` — **route not implemented** in UI
-- [ ] `POST /ui/collections` — **route not implemented** in UI
+- [x] `GET /ui/collections/new` — renders form (200) (route implemented)
+- [x] `POST /ui/collections` — missing name/slug/scope returns form error (route implemented)
 
 File: `internal/ui/handler_collections_test.go` (new)
 
