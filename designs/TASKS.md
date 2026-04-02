@@ -50,6 +50,20 @@
     - build (`make build`)
     - format check (`make fmt` + `git diff --exit-code`)
     - vet (`make vet`)
+- [x] 2026-04-02: Started Go LSP (`gopls`) TCP resolver implementation for codegraph:
+  - Added optional LSP stage in `internal/codegraph/Resolver` between import-aware and suffix fallback
+  - Added `internal/codegraph/GoplsTCPResolver` with JSON-RPC/LSP over TCP:
+    - handshake: `initialize` / `initialized`
+    - lookup: `workspace/symbol`
+    - teardown: `shutdown` / `exit`
+  - Added indexer opt-in wiring:
+    - `IndexOptions.GoLSPAddr`
+    - `IndexOptions.GoLSPTimeout`
+    - per-run resolver lifecycle with graceful fallback when LSP is unavailable
+  - Added unit tests:
+    - `internal/codegraph/resolve_lsp_test.go`
+    - `internal/codegraph/gopls_tcp_test.go`
+    - `internal/codegraph/indexer_lsp_test.go`
 - [x] 2026-04-02: Added comprehensive principal scope-visibility integration matrix:
   - Table-driven coverage for principal chains: single-node (`user|team|department|company`) and multi-hop (`user->team`, `team->department`, `user->team->company`, up to `user->team->department->company`)
   - For each principal in chain, asserted `EffectiveScopeIDs` includes self+ancestors only (no descendants)

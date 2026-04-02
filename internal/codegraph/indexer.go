@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"net"
 
@@ -56,9 +57,18 @@ type IndexOptions struct {
 	// Depth controls the git clone depth. 0 defaults to 1 (shallow, production default).
 	// Set higher in tests to make previous commits reachable for incremental diffs.
 	Depth int
+	// GoLSPAddr enables optional Go LSP resolution via a TCP gopls endpoint.
+	// Example: "127.0.0.1:37373". Empty disables LSP for this run.
+	GoLSPAddr string
+	// GoLSPTimeout controls request/dial timeouts for GoLSPAddr.
+	GoLSPTimeout time.Duration
 }
 
 const defaultMaxBytes int64 = 512 * 1024
+
+var newGoplsTCPResolverFn = func(addr string, timeout time.Duration) (LSPResolver, error) {
+	return NewGoplsTCPResolver(addr, timeout)
+}
 
 // IndexResult summarises what was written during an index run.
 type IndexResult struct {
@@ -78,6 +88,15 @@ func IndexRepo(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions) (*Ind
 	}
 	if opts.DefaultBranch == "" {
 		opts.DefaultBranch = "main"
+	}
+
+	lspResolver := lspResolverForIndex(ctx, opts)
+	if lspResolver != nil {
+		defer func() {
+			if err := lspResolver.Close(); err != nil {
+				slog.WarnContext(ctx, "codegraph: close lsp resolver", "err", err)
+			}
+		}()
 	}
 
 	depth := opts.Depth
@@ -139,7 +158,7 @@ func IndexRepo(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions) (*Ind
 			// prev commit unreachable in shallow clone — full re-index
 			slog.WarnContext(ctx, "codegraph: prev commit not reachable, falling back to full index",
 				"prev_sha", opts.PrevCommit)
-			if err2 := indexFullTree(ctx, pool, opts, headTree, res); err2 != nil {
+			if err2 := indexFullTree(ctx, pool, opts, headTree, res, lspResolver); err2 != nil {
 				return nil, err2
 			}
 		} else {
@@ -147,12 +166,12 @@ func IndexRepo(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions) (*Ind
 			if treeErr != nil {
 				return nil, fmt.Errorf("codegraph: prev tree: %w", treeErr)
 			}
-			if err2 := indexDiff(ctx, pool, opts, prevTree, headTree, res); err2 != nil {
+			if err2 := indexDiff(ctx, pool, opts, prevTree, headTree, res, lspResolver); err2 != nil {
 				return nil, err2
 			}
 		}
 	} else {
-		if err2 := indexFullTree(ctx, pool, opts, headTree, res); err2 != nil {
+		if err2 := indexFullTree(ctx, pool, opts, headTree, res, lspResolver); err2 != nil {
 			return nil, err2
 		}
 	}
@@ -161,9 +180,9 @@ func IndexRepo(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions) (*Ind
 }
 
 // indexFullTree walks every file in the tree and upserts symbols/relations.
-func indexFullTree(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, tree *object.Tree, res *IndexResult) error {
+func indexFullTree(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, tree *object.Tree, res *IndexResult, lspResolver LSPResolver) error {
 	return tree.Files().ForEach(func(f *object.File) error {
-		if err := indexFile(ctx, pool, opts, f, res); err != nil {
+		if err := indexFile(ctx, pool, opts, f, res, lspResolver); err != nil {
 			slog.WarnContext(ctx, "codegraph: index file error", "file", f.Name, "err", err)
 		}
 		return nil
@@ -171,7 +190,7 @@ func indexFullTree(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, t
 }
 
 // indexDiff re-extracts only added/modified files and deletes relations for removed files.
-func indexDiff(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, prevTree, currTree *object.Tree, res *IndexResult) error {
+func indexDiff(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, prevTree, currTree *object.Tree, res *IndexResult, lspResolver LSPResolver) error {
 	changes, err := prevTree.Diff(currTree)
 	if err != nil {
 		return fmt.Errorf("codegraph: tree diff: %w", err)
@@ -191,7 +210,7 @@ func indexDiff(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, prevT
 			if err != nil {
 				continue
 			}
-			if err := indexFile(ctx, pool, opts, f, res); err != nil {
+			if err := indexFile(ctx, pool, opts, f, res, lspResolver); err != nil {
 				slog.WarnContext(ctx, "codegraph: index file error (insert)", "file", f.Name, "err", err)
 			}
 
@@ -201,7 +220,7 @@ func indexDiff(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, prevT
 			if err != nil {
 				continue
 			}
-			if err := indexFile(ctx, pool, opts, f, res); err != nil {
+			if err := indexFile(ctx, pool, opts, f, res, lspResolver); err != nil {
 				slog.WarnContext(ctx, "codegraph: index file error (modify)", "file", f.Name, "err", err)
 			}
 		}
@@ -210,7 +229,7 @@ func indexDiff(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, prevT
 }
 
 // indexFile extracts symbols and relations from a single git blob and upserts them.
-func indexFile(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, f *object.File, res *IndexResult) error {
+func indexFile(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, f *object.File, res *IndexResult, lspResolver LSPResolver) error {
 	if f.Size > opts.MaxBytesPerFile {
 		res.FilesSkipped++
 		return nil
@@ -262,7 +281,7 @@ func indexFile(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, f *ob
 	}
 
 	// Upsert symbols as entities.
-	resolver := NewResolver(pool, opts.ScopeID, nil)
+	resolver := NewResolver(pool, opts.ScopeID, lspResolver)
 	symToID := make(map[string]uuid.UUID, len(syms))
 	for _, sym := range syms {
 		canonical := sym.Name
@@ -352,6 +371,19 @@ func indexFile(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, f *ob
 	}
 
 	return nil
+}
+
+func lspResolverForIndex(ctx context.Context, opts IndexOptions) LSPResolver {
+	if opts.GoLSPAddr == "" {
+		return nil
+	}
+	resolver, err := newGoplsTCPResolverFn(opts.GoLSPAddr, opts.GoLSPTimeout)
+	if err != nil {
+		slog.WarnContext(ctx, "codegraph: gopls resolver unavailable; continuing without lsp",
+			"addr", opts.GoLSPAddr, "err", err)
+		return nil
+	}
+	return resolver
 }
 
 // isSSHURL reports whether u is an SSH clone URL (git@ SCP syntax or ssh:// scheme).
