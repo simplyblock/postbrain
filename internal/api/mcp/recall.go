@@ -98,7 +98,7 @@ func (s *Server) handleRecall(ctx context.Context, req mcpgo.CallToolRequest) (*
 			return mcpgo.NewToolResultError(fmt.Sprintf("recall: scope '%s' not found", scopeStr)), nil
 		}
 		if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-			return scopeAuthzToolError(err), nil
+			return scopeAuthzToolError(ctx, "recall", scope.ID, err), nil
 		}
 		scopeID = scope.ID
 	}

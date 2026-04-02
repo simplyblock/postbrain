@@ -70,7 +70,7 @@ func (s *Server) collectAddToCollection(ctx context.Context, args map[string]any
 			return mcpgo.NewToolResultError("collect: scope not found"), nil
 		}
 		if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-			return scopeAuthzToolError(err), nil
+			return scopeAuthzToolError(ctx, "collect", scope.ID, err), nil
 		}
 		coll, err := s.knwColl.GetBySlug(ctx, scope.ID, slug)
 		if err != nil || coll == nil {
@@ -125,7 +125,7 @@ func (s *Server) collectCreate(ctx context.Context, args map[string]any, callerI
 		return mcpgo.NewToolResultError("collect: scope not found"), nil
 	}
 	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-		return scopeAuthzToolError(err), nil
+		return scopeAuthzToolError(ctx, "collect", scope.ID, err), nil
 	}
 
 	coll, err := s.knwColl.Create(ctx, scope.ID, callerID, slug, name, visibility, description)
@@ -156,7 +156,7 @@ func (s *Server) collectList(ctx context.Context, args map[string]any) (*mcpgo.C
 		return mcpgo.NewToolResultError("collect: scope not found"), nil
 	}
 	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-		return scopeAuthzToolError(err), nil
+		return scopeAuthzToolError(ctx, "collect", scope.ID, err), nil
 	}
 
 	colls, err := s.knwColl.List(ctx, scope.ID)

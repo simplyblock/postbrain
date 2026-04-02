@@ -67,7 +67,7 @@ func (s *Server) handleSynthesizeTopic(ctx context.Context, req mcpgo.CallToolRe
 		return mcpgo.NewToolResultError(fmt.Sprintf("synthesize_topic: scope '%s' not found", scopeStr)), nil
 	}
 	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-		return scopeAuthzToolError(err), nil
+		return scopeAuthzToolError(ctx, "synthesize_topic", scope.ID, err), nil
 	}
 
 	authorID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)

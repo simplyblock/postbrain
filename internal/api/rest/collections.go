@@ -44,7 +44,7 @@ func (ro *Router) createCollection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
-		writeScopeAuthzError(w, err)
+		writeScopeAuthzError(w, r, scope.ID, err)
 		return
 	}
 
@@ -72,7 +72,7 @@ func (ro *Router) listCollections(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
-			writeScopeAuthzError(w, err)
+			writeScopeAuthzError(w, r, scope.ID, err)
 			return
 		}
 		scopeID = scope.ID
@@ -101,7 +101,7 @@ func (ro *Router) getCollection(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := ro.authorizeObjectScope(r.Context(), coll.ScopeID); err != nil {
-			writeScopeAuthzError(w, err)
+			writeScopeAuthzError(w, r, coll.ScopeID, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, coll)
@@ -124,7 +124,7 @@ func (ro *Router) getCollection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
-		writeScopeAuthzError(w, err)
+		writeScopeAuthzError(w, r, scope.ID, err)
 		return
 	}
 	coll, err := ro.knwColl.GetBySlug(r.Context(), scope.ID, slug)
@@ -169,7 +169,7 @@ func (ro *Router) addCollectionItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := ro.authorizeObjectScope(r.Context(), coll.ScopeID); err != nil {
-		writeScopeAuthzError(w, err)
+		writeScopeAuthzError(w, r, coll.ScopeID, err)
 		return
 	}
 	adderID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
@@ -201,7 +201,7 @@ func (ro *Router) removeCollectionItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := ro.authorizeObjectScope(r.Context(), coll.ScopeID); err != nil {
-		writeScopeAuthzError(w, err)
+		writeScopeAuthzError(w, r, coll.ScopeID, err)
 		return
 	}
 	if err := ro.knwColl.RemoveItem(r.Context(), collID, artID); err != nil {

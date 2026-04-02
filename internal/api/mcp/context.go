@@ -49,7 +49,7 @@ func (s *Server) handleContext(ctx context.Context, req mcpgo.CallToolRequest) (
 		return mcpgo.NewToolResultError(fmt.Sprintf("context: scope '%s' not found", scopeStr)), nil
 	}
 	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-		return scopeAuthzToolError(err), nil
+		return scopeAuthzToolError(ctx, "context", scope.ID, err), nil
 	}
 
 	principalID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)

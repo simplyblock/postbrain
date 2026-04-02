@@ -43,7 +43,7 @@ func (ro *Router) createSkill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
-		writeScopeAuthzError(w, err)
+		writeScopeAuthzError(w, r, scope.ID, err)
 		return
 	}
 
@@ -92,7 +92,7 @@ func (ro *Router) searchSkills(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
-			writeScopeAuthzError(w, err)
+			writeScopeAuthzError(w, r, scope.ID, err)
 			return
 		}
 		scopeIDs = []uuid.UUID{scope.ID}
@@ -132,7 +132,7 @@ func (ro *Router) getSkill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := ro.authorizeObjectScope(r.Context(), skill.ScopeID); err != nil {
-		writeScopeAuthzError(w, err)
+		writeScopeAuthzError(w, r, skill.ScopeID, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, skill)
@@ -164,7 +164,7 @@ func (ro *Router) updateSkill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := ro.authorizeObjectScope(r.Context(), existing.ScopeID); err != nil {
-		writeScopeAuthzError(w, err)
+		writeScopeAuthzError(w, r, existing.ScopeID, err)
 		return
 	}
 	callerID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)

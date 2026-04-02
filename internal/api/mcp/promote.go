@@ -52,7 +52,7 @@ func (s *Server) handlePromote(ctx context.Context, req mcpgo.CallToolRequest) (
 		return mcpgo.NewToolResultError(fmt.Sprintf("promote: scope '%s' not found", targetScopeStr)), nil
 	}
 	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-		return scopeAuthzToolError(err), nil
+		return scopeAuthzToolError(ctx, "promote", scope.ID, err), nil
 	}
 
 	requesterID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)

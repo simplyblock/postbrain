@@ -62,7 +62,7 @@ func (ro *Router) uploadKnowledge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
-		writeScopeAuthzError(w, err)
+		writeScopeAuthzError(w, r, scope.ID, err)
 		return
 	}
 

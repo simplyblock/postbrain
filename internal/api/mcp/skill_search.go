@@ -47,7 +47,7 @@ func (s *Server) handleSkillSearch(ctx context.Context, req mcpgo.CallToolReques
 			return mcpgo.NewToolResultError("skill_search: scope not found"), nil
 		}
 		if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-			return scopeAuthzToolError(err), nil
+			return scopeAuthzToolError(ctx, "skill_search", scope.ID, err), nil
 		}
 		scopeIDs = []uuid.UUID{scope.ID}
 	}

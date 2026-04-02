@@ -27,4 +27,9 @@ func TestMetrics_CanObserveWithoutPanic(t *testing.T) {
 		RecallResults.WithLabelValues("knowledge").Inc()
 		RecallResults.WithLabelValues("skill").Add(0)
 	})
+
+	t.Run("ScopeAuthzDenied", func(t *testing.T) {
+		ScopeAuthzDenied.WithLabelValues("rest", "POST /v1/memories").Inc()
+		ScopeAuthzDenied.WithLabelValues("mcp", "remember").Add(0)
+	})
 }

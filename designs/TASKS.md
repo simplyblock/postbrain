@@ -147,6 +147,17 @@
   - Added dedicated CI scope-auth gate in `.github/workflows/ci.yml`:
     - unit: `go test ./internal/api/scopeauth ./internal/memory`
     - integration: `go test -tags integration ./internal/api/rest ./internal/api/mcp -run "Test(REST|MCP)_ScopeAuthz_|TestREST_Recall_IntersectsFanOutWithPrincipalScopes"`
+- [x] 2026-04-02: Completed cross-cutting scope-auth observability and inventory tasks (TDD-first):
+  - Added explicit REST/MCP scope-taking inventory tables used by inventory guard tests:
+    - `restScopeRouteInventory` in `internal/api/rest/scopeauth_inventory_test.go`
+    - `mcpScopeToolInventory` in `internal/api/mcp/scopeauth_inventory_test.go`
+  - Added denied-attempt structured logging fields for both REST and MCP scope-auth failures:
+    - `principal_id`, `requested_scope_id`, `token_id`, `endpoint`/`tool`
+  - Added denied-attempt metric:
+    - `postbrain_scope_authz_denied_total{surface,endpoint}` via `metrics.ScopeAuthzDenied`
+  - Added observability unit tests:
+    - `TestWriteScopeAuthzError_LogsFieldsAndIncrementsMetric`
+    - `TestScopeAuthzToolError_LogsFieldsAndIncrementsMetric`
 - [x] 2026-04-02: Added comprehensive principal scope-visibility integration matrix:
   - Table-driven coverage for principal chains: single-node (`user|team|department|company`) and multi-hop (`user->team`, `team->department`, `user->team->company`, up to `user->team->department->company`)
   - For each principal in chain, asserted `EffectiveScopeIDs` includes self+ancestors only (no descendants)

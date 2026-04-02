@@ -222,18 +222,23 @@ Impact: Good unit/integration coverage for store layer, limited API security ass
 
 ## Cross-Cutting Tasks
 
-- [ ] Add a route/tool inventory in code comments or test table listing every scope-taking operation.
+- [x] Add a route/tool inventory in code comments or test table listing every scope-taking operation.
+  - Added explicit inventory tables in:
+    - `internal/api/rest/scopeauth_inventory_test.go` (`restScopeRouteInventory`)
+    - `internal/api/mcp/scopeauth_inventory_test.go` (`mcpScopeToolInventory`)
 - [x] Add CI gate for scope authz tests (unit + integration tags).
   - Added GitHub Actions job `scope-authz` in `.github/workflows/ci.yml`:
     - unit: `go test ./internal/api/scopeauth ./internal/memory`
     - integration: `go test -tags integration ./internal/api/rest ./internal/api/mcp -run "Test(REST|MCP)_ScopeAuthz_|TestREST_Recall_IntersectsFanOutWithPrincipalScopes"`
-- [ ] Add logging fields for denied scope attempts:
+- [x] Add logging fields for denied scope attempts:
   - principal_id
   - requested_scope_id
   - token_id
   - endpoint/tool
-- [ ] Add metrics counter:
+  - Implemented for both REST and MCP deny paths.
+- [x] Add metrics counter:
   - `postbrain_scope_authz_denied_total{surface="rest|mcp", endpoint="..."}`
+  - Added `metrics.ScopeAuthzDenied` and hooked increments in REST/MCP deny helpers.
 
 ---
 
