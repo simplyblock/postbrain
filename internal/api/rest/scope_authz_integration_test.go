@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -230,6 +231,304 @@ func TestREST_ScopeAuthz_WriteEndpoints(t *testing.T) {
 			defer resp.Body.Close()
 			if resp.StatusCode != http.StatusBadRequest {
 				t.Fatalf("%s status = %d, want %d", tc.path, resp.StatusCode, http.StatusBadRequest)
+			}
+		})
+	}
+}
+
+func TestREST_ScopeAuthz_IDBasedEndpoints(t *testing.T) {
+	ctx := context.Background()
+	pool := testhelper.NewTestPool(t)
+	svc := testhelper.NewMockEmbeddingService()
+	cfg := &config.Config{}
+
+	principal := testhelper.CreateTestPrincipal(t, pool, "user", "rest-scope-id-authz-"+uuid.New().String())
+	allowed := testhelper.CreateTestScope(t, pool, "project", "rest-scope-id-allowed-"+uuid.New().String(), nil, principal.ID)
+	blocked := testhelper.CreateTestScope(t, pool, "project", "rest-scope-id-blocked-"+uuid.New().String(), nil, principal.ID)
+	testhelper.CreateTestEmbeddingModel(t, pool)
+
+	allowedMemory := testhelper.CreateTestMemory(t, pool, allowed.ID, principal.ID, "allowed memory")
+	blockedMemory := testhelper.CreateTestMemory(t, pool, blocked.ID, principal.ID, "blocked memory")
+
+	allowedArtifact := testhelper.CreateTestArtifact(t, pool, allowed.ID, principal.ID, "allowed artifact")
+	blockedArtifact := testhelper.CreateTestArtifact(t, pool, blocked.ID, principal.ID, "blocked artifact")
+	allowedDraftArtifact, err := db.CreateArtifact(ctx, pool, &db.KnowledgeArtifact{
+		KnowledgeType: "semantic",
+		OwnerScopeID:  allowed.ID,
+		AuthorID:      principal.ID,
+		Visibility:    "team",
+		Status:        "draft",
+		Title:         "allowed draft artifact",
+		Content:       "allowed draft content",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	blockedDraftArtifact, err := db.CreateArtifact(ctx, pool, &db.KnowledgeArtifact{
+		KnowledgeType: "semantic",
+		OwnerScopeID:  blocked.ID,
+		AuthorID:      principal.ID,
+		Visibility:    "team",
+		Status:        "draft",
+		Title:         "blocked draft artifact",
+		Content:       "blocked draft content",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now().UTC()
+	skillParams, err := json.Marshal([]db.SkillParameter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	allowedSkill, err := db.CreateSkill(ctx, pool, &db.Skill{
+		ScopeID:        allowed.ID,
+		AuthorID:       principal.ID,
+		Slug:           "allowed-skill-" + uuid.New().String(),
+		Name:           "Allowed Skill",
+		Description:    "Allowed skill",
+		AgentTypes:     []string{"any"},
+		Body:           "Allowed skill body",
+		Parameters:     skillParams,
+		Visibility:     "team",
+		Status:         "published",
+		PublishedAt:    &now,
+		ReviewRequired: 1,
+		Version:        1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	blockedSkill, err := db.CreateSkill(ctx, pool, &db.Skill{
+		ScopeID:        blocked.ID,
+		AuthorID:       principal.ID,
+		Slug:           "blocked-skill-" + uuid.New().String(),
+		Name:           "Blocked Skill",
+		Description:    "Blocked skill",
+		AgentTypes:     []string{"any"},
+		Body:           "Blocked skill body",
+		Parameters:     skillParams,
+		Visibility:     "team",
+		Status:         "published",
+		PublishedAt:    &now,
+		ReviewRequired: 1,
+		Version:        1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	allowedColl, err := db.CreateCollection(ctx, pool, &db.KnowledgeCollection{
+		ScopeID:    allowed.ID,
+		OwnerID:    principal.ID,
+		Slug:       "allowed-coll-" + uuid.New().String(),
+		Name:       "Allowed Collection",
+		Visibility: "team",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	blockedColl, err := db.CreateCollection(ctx, pool, &db.KnowledgeCollection{
+		ScopeID:    blocked.ID,
+		OwnerID:    principal.ID,
+		Slug:       "blocked-coll-" + uuid.New().String(),
+		Name:       "Blocked Collection",
+		Visibility: "team",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AddCollectionItem(ctx, pool, allowedColl.ID, allowedArtifact.ID, principal.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AddCollectionItem(ctx, pool, blockedColl.ID, blockedArtifact.ID, principal.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	rawToken, hashToken, err := auth.GenerateToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.CreateToken(ctx, pool, principal.ID, hashToken, "rest-scope-id-authz-token", []uuid.UUID{allowed.ID}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	handler := rest.NewRouter(pool, svc, cfg).Handler()
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	authHeader := "Bearer " + rawToken
+
+	type endpointCase struct {
+		name        string
+		allowedID   string
+		blockedID   string
+		reqBuilder  func(id string) (*http.Request, error)
+		successCode int
+	}
+
+	cases := []endpointCase{
+		{
+			name:        "get memory",
+			allowedID:   allowedMemory.ID.String(),
+			blockedID:   blockedMemory.ID.String(),
+			successCode: http.StatusOK,
+			reqBuilder: func(id string) (*http.Request, error) {
+				return http.NewRequest(http.MethodGet, srv.URL+"/v1/memories/"+id, nil)
+			},
+		},
+		{
+			name:        "patch memory",
+			allowedID:   allowedMemory.ID.String(),
+			blockedID:   blockedMemory.ID.String(),
+			successCode: http.StatusOK,
+			reqBuilder: func(id string) (*http.Request, error) {
+				body := map[string]any{"content": "updated memory", "importance": 0.6}
+				b, _ := json.Marshal(body)
+				req, err := http.NewRequest(http.MethodPatch, srv.URL+"/v1/memories/"+id, bytes.NewReader(b))
+				if err != nil {
+					return nil, err
+				}
+				req.Header.Set("Content-Type", "application/json")
+				return req, nil
+			},
+		},
+		{
+			name:        "delete memory",
+			allowedID:   allowedMemory.ID.String(),
+			blockedID:   blockedMemory.ID.String(),
+			successCode: http.StatusOK,
+			reqBuilder: func(id string) (*http.Request, error) {
+				return http.NewRequest(http.MethodDelete, srv.URL+"/v1/memories/"+id, nil)
+			},
+		},
+		{
+			name:        "get knowledge",
+			allowedID:   allowedArtifact.ID.String(),
+			blockedID:   blockedArtifact.ID.String(),
+			successCode: http.StatusOK,
+			reqBuilder: func(id string) (*http.Request, error) {
+				return http.NewRequest(http.MethodGet, srv.URL+"/v1/knowledge/"+id, nil)
+			},
+		},
+		{
+			name:        "patch knowledge",
+			allowedID:   allowedDraftArtifact.ID.String(),
+			blockedID:   blockedDraftArtifact.ID.String(),
+			successCode: http.StatusOK,
+			reqBuilder: func(id string) (*http.Request, error) {
+				body := map[string]any{"title": "updated title", "content": "updated knowledge"}
+				b, _ := json.Marshal(body)
+				req, err := http.NewRequest(http.MethodPatch, srv.URL+"/v1/knowledge/"+id, bytes.NewReader(b))
+				if err != nil {
+					return nil, err
+				}
+				req.Header.Set("Content-Type", "application/json")
+				return req, nil
+			},
+		},
+		{
+			name:        "get skill",
+			allowedID:   allowedSkill.ID.String(),
+			blockedID:   blockedSkill.ID.String(),
+			successCode: http.StatusOK,
+			reqBuilder: func(id string) (*http.Request, error) {
+				return http.NewRequest(http.MethodGet, srv.URL+"/v1/skills/"+id, nil)
+			},
+		},
+		{
+			name:        "patch skill",
+			allowedID:   allowedSkill.ID.String(),
+			blockedID:   blockedSkill.ID.String(),
+			successCode: http.StatusOK,
+			reqBuilder: func(id string) (*http.Request, error) {
+				body := map[string]any{"body": "updated skill body", "parameters": []map[string]any{}}
+				b, _ := json.Marshal(body)
+				req, err := http.NewRequest(http.MethodPatch, srv.URL+"/v1/skills/"+id, bytes.NewReader(b))
+				if err != nil {
+					return nil, err
+				}
+				req.Header.Set("Content-Type", "application/json")
+				return req, nil
+			},
+		},
+		{
+			name:        "get collection by id",
+			allowedID:   allowedColl.ID.String(),
+			blockedID:   blockedColl.ID.String(),
+			successCode: http.StatusOK,
+			reqBuilder: func(id string) (*http.Request, error) {
+				return http.NewRequest(http.MethodGet, srv.URL+"/v1/collections/"+id, nil)
+			},
+		},
+		{
+			name:        "add collection item",
+			allowedID:   allowedColl.ID.String(),
+			blockedID:   blockedColl.ID.String(),
+			successCode: http.StatusCreated,
+			reqBuilder: func(id string) (*http.Request, error) {
+				body := map[string]any{"artifact_id": allowedArtifact.ID.String()}
+				b, _ := json.Marshal(body)
+				req, err := http.NewRequest(http.MethodPost, srv.URL+"/v1/collections/"+id+"/items", bytes.NewReader(b))
+				if err != nil {
+					return nil, err
+				}
+				req.Header.Set("Content-Type", "application/json")
+				return req, nil
+			},
+		},
+		{
+			name:        "remove collection item",
+			allowedID:   allowedColl.ID.String(),
+			blockedID:   blockedColl.ID.String(),
+			successCode: http.StatusNoContent,
+			reqBuilder: func(id string) (*http.Request, error) {
+				return http.NewRequest(http.MethodDelete, srv.URL+"/v1/collections/"+id+"/items/"+allowedArtifact.ID.String(), nil)
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name+" in-scope id succeeds", func(t *testing.T) {
+			req, err := tc.reqBuilder(tc.allowedID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Authorization", authHeader)
+
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != tc.successCode {
+				t.Fatalf("%s status = %d, want %d", tc.name, resp.StatusCode, tc.successCode)
+			}
+		})
+
+		t.Run(tc.name+" out-of-scope id is forbidden", func(t *testing.T) {
+			req, err := tc.reqBuilder(tc.blockedID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Authorization", authHeader)
+
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusForbidden {
+				t.Fatalf("%s status = %d, want %d", tc.name, resp.StatusCode, http.StatusForbidden)
+			}
+			var out map[string]any
+			_ = json.NewDecoder(resp.Body).Decode(&out)
+			errMsg, _ := out["error"].(string)
+			if !strings.Contains(errMsg, "scope access denied") {
+				t.Fatalf("%s error = %q, want scope access denied", tc.name, errMsg)
 			}
 		})
 	}

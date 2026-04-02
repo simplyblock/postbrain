@@ -14,6 +14,10 @@ func (ro *Router) authorizeRequestedScope(ctx context.Context, requestedScopeID 
 	return scopeauth.AuthorizeContextScope(ctx, ro.membership, requestedScopeID)
 }
 
+func (ro *Router) authorizeObjectScope(ctx context.Context, objectScopeID uuid.UUID) error {
+	return ro.authorizeRequestedScope(ctx, objectScopeID)
+}
+
 func writeScopeAuthzError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, scopeauth.ErrTokenScopeDenied),

@@ -103,6 +103,16 @@
     - authorized scope -> success
     - unauthorized scope -> forbidden (`scope access denied`)
     - malformed scope -> bad request/tool error (`invalid scope`)
+- [x] 2026-04-02: Completed Finding 3 ID-based scope authorization hardening (TDD-first):
+  - Added object-scope helper in REST: `authorizeObjectScope(ctx, objectScopeID)`
+  - Enforced object-scope checks on ID-based REST handlers:
+    - memories: `GET/PATCH/DELETE /v1/memories/{id}`
+    - knowledge: `GET/PATCH /v1/knowledge/{id}`
+    - skills: `GET/PATCH /v1/skills/{id}`
+    - collections: `GET /v1/collections/{id}`, `POST/DELETE /v1/collections/{id}/items...`
+  - Added integration regression matrix in `internal/api/rest/scope_authz_integration_test.go`:
+    - in-scope object IDs remain successful
+    - out-of-scope object IDs return `403 forbidden: scope access denied`
 - [x] 2026-04-02: Added comprehensive principal scope-visibility integration matrix:
   - Table-driven coverage for principal chains: single-node (`user|team|department|company`) and multi-hop (`user->team`, `team->department`, `user->team->company`, up to `user->team->department->company`)
   - For each principal in chain, asserted `EffectiveScopeIDs` includes self+ancestors only (no descendants)
