@@ -169,10 +169,13 @@ func MigrateDown(ctx context.Context, pool *pgxpool.Pool, n int) error {
 		return fmt.Errorf("migrate down %d: %w", n, err)
 	}
 
-	version, dirty, _ := m.Version()
-	if errors.Is(err, migrate.ErrNilVersion) {
+	version, dirty, verErr := m.Version()
+	if errors.Is(verErr, migrate.ErrNilVersion) {
 		slog.Info("migrate: rolled back to clean state (no migrations applied)")
 	} else {
+		if verErr != nil {
+			slog.Warn("migrate: could not read version after rollback", "err", verErr)
+		}
 		slog.Info("migrate: rolled back", "steps", n, "current_version", version, "dirty", dirty)
 	}
 	return nil

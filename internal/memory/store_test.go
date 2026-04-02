@@ -1,8 +1,10 @@
 package memory
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -60,6 +62,8 @@ type mockCreator struct {
 	dupes []*db.Memory
 	// updated tracks calls to UpdateMemoryContent.
 	updated []*db.Memory
+	// upsertRelErr, if set, is returned by UpsertRelation.
+	upsertRelErr error
 }
 
 func (mc *mockCreator) CreateMemory(_ context.Context, m *db.Memory) (*db.Memory, error) {
@@ -95,6 +99,9 @@ func (mc *mockCreator) LinkMemoryToEntity(_ context.Context, _, _ uuid.UUID, _ s
 }
 
 func (mc *mockCreator) UpsertRelation(_ context.Context, r *db.Relation) (*db.Relation, error) {
+	if mc.upsertRelErr != nil {
+		return nil, mc.upsertRelErr
+	}
 	r.ID = uuid.New()
 	return r, nil
 }
@@ -320,5 +327,42 @@ func TestCreate_LargeContent_ChunkChildrenHaveParentID(t *testing.T) {
 		if *m.ParentMemoryID != parentID {
 			t.Errorf("chunk[%d]: ParentMemoryID = %v, want %v", i, *m.ParentMemoryID, parentID)
 		}
+	}
+}
+
+// ── UpsertRelation error logging ──────────────────────────────────────────────
+
+// TestCreate_UpsertRelationError_LogsWarning verifies that a failure in the
+// best-effort co_occurs_with upsert step is logged as a warning rather than
+// silently discarded. The parent Create must still succeed.
+//
+// Not parallel — temporarily replaces the global slog default.
+func TestCreate_UpsertRelationError_LogsWarning(t *testing.T) {
+	var buf bytes.Buffer
+	orig := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(orig) })
+
+	mc := &mockCreator{upsertRelErr: errors.New("db relation error")}
+	s := newTestStore(false, mc)
+
+	// Two explicit entities guarantee the co_occurs_with loop runs.
+	_, err := s.Create(context.Background(), CreateInput{
+		Content:    "foo and bar coexist",
+		MemoryType: "semantic",
+		ScopeID:    uuid.New(),
+		AuthorID:   uuid.New(),
+		Entities: []EntityInput{
+			{Name: "foo", Type: "concept"},
+			{Name: "bar", Type: "concept"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Create should succeed even when UpsertRelation fails: %v", err)
+	}
+
+	logged := buf.String()
+	if !strings.Contains(logged, "co_occurs_with") {
+		t.Errorf("expected warning mentioning co_occurs_with in log output, got: %q", logged)
 	}
 }

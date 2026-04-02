@@ -337,13 +337,15 @@ func (s *Store) linkExtractedEntities(ctx context.Context, artifactID, scopeID u
 				if bytes.Compare(subj[:], obj[:]) > 0 {
 					subj, obj = obj, subj
 				}
-				_, _ = db.UpsertRelation(ctx, s.pool, &db.Relation{
+				if _, relErr := db.UpsertRelation(ctx, s.pool, &db.Relation{
 					ScopeID:    scopeID,
 					SubjectID:  subj,
 					Predicate:  "same_as",
 					ObjectID:   obj,
 					Confidence: 1.0,
-				})
+				}); relErr != nil {
+					slog.Warn("knowledge: same_as upsert failed", "err", relErr)
+				}
 			}
 		}
 	}
@@ -351,14 +353,16 @@ func (s *Store) linkExtractedEntities(ctx context.Context, artifactID, scopeID u
 	artID := artifactID
 	for i := 0; i < len(linkedIDs); i++ {
 		for j := i + 1; j < len(linkedIDs); j++ {
-			_, _ = db.UpsertRelation(ctx, s.pool, &db.Relation{
+			if _, relErr := db.UpsertRelation(ctx, s.pool, &db.Relation{
 				ScopeID:        scopeID,
 				SubjectID:      linkedIDs[i],
 				Predicate:      "co_occurs_with",
 				ObjectID:       linkedIDs[j],
 				Confidence:     1.0,
 				SourceArtifact: &artID,
-			})
+			}); relErr != nil {
+				slog.Warn("knowledge: co_occurs_with upsert failed", "err", relErr)
+			}
 		}
 	}
 }

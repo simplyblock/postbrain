@@ -111,3 +111,49 @@ func TestHandleMemoryDetail_UnauthenticatedViaRouter_RedirectsToLogin(t *testing
 		t.Errorf("Location = %q, want %q", loc, "/ui/login")
 	}
 }
+
+// ── handleMemoryForget ────────────────────────────────────────────────────────
+
+func TestHandleMemoryForget_InvalidUUID_Returns400(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	req := httptest.NewRequest(http.MethodPost, "/ui/memories/not-a-uuid/forget", nil)
+	w := httptest.NewRecorder()
+
+	h.handleMemoryForget(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleMemoryForget_NilPool_Returns503(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	req := httptest.NewRequest(http.MethodPost,
+		"/ui/memories/00000000-0000-0000-0000-000000000001/forget", nil)
+	w := httptest.NewRecorder()
+
+	h.handleMemoryForget(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+}
+
+func TestHandleMemoryForget_UnauthenticatedViaRouter_RedirectsToLogin(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	req := httptest.NewRequest(http.MethodPost,
+		"/ui/memories/00000000-0000-0000-0000-000000000001/forget", nil)
+	w := httptest.NewRecorder()
+
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusSeeOther)
+	}
+	if loc := w.Header().Get("Location"); loc != "/ui/login" {
+		t.Errorf("Location = %q, want /ui/login", loc)
+	}
+}

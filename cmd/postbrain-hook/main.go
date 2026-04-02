@@ -273,7 +273,11 @@ func runSkillSync(ctx context.Context, agentType, workdir string) error {
 
 	for _, sk := range result.Data {
 		// Convert to db.Skill for install.
-		skillID, _ := uuid.Parse(sk.ID)
+		skillID, err := parseSkillID(sk.ID)
+		if err != nil {
+			slog.Warn("skill sync: skipping skill with invalid id", "id", sk.ID, "slug", sk.Slug, "err", err)
+			continue
+		}
 		dbSkill := &db.Skill{
 			ID:          skillID,
 			Slug:        sk.Slug,
@@ -354,7 +358,10 @@ func skillInstallCmd() *cobra.Command {
 				return fmt.Errorf("skill install: slug %q not found in registry", slug)
 			}
 			sk := result.Data[0]
-			skillID, _ := uuid.Parse(sk.ID)
+			skillID, err := parseSkillID(sk.ID)
+			if err != nil {
+				return fmt.Errorf("skill install: %w", err)
+			}
 			dbSkill := &db.Skill{
 				ID:          skillID,
 				Slug:        sk.Slug,
@@ -394,4 +401,15 @@ func skillListCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// parseSkillID parses a UUID string from the API. An invalid UUID is a data-
+// corruption risk: uuid.Parse returns the zero UUID on failure, which would be
+// silently written to the database. Return an explicit error instead.
+func parseSkillID(raw string) (uuid.UUID, error) {
+	id, err := uuid.Parse(raw)
+	if err != nil {
+		return uuid.UUID{}, fmt.Errorf("skill: invalid id %q: %w", raw, err)
+	}
+	return id, nil
 }

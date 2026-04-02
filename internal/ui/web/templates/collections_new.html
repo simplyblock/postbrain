@@ -1,0 +1,32 @@
+{{define "collections_new"}}
+<h1>New Collection</h1>
+{{if .FormError}}<div class="alert alert-error">{{.FormError}}</div>{{end}}
+<form method="POST" action="/ui/collections">
+  <label>Name (required)<br>
+    <input type="text" name="name" style="width:100%;max-width:30rem" autofocus>
+  </label>
+  <br><br>
+  <label>Slug (required)<br>
+    <input type="text" name="slug" style="width:100%;max-width:30rem"
+           placeholder="e.g. my-collection">
+  </label>
+  <br><br>
+  <label>Scope (required)<br>
+    <select name="scope_id">
+      <option value="">— select scope —</option>
+      {{range .Scopes}}<option value="{{.ID}}">{{.Kind}}:{{.ExternalID}}</option>{{end}}
+    </select>
+  </label>
+  <br><br>
+  <label>Visibility<br>
+    <select name="visibility">
+      <option value="team">team</option>
+      <option value="public">public</option>
+      <option value="private">private</option>
+    </select>
+  </label>
+  <br><br>
+  <button type="submit">Create Collection</button>
+  <a href="/ui/collections" style="margin-left:1rem">Cancel</a>
+</form>
+{{end}}

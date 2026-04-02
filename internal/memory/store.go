@@ -299,14 +299,16 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 	memID := created.ID
 	for i := 0; i < len(entityIDs); i++ {
 		for j := i + 1; j < len(entityIDs); j++ {
-			_, _ = s.creator.UpsertRelation(ctx, &db.Relation{
+			if _, err := s.creator.UpsertRelation(ctx, &db.Relation{
 				ScopeID:      input.ScopeID,
 				SubjectID:    entityIDs[i],
 				Predicate:    "co_occurs_with",
 				ObjectID:     entityIDs[j],
 				Confidence:   1.0,
 				SourceMemory: &memID,
-			})
+			}); err != nil {
+				slog.Warn("memory: co_occurs_with upsert failed", "err", err)
+			}
 		}
 	}
 
@@ -459,14 +461,16 @@ func (s *Store) extractCodeGraph(ctx context.Context, content, sourceRef string,
 			objID = candidates[0].ID
 		}
 
-		_, _ = s.creator.UpsertRelation(ctx, &db.Relation{
+		if _, err := s.creator.UpsertRelation(ctx, &db.Relation{
 			ScopeID:      scopeID,
 			SubjectID:    subjID,
 			Predicate:    edge.Predicate,
 			ObjectID:     objID,
 			Confidence:   1.0,
 			SourceMemory: &memoryID,
-		})
+		}); err != nil {
+			slog.Warn("memory: code-graph edge upsert failed", "err", err)
+		}
 	}
 }
 
