@@ -85,11 +85,13 @@ func TestAuthorizeRequestedScope(t *testing.T) {
 }
 
 type fakeEffectiveScopeResolver struct {
-	ids []uuid.UUID
-	err error
+	ids   []uuid.UUID
+	err   error
+	calls int
 }
 
 func (f *fakeEffectiveScopeResolver) EffectiveScopeIDs(_ context.Context, _ uuid.UUID) ([]uuid.UUID, error) {
+	f.calls++
 	return f.ids, f.err
 }
 
@@ -187,5 +189,25 @@ func TestAuthorizeContextScope(t *testing.T) {
 				t.Fatalf("expected error %v, got %v", tc.wantErr, err)
 			}
 		})
+	}
+}
+
+func TestAuthorizeContextScope_UsesCachedEffectiveScopes(t *testing.T) {
+	t.Parallel()
+
+	principalID := uuid.New()
+	requested := uuid.New()
+
+	resolver := &fakeEffectiveScopeResolver{ids: []uuid.UUID{}}
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, auth.ContextKeyToken, &db.Token{ScopeIds: []uuid.UUID{requested}})
+	ctx = context.WithValue(ctx, auth.ContextKeyPrincipalID, principalID)
+	ctx = WithEffectiveScopeIDs(ctx, []uuid.UUID{requested})
+
+	if err := AuthorizeContextScope(ctx, resolver, requested); err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if resolver.calls != 0 {
+		t.Fatalf("resolver calls = %d, want 0 when cache is present", resolver.calls)
 	}
 }

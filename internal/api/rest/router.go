@@ -93,6 +93,7 @@ func (ro *Router) Handler() http.Handler {
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(authMW)
 		r.Use(requestLoggerMiddleware)
+		r.Use(ro.scopeAuthzContextMiddleware)
 
 		// Memory endpoints.
 		r.Post("/memories", ro.createMemory)
