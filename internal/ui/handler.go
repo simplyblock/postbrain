@@ -152,6 +152,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleStaleness(w, r)
 	case r.URL.Path == "/ui/graph":
 		h.handleGraph(w, r)
+	case r.URL.Path == "/ui/graph3d":
+		h.handleGraph3D(w, r)
 	case r.URL.Path == "/ui/skills":
 		h.handleSkills(w, r)
 	case strings.HasSuffix(r.URL.Path, "/history") && strings.HasPrefix(r.URL.Path, "/ui/skills/"):
@@ -611,8 +613,23 @@ type graphLink struct {
 
 // handleGraph serves GET /ui/graph.
 func (h *Handler) handleGraph(w http.ResponseWriter, r *http.Request) {
-	scopeStr := r.URL.Query().Get("scope_id")
+	data := h.graphViewData(r, r.URL.Query().Get("scope_id"))
+	h.render(w, r, "graph", "Entity Graph", data)
+}
 
+// handleGraph3D serves GET /ui/graph3d.
+func (h *Handler) handleGraph3D(w http.ResponseWriter, r *http.Request) {
+	data := h.graphViewData(r, r.URL.Query().Get("scope_id"))
+	h.render(w, r, "graph3d", "Entity Graph 3D", data)
+}
+
+func (h *Handler) graphViewData(r *http.Request, scopeStr string) struct {
+	Scopes    []*db.Scope
+	ScopeID   string
+	NodeCount int
+	EdgeCount int
+	GraphJSON template.JS
+} {
 	data := struct {
 		Scopes    []*db.Scope
 		ScopeID   string
@@ -622,8 +639,7 @@ func (h *Handler) handleGraph(w http.ResponseWriter, r *http.Request) {
 	}{ScopeID: scopeStr}
 
 	if h.pool == nil {
-		h.render(w, r, "graph", "Entity Graph", data)
-		return
+		return data
 	}
 
 	scopes, err := db.ListScopes(r.Context(), h.pool, 200, 0)
@@ -684,7 +700,7 @@ func (h *Handler) handleGraph(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.render(w, r, "graph", "Entity Graph", data)
+	return data
 }
 
 // handleSkills serves GET /ui/skills.

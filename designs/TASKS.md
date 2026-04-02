@@ -70,6 +70,12 @@
   - Indexes the same Go fixture with LSP disabled/enabled
   - Seeds competing suffix candidates and asserts enabled run resolves `calls` target via LSP path
   - Added `GoLSPRootURI` wiring and `textDocument/definition`-first resolver path for file-context resolution
+- [x] 2026-04-02: Added parallel 3D entity graph UI view:
+  - New authenticated route `GET /ui/graph3d` handled by `handleGraph3D`
+  - Shared graph data loader reused by both 2D (`/ui/graph`) and 3D views
+  - New template `internal/ui/web/templates/graph3d.html` using `3d-force-graph`
+  - Navigation updated in base template with `Entity Graph 3D` link
+  - Unit tests added in `internal/ui/handler_graph_test.go` (direct render + unauth redirect)
 - [x] 2026-04-02: Extended `Makefile` to auto-install `gopls` locally when needed:
   - Added pinned tool vars: `GOPLS`, `GOPLS_VERSION`
   - Added `gopls` install target using existing `go-install-tool` pattern
