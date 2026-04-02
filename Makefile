@@ -7,11 +7,13 @@ GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 GOLANGCI_LINT_VERSION ?= v2.5.0
 GO_JUNIT_REPORT = $(LOCALBIN)/go-junit-report
 GO_JUNIT_REPORT_VERSION ?= v1.0.0
+GOPLS = $(LOCALBIN)/gopls
+GOPLS_VERSION ?= v0.16.2
 MARKITDOWN_VENV ?= $(shell pwd)/.venv-markitdown
 MARKITDOWN_STAMP ?= $(MARKITDOWN_VENV)/.markitdown-all-ready
 MARKITDOWN_VERSION ?= 0.1.5
 
-.PHONY: build test test-integration lint fmt vet migrate-up migrate-down docker-up docker-down generate ensure-markitdown
+.PHONY: build test test-integration lint fmt vet migrate-up migrate-down docker-up docker-down generate ensure-markitdown ensure-gopls
 
 build:
 	go build -o postbrain ./cmd/postbrain
@@ -20,7 +22,7 @@ build:
 test: ensure-markitdown go-junit-report
 	PATH="$(MARKITDOWN_VENV)/bin:$$PATH" go test -coverprofile=coverage.out -covermode=atomic -v 2>&1 ./... | $(GO_JUNIT_REPORT) -set-exit-code > report.xml
 
-test-integration: ensure-markitdown go-junit-report
+test-integration: ensure-markitdown go-junit-report ensure-gopls
 	PATH="$(MARKITDOWN_VENV)/bin:$$PATH" go test -tags integration -coverprofile=coverage.out -covermode=atomic -v 2>&1 ./... | $(GO_JUNIT_REPORT) -set-exit-code > report.xml
 
 lint: golangci-lint
@@ -52,6 +54,9 @@ ensure-markitdown:
 		echo "creating markitdown venv at $(MARKITDOWN_VENV)"; \
 		python3 -m venv "$(MARKITDOWN_VENV)"; \
 	fi
+
+ensure-gopls: gopls
+	@echo "using gopls from $(GOPLS)"
 	@if [ ! -f "$(MARKITDOWN_STAMP)" ]; then \
 		echo "installing markitdown[all]==$(MARKITDOWN_VERSION) into $(MARKITDOWN_VENV)"; \
 		"$(MARKITDOWN_VENV)/bin/python" -m pip install --upgrade pip "markitdown[all]==$(MARKITDOWN_VERSION)"; \
@@ -67,6 +72,10 @@ $(GOLANGCI_LINT): $(LOCALBIN)
 go-junit-report: $(GO_JUNIT_REPORT) ## Download go-junit-report locally if necessary
 $(GO_JUNIT_REPORT): $(LOCALBIN)
 	$(call go-install-tool,$(GO_JUNIT_REPORT),github.com/jstemmer/go-junit-report,$(GO_JUNIT_REPORT_VERSION))
+
+gopls: $(GOPLS) ## Download gopls locally if necessary
+$(GOPLS): $(LOCALBIN)
+	$(call go-install-tool,$(GOPLS),golang.org/x/tools/gopls,$(GOPLS_VERSION))
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary

@@ -64,6 +64,10 @@
     - `internal/codegraph/resolve_lsp_test.go`
     - `internal/codegraph/gopls_tcp_test.go`
     - `internal/codegraph/indexer_lsp_test.go`
+- [x] 2026-04-02: Extended `Makefile` to auto-install `gopls` locally when needed:
+  - Added pinned tool vars: `GOPLS`, `GOPLS_VERSION`
+  - Added `gopls` install target using existing `go-install-tool` pattern
+  - Added `ensure-gopls` helper and wired it into `test-integration`
 - [x] 2026-04-02: Added comprehensive principal scope-visibility integration matrix:
   - Table-driven coverage for principal chains: single-node (`user|team|department|company`) and multi-hop (`user->team`, `team->department`, `user->team->company`, up to `user->team->department->company`)
   - For each principal in chain, asserted `EffectiveScopeIDs` includes self+ancestors only (no descendants)
