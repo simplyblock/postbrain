@@ -67,6 +67,10 @@ func (ro *Router) createMemory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "scope not found")
 		return
 	}
+	if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
+		writeScopeAuthzError(w, err)
+		return
+	}
 
 	principalID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 
@@ -122,6 +126,10 @@ func (ro *Router) recallMemories(w http.ResponseWriter, r *http.Request) {
 		scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 		if err != nil || scope == nil {
 			writeError(w, http.StatusBadRequest, "scope not found")
+			return
+		}
+		if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
+			writeScopeAuthzError(w, err)
 			return
 		}
 		scopeID = scope.ID
@@ -238,6 +246,10 @@ func (ro *Router) promoteMemory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "target scope not found")
 		return
 	}
+	if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
+		writeScopeAuthzError(w, err)
+		return
+	}
 
 	principalID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 
@@ -290,6 +302,10 @@ func (ro *Router) handleSummarizeMemories(w http.ResponseWriter, req *http.Reque
 	scope, err := db.GetScopeByExternalID(req.Context(), ro.pool, kind, externalID)
 	if err != nil || scope == nil {
 		writeError(w, http.StatusBadRequest, "scope not found")
+		return
+	}
+	if err := ro.authorizeRequestedScope(req.Context(), scope.ID); err != nil {
+		writeScopeAuthzError(w, err)
 		return
 	}
 

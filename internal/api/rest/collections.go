@@ -43,6 +43,10 @@ func (ro *Router) createCollection(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "scope not found")
 		return
 	}
+	if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
+		writeScopeAuthzError(w, err)
+		return
+	}
 
 	ownerID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 	coll, err := ro.knwColl.Create(r.Context(), scope.ID, ownerID, body.Slug, body.Name, visibility, body.Description)
@@ -65,6 +69,10 @@ func (ro *Router) listCollections(w http.ResponseWriter, r *http.Request) {
 		scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 		if err != nil || scope == nil {
 			writeError(w, http.StatusBadRequest, "scope not found")
+			return
+		}
+		if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
+			writeScopeAuthzError(w, err)
 			return
 		}
 		scopeID = scope.ID
@@ -109,6 +117,10 @@ func (ro *Router) getCollection(w http.ResponseWriter, r *http.Request) {
 	scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 	if err != nil || scope == nil {
 		writeError(w, http.StatusBadRequest, "scope not found")
+		return
+	}
+	if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
+		writeScopeAuthzError(w, err)
 		return
 	}
 	coll, err := ro.knwColl.GetBySlug(r.Context(), scope.ID, slug)

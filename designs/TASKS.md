@@ -33,6 +33,12 @@
     - token `scope_ids` restrictions (`auth.EnforceScopeAccess`)
     - principal effective-scope inclusion
   - Added unit tests covering allow/deny matrix and explicit sentinel error assertions
+- [x] 2026-04-02: Completed Finding 1 scope-auth wiring for scope-string handlers (TDD-first):
+  - Added context-aware auth helper wiring in `internal/api/rest/scopeauth.go` and `internal/api/mcp/scopeauth.go`
+  - Enforced scope authorization in all identified scope-taking REST/MCP handlers before reads/writes
+  - Added inventory guard tests ensuring scope-taking handlers call `authorizeRequestedScope`:
+    - `internal/api/rest/scopeauth_inventory_test.go`
+    - `internal/api/mcp/scopeauth_inventory_test.go`
 - [x] 2026-04-02: Added comprehensive principal scope-visibility integration matrix:
   - Table-driven coverage for principal chains: single-node (`user|team|department|company`) and multi-hop (`user->team`, `team->department`, `user->team->company`, up to `user->team->department->company`)
   - For each principal in chain, asserted `EffectiveScopeIDs` includes self+ancestors only (no descendants)

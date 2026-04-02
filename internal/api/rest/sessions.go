@@ -41,6 +41,10 @@ func (ro *Router) createSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "scope not found")
 		return
 	}
+	if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
+		writeScopeAuthzError(w, err)
+		return
+	}
 
 	principalID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 

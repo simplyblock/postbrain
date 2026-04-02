@@ -48,6 +48,9 @@ func (s *Server) handleContext(ctx context.Context, req mcpgo.CallToolRequest) (
 	if scope == nil {
 		return mcpgo.NewToolResultError(fmt.Sprintf("context: scope '%s' not found", scopeStr)), nil
 	}
+	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
+		return scopeAuthzToolError(err), nil
+	}
 
 	principalID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 
