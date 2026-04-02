@@ -30,8 +30,8 @@ func TestMCP_Remember_Recall_Forget(t *testing.T) {
 	srv := mcpapi.NewServer(pool, svc, cfg)
 	mcpSrv := srv.MCPServer()
 
-	ctx = context.WithValue(ctx, auth.ContextKeyPrincipalID, principal.ID)
 	scopeStr := "project:" + scope.ExternalID
+	ctx = withAuthContext(ctx, principal.ID, scope.ID)
 
 	// Test remember.
 	rememberTool := mcpSrv.GetTool("remember")
@@ -156,8 +156,8 @@ func TestMCP_Publish_Endorse_AutoPublish(t *testing.T) {
 	srv := mcpapi.NewServer(pool, svc, cfg)
 	mcpSrv := srv.MCPServer()
 
-	ctx = context.WithValue(ctx, auth.ContextKeyPrincipalID, principal.ID)
 	scopeStr := "project:" + scope.ExternalID
+	ctx = withAuthContext(ctx, principal.ID, scope.ID)
 
 	// Publish an artifact.
 	publishTool := mcpSrv.GetTool("publish")
@@ -182,4 +182,13 @@ func TestMCP_Publish_Endorse_AutoPublish(t *testing.T) {
 	if pubResult == nil || pubResult.IsError {
 		t.Fatalf("publish returned error: %+v", pubResult)
 	}
+}
+
+func withAuthContext(ctx context.Context, principalID, scopeID uuid.UUID) context.Context {
+	ctx = context.WithValue(ctx, auth.ContextKeyPrincipalID, principalID)
+	token := &db.Token{
+		PrincipalID: principalID,
+		ScopeIds:    []uuid.UUID{scopeID},
+	}
+	return context.WithValue(ctx, auth.ContextKeyToken, token)
 }
