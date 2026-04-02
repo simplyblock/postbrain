@@ -11,6 +11,10 @@ import (
 	"github.com/simplyblock/postbrain/internal/db"
 )
 
+type contextKey string
+
+const contextKeyEffectiveScopeIDs contextKey = "scopeauth_effective_scope_ids"
+
 var (
 	// ErrTokenScopeDenied indicates the requested scope is outside token scope_ids.
 	ErrTokenScopeDenied = errors.New("scopeauth: token scope denied")
@@ -64,9 +68,28 @@ func AuthorizeContextScope(ctx context.Context, resolver EffectiveScopeResolver,
 		return fmt.Errorf("%w", ErrMissingPrincipal)
 	}
 
-	effectiveScopeIDs, err := resolver.EffectiveScopeIDs(ctx, principalID)
-	if err != nil {
-		return fmt.Errorf("scopeauth: resolve effective scopes: %w", err)
+	effectiveScopeIDs, ok := EffectiveScopeIDsFromContext(ctx)
+	if !ok {
+		var err error
+		effectiveScopeIDs, err = resolver.EffectiveScopeIDs(ctx, principalID)
+		if err != nil {
+			return fmt.Errorf("scopeauth: resolve effective scopes: %w", err)
+		}
 	}
 	return AuthorizeRequestedScope(token, requestedScopeID, effectiveScopeIDs)
+}
+
+// WithEffectiveScopeIDs stores resolved effective scope IDs in context.
+func WithEffectiveScopeIDs(ctx context.Context, ids []uuid.UUID) context.Context {
+	copied := append([]uuid.UUID(nil), ids...)
+	return context.WithValue(ctx, contextKeyEffectiveScopeIDs, copied)
+}
+
+// EffectiveScopeIDsFromContext returns cached effective scope IDs when present.
+func EffectiveScopeIDsFromContext(ctx context.Context) ([]uuid.UUID, bool) {
+	ids, ok := ctx.Value(contextKeyEffectiveScopeIDs).([]uuid.UUID)
+	if !ok {
+		return nil, false
+	}
+	return append([]uuid.UUID(nil), ids...), true
 }

@@ -113,6 +113,17 @@
   - Added integration regression matrix in `internal/api/rest/scope_authz_integration_test.go`:
     - in-scope object IDs remain successful
     - out-of-scope object IDs return `403 forbidden: scope access denied`
+- [x] 2026-04-02: Completed Finding 4 multi-hop principal chain API authorization (TDD-first):
+  - Added effective-scope context cache primitives in `internal/api/scopeauth`:
+    - `WithEffectiveScopeIDs`
+    - `EffectiveScopeIDsFromContext`
+  - `AuthorizeContextScope` now prefers cached effective scopes and only resolves via `MembershipStore.EffectiveScopeIDs` when cache is absent
+  - Added REST middleware (`scopeAuthzContextMiddleware`) to preload effective scopes once per authenticated request
+  - Added scopeauth unit test `TestAuthorizeContextScope_UsesCachedEffectiveScopes` verifying resolver bypass when cache is present
+  - Added API integration matrix `TestREST_ScopeAuthz_MultiHopPrincipalChain`:
+    - chain: `user -> team -> company`
+    - roles: `member`, `owner`, `admin`
+    - asserts allow self+ancestors and deny descendants + unrelated branch on scope-taking endpoint `POST /v1/sessions`
 - [x] 2026-04-02: Added comprehensive principal scope-visibility integration matrix:
   - Table-driven coverage for principal chains: single-node (`user|team|department|company`) and multi-hop (`user->team`, `team->department`, `user->team->company`, up to `user->team->department->company`)
   - For each principal in chain, asserted `EffectiveScopeIDs` includes self+ancestors only (no descendants)

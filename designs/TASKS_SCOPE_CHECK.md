@@ -149,12 +149,16 @@ Impact: Membership hierarchy exists but does not protect runtime endpoint access
 
 ### Tasks
 
-- [ ] Wire `MembershipStore.EffectiveScopeIDs` into authorization helper.
-- [ ] Cache effective scopes in request context for reuse within a request.
-- [ ] Add integration tests for chain authz:
+- [x] Wire `MembershipStore.EffectiveScopeIDs` into authorization helper.
+- [x] Cache effective scopes in request context for reuse within a request.
+  - Added `scopeauth.WithEffectiveScopeIDs(...)` / `EffectiveScopeIDsFromContext(...)`.
+  - Added REST middleware preloading effective scopes into request context.
+- [x] Add integration tests for chain authz:
   - `user -> team -> company`
   - allow self + ancestors, deny descendants + unrelated branches
-- [ ] Add tests with role variants (`member`, `owner`, `admin`) to confirm visibility inheritance behavior.
+- [x] Add tests with role variants (`member`, `owner`, `admin`) to confirm visibility inheritance behavior.
+  - Added REST integration matrix in `internal/api/rest/scope_authz_integration_test.go` using `POST /v1/sessions`.
+  - Added scopeauth unit test ensuring cached effective scopes bypass resolver lookups.
 
 ### Acceptance Criteria
 

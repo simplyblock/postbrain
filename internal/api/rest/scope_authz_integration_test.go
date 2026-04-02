@@ -19,6 +19,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/principals"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
@@ -529,6 +530,152 @@ func TestREST_ScopeAuthz_IDBasedEndpoints(t *testing.T) {
 			errMsg, _ := out["error"].(string)
 			if !strings.Contains(errMsg, "scope access denied") {
 				t.Fatalf("%s error = %q, want scope access denied", tc.name, errMsg)
+			}
+		})
+	}
+}
+
+func TestREST_ScopeAuthz_MultiHopPrincipalChain(t *testing.T) {
+	for _, role := range []string{"member", "owner", "admin"} {
+		role := role
+		t.Run("role="+role, func(t *testing.T) {
+			ctx := context.Background()
+			pool := testhelper.NewTestPool(t)
+			svc := testhelper.NewMockEmbeddingService()
+			cfg := &config.Config{}
+
+			user := testhelper.CreateTestPrincipal(t, pool, "user", "chain-user-"+role+"-"+uuid.New().String())
+			team := testhelper.CreateTestPrincipal(t, pool, "team", "chain-team-"+role+"-"+uuid.New().String())
+			company := testhelper.CreateTestPrincipal(t, pool, "company", "chain-company-"+role+"-"+uuid.New().String())
+			outsider := testhelper.CreateTestPrincipal(t, pool, "team", "chain-outsider-"+role+"-"+uuid.New().String())
+
+			userScope := testhelper.CreateTestScope(t, pool, "project", "chain-user-scope-"+role+"-"+uuid.New().String(), nil, user.ID)
+			teamScope := testhelper.CreateTestScope(t, pool, "project", "chain-team-scope-"+role+"-"+uuid.New().String(), nil, team.ID)
+			companyScope := testhelper.CreateTestScope(t, pool, "project", "chain-company-scope-"+role+"-"+uuid.New().String(), nil, company.ID)
+			outsiderScope := testhelper.CreateTestScope(t, pool, "project", "chain-outsider-scope-"+role+"-"+uuid.New().String(), nil, outsider.ID)
+
+			ms := principals.NewMembershipStore(pool)
+			if err := ms.AddMembership(ctx, user.ID, team.ID, role, nil); err != nil {
+				t.Fatalf("add membership user->team (%s): %v", role, err)
+			}
+			if err := ms.AddMembership(ctx, team.ID, company.ID, role, nil); err != nil {
+				t.Fatalf("add membership team->company (%s): %v", role, err)
+			}
+
+			handler := rest.NewRouter(pool, svc, cfg).Handler()
+			srv := httptest.NewServer(handler)
+			defer srv.Close()
+
+			type principalCase struct {
+				name         string
+				principalID  uuid.UUID
+				allowedScope []string
+				deniedScope  []string
+			}
+			cases := []principalCase{
+				{
+					name:        "user",
+					principalID: user.ID,
+					allowedScope: []string{
+						"project:" + userScope.ExternalID,
+						"project:" + teamScope.ExternalID,
+						"project:" + companyScope.ExternalID,
+					},
+					deniedScope: []string{
+						"project:" + outsiderScope.ExternalID,
+					},
+				},
+				{
+					name:        "team",
+					principalID: team.ID,
+					allowedScope: []string{
+						"project:" + teamScope.ExternalID,
+						"project:" + companyScope.ExternalID,
+					},
+					deniedScope: []string{
+						"project:" + userScope.ExternalID, // descendant
+						"project:" + outsiderScope.ExternalID,
+					},
+				},
+				{
+					name:        "company",
+					principalID: company.ID,
+					allowedScope: []string{
+						"project:" + companyScope.ExternalID,
+					},
+					deniedScope: []string{
+						"project:" + teamScope.ExternalID, // descendant
+						"project:" + userScope.ExternalID, // descendant
+						"project:" + outsiderScope.ExternalID,
+					},
+				},
+			}
+
+			for _, tc := range cases {
+				tc := tc
+				t.Run(tc.name+" principal", func(t *testing.T) {
+					rawToken, hashToken, err := auth.GenerateToken()
+					if err != nil {
+						t.Fatal(err)
+					}
+					_, err = db.CreateToken(ctx, pool, tc.principalID, hashToken, "chain-token-"+tc.name+"-"+uuid.New().String(), nil, nil, nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+					authHeader := "Bearer " + rawToken
+
+					for _, scopeStr := range tc.allowedScope {
+						scopeStr := scopeStr
+						t.Run("allow "+scopeStr, func(t *testing.T) {
+							body := map[string]any{"scope": scopeStr}
+							b, _ := json.Marshal(body)
+							req, err := http.NewRequest(http.MethodPost, srv.URL+"/v1/sessions", bytes.NewReader(b))
+							if err != nil {
+								t.Fatal(err)
+							}
+							req.Header.Set("Content-Type", "application/json")
+							req.Header.Set("Authorization", authHeader)
+
+							resp, err := http.DefaultClient.Do(req)
+							if err != nil {
+								t.Fatal(err)
+							}
+							defer resp.Body.Close()
+							if resp.StatusCode != http.StatusCreated {
+								t.Fatalf("scope %s status = %d, want %d", scopeStr, resp.StatusCode, http.StatusCreated)
+							}
+						})
+					}
+
+					for _, scopeStr := range tc.deniedScope {
+						scopeStr := scopeStr
+						t.Run("deny "+scopeStr, func(t *testing.T) {
+							body := map[string]any{"scope": scopeStr}
+							b, _ := json.Marshal(body)
+							req, err := http.NewRequest(http.MethodPost, srv.URL+"/v1/sessions", bytes.NewReader(b))
+							if err != nil {
+								t.Fatal(err)
+							}
+							req.Header.Set("Content-Type", "application/json")
+							req.Header.Set("Authorization", authHeader)
+
+							resp, err := http.DefaultClient.Do(req)
+							if err != nil {
+								t.Fatal(err)
+							}
+							defer resp.Body.Close()
+							if resp.StatusCode != http.StatusForbidden {
+								t.Fatalf("scope %s status = %d, want %d", scopeStr, resp.StatusCode, http.StatusForbidden)
+							}
+							var out map[string]any
+							_ = json.NewDecoder(resp.Body).Decode(&out)
+							errMsg, _ := out["error"].(string)
+							if !strings.Contains(errMsg, "scope access denied") {
+								t.Fatalf("scope %s error = %q, want scope access denied", scopeStr, errMsg)
+							}
+						})
+					}
+				})
 			}
 		})
 	}
