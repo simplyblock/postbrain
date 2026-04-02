@@ -1,40 +1,54 @@
 {{define "scopes"}}
 <style>
   .scopes-table-wrap {
-    overflow-x: auto;
+    overflow-x: visible;
   }
   .scopes-table {
     width: 100%;
-    min-width: 1160px;
-    table-layout: fixed;
+    table-layout: auto;
   }
   .scopes-table th,
   .scopes-table td {
-    vertical-align: middle;
+    vertical-align: top;
   }
-  .scopes-table .scope-path,
-  .scopes-table .scope-repo {
+  .scopes-table td {
+    padding-top: 0.65rem;
+    padding-bottom: 0.65rem;
+  }
+  .scope-main {
+    font-weight: 600;
+    line-height: 1.25;
+  }
+  .scope-meta {
+    margin-top: 0.2rem;
     font-size: 0.8rem;
+    color: var(--pico-muted-color);
+    line-height: 1.35;
   }
-  .scopes-table .scope-chip {
-    display: inline-block;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    vertical-align: middle;
+  .scope-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.35;
   }
-  .scopes-table .scope-created,
-  .scopes-table .scope-indexed {
-    white-space: nowrap;
+  .scope-status {
     font-size: 0.8rem;
+    line-height: 1.4;
+  }
+  .scope-status-row {
+    display: block;
+    margin-top: 0.2rem;
+  }
+  .scope-status-row:first-child {
+    margin-top: 0;
   }
   .scope-actions {
     display: flex;
-    align-items: center;
-    justify-content: flex-end;
+    align-items: flex-start;
+    justify-content: flex-start;
     gap: 0.35rem;
     flex-wrap: wrap;
+    min-width: 11rem;
   }
   .scope-actions > button,
   .scope-actions > form button {
@@ -51,37 +65,41 @@
 {{if .ScopeFormError}}<div class="alert alert-error">{{.ScopeFormError}}</div>{{end}}
 <div class="scopes-table-wrap">
 <table class="scopes-table">
-  <colgroup>
-    <col style="width:8%">
-    <col style="width:14%">
-    <col style="width:14%">
-    <col style="width:31%">
-    <col style="width:21%">
-    <col style="width:6%">
-    <col style="width:6%">
-    <col style="width:12rem">
-  </colgroup>
-  <thead><tr><th>Kind</th><th>External ID</th><th>Name</th><th>Path</th><th>Repository</th><th>Last Indexed</th><th>Created</th><th></th></tr></thead>
+  <thead><tr><th>Scope</th><th>Path</th><th>Repository</th><th>Status</th><th></th></tr></thead>
   <tbody>
   {{range .Scopes}}
   <tr>
-    <td>{{.Kind}}</td>
-    <td class="mono">{{.ExternalID}}</td>
-    <td>{{.Name}}</td>
-    <td class="scope-path" title="{{.Path}}"><code class="scope-chip">{{.Path}}</code></td>
-    <td class="muted scope-repo" title="{{if .RepoUrl}}{{deref .RepoUrl}}{{end}}">
-      {{if .RepoUrl}}<code class="scope-chip">{{deref .RepoUrl}}</code> <span class="muted">({{.RepoDefaultBranch}})</span>
-      {{else if eq .Kind "project"}}<span class="muted">—</span>{{end}}
-    </td>
-    <td class="muted scope-indexed" id="sync-cell-{{.ID}}">
-      {{$st := index $.SyncStatus (printf "%s" .ID)}}
-      {{if eq $st.State 1}}<span class="sync-running" data-scope="{{.ID}}">⟳ syncing…</span>
-      {{else if $st.Error}}<span style="color:var(--pico-color-red-500);font-size:0.75rem" title="{{$st.Error}}">✕ {{$st.Error}}</span>
-      {{else if .LastIndexedCommit}}<code>{{slice (deref .LastIndexedCommit) 0 7}}</code>
-      {{else}}—{{end}}
-    </td>
-    <td class="muted scope-created">{{timeAgo .CreatedAt}}</td>
     <td>
+      <div class="scope-main">{{.Name}}</div>
+      <div class="scope-meta scope-code">{{.Kind}}:{{.ExternalID}}</div>
+    </td>
+    <td>
+      <div class="scope-code">{{.Path}}</div>
+    </td>
+    <td class="muted">
+      {{if .RepoUrl}}
+      <div class="scope-code">{{deref .RepoUrl}}</div>
+      <div class="scope-meta">branch: {{.RepoDefaultBranch}}</div>
+      {{else if eq .Kind "project"}}
+      <span class="muted">No repository attached</span>
+      {{else}}
+      <span class="muted">—</span>
+      {{end}}
+    </td>
+    <td class="scope-status muted" id="sync-cell-{{.ID}}">
+      {{$st := index $.SyncStatus (printf "%s" .ID)}}
+      <span class="scope-status-row">created: {{timeAgo .CreatedAt}}</span>
+      {{if eq $st.State 1}}
+      <span class="scope-status-row sync-running" data-scope="{{.ID}}">indexing: ⟳ syncing…</span>
+      {{else if $st.Error}}
+      <span class="scope-status-row" style="color:var(--pico-color-red-500)" title="{{$st.Error}}">indexing: ✕ {{$st.Error}}</span>
+      {{else if .LastIndexedCommit}}
+      <span class="scope-status-row">indexed: <code>{{slice (deref .LastIndexedCommit) 0 7}}</code></span>
+      {{else}}
+      <span class="scope-status-row">indexed: —</span>
+      {{end}}
+    </td>
+    <td class="scope-actions-cell">
       <div class="scope-actions">
       {{if eq .Kind "project"}}
         <button class="secondary"
@@ -110,7 +128,7 @@
     </td>
   </tr>
   {{else}}
-  <tr><td colspan="8" class="muted">No scopes.</td></tr>
+  <tr><td colspan="5" class="muted">No scopes.</td></tr>
   {{end}}
   </tbody>
 </table>

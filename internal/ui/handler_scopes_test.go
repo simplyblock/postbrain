@@ -101,4 +101,10 @@ func TestHandleScopes_RendersImprovedTableLayout(t *testing.T) {
 	if !strings.Contains(body, "scope-actions") {
 		t.Errorf("expected scope-actions class in response body")
 	}
+	if !strings.Contains(body, "scope-main") {
+		t.Errorf("expected scope-main class in response body")
+	}
+	if !strings.Contains(body, "scope-meta") {
+		t.Errorf("expected scope-meta class in response body")
+	}
 }

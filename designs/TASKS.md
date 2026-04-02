@@ -27,6 +27,11 @@
 
 ### Maintenance
 
+- [x] 2026-04-02: Redesigned `/ui/scopes` rows to multiline cards-in-table style for better readability without horizontal scrolling:
+  - collapsed scope identity (name + `kind:external_id`) into stacked content
+  - switched path/repository cells to wrapping monospace text
+  - moved created/indexed info into stacked status lines
+  - kept repository attach/edit/sync/delete actions, grouped with wrapping controls
 - [x] 2026-04-02: Extended `Makefile` to auto-provision a dedicated markitdown venv for tests:
   - Added `ensure-markitdown` target used by both `test` and `test-integration`
   - Added `MARKITDOWN_VENV`, `MARKITDOWN_STAMP`, `MARKITDOWN_VERSION` variables
