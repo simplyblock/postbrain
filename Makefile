@@ -5,18 +5,21 @@ $(LOCALBIN):
 
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 GOLANGCI_LINT_VERSION ?= v2.5.0
+MARKITDOWN_VENV ?= $(shell pwd)/.venv-markitdown
+MARKITDOWN_STAMP ?= $(MARKITDOWN_VENV)/.markitdown-all-ready
+MARKITDOWN_VERSION ?= 0.1.5
 
-.PHONY: build test test-integration lint fmt vet migrate-up migrate-down docker-up docker-down generate
+.PHONY: build test test-integration lint fmt vet migrate-up migrate-down docker-up docker-down generate ensure-markitdown
 
 build:
 	go build -o postbrain ./cmd/postbrain
 	go build -o postbrain-hook ./cmd/postbrain-hook
 
-test:
-	go test -coverprofile=coverage.out -covermode=atomic ./...
+test: ensure-markitdown
+	PATH="$(MARKITDOWN_VENV)/bin:$$PATH" go test -coverprofile=coverage.out -covermode=atomic ./...
 
-test-integration:
-	go test -tags integration -coverprofile=coverage.out -covermode=atomic ./...
+test-integration: ensure-markitdown
+	PATH="$(MARKITDOWN_VENV)/bin:$$PATH" go test -tags integration -coverprofile=coverage.out -covermode=atomic ./...
 
 lint: golangci-lint
 	"$(GOLANGCI_LINT)" run ./...
@@ -41,6 +44,19 @@ docker-down:
 
 generate:
 	sqlc generate
+
+ensure-markitdown:
+	@if [ ! -x "$(MARKITDOWN_VENV)/bin/python" ]; then \
+		echo "creating markitdown venv at $(MARKITDOWN_VENV)"; \
+		python3 -m venv "$(MARKITDOWN_VENV)"; \
+	fi
+	@if [ ! -f "$(MARKITDOWN_STAMP)" ]; then \
+		echo "installing markitdown[all]==$(MARKITDOWN_VERSION) into $(MARKITDOWN_VENV)"; \
+		"$(MARKITDOWN_VENV)/bin/python" -m pip install --upgrade pip "markitdown[all]==$(MARKITDOWN_VERSION)"; \
+		touch "$(MARKITDOWN_STAMP)"; \
+	else \
+		echo "using markitdown from $(MARKITDOWN_VENV)"; \
+	fi
 
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
