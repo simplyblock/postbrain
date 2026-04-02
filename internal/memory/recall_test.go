@@ -57,33 +57,38 @@ func TestCombinedScore_Formula(t *testing.T) {
 // ── Mock recall DB ───────────────────────────────────────────────────────────
 
 type mockRecallDB struct {
-	vecResults  []db.MemoryScore
-	ftsResults  []db.MemoryScore
-	trgmResults []db.MemoryScore
-	codeResults []db.MemoryScore
-	vecCalled   int
-	ftsCalled   int
-	trgmCalled  int
-	codeCalled  int
+	vecResults   []db.MemoryScore
+	ftsResults   []db.MemoryScore
+	trgmResults  []db.MemoryScore
+	codeResults  []db.MemoryScore
+	vecCalled    int
+	ftsCalled    int
+	trgmCalled   int
+	codeCalled   int
+	lastScopeIDs []uuid.UUID
 }
 
-func (m *mockRecallDB) RecallMemoriesByVector(_ context.Context, _ []uuid.UUID, _ []float32, _ int) ([]db.MemoryScore, error) {
+func (m *mockRecallDB) RecallMemoriesByVector(_ context.Context, scopeIDs []uuid.UUID, _ []float32, _ int) ([]db.MemoryScore, error) {
 	m.vecCalled++
+	m.lastScopeIDs = append([]uuid.UUID(nil), scopeIDs...)
 	return m.vecResults, nil
 }
 
-func (m *mockRecallDB) RecallMemoriesByFTS(_ context.Context, _ []uuid.UUID, _ string, _ int) ([]db.MemoryScore, error) {
+func (m *mockRecallDB) RecallMemoriesByFTS(_ context.Context, scopeIDs []uuid.UUID, _ string, _ int) ([]db.MemoryScore, error) {
 	m.ftsCalled++
+	m.lastScopeIDs = append([]uuid.UUID(nil), scopeIDs...)
 	return m.ftsResults, nil
 }
 
-func (m *mockRecallDB) RecallMemoriesByTrigram(_ context.Context, _ []uuid.UUID, _ string, _ int) ([]db.MemoryScore, error) {
+func (m *mockRecallDB) RecallMemoriesByTrigram(_ context.Context, scopeIDs []uuid.UUID, _ string, _ int) ([]db.MemoryScore, error) {
 	m.trgmCalled++
+	m.lastScopeIDs = append([]uuid.UUID(nil), scopeIDs...)
 	return m.trgmResults, nil
 }
 
-func (m *mockRecallDB) RecallMemoriesByCodeVector(_ context.Context, _ []uuid.UUID, _ []float32, _ int) ([]db.MemoryScore, error) {
+func (m *mockRecallDB) RecallMemoriesByCodeVector(_ context.Context, scopeIDs []uuid.UUID, _ []float32, _ int) ([]db.MemoryScore, error) {
 	m.codeCalled++
+	m.lastScopeIDs = append([]uuid.UUID(nil), scopeIDs...)
 	return m.codeResults, nil
 }
 
@@ -251,5 +256,59 @@ func TestRecall_DefaultSearchMode_IsHybrid(t *testing.T) {
 	}
 	if rdb.vecCalled == 0 || rdb.ftsCalled == 0 {
 		t.Fatalf("expected hybrid mode: vec=%d fts=%d", rdb.vecCalled, rdb.ftsCalled)
+	}
+}
+
+func TestRecall_IntersectAuthorizedScopeIDs(t *testing.T) {
+	teamScope := uuid.New()
+	ancestorScope := uuid.New()
+	unrelatedScope := uuid.New()
+
+	rdb := &mockRecallDB{}
+	s := newTestRecallStore(rdb)
+	s.fanOut = staticFanOut([]uuid.UUID{teamScope, ancestorScope, unrelatedScope})
+
+	_, err := s.Recall(context.Background(), RecallInput{
+		Query:              "test",
+		ScopeID:            teamScope,
+		SearchMode:         "text",
+		Limit:              10,
+		AuthorizedScopeIDs: []uuid.UUID{teamScope, unrelatedScope},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(rdb.lastScopeIDs) != 2 {
+		t.Fatalf("scopeIDs len = %d, want 2", len(rdb.lastScopeIDs))
+	}
+	if rdb.lastScopeIDs[0] != teamScope || rdb.lastScopeIDs[1] != unrelatedScope {
+		t.Fatalf("scopeIDs = %v, want [%s %s]", rdb.lastScopeIDs, teamScope, unrelatedScope)
+	}
+}
+
+func TestRecall_EmptyIntersectionSkipsDBQueries(t *testing.T) {
+	teamScope := uuid.New()
+	ancestorScope := uuid.New()
+
+	rdb := &mockRecallDB{}
+	s := newTestRecallStore(rdb)
+	s.fanOut = staticFanOut([]uuid.UUID{teamScope, ancestorScope})
+
+	results, err := s.Recall(context.Background(), RecallInput{
+		Query:              "test",
+		ScopeID:            teamScope,
+		SearchMode:         "text",
+		Limit:              10,
+		AuthorizedScopeIDs: []uuid.UUID{uuid.New()},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("results len = %d, want 0", len(results))
+	}
+	if rdb.vecCalled != 0 || rdb.ftsCalled != 0 || rdb.trgmCalled != 0 || rdb.codeCalled != 0 {
+		t.Fatalf("expected no DB recall calls, got vec=%d fts=%d trgm=%d code=%d", rdb.vecCalled, rdb.ftsCalled, rdb.trgmCalled, rdb.codeCalled)
 	}
 }

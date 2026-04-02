@@ -44,6 +44,11 @@ func (ro *Router) getContext(w http.ResponseWriter, r *http.Request) {
 	}
 
 	principalID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
+	authorizedScopeIDs, err := ro.effectiveScopeIDsForRequest(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "scope authorization failed")
+		return
+	}
 
 	type contextBlock struct {
 		Layer   string `json:"layer"`
@@ -81,11 +86,12 @@ func (ro *Router) getContext(w http.ResponseWriter, r *http.Request) {
 
 	if ro.memStore != nil {
 		mems, err := ro.memStore.Recall(r.Context(), memory.RecallInput{
-			Query:       query,
-			ScopeID:     scope.ID,
-			PrincipalID: principalID,
-			SearchMode:  "hybrid",
-			Limit:       50,
+			Query:              query,
+			ScopeID:            scope.ID,
+			PrincipalID:        principalID,
+			AuthorizedScopeIDs: authorizedScopeIDs,
+			SearchMode:         "hybrid",
+			Limit:              50,
 		})
 		if err == nil {
 			for _, m := range mems {

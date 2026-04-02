@@ -115,6 +115,11 @@ func (ro *Router) recallMemories(w http.ResponseWriter, r *http.Request) {
 	pg := paginationFromRequest(r)
 
 	principalID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
+	authorizedScopeIDs, err := ro.effectiveScopeIDsForRequest(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "scope authorization failed")
+		return
+	}
 
 	var scopeID uuid.UUID
 	if scopeStr != "" {
@@ -136,10 +141,11 @@ func (ro *Router) recallMemories(w http.ResponseWriter, r *http.Request) {
 	}
 
 	results, err := ro.memStore.Recall(r.Context(), memory.RecallInput{
-		Query:       query,
-		ScopeID:     scopeID,
-		PrincipalID: principalID,
-		Limit:       pg.Limit,
+		Query:              query,
+		ScopeID:            scopeID,
+		PrincipalID:        principalID,
+		AuthorizedScopeIDs: authorizedScopeIDs,
+		Limit:              pg.Limit,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())

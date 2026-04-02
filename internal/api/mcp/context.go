@@ -53,6 +53,10 @@ func (s *Server) handleContext(ctx context.Context, req mcpgo.CallToolRequest) (
 	}
 
 	principalID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
+	authorizedScopeIDs, err := s.effectiveScopeIDsForRequest(ctx)
+	if err != nil {
+		return mcpgo.NewToolResultError("context: scope authorization failed"), nil
+	}
 
 	type contextBlock struct {
 		Layer                string `json:"layer"`
@@ -113,11 +117,12 @@ func (s *Server) handleContext(ctx context.Context, req mcpgo.CallToolRequest) (
 	// Memories (relevant to query).
 	if s.memStore != nil {
 		mems, err := s.memStore.Recall(ctx, memory.RecallInput{
-			Query:       query,
-			ScopeID:     scope.ID,
-			PrincipalID: principalID,
-			SearchMode:  "hybrid",
-			Limit:       50,
+			Query:              query,
+			ScopeID:            scope.ID,
+			PrincipalID:        principalID,
+			AuthorizedScopeIDs: authorizedScopeIDs,
+			SearchMode:         "hybrid",
+			Limit:              50,
 		})
 		if err == nil {
 			for _, m := range mems {

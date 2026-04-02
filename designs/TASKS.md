@@ -124,6 +124,16 @@
     - chain: `user -> team -> company`
     - roles: `member`, `owner`, `admin`
     - asserts allow self+ancestors and deny descendants + unrelated branch on scope-taking endpoint `POST /v1/sessions`
+- [x] 2026-04-02: Completed Finding 5 memory fan-out authorization alignment (TDD-first):
+  - Policy decision: use intersection model for recall safety (`fanOutScopes ∩ authorizedScopes`)
+  - Added `RecallInput.AuthorizedScopeIDs` and intersect logic in `internal/memory/recall.go`
+  - Added short-circuit when intersection is empty (no DB recall queries)
+  - Wired authorized scope IDs into memory recall call sites:
+    - REST: `/v1/memories/recall`, `/v1/context`
+    - MCP: `recall`, `context`
+  - Added tests:
+    - unit: `TestRecall_IntersectAuthorizedScopeIDs`, `TestRecall_EmptyIntersectionSkipsDBQueries`
+    - integration: `TestREST_Recall_IntersectsFanOutWithPrincipalScopes` (prevents ancestor-scope leakage)
 - [x] 2026-04-02: Added comprehensive principal scope-visibility integration matrix:
   - Table-driven coverage for principal chains: single-node (`user|team|department|company`) and multi-hop (`user->team`, `team->department`, `user->team->company`, up to `user->team->department->company`)
   - For each principal in chain, asserted `EffectiveScopeIDs` includes self+ancestors only (no descendants)

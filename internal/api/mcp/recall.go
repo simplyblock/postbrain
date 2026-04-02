@@ -104,19 +104,24 @@ func (s *Server) handleRecall(ctx context.Context, req mcpgo.CallToolRequest) (*
 	}
 
 	principalID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
+	authorizedScopeIDs, err := s.effectiveScopeIDsForRequest(ctx)
+	if err != nil {
+		return mcpgo.NewToolResultError("recall: scope authorization failed"), nil
+	}
 
 	var allResults []*retrieval.Result
 
 	// Memory layer.
 	if activeLayers[retrieval.LayerMemory] && s.memStore != nil {
 		mems, err := s.memStore.Recall(ctx, memory.RecallInput{
-			Query:       query,
-			ScopeID:     scopeID,
-			PrincipalID: principalID,
-			MemoryTypes: memoryTypes,
-			SearchMode:  searchMode,
-			Limit:       limit * 2,
-			MinScore:    minScore,
+			Query:              query,
+			ScopeID:            scopeID,
+			PrincipalID:        principalID,
+			AuthorizedScopeIDs: authorizedScopeIDs,
+			MemoryTypes:        memoryTypes,
+			SearchMode:         searchMode,
+			Limit:              limit * 2,
+			MinScore:           minScore,
 		})
 		if err != nil {
 			return mcpgo.NewToolResultError(fmt.Sprintf("recall: memory recall failed: %v", err)), nil
