@@ -1,10 +1,66 @@
 {{define "scopes"}}
+<style>
+  .scopes-table-wrap {
+    overflow-x: auto;
+  }
+  .scopes-table {
+    width: 100%;
+    min-width: 1160px;
+    table-layout: fixed;
+  }
+  .scopes-table th,
+  .scopes-table td {
+    vertical-align: middle;
+  }
+  .scopes-table .scope-path,
+  .scopes-table .scope-repo {
+    font-size: 0.8rem;
+  }
+  .scopes-table .scope-chip {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+  .scopes-table .scope-created,
+  .scopes-table .scope-indexed {
+    white-space: nowrap;
+    font-size: 0.8rem;
+  }
+  .scope-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+  }
+  .scope-actions > button,
+  .scope-actions > form button {
+    margin: 0;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+</style>
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
   <h1 style="margin:0">Scopes</h1>
   <button onclick="document.getElementById('dlg-scope').showModal()">+ New Scope</button>
 </div>
 {{if .ScopeFormError}}<div class="alert alert-error">{{.ScopeFormError}}</div>{{end}}
-<table>
+<div class="scopes-table-wrap">
+<table class="scopes-table">
+  <colgroup>
+    <col style="width:8%">
+    <col style="width:14%">
+    <col style="width:14%">
+    <col style="width:31%">
+    <col style="width:21%">
+    <col style="width:6%">
+    <col style="width:6%">
+    <col style="width:12rem">
+  </colgroup>
   <thead><tr><th>Kind</th><th>External ID</th><th>Name</th><th>Path</th><th>Repository</th><th>Last Indexed</th><th>Created</th><th></th></tr></thead>
   <tbody>
   {{range .Scopes}}
@@ -12,28 +68,29 @@
     <td>{{.Kind}}</td>
     <td class="mono">{{.ExternalID}}</td>
     <td>{{.Name}}</td>
-    <td><code>{{.Path}}</code></td>
-    <td class="muted" style="font-size:0.8rem">
-      {{if .RepoUrl}}<code>{{deref .RepoUrl}}</code> <span class="muted">({{.RepoDefaultBranch}})</span>
+    <td class="scope-path" title="{{.Path}}"><code class="scope-chip">{{.Path}}</code></td>
+    <td class="muted scope-repo" title="{{if .RepoUrl}}{{deref .RepoUrl}}{{end}}">
+      {{if .RepoUrl}}<code class="scope-chip">{{deref .RepoUrl}}</code> <span class="muted">({{.RepoDefaultBranch}})</span>
       {{else if eq .Kind "project"}}<span class="muted">—</span>{{end}}
     </td>
-    <td class="muted" style="font-size:0.8rem" id="sync-cell-{{.ID}}">
+    <td class="muted scope-indexed" id="sync-cell-{{.ID}}">
       {{$st := index $.SyncStatus (printf "%s" .ID)}}
       {{if eq $st.State 1}}<span class="sync-running" data-scope="{{.ID}}">⟳ syncing…</span>
       {{else if $st.Error}}<span style="color:var(--pico-color-red-500);font-size:0.75rem" title="{{$st.Error}}">✕ {{$st.Error}}</span>
       {{else if .LastIndexedCommit}}<code>{{slice (deref .LastIndexedCommit) 0 7}}</code>
       {{else}}—{{end}}
     </td>
-    <td class="muted">{{timeAgo .CreatedAt}}</td>
-    <td style="white-space:nowrap">
+    <td class="muted scope-created">{{timeAgo .CreatedAt}}</td>
+    <td>
+      <div class="scope-actions">
       {{if eq .Kind "project"}}
-        <button class="secondary" style="margin-right:0.25rem;padding:0.25rem 0.5rem;font-size:0.8rem"
+        <button class="secondary"
                 onclick="openRepoDialog('{{.ID}}','{{if .RepoUrl}}{{deref .RepoUrl}}{{end}}','{{.RepoDefaultBranch}}')">
           {{if .RepoUrl}}Edit Repo{{else}}Attach Repo{{end}}
         </button>
         {{if .RepoUrl}}
         {{$st := index $.SyncStatus (printf "%s" .ID)}}
-        <button style="padding:0.25rem 0.5rem;font-size:0.8rem"
+        <button
                 {{if eq $st.State 1}}disabled{{end}}
                 onclick="openSyncDialog('{{.ID}}','{{deref .RepoUrl}}')">
           {{if eq $st.State 1}}Syncing…{{else}}Sync{{end}}
@@ -41,14 +98,15 @@
         {{end}}
       {{end}}
       {{if index $.ChildCount (.ID.String)}}
-      <button class="danger" style="padding:0.25rem 0.5rem;font-size:0.8rem" disabled
+      <button class="danger" disabled
               title="Cannot delete: this scope has child scopes">Delete</button>
       {{else}}
-      <form method="POST" action="/ui/scopes/{{.ID}}/delete" style="display:inline"
+      <form method="POST" action="/ui/scopes/{{.ID}}/delete"
             onsubmit="return confirm('Delete scope {{.ExternalID}}?')">
-        <button type="submit" class="danger" style="padding:0.25rem 0.5rem;font-size:0.8rem">Delete</button>
+        <button type="submit" class="danger">Delete</button>
       </form>
       {{end}}
+      </div>
     </td>
   </tr>
   {{else}}
@@ -56,6 +114,7 @@
   {{end}}
   </tbody>
 </table>
+</div>
 
 {{if .Scopes}}
 <h2 style="margin-top:2rem">Hierarchy</h2>
