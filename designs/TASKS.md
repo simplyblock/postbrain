@@ -76,6 +76,9 @@
   - New template `internal/ui/web/templates/graph3d.html` using `3d-force-graph`
   - Navigation updated in base template with `Entity Graph 3D` link
   - Unit tests added in `internal/ui/handler_graph_test.go` (direct render + unauth redirect)
+- [x] 2026-04-02: Locked 3D graph camera panning in `/ui/graph3d`:
+  - `controls.enablePan = false`
+  - keep rotation + zoom enabled (`enableRotate`, `enableZoom`)
 - [x] 2026-04-02: Extended `Makefile` to auto-install `gopls` locally when needed:
   - Added pinned tool vars: `GOPLS`, `GOPLS_VERSION`
   - Added `gopls` install target using existing `go-install-tool` pattern
