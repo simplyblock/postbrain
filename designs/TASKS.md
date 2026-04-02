@@ -93,6 +93,16 @@
   - Reduced HTTP graceful shutdown timeout from 30s to 5s
   - Added forced `http.Server.Close()` fallback when graceful shutdown times out
   - Prevents long hangs with active long-lived connections during termination
+- [x] 2026-04-02: Completed Finding 2 scope-auth behavior coverage (TDD-first):
+  - Added REST integration suite `internal/api/rest/scope_authz_integration_test.go` covering scope-taking write endpoints:
+    - `POST /v1/memories`, `/v1/knowledge`, `/v1/skills`, `/v1/collections`, `/v1/knowledge/upload`, `/v1/sessions`
+  - Added MCP integration suite `internal/api/mcp/scope_authz_integration_test.go` covering scope-taking tools:
+    - `remember`, `publish`, `recall`, `context`, `skill_search`, `promote`, `session_begin`, `summarize`, `synthesize_topic`, `skill_install`, `skill_invoke`
+    - `collect` action coverage: `create_collection`, `list_collections`, `add_to_collection` (slug+scope path)
+  - Each test matrix asserts:
+    - authorized scope -> success
+    - unauthorized scope -> forbidden (`scope access denied`)
+    - malformed scope -> bad request/tool error (`invalid scope`)
 - [x] 2026-04-02: Added comprehensive principal scope-visibility integration matrix:
   - Table-driven coverage for principal chains: single-node (`user|team|department|company`) and multi-hop (`user->team`, `team->department`, `user->team->company`, up to `user->team->department->company`)
   - For each principal in chain, asserted `EffectiveScopeIDs` includes self+ancestors only (no descendants)

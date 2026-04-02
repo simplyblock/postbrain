@@ -69,22 +69,34 @@ Impact: Caller can write to scopes they should not access.
   - `publish`
   - `context`
   - `recall`
-  - `skill_search` and other scope-taking tools
+  - `skill_search`
+  - `promote`
+  - `collect` (`create_collection`, `list_collections`, `add_to_collection` with `collection_slug`)
+  - `session_begin`
+  - `summarize`
+  - `synthesize_topic`
+  - `skill_install` (slug+scope path)
+  - `skill_invoke`
 
 ### Tasks
 
-- [ ] For each endpoint/tool above, after scope resolution:
+- [x] For each endpoint/tool above, after scope resolution:
   - call `authorizeRequestedScope(...)`
   - return `403` (REST) or tool error (MCP) on unauthorized scope
-- [ ] Add table-driven REST tests:
+- [x] Add table-driven REST tests:
   - authorized scope -> success
   - unauthorized scope -> forbidden
   - malformed scope -> bad request
-- [ ] Add MCP tests for unauthorized scope behavior.
+- [x] Add MCP tests for unauthorized scope behavior.
+  - Added integration tests:
+    - `internal/api/rest/scope_authz_integration_test.go`
+    - `internal/api/mcp/scope_authz_integration_test.go`
+  - Expanded MCP matrix to all currently identified scope-taking tools and collect actions.
 
 ### Acceptance Criteria
 
 - No write path proceeds with only `scope exists`; all require authorization pass.
+- Integration coverage asserts authorized/unauthorized/malformed scope behavior for REST write endpoints and MCP scope-taking tools.
 
 ---
 
