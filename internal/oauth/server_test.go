@@ -445,6 +445,32 @@ func TestHandleToken_ConfidentialClient_WrongSecret_Returns401(t *testing.T) {
 	}
 }
 
+func TestHandleToken_ConfidentialClient_ValidSecret_NoVerifier_Returns200(t *testing.T) {
+	srv := newTestServer()
+	codes := srv.codes.(*fakeServerCodeStore)
+	codes.code.ClientID = uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	codes.code.CodeChallenge = ""
+
+	form := url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {"raw-code"},
+		"client_id":     {"pb_client_confidential"},
+		"redirect_uri":  {"http://localhost:8765/callback"},
+		"client_secret": {"correct-secret"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.HandleToken(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "access_token") {
+		t.Fatalf("expected access_token in response body, got %s", rec.Body.String())
+	}
+}
+
 func TestHandleToken_ValidRequest_Returns200_WithToken(t *testing.T) {
 	srv := newTestServer()
 	form := url.Values{

@@ -344,3 +344,18 @@ Already covered in Phase 4 identity tests above.
 - [x] `TASKS.md` — add OAuth implementation section once all tasks complete
 - [x] Verify logs and API responses never include `social_identities.raw_profile` content
 - [x] Update `designs/DESIGN_OAUTH.md` if any decisions change during implementation
+
+---
+
+## Post-Implementation Verification Gaps (2026-04-02)
+
+- [x] `internal/ui/auth.go` — resume OAuth consent flow after login:
+  - when redirected to `/ui/login?next=...`, successful token login must redirect to `next` instead of always `/ui`
+  - add regression tests covering the `next` parameter roundtrip
+
+- [x] `internal/oauth/server.go` — align confidential-client token exchange behavior with design:
+  - design allows confidential clients to rely on `client_secret` alone in v1
+  - current implementation still enforces PKCE for confidential clients during `/oauth/token`
+  - update logic + tests so confidential clients do not require `code_verifier` when `client_secret` is valid
+
+- [x] `internal/ui/oauth_consent.go` + `internal/ui/web/templates/oauth_consent.html` — render human-readable scope labels on consent page (design requirement), not raw scope strings only

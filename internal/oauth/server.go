@@ -187,9 +187,16 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := s.codes.VerifyPKCE(code, verifier); err != nil {
-		writeOAuthError(w, http.StatusBadRequest, "invalid_grant")
-		return
+	if client.IsPublic {
+		if err := s.codes.VerifyPKCE(code, verifier); err != nil {
+			writeOAuthError(w, http.StatusBadRequest, "invalid_grant")
+			return
+		}
+	} else if verifier != "" && code.CodeChallenge != "" {
+		if err := s.codes.VerifyPKCE(code, verifier); err != nil {
+			writeOAuthError(w, http.StatusBadRequest, "invalid_grant")
+			return
+		}
 	}
 
 	rawToken, err := s.issuer.Issue(r.Context(), code.PrincipalID, code.Scopes, s.cfg.Server.TokenTTL)

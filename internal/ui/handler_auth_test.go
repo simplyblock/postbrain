@@ -27,6 +27,26 @@ func TestLoginGET_RendersForm(t *testing.T) {
 	}
 }
 
+func TestLoginGET_WithNext_RendersHiddenNextField(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/ui/login?next=%2Fui%2Foauth%2Fauthorize%3Fstate%3Dabc", nil)
+	w := httptest.NewRecorder()
+
+	h.handleLogin(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "name=\"next\"") {
+		t.Fatal("expected hidden next input in login form")
+	}
+	if !strings.Contains(body, "value=\"/ui/oauth/authorize?state=abc\"") {
+		t.Fatalf("expected decoded next value in response body, got: %s", body)
+	}
+}
+
 func TestLoginPOST_MissingToken_RendersFormWithError(t *testing.T) {
 	t.Parallel()
 	h := newTestHandler(t)
