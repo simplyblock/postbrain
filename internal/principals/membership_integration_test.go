@@ -5,7 +5,10 @@ package principals_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
+
+	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/principals"
 	"github.com/simplyblock/postbrain/internal/testhelper"
@@ -115,6 +118,98 @@ func TestMembershipStore_EffectiveScopeIDs(t *testing.T) {
 	if !found[scopeChild.ID.String()] {
 		t.Errorf("child scope %v not in effective scope IDs", scopeChild.ID)
 	}
+}
+
+func TestMembershipStore_EffectiveScopeIDs_ChainMatrix(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		kinds []string
+		role  string
+	}{
+		{name: "user", kinds: []string{"user"}, role: "member"},
+		{name: "team", kinds: []string{"team"}, role: "member"},
+		{name: "department", kinds: []string{"department"}, role: "member"},
+		{name: "company", kinds: []string{"company"}, role: "member"},
+		{name: "user_team", kinds: []string{"user", "team"}, role: "member"},
+		{name: "user_department", kinds: []string{"user", "department"}, role: "member"},
+		{name: "user_company", kinds: []string{"user", "company"}, role: "member"},
+		{name: "team_department", kinds: []string{"team", "department"}, role: "member"},
+		{name: "team_company", kinds: []string{"team", "company"}, role: "member"},
+		{name: "department_company", kinds: []string{"department", "company"}, role: "member"},
+		{name: "user_team_department", kinds: []string{"user", "team", "department"}, role: "member"},
+		{name: "user_team_company", kinds: []string{"user", "team", "company"}, role: "member"},
+		{name: "user_department_company", kinds: []string{"user", "department", "company"}, role: "member"},
+		{name: "team_department_company", kinds: []string{"team", "department", "company"}, role: "member"},
+		{name: "user_team_department_company", kinds: []string{"user", "team", "department", "company"}, role: "member"},
+		{name: "user_team_company_owner_role", kinds: []string{"user", "team", "company"}, role: "owner"},
+		{name: "user_team_company_admin_role", kinds: []string{"user", "team", "company"}, role: "admin"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			pool := testhelper.NewTestPool(t)
+			ms := principals.NewMembershipStore(pool)
+			ctx := context.Background()
+
+			outsiderPrincipal := testhelper.CreateTestPrincipal(t, pool, "user", fmt.Sprintf("mem-outsider-%s", tc.name))
+			outsiderScope := testhelper.CreateTestScope(t, pool, "project", fmt.Sprintf("mem-outsider-scope-%s", tc.name), nil, outsiderPrincipal.ID)
+
+			type node struct {
+				principalID uuid.UUID
+				scopeID     uuid.UUID
+			}
+			nodes := make([]node, 0, len(tc.kinds))
+
+			for i, kind := range tc.kinds {
+				slug := fmt.Sprintf("mem-%s-%d", tc.name, i)
+				pr := testhelper.CreateTestPrincipal(t, pool, kind, slug)
+				sc := testhelper.CreateTestScope(t, pool, "project", fmt.Sprintf("%s-scope", slug), nil, pr.ID)
+				nodes = append(nodes, node{principalID: pr.ID, scopeID: sc.ID})
+			}
+
+			// chain[0] -> chain[1] -> ... -> chain[n-1]
+			for i := 0; i+1 < len(nodes); i++ {
+				if err := ms.AddMembership(ctx, nodes[i].principalID, nodes[i+1].principalID, tc.role, nil); err != nil {
+					t.Fatalf("AddMembership %d->%d: %v", i, i+1, err)
+				}
+			}
+
+			// For each node i, effective scopes must include i..n-1 and exclude 0..i-1.
+			for i := range nodes {
+				got, err := ms.EffectiveScopeIDs(ctx, nodes[i].principalID)
+				if err != nil {
+					t.Fatalf("EffectiveScopeIDs(%d): %v", i, err)
+				}
+				gotSet := toIDSet(got)
+				if gotSet[outsiderScope.ID] {
+					t.Fatalf("principal %d unexpectedly sees outsider scope %s", i, outsiderScope.ID)
+				}
+
+				for j := i; j < len(nodes); j++ {
+					if !gotSet[nodes[j].scopeID] {
+						t.Fatalf("principal %d missing expected scope %d (%s)", i, j, nodes[j].scopeID)
+					}
+				}
+				for j := 0; j < i; j++ {
+					if gotSet[nodes[j].scopeID] {
+						t.Fatalf("principal %d unexpectedly sees descendant scope %d (%s)", i, j, nodes[j].scopeID)
+					}
+				}
+			}
+		})
+	}
+}
+
+func toIDSet(ids []uuid.UUID) map[uuid.UUID]bool {
+	set := make(map[uuid.UUID]bool, len(ids))
+	for _, id := range ids {
+		set[id] = true
+	}
+	return set
 }
 
 func TestMembershipStore_IsScopeAdmin(t *testing.T) {
