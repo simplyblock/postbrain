@@ -373,3 +373,49 @@ func (q *Queries) UpdateScope(ctx context.Context, arg UpdateScopeParams) (*Upda
 	)
 	return &i, err
 }
+
+const updateScopeOwner = `-- name: UpdateScopeOwner :one
+UPDATE scopes SET principal_id = $2 WHERE id = $1
+RETURNING id, kind, external_id, name, parent_id, principal_id, path::text, meta,
+          repo_url, repo_default_branch, last_indexed_commit, created_at
+`
+
+type UpdateScopeOwnerParams struct {
+	ID          uuid.UUID
+	PrincipalID uuid.UUID
+}
+
+type UpdateScopeOwnerRow struct {
+	ID                uuid.UUID
+	Kind              string
+	ExternalID        string
+	Name              string
+	ParentID          *uuid.UUID
+	PrincipalID       uuid.UUID
+	Path              string
+	Meta              []byte
+	RepoUrl           *string
+	RepoDefaultBranch string
+	LastIndexedCommit *string
+	CreatedAt         time.Time
+}
+
+func (q *Queries) UpdateScopeOwner(ctx context.Context, arg UpdateScopeOwnerParams) (*UpdateScopeOwnerRow, error) {
+	row := q.db.QueryRow(ctx, updateScopeOwner, arg.ID, arg.PrincipalID)
+	var i UpdateScopeOwnerRow
+	err := row.Scan(
+		&i.ID,
+		&i.Kind,
+		&i.ExternalID,
+		&i.Name,
+		&i.ParentID,
+		&i.PrincipalID,
+		&i.Path,
+		&i.Meta,
+		&i.RepoUrl,
+		&i.RepoDefaultBranch,
+		&i.LastIndexedCommit,
+		&i.CreatedAt,
+	)
+	return &i, err
+}

@@ -72,6 +72,7 @@
     <td>
       <div class="scope-main">{{.Name}}</div>
       <div class="scope-meta scope-code">{{.Kind}}:{{.ExternalID}}</div>
+      <div class="scope-meta">owner: {{or (index $.OwnerNames (.PrincipalID.String)) (.PrincipalID.String)}}</div>
     </td>
     <td>
       <div class="scope-code">{{.Path}}</div>
@@ -101,6 +102,8 @@
     </td>
     <td class="scope-actions-cell">
       <div class="scope-actions">
+      <button class="secondary"
+              onclick="openOwnerDialog('{{.ID}}','{{.PrincipalID}}','{{.ExternalID}}')">Owner</button>
       {{if eq .Kind "project"}}
         <button class="secondary"
                 onclick="openRepoDialog('{{.ID}}','{{if .RepoUrl}}{{deref .RepoUrl}}{{end}}','{{.RepoDefaultBranch}}')">
@@ -219,6 +222,26 @@
 
 {{if .ScopeFormError}}<script>document.getElementById('dlg-scope').showModal()</script>{{end}}
 
+<!-- ── Dialog: Change Scope Owner ────────────────────────── -->
+<dialog id="dlg-owner">
+  <h2>Change Scope Owner</h2>
+  <p id="dlg-owner-scope" style="font-size:0.85rem;color:var(--pico-muted-color);margin-top:-0.5rem"></p>
+  <form id="dlg-owner-form" method="POST">
+    <label>Owner Principal
+      <select name="principal_id" id="dlg-owner-principal" required>
+        <option value="">— select —</option>
+        {{range .Principals}}
+        <option value="{{.ID}}">{{.DisplayName}} ({{.Kind}}: {{.Slug}})</option>
+        {{end}}
+      </select>
+    </label>
+    <div class="dialog-footer">
+      <button type="button" class="secondary" onclick="document.getElementById('dlg-owner').close()">Cancel</button>
+      <button type="submit">Save Owner</button>
+    </div>
+  </form>
+</dialog>
+
 <!-- ── Dialog: Attach / Edit Repository ───────────────────── -->
 <dialog id="dlg-repo">
   <h2 id="dlg-repo-title">Attach Repository</h2>
@@ -308,6 +331,13 @@ function openRepoDialog(scopeId, repoUrl, branch) {
   document.getElementById('dlg-repo-branch').value = branch || 'main';
   document.getElementById('dlg-repo-title').textContent = repoUrl ? 'Edit Repository' : 'Attach Repository';
   document.getElementById('dlg-repo').showModal();
+}
+
+function openOwnerDialog(scopeId, ownerPrincipalId, scopeExternalId) {
+  document.getElementById('dlg-owner-form').action = '/ui/scopes/' + scopeId + '/owner';
+  document.getElementById('dlg-owner-principal').value = ownerPrincipalId || '';
+  document.getElementById('dlg-owner-scope').textContent = 'scope: ' + scopeExternalId;
+  document.getElementById('dlg-owner').showModal();
 }
 </script>
 {{end}}

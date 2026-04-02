@@ -24,6 +24,10 @@ type updateScopeRequest struct {
 	Meta []byte `json:"meta,omitempty"`
 }
 
+type updateScopeOwnerRequest struct {
+	PrincipalID uuid.UUID `json:"principal_id"`
+}
+
 func (ro *Router) listScopes(w http.ResponseWriter, r *http.Request) {
 	pg := paginationFromRequest(r)
 	scopes, err := db.ListScopes(r.Context(), ro.pool, pg.Limit, pg.Offset)
@@ -113,6 +117,34 @@ func (ro *Router) deleteScope(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// updateScopeOwner handles PUT /v1/scopes/{id}/owner.
+func (ro *Router) updateScopeOwner(w http.ResponseWriter, r *http.Request) {
+	id, err := uuidParam(r, "id")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid scope id")
+		return
+	}
+	var body updateScopeOwnerRequest
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if body.PrincipalID == uuid.Nil {
+		writeError(w, http.StatusBadRequest, "principal_id is required")
+		return
+	}
+	s, err := db.UpdateScopeOwner(r.Context(), ro.pool, id, body.PrincipalID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if s == nil {
+		writeError(w, http.StatusNotFound, "scope not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, s)
 }
 
 type setScopeRepoRequest struct {

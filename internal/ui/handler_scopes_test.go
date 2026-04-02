@@ -80,6 +80,31 @@ func TestHandleSyncStatus_UnknownScope_ReturnsJSON(t *testing.T) {
 	}
 }
 
+// TestHandleSetScopeOwner_MissingPrincipalID_RendersError verifies that
+// POST /ui/scopes/{id}/owner without principal_id renders the scopes page
+// with a form error instead of panicking.
+func TestHandleSetScopeOwner_MissingPrincipalID_RendersError(t *testing.T) {
+	h := newTestHandler(t)
+	id := uuid.New()
+
+	req := httptest.NewRequest(http.MethodPost, "/ui/scopes/"+id.String()+"/owner",
+		strings.NewReader("")) // no principal_id field
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	h.handleSetScopeOwner(w, req)
+
+	if w.Code >= http.StatusInternalServerError {
+		t.Errorf("expected non-5xx response, got %d", w.Code)
+	}
+	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
+		t.Errorf("expected HTML content-type, got %q", ct)
+	}
+	if !strings.Contains(w.Body.String(), "principal_id is required") {
+		t.Errorf("expected 'principal_id is required' in response body")
+	}
+}
+
 // TestHandleScopes_RendersImprovedTableLayout verifies that
 // GET /ui/scopes includes the responsive table wrapper and grouped
 // action controls used by the updated scopes design.

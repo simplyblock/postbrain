@@ -27,6 +27,11 @@
 
 ### Maintenance
 
+- [x] 2026-04-02: Added scope owner reassignment (REST + UI, TDD-first):
+  - REST: `PUT /v1/scopes/{id}/owner` with required `principal_id`
+  - DB: new `UpdateScopeOwner` query + compat helper
+  - UI: new `POST /ui/scopes/{id}/owner` handler and owner-change dialog/action on scopes page
+  - Integration test extended to verify scope owner changes in `TestScopes_CRUD`
 - [x] 2026-04-02: Redesigned `/ui/scopes` rows to multiline cards-in-table style for better readability without horizontal scrolling:
   - collapsed scope identity (name + `kind:external_id`) into stacked content
   - switched path/repository cells to wrapping monospace text

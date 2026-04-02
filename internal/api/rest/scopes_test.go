@@ -93,6 +93,22 @@ func TestDeleteScope_NoAuth_Returns401(t *testing.T) {
 	}
 }
 
+// TestUpdateScopeOwner_NoAuth_Returns401 verifies unauthenticated
+// PUT /v1/scopes/{id}/owner returns 401.
+func TestUpdateScopeOwner_NoAuth_Returns401(t *testing.T) {
+	r := newTestRouter()
+	handler := r.Handler()
+
+	req := httptest.NewRequest(http.MethodPut, "/v1/scopes/00000000-0000-0000-0000-000000000001/owner", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
 // TestSetScopeRepo_MissingRepoURL_Returns400 verifies that omitting repo_url
 // in the POST /v1/scopes/:id/repo body returns 400 before any DB call.
 func TestSetScopeRepo_MissingRepoURL_Returns400(t *testing.T) {
@@ -139,5 +155,31 @@ func TestGetSyncStatus_UnknownScope_ReturnsJSON(t *testing.T) {
 	var body map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("response body is not valid JSON: %v\nbody: %s", err, w.Body.String())
+	}
+}
+
+// TestUpdateScopeOwner_MissingPrincipalID_Returns400 verifies that omitting
+// principal_id in PUT /v1/scopes/:id/owner returns 400 before DB access.
+func TestUpdateScopeOwner_MissingPrincipalID_Returns400(t *testing.T) {
+	ro := &Router{}
+
+	req := httptest.NewRequest(http.MethodPut, "/", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", uuid.New().String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	w := httptest.NewRecorder()
+
+	ro.updateScopeOwner(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+	if _, ok := body["error"]; !ok {
+		t.Error("expected 'error' key in 400 response body")
 	}
 }

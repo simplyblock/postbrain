@@ -149,6 +149,7 @@ func (ro *Router) Handler() http.Handler {
 		r.Post("/scopes", ro.createScope)
 		r.Get("/scopes/{id}", ro.getScope)
 		r.Put("/scopes/{id}", ro.updateScope)
+		r.Put("/scopes/{id}/owner", ro.updateScopeOwner)
 		r.Delete("/scopes/{id}", ro.deleteScope)
 		r.Post("/scopes/{id}/repo", ro.setScopeRepo)
 		r.Post("/scopes/{id}/repo/sync", ro.syncScopeRepo)
