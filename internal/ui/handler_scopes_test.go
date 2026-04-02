@@ -79,3 +79,26 @@ func TestHandleSyncStatus_UnknownScope_ReturnsJSON(t *testing.T) {
 		t.Error("expected non-empty JSON body")
 	}
 }
+
+// TestHandleScopes_RendersImprovedTableLayout verifies that
+// GET /ui/scopes includes the responsive table wrapper and grouped
+// action controls used by the updated scopes design.
+func TestHandleScopes_RendersImprovedTableLayout(t *testing.T) {
+	h := newTestHandler(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/ui/scopes", nil)
+	w := httptest.NewRecorder()
+
+	h.handleScopes(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "scopes-table-wrap") {
+		t.Errorf("expected scopes-table-wrap class in response body")
+	}
+	if !strings.Contains(body, "scope-actions") {
+		t.Errorf("expected scope-actions class in response body")
+	}
+}

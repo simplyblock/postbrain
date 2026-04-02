@@ -545,7 +545,7 @@ Technology: Go `html/template` + HTMX + Pico.css, all embedded via `//go:embed`.
 - [x] **Entity Graph** (`web/templates/graph.html`) — entity and relation tables for scope; data from `GET /v1/graph`
 - [x] **Skills Registry** (`web/templates/skills.html`) — published skills list
 - [x] **Principals & Scopes** (`web/templates/principals.html`) — principals table, scopes table with delete button, memberships table with remove button, create-principal form, create-scope form, add-membership form (member/parent/role dropdowns); `POST /ui/principals`, `POST /ui/scopes`, `POST /ui/memberships`, `POST /ui/memberships/delete` routes wired in `ServeHTTP`; `ListAllMemberships` query added to `db/compat.go`
-- [x] **Scopes** (`web/templates/scopes.html`) — flat list of all scopes with external ID, ltree path, and delete button; route `GET /ui/scopes`
+- [x] **Scopes** (`web/templates/scopes.html`) — flat list of all scopes with external ID, ltree path, and delete button; repository attach/edit + sync actions; responsive table layout with grouped action controls; route `GET /ui/scopes`
 - [x] **Metrics** (`web/templates/metrics.html`) — Prometheus metrics reference page
 
 #### Missing / Planned Screens
