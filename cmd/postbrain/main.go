@@ -27,6 +27,8 @@ import (
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/embedding"
 	"github.com/simplyblock/postbrain/internal/jobs"
+	"github.com/simplyblock/postbrain/internal/oauth"
+	"github.com/simplyblock/postbrain/internal/social"
 	uiapi "github.com/simplyblock/postbrain/internal/ui"
 )
 
@@ -82,6 +84,23 @@ func runServe(cmd *cobra.Command, args []string) error {
 	// Build HTTP mux.
 	mux := http.NewServeMux()
 
+	// OAuth/social dependencies.
+	tokenStore := auth.NewTokenStore(pool)
+	stateStore := oauth.NewStateStore(pool)
+	clientStore := oauth.NewClientStore(pool)
+	codeStore := oauth.NewCodeStore(pool)
+	issuer := oauth.NewIssuer(tokenStore)
+	identityStore := social.NewIdentityStore(pool)
+	providers := social.NewRegistry(cfg.OAuth)
+	oauthServer := oauth.NewServer(clientStore, codeStore, stateStore, issuer, tokenStore, cfg.OAuth)
+
+	// OAuth Authorization Server routes.
+	mux.HandleFunc("GET /.well-known/oauth-authorization-server", oauthServer.HandleMetadata)
+	mux.HandleFunc("GET /oauth/authorize", oauthServer.HandleAuthorize)
+	mux.HandleFunc("POST /oauth/token", oauthServer.HandleToken)
+	mux.HandleFunc("POST /oauth/register", oauthServer.HandleRegister)
+	mux.HandleFunc("POST /oauth/revoke", oauthServer.HandleRevoke)
+
 	// MCP server at /mcp.
 	mcpSrv := mcpapi.NewServer(pool, svc, cfg)
 	mux.Handle("/mcp", mcpSrv.Handler())
@@ -92,7 +111,17 @@ func runServe(cmd *cobra.Command, args []string) error {
 	mux.Handle("/", restSrv.Handler())
 
 	// Web UI.
-	uiHandler, err := uiapi.NewHandler(pool, svc)
+	uiHandler, err := uiapi.NewHandlerWithOAuth(
+		pool,
+		svc,
+		cfg.OAuth,
+		providers,
+		stateStore,
+		clientStore,
+		codeStore,
+		issuer,
+		identityStore,
+	)
 	if err != nil {
 		return fmt.Errorf("ui handler: %w", err)
 	}

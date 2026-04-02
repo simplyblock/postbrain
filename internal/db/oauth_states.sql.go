@@ -34,6 +34,29 @@ func (q *Queries) ConsumeState(ctx context.Context, stateHash string) (*OauthSta
 	return &i, err
 }
 
+const getStateByHash = `-- name: GetStateByHash :one
+SELECT id, state_hash, kind, payload, expires_at, used_at, created_at
+FROM oauth_states
+WHERE state_hash = $1
+  AND used_at IS NULL
+  AND expires_at > now()
+`
+
+func (q *Queries) GetStateByHash(ctx context.Context, stateHash string) (*OauthState, error) {
+	row := q.db.QueryRow(ctx, getStateByHash, stateHash)
+	var i OauthState
+	err := row.Scan(
+		&i.ID,
+		&i.StateHash,
+		&i.Kind,
+		&i.Payload,
+		&i.ExpiresAt,
+		&i.UsedAt,
+		&i.CreatedAt,
+	)
+	return &i, err
+}
+
 const issueState = `-- name: IssueState :one
 INSERT INTO oauth_states (
     state_hash,

@@ -184,22 +184,22 @@ All tasks follow strict TDD: failing test written first, then implementation. Se
 
 ### `internal/social/provider.go`
 
-- [ ] `provider.go`:
+- [x] `provider.go`:
   - `UserInfo{ProviderID, Email, DisplayName, AvatarURL string, RawProfile []byte}`
   - `Provider` interface: `AuthURL(state string) string`, `Exchange(ctx context.Context, code string) (*UserInfo, error)`
 
 ### `internal/social/pkce.go` (state generation helper)
 
-- [ ] Reuse `internal/oauth` state helpers; no separate file needed — social handlers call `oauth.StateStore` directly.
+- [x] Reuse `internal/oauth` state helpers; no separate file needed — social handlers call `oauth.StateStore` directly.
 
 ### `internal/social/github.go` + test
 
-- [ ] `github_test.go` (failing first) — use `httptest.Server` to mock GitHub API:
+- [x] `github_test.go` (failing first) — use `httptest.Server` to mock GitHub API:
   - `TestGitHubProvider_AuthURL_ContainsClientIDAndState`
   - `TestGitHubProvider_Exchange_ValidCode_ReturnsUserInfo`
   - `TestGitHubProvider_Exchange_APIError_ReturnsError`
   - `TestGitHubProvider_Exchange_UsesVerifiedPrimaryEmail`
-- [ ] `github.go`:
+- [x] `github.go`:
   - `GitHubProvider{clientID, clientSecret string, scopes []string, httpClient *http.Client}`
   - `NewGitHubProvider(cfg config.ProviderConfig) *GitHubProvider`
   - `AuthURL(state string) string` — builds GitHub authorize URL
@@ -207,11 +207,11 @@ All tasks follow strict TDD: failing test written first, then implementation. Se
 
 ### `internal/social/google.go` + test
 
-- [ ] `google_test.go` (failing first) — mock OIDC discovery and token endpoint:
+- [x] `google_test.go` (failing first) — mock OIDC discovery and token endpoint:
   - `TestGoogleProvider_AuthURL_ContainsClientIDAndState`
   - `TestGoogleProvider_Exchange_ValidIDToken_ReturnsUserInfo`
   - `TestGoogleProvider_Exchange_InvalidIDToken_ReturnsError`
-- [ ] `google.go`:
+- [x] `google.go`:
   - `GoogleProvider{clientID, clientSecret string, scopes []string, httpClient *http.Client}`
   - `NewGoogleProvider(cfg config.ProviderConfig) *GoogleProvider`
   - `AuthURL(state string) string`
@@ -219,10 +219,10 @@ All tasks follow strict TDD: failing test written first, then implementation. Se
 
 ### `internal/social/gitlab.go` + test
 
-- [ ] `gitlab_test.go` (failing first) — mock GitLab API:
+- [x] `gitlab_test.go` (failing first) — mock GitLab API:
   - `TestGitLabProvider_AuthURL_UsesInstanceURL`
   - `TestGitLabProvider_Exchange_ValidCode_ReturnsUserInfo`
-- [ ] `gitlab.go`:
+- [x] `gitlab.go`:
   - `GitLabProvider{instanceURL, clientID, clientSecret string, scopes []string, httpClient *http.Client}`
   - `NewGitLabProvider(cfg config.ProviderConfig) *GitLabProvider`
   - `AuthURL(state string) string` — uses `instanceURL`
@@ -230,20 +230,20 @@ All tasks follow strict TDD: failing test written first, then implementation. Se
 
 ### `internal/social/registry.go` + test
 
-- [ ] `registry_test.go` (failing first):
+- [x] `registry_test.go` (failing first):
   - `TestNewRegistry_OnlyEnabledProviders_Included`
   - `TestNewRegistry_DisabledProvider_Excluded`
   - `TestNewRegistry_UnknownProvider_Ignored`
-- [ ] `registry.go`:
+- [x] `registry.go`:
   - `NewRegistry(cfg config.OAuthConfig) map[string]Provider` — constructs providers for `github`, `google`, `gitlab` if `enabled: true`
 
 ### `internal/social/identity.go` + test
 
-- [ ] `identity_test.go` (failing first, integration tag):
+- [x] `identity_test.go` (failing first, integration tag):
   - `TestIdentityStore_FindOrCreate_NewIdentity_CreatesPrincipalAndIdentity`
   - `TestIdentityStore_FindOrCreate_ExistingIdentity_UpdatesProfile_ReturnsSamePrincipal`
   - `TestIdentityStore_FindOrCreate_SlugCollision_AppendsProviderID`
-- [ ] `identity.go`:
+- [x] `identity.go`:
   - `IdentityStore{pool}`, `NewIdentityStore(pool)`
   - `FindOrCreate(ctx, provider string, info *UserInfo) (*db.Principal, error)` — single serializable transaction: lookup → update or create principal + identity
 
@@ -253,7 +253,7 @@ All tasks follow strict TDD: failing test written first, then implementation. Se
 
 ### `internal/ui/oauth_social.go` + tests
 
-- [ ] `oauth_social_test.go` (failing first):
+- [x] `oauth_social_test.go` (failing first):
   - `TestHandleSocialStart_UnknownProvider_Returns404`
   - `TestHandleSocialStart_DisabledProvider_Returns404`
   - `TestHandleSocialStart_ValidProvider_RedirectsToProviderURL`
@@ -263,14 +263,14 @@ All tasks follow strict TDD: failing test written first, then implementation. Se
   - `TestHandleSocialCallback_ReplayState_Returns400`
   - `TestHandleSocialCallback_ProviderExchangeError_Returns502`
   - `TestHandleSocialCallback_Success_SetsCookie_RedirectsToUI`
-- [ ] `oauth_social.go`:
+- [x] `oauth_social.go`:
   - `handleSocialStart(w, r)` — dispatched by provider name from URL path; creates state, redirects
   - `handleSocialCallback(w, r)` — validates state, exchanges code, calls `IdentityStore.FindOrCreate`, issues token, sets `pb_session` cookie
   - Set `Secure` on cookie when `cfg.OAuth.BaseURL` starts with `https://`
 
 ### `internal/ui/oauth_consent.go` + tests
 
-- [ ] `oauth_consent_test.go` (failing first):
+- [x] `oauth_consent_test.go` (failing first):
   - `TestHandleConsentGet_NoSession_RedirectsToLogin_WithNext`
   - `TestHandleConsentGet_InvalidState_Returns400`
   - `TestHandleConsentGet_ValidState_RendersConsentPage`
@@ -279,23 +279,23 @@ All tasks follow strict TDD: failing test written first, then implementation. Se
   - `TestHandleConsentPost_Approve_IssuedCode_RedirectsToClientWithCodeAndOriginalState`
   - `TestHandleConsentPost_ExpiredState_Returns400`
   - `TestHandleConsentPost_ReplayState_Returns400`
-- [ ] `oauth_consent.go`:
+- [x] `oauth_consent.go`:
   - `handleConsentGet(w, r)` — auth-guarded; renders `oauth_consent` template with client name and human-readable scope labels
   - `handleConsentPost(w, r)` — auth-guarded; consume state once; on approve: issue code, redirect to `redirect_uri` with `code` and original client `state`; on deny: redirect with `error=access_denied` and original client `state`
 
 ### Templates
 
-- [ ] `internal/ui/web/templates/oauth_consent.html` — consent page: client name, scope list, Approve / Deny buttons
-- [ ] `internal/ui/web/templates/login.html` — extend to show `<a href="/ui/auth/{provider}">Login with GitHub</a>` etc. for each enabled provider (passed in template data as `Providers []string`)
+- [x] `internal/ui/web/templates/oauth_consent.html` — consent page: client name, scope list, Approve / Deny buttons
+- [x] `internal/ui/web/templates/login.html` — extend to show `<a href="/ui/auth/{provider}">Login with GitHub</a>` etc. for each enabled provider (passed in template data as `Providers []string`)
 
 ### Router wiring (`internal/ui/handler.go`)
 
-- [ ] Add routes to `ServeHTTP`:
+- [x] Add routes to `ServeHTTP`:
   - `strings.HasPrefix(path, "/ui/auth/") && method == GET` → dispatch to `handleSocialStart` or `handleSocialCallback` based on `strings.HasSuffix(path, "/callback")`
   - `path == "/ui/oauth/authorize" && method == GET` → `handleConsentGet`
   - `path == "/ui/oauth/authorize" && method == POST` → `handleConsentPost`
-- [ ] Update `handleLogin` (GET) to pass `Providers []string` (enabled provider names) to template data
-- [ ] Update `NewHandler` signature or config injection to receive `cfg config.OAuthConfig`, `providers map[string]social.Provider`, `stateStore *oauth.StateStore`, `codeStore *oauth.CodeStore`, `issuer *oauth.Issuer`
+- [x] Update `handleLogin` (GET) to pass `Providers []string` (enabled provider names) to template data
+- [x] Update `NewHandler` signature or config injection to receive `cfg config.OAuthConfig`, `providers map[string]social.Provider`, `stateStore *oauth.StateStore`, `codeStore *oauth.CodeStore`, `issuer *oauth.Issuer`
 
 ---
 
@@ -303,14 +303,14 @@ All tasks follow strict TDD: failing test written first, then implementation. Se
 
 ### `cmd/postbrain/main.go`
 
-- [ ] Instantiate all OAuth/social dependencies in `runServe`: `StateStore`, `ClientStore`, `CodeStore`, `Issuer`, `social.Registry`, `IdentityStore`, `oauth.Server`
-- [ ] Register on root mux:
+- [x] Instantiate all OAuth/social dependencies in `runServe`: `StateStore`, `ClientStore`, `CodeStore`, `Issuer`, `social.Registry`, `IdentityStore`, `oauth.Server`
+- [x] Register on root mux:
   - `mux.HandleFunc("GET /.well-known/oauth-authorization-server", oauthServer.HandleMetadata)`
   - `mux.HandleFunc("GET /oauth/authorize", oauthServer.HandleAuthorize)`
   - `mux.HandleFunc("POST /oauth/token", oauthServer.HandleToken)`
   - `mux.HandleFunc("POST /oauth/register", oauthServer.HandleRegister)`
   - `mux.HandleFunc("POST /oauth/revoke", oauthServer.HandleRevoke)`
-- [ ] Pass updated dependencies to `ui.NewHandler`
+- [x] Pass updated dependencies to `ui.NewHandler`
 
 ---
 
@@ -322,7 +322,7 @@ Already covered in Phase 4 identity tests above.
 
 ### OAuth server integration test (`internal/oauth/server_integration_test.go`, build tag `integration`)
 
-- [ ] Full Authorization Code + PKCE round-trip against a real DB:
+- [x] Full Authorization Code + PKCE round-trip against a real DB:
   - Register client → authorize → consent → token exchange → verify `pb_*` token works on `/v1/memories/recall`
   - Replay attack: same code → `invalid_grant`
   - PKCE mismatch: wrong verifier → `invalid_grant`
@@ -332,15 +332,15 @@ Already covered in Phase 4 identity tests above.
 
 ### Social login E2E test (`internal/ui/oauth_social_integration_test.go`, build tag `integration`)
 
-- [ ] Mock provider server (httptest) + real DB:
+- [x] Mock provider server (httptest) + real DB:
   - Full flow: `GET /ui/auth/github` → mock GitHub → `GET /ui/auth/github/callback` → cookie set → `GET /ui` returns 200
 
 ---
 
 ## Phase 8 — Housekeeping
 
-- [ ] `go.mod` / `go.sum` — no new external dependencies needed (all crypto is stdlib; HTTP calls use stdlib `net/http`)
-- [ ] `config.example.yaml` — add `oauth:` block (already listed in Phase 1, verify it's complete)
-- [ ] `TASKS.md` — add OAuth implementation section once all tasks complete
-- [ ] Verify logs and API responses never include `social_identities.raw_profile` content
-- [ ] Update `designs/DESIGN_OAUTH.md` if any decisions change during implementation
+- [x] `go.mod` / `go.sum` — no new external dependencies needed (all crypto is stdlib; HTTP calls use stdlib `net/http`)
+- [x] `config.example.yaml` — add `oauth:` block (already listed in Phase 1, verify it's complete)
+- [x] `TASKS.md` — add OAuth implementation section once all tasks complete
+- [x] Verify logs and API responses never include `social_identities.raw_profile` content
+- [x] Update `designs/DESIGN_OAUTH.md` if any decisions change during implementation

@@ -1,0 +1,119 @@
+package social
+
+import (
+	"context"
+	"errors"
+	"strings"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/simplyblock/postbrain/internal/db"
+)
+
+// IdentityStore links external provider identities to local principals.
+type IdentityStore struct {
+	pool *pgxpool.Pool
+}
+
+func NewIdentityStore(pool *pgxpool.Pool) *IdentityStore {
+	return &IdentityStore{pool: pool}
+}
+
+// FindOrCreate resolves an existing social identity or creates a new user principal.
+func (s *IdentityStore) FindOrCreate(ctx context.Context, provider string, info *UserInfo) (*db.Principal, error) {
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	q := db.New(tx)
+
+	principalID, err := q.FindPrincipalBySocialIdentity(ctx, db.FindPrincipalBySocialIdentityParams{
+		Provider:   provider,
+		ProviderID: info.ProviderID,
+	})
+	if err == nil {
+		if _, err := q.UpsertSocialIdentity(ctx, db.UpsertSocialIdentityParams{
+			PrincipalID: principalID,
+			Provider:    provider,
+			ProviderID:  info.ProviderID,
+			Email:       optionalString(info.Email),
+			DisplayName: optionalString(info.DisplayName),
+			AvatarUrl:   optionalString(info.AvatarURL),
+			RawProfile:  info.RawProfile,
+		}); err != nil {
+			return nil, err
+		}
+		principal, err := q.GetPrincipalByID(ctx, principalID)
+		if err != nil {
+			return nil, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+		return principal, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+
+	baseSlug := principalSlug(provider, info)
+	displayName := strings.TrimSpace(info.DisplayName)
+	if displayName == "" {
+		displayName = baseSlug
+	}
+
+	slug := baseSlug
+	if _, slugErr := q.GetPrincipalBySlug(ctx, baseSlug); slugErr == nil {
+		slug = baseSlug + "-" + info.ProviderID
+	} else if !errors.Is(slugErr, pgx.ErrNoRows) {
+		return nil, slugErr
+	}
+
+	principal, err := q.CreatePrincipal(ctx, db.CreatePrincipalParams{
+		Kind:        "user",
+		Slug:        slug,
+		DisplayName: displayName,
+		Meta:        []byte(`{}`),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := q.UpsertSocialIdentity(ctx, db.UpsertSocialIdentityParams{
+		PrincipalID: principal.ID,
+		Provider:    provider,
+		ProviderID:  info.ProviderID,
+		Email:       optionalString(info.Email),
+		DisplayName: optionalString(info.DisplayName),
+		AvatarUrl:   optionalString(info.AvatarURL),
+		RawProfile:  info.RawProfile,
+	}); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return principal, nil
+}
+
+func principalSlug(provider string, info *UserInfo) string {
+	if email := strings.TrimSpace(info.Email); email != "" {
+		return email
+	}
+	if providerID := strings.TrimSpace(info.ProviderID); providerID != "" {
+		return provider + "-" + providerID
+	}
+	return provider + "-user"
+}
+
+func optionalString(s string) *string {
+	v := strings.TrimSpace(s)
+	if v == "" {
+		return nil
+	}
+	return &v
+}

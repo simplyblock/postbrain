@@ -27,6 +27,15 @@
 
 ### Maintenance
 
+- [x] 2026-04-02: Completed OAuth implementation baseline and integrations (`designs/TASKS_OAUTH.md` all items checked):
+  - Implemented OAuth/social data model, config, sqlc queries, and core authorization-server package (`internal/oauth`).
+  - Implemented social provider stack and identity linking (`internal/social`) with integration tests.
+  - Implemented UI OAuth social-login and consent flows, templates, route wiring, and OAuth-aware UI handler construction.
+  - Wired OAuth server + social dependencies in `cmd/postbrain/main.go` with route registration (`/.well-known/oauth-authorization-server`, `/oauth/*`).
+  - Added integration coverage for:
+    - full Authorization Code + PKCE flow (including replay, PKCE mismatch, redirect mismatch, confidential-client bad secret, registration disabled)
+    - social login E2E via mock provider with real DB and cookie-authenticated `/ui` access.
+  - Audited code paths to ensure `social_identities.raw_profile` is stored but not exposed through API/UI responses or logs.
 - [x] 2026-04-02: Started OAuth implementation from `designs/DESIGN_OAUTH.md` (TDD-first), completed Phases 1–3 baseline:
   - Phase 1 (DB + config):
     - Added migrations `000011_oauth.up/down.sql` with `social_identities`, `oauth_clients`, `oauth_auth_codes`, `oauth_states` (+ indexes/triggers/checks).
