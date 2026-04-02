@@ -50,10 +50,17 @@ func (r *Resolver) Resolve(ctx context.Context, filePath, targetName string, loc
 		return id, true
 	}
 
+	// Stage 2.5: optional language-server resolution.
+	if id, ok := r.resolveViaLSP(ctx, filePath, targetName, localSymTable); ok {
+		return id, true
+	}
+
 	// Stage 3: suffix fallback.
-	candidates, err := db.FindEntitiesBySuffix(ctx, r.pool, r.scopeID, targetName)
-	if err == nil && len(candidates) > 0 {
-		return candidates[0].ID, true
+	if r.pool != nil {
+		candidates, err := db.FindEntitiesBySuffix(ctx, r.pool, r.scopeID, targetName)
+		if err == nil && len(candidates) > 0 {
+			return candidates[0].ID, true
+		}
 	}
 
 	return uuid.UUID{}, false
@@ -62,6 +69,10 @@ func (r *Resolver) Resolve(ctx context.Context, filePath, targetName string, loc
 // resolveViaImports looks up the file entity, walks its outgoing "imports"
 // edges, and tries canonical lookups of the form <pkg>.<targetName>.
 func (r *Resolver) resolveViaImports(ctx context.Context, filePath, targetName string) (uuid.UUID, bool) {
+	if r.pool == nil {
+		return uuid.UUID{}, false
+	}
+
 	// File canonicals are lowercased (see extract_go.go etc).
 	fileCanon := strings.ToLower(filepath.ToSlash(filePath))
 
@@ -100,6 +111,37 @@ func (r *Resolver) resolveViaImports(ctx context.Context, filePath, targetName s
 					return ent.ID, true
 				}
 			}
+		}
+	}
+
+	return uuid.UUID{}, false
+}
+
+func (r *Resolver) resolveViaLSP(ctx context.Context, filePath, targetName string, localSymTable map[string]uuid.UUID) (uuid.UUID, bool) {
+	if r.lsp == nil || r.lsp.Language() == "" {
+		return uuid.UUID{}, false
+	}
+	if !strings.EqualFold(filepath.Ext(filePath), r.lsp.Language()) {
+		return uuid.UUID{}, false
+	}
+
+	canonical, err := r.lsp.Resolve(ctx, filePath, targetName)
+	if err != nil || canonical == "" {
+		return uuid.UUID{}, false
+	}
+
+	if id, ok := localSymTable[canonical]; ok {
+		return id, true
+	}
+	if r.pool == nil {
+		return uuid.UUID{}, false
+	}
+
+	codeTypes := []string{"function", "method", "type", "struct", "interface", "class", "variable"}
+	for _, codeType := range codeTypes {
+		ent, qErr := db.GetEntityByCanonical(ctx, r.pool, r.scopeID, codeType, canonical)
+		if qErr == nil && ent != nil {
+			return ent.ID, true
 		}
 	}
 
