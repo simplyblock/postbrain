@@ -73,7 +73,7 @@ Additional rules:
     ```
 
 ### Task Tracking
-- Update `TASKS.md` **before** staging and committing. Record what was done,
+- Update `designs/TASKS.md` **before** staging and committing. Record what was done,
   mark completed tasks, and add any newly discovered tasks.
 
 ### In-Code Markers
@@ -96,8 +96,8 @@ Additional rules:
   ```
 
 ### Design Changes
-- Update `DESIGN.md` **only if absolutely necessary**.
-- You **must ask** before making any change to `DESIGN.md`, and provide a clear
+- Update `designs/DESIGN.md` **only if absolutely necessary**.
+- You **must ask** before making any change to `designs/DESIGN.md`, and provide a clear
   explanation of why the design must be adjusted.
 
 ---
@@ -106,7 +106,7 @@ Additional rules:
 
 ### Dependencies
 - Do not introduce large frameworks or heavy dependencies unless they are
-  explicitly approved in `DESIGN.md` or by the user.
+  explicitly approved in `designs/DESIGN.md` or by the user.
 - New dependencies must be the minimum necessary to fulfil the task.
 
 ### Documentation Files
@@ -148,7 +148,7 @@ Additional rules:
 | Commit message summary | ≤ 72 characters, imperative mood ("Add X", "Fix Y") |
 | Commit message body | Required — explain what and why, not just what |
 | `Co-authored-by` trailer | Required on every agent commit |
-| Pre-commit checklist | 1. `go test ./...` passes · 2. `gofmt -w .` applied · 3. `make lint` passes · 4. `TASKS.md` updated |
+| Pre-commit checklist | 1. `go test ./...` passes · 2. `gofmt -w .` applied · 3. `make lint` passes · 4. `designs/TASKS.md` updated |
 
 ---
 
@@ -159,6 +159,6 @@ Before every `git commit`, verify all of the following:
 - [ ] `go test ./...` — full test suite passes, including newly written tests
 - [ ] `gofmt -w .` — formatter applied, no outstanding diffs
 - [ ] `make lint` — linter passes with zero errors
-- [ ] `TASKS.md` — updated to reflect completed and newly discovered work
+- [ ] `designs/TASKS.md` — updated to reflect completed and newly discovered work
 - [ ] Changes are focused — no unrelated modifications staged
-- [ ] `DESIGN.md` — not modified unless approved and necessary
+- [ ] `designs/DESIGN.md` — not modified unless approved and necessary

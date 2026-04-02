@@ -688,8 +688,12 @@ postbrain/
 │   ├── sharing/            # sharing grant enforcement
 │   └── jobs/               # background jobs scheduler
 ├── AGENTS.md               # ← agent rules (read first)
-├── DESIGN.md               # ← full architecture and design decisions
-├── TASKS.md                # ← current task list and status
+├── designs/                # ← architecture, design, and task documents
+│   ├── DESIGN.md           #   full architecture and design decisions
+│   ├── DESIGN_CODE_GRAPH.md
+│   ├── DESIGN_OAUTH.md
+│   ├── TASKS.md            #   current task list and status
+│   └── TASKS_OAUTH.md      #   OAuth implementation task list
 ├── config.example.yaml
 └── docker-compose.yml
 ```
@@ -703,11 +707,11 @@ Before writing a single line of code, read these files **in order**:
 1. **`AGENTS.md`** — mandatory rules and guard rails: TDD workflow,
    commit discipline, what you must never do. No exceptions.
 
-2. **`DESIGN.md`** — the full architecture. Understand the three-layer model,
+2. **`designs/DESIGN.md`** — the full architecture. Understand the three-layer model,
    the database schema, the scope hierarchy, and the extension rationale
    before touching any code. Do **not** change the design without asking first.
 
-3. **`TASKS.md`** — the current task list. Find your assigned task, understand
+3. **`designs/TASKS.md`** — the current task list. Find your assigned task, understand
    its scope, and update this file before every commit.
 
 ### Key constraints (summary — full rules in `AGENTS.md`)
@@ -716,6 +720,6 @@ Before writing a single line of code, read these files **in order**:
 - **Test suite**: `go test ./...` must pass before every commit.
 - **Formatter**: `gofmt -w .` before every commit.
 - **Commits**: after each task; detailed message; `Co-authored-by:` trailer required.
-- **DESIGN.md**: do not edit without asking and explaining why.
+- **designs/DESIGN.md**: do not edit without asking and explaining why.
 - **No unsolicited refactoring**: mark with `TODO` and move on.
-- **No heavy dependencies**: check `DESIGN.md` for the approved stack first.
+- **No heavy dependencies**: check `designs/DESIGN.md` for the approved stack first.

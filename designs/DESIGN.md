@@ -2325,7 +2325,10 @@ postbrain/
 ├── docker-compose.yml
 ├── Makefile
 ├── go.mod
-└── DESIGN.md
+└── designs/
+    ├── DESIGN.md
+    ├── DESIGN_CODE_GRAPH.md
+    └── DESIGN_OAUTH.md
 ```
 
 ### Key Implementation Notes
