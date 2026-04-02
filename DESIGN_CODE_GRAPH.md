@@ -429,12 +429,23 @@ the embedding service (code model) in batches. The queue is an in-process buffer
 channel; on restart, any un-embedded memories are detected via a startup sweep
 (`WHERE embedding_code IS NULL AND content_kind = 'code' AND is_active = true`).
 
-#### 5b — Embedding budget cap
+#### 5b — Embedding budget caps (global + per-repo)
 
-Configurable `REPO_CHUNK_EMBED_MAX` (default: unlimited). If the indexer would
-produce more than N chunk memories in a single run, embedding is skipped for the
-excess chunks (file-level memory embedding is unaffected). The cap prevents runaway
-API costs on very large repos.
+Use two independent configurable caps:
+
+- `REPO_CHUNK_EMBED_MAX_GLOBAL` (default: unlimited): maximum chunk embeddings
+  allowed across all repo sync jobs in a budgeting window (for example per hour
+  or per day, configurable by operator policy).
+- `REPO_CHUNK_EMBED_MAX_PER_REPO` (default: unlimited): maximum chunk embeddings
+  allowed for a single repo in one index/sync run.
+
+Enforcement order:
+1. Apply the per-repo cap during chunk enqueue for that repo run.
+2. Apply the global cap before dispatching embedding batches; once exhausted,
+   remaining queued chunks are skipped or deferred to the next window.
+
+File-level memory embedding is unaffected by these chunk caps. Splitting budgets
+prevents both single-repo runaway costs and cross-repo fleet-wide spend spikes.
 
 #### 5c — Recall integration
 
