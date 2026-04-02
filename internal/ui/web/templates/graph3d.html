@@ -35,6 +35,12 @@
     .linkDirectionalParticleSpeed(0.003)
     .backgroundColor("#0b1020");
 
+  // Keep user interaction constrained to rotate + zoom.
+  const controls = graph.controls();
+  controls.enablePan = false;
+  controls.enableRotate = true;
+  controls.enableZoom = true;
+
   // Keep the camera readable for small and large graphs.
   graph.d3Force("charge").strength(-180);
   graph.d3Force("link").distance(l => l.predicate === "same_as" ? 22 : 95);
