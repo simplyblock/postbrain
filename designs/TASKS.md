@@ -89,6 +89,10 @@
   - Added `gopls` install target using existing `go-install-tool` pattern
   - Added `ensure-gopls` helper and wired it into `test-integration`
 - [x] 2026-04-02: Updated `GOPLS_VERSION` pin to `v0.21.1` for Go 1.25 compatibility.
+- [x] 2026-04-02: Improved server shutdown responsiveness on `Ctrl+C`:
+  - Reduced HTTP graceful shutdown timeout from 30s to 5s
+  - Added forced `http.Server.Close()` fallback when graceful shutdown times out
+  - Prevents long hangs with active long-lived connections during termination
 - [x] 2026-04-02: Added comprehensive principal scope-visibility integration matrix:
   - Table-driven coverage for principal chains: single-node (`user|team|department|company`) and multi-hop (`user->team`, `team->department`, `user->team->company`, up to `user->team->department->company`)
   - For each principal in chain, asserted `EffectiveScopeIDs` includes self+ancestors only (no descendants)

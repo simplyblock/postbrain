@@ -143,9 +143,19 @@ func runServe(cmd *cobra.Command, args []string) error {
 	select {
 	case <-ctx.Done():
 		slog.Info("shutting down server")
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer shutdownCancel()
-		return httpSrv.Shutdown(shutdownCtx)
+		if err := httpSrv.Shutdown(shutdownCtx); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				slog.Warn("graceful shutdown timed out; forcing close")
+				if closeErr := httpSrv.Close(); closeErr != nil && !errors.Is(closeErr, http.ErrServerClosed) {
+					return closeErr
+				}
+				return nil
+			}
+			return err
+		}
+		return nil
 	case err := <-errCh:
 		return err
 	}
