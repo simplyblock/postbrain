@@ -27,6 +27,19 @@
 
 ### Maintenance
 
+- [x] 2026-04-02: Fixed silently discarded errors (TDD: failing tests first):
+  - `internal/memory/store.go`: log `slog.Warn` on `co_occurs_with` and code-graph `UpsertRelation` failures
+  - `internal/knowledge/store.go`: log `slog.Warn` on `same_as` / `co_occurs_with` `UpsertRelation` failures
+  - `internal/db/migrate.go`: capture `m.Version()` error as `verErr`; fix `errors.Is` checking wrong variable
+  - `cmd/postbrain-hook/main.go`: add `parseSkillID` helper; use in `sync` and `install` to prevent zero-UUID DB writes
+- [x] 2026-04-02: Implemented missing UI routes + templates (TDD: failing tests first):
+  - `GET /ui/knowledge/new` → `handleKnowledgeNew` + `knowledge_new.html` template
+  - `POST /ui/knowledge` → `handleCreateKnowledge` (validates title, scope_id; creates artifact)
+  - `POST /ui/knowledge/:id/retract` → `handleKnowledgeRetract`
+  - `POST /ui/memories/:id/forget` → `handleMemoryForget`
+  - `GET /ui/collections/new` → `handleCollectionNew` + `collections_new.html` template
+  - `POST /ui/collections` → `handleCreateCollection` (validates name, slug, scope_id)
+  - Bug fix: `handleKnowledgeDetail` with nil pool now returns 404 instead of template-exec 500
 - [x] 2026-04-02: Updated `DESIGN_CODE_GRAPH.md` Phase 5a to prioritize chunk embedding by graph centrality (high in/out link degree first), with tie-breakers and caveat that degree is a strong but imperfect importance proxy.
 - [x] 2026-04-02: Updated `DESIGN_CODE_GRAPH.md` Phase 5b to split chunk embedding budget control into two caps:
   - `REPO_CHUNK_EMBED_MAX_GLOBAL` (fleet-wide/global window cap)
@@ -43,7 +56,7 @@
     - DB query path: `UpdateMemoryContent` now updates `summary` and `meta`
   - Validation:
     - `go test -tags integration ./internal/api/rest ./internal/api/mcp` passed
-    - `go test ./...` and `make lint` currently fail due unrelated pre-existing untracked test file `cmd/postbrain-hook/main_test.go` referencing undefined `parseSkillID`.
+    - `go test ./...` passes (parseSkillID undefined resolved in 2026-04-02 fix below).
 - [x] 2026-04-01: Ran `make lint`, fixed all reported issues (errcheck/staticcheck/unused), then verified with `gofmt -w .`, `go test ./...`, and `make lint` (0 issues).
 - [x] 2026-04-01: Added shared `internal/closeutil.Log` helper to report deferred close failures; replaced swallowed production `Close()` errors and added unit tests.
 
