@@ -8,20 +8,20 @@ All tasks follow strict TDD: failing test written first, then implementation. Se
 
 ### Migration
 
-- [ ] `internal/db/migrations/000011_oauth.up.sql` — create four tables:
+- [x] `internal/db/migrations/000011_oauth.up.sql` — create four tables:
   - `social_identities (id, principal_id FK, provider, provider_id, email citext, display_name, avatar_url, raw_profile JSONB, created_at, updated_at)` + `UNIQUE(provider, provider_id)` + `touch_updated_at` trigger
   - `oauth_clients (id, client_id TEXT UNIQUE, client_secret_hash, name, redirect_uris TEXT[], grant_types TEXT[], scopes TEXT[], is_public, meta JSONB, created_at, revoked_at)`
   - `oauth_auth_codes (id, code_hash TEXT UNIQUE, client_id FK, principal_id FK, redirect_uri, scopes TEXT[], code_challenge, expires_at, used_at, created_at)`
   - `oauth_states (id, state_hash TEXT UNIQUE, kind CHECK IN ('social','mcp_consent'), payload JSONB, expires_at, used_at, created_at)`
   - All indexes per design
-- [ ] `internal/db/migrations/000011_oauth.down.sql` — drop all four tables in reverse FK order
-- [ ] `internal/db/migrate_test.go` — extend migration integration test: verify all four tables exist and constraints hold after up; verify clean rollback on down
+- [x] `internal/db/migrations/000011_oauth.down.sql` — drop all four tables in reverse FK order
+- [x] `internal/db/migrate_test.go` — extend migration integration test: verify all four tables exist and constraints hold after up; verify clean rollback on down
 
 ### Configuration
 
-- [ ] `internal/config/config.go` — add `OAuthConfig`, `ProviderConfig`, `OAuthServerConfig` structs; add `OAuth OAuthConfig` field to `Config`; add four `SetDefault` calls; wire `mapstructure` tags
-- [ ] `internal/config/config_test.go` — add tests: OAuth defaults load correctly; enabled provider fields round-trip from YAML; `auth_code_ttl` parses as `time.Duration`
-- [ ] `config.example.yaml` — add `oauth:` block with all keys documented
+- [x] `internal/config/config.go` — add `OAuthConfig`, `ProviderConfig`, `OAuthServerConfig` structs; add `OAuth OAuthConfig` field to `Config`; add four `SetDefault` calls; wire `mapstructure` tags
+- [x] `internal/config/config_test.go` — add tests: OAuth defaults load correctly; enabled provider fields round-trip from YAML; `auth_code_ttl` parses as `time.Duration`
+- [x] `config.example.yaml` — add `oauth:` block with all keys documented
 
 ---
 
@@ -29,25 +29,25 @@ All tasks follow strict TDD: failing test written first, then implementation. Se
 
 ### sqlc query files (`internal/db/queries/`)
 
-- [ ] `oauth_clients.sql`:
+- [x] `oauth_clients.sql`:
   - `RegisterClient(client_id, client_secret_hash, name, redirect_uris, grant_types, scopes, is_public, meta)` — INSERT RETURNING
   - `LookupClient(client_id TEXT)` — SELECT WHERE revoked_at IS NULL
   - `RevokeClient(id UUID)` — UPDATE SET revoked_at=now()
 
-- [ ] `oauth_codes.sql`:
+- [x] `oauth_codes.sql`:
   - `IssueCode(code_hash, client_id, principal_id, redirect_uri, scopes, code_challenge, expires_at)` — INSERT RETURNING
   - `ConsumeCode(code_hash TEXT)` — `UPDATE oauth_auth_codes SET used_at=now() WHERE code_hash=$1 AND used_at IS NULL AND expires_at > now() RETURNING *` (atomic single-use)
 
-- [ ] `oauth_states.sql`:
+- [x] `oauth_states.sql`:
   - `IssueState(state_hash, kind, payload, expires_at)` — INSERT RETURNING
   - `ConsumeState(state_hash TEXT)` — `UPDATE oauth_states SET used_at=now() WHERE state_hash=$1 AND used_at IS NULL AND expires_at > now() RETURNING *`
 
-- [ ] `social_identities.sql`:
+- [x] `social_identities.sql`:
   - `UpsertSocialIdentity(principal_id, provider, provider_id, email, display_name, avatar_url, raw_profile)` — `INSERT ... ON CONFLICT (provider, provider_id) DO UPDATE SET email=..., display_name=..., avatar_url=..., raw_profile=..., updated_at=now() RETURNING *`
   - `FindPrincipalBySocialIdentity(provider, provider_id TEXT)` — SELECT principal_id
 
-- [ ] Run `sqlc generate` and verify generated files compile
-- [ ] `internal/db/queries_test.go` (integration, build tag `integration`) — at minimum: `ConsumeCode` returns zero rows on second call; `ConsumeState` returns zero rows on second call; expired code is rejected
+- [x] Run `sqlc generate` and verify generated files compile
+- [x] `internal/db/queries_test.go` (integration, build tag `integration`) — at minimum: `ConsumeCode` returns zero rows on second call; `ConsumeState` returns zero rows on second call; expired code is rejected; `LookupClient` excludes revoked clients
 
 ---
 
@@ -55,50 +55,50 @@ All tasks follow strict TDD: failing test written first, then implementation. Se
 
 ### `internal/oauth/pkce.go` + test
 
-- [ ] `pkce_test.go` (failing first):
+- [x] `pkce_test.go` (failing first):
   - `TestVerifyS256_ValidPair_ReturnsTrue`
   - `TestVerifyS256_WrongVerifier_ReturnsFalse`
   - `TestVerifyS256_EmptyInputs_ReturnsFalse`
   - `TestGenerateChallenge_DeterministicForSameVerifier`
-- [ ] `pkce.go`:
+- [x] `pkce.go`:
   - `GenerateChallenge(verifier string) string` — `base64.RawURLEncoding.EncodeToString(sha256sum(verifier))`
   - `VerifyS256(verifier, challenge string) bool` — constant-time compare via `subtle.ConstantTimeCompare`
 
 ### `internal/oauth/scopes.go` + test
 
-- [ ] `scopes_test.go` (failing first):
+- [x] `scopes_test.go` (failing first):
   - `TestParseScopes_ValidSingle_OK`
   - `TestParseScopes_ValidMultiple_OK`
   - `TestParseScopes_UnknownScope_ReturnsError`
   - `TestParseScopes_Empty_ReturnsError`
   - `TestScopeToPermissions_MapsCorrectly`
-- [ ] `scopes.go`:
+- [x] `scopes.go`:
   - Constants: `ScopeMemoriesRead = "memories:read"`, `ScopeMemoriesWrite`, `ScopeKnowledgeRead`, `ScopeKnowledgeWrite`, `ScopeSkillsRead`, `ScopeSkillsWrite`, `ScopeAdmin`
   - `ParseScopes(raw string) ([]string, error)` — splits on space, validates each against known set
   - `ScopeToPermissions(scopes []string) []string` — identity mapping for now (scope strings are permission strings)
 
 ### `internal/oauth/states.go` + test
 
-- [ ] `states_test.go` (failing first):
+- [x] `states_test.go` (failing first):
   - `TestStateStore_Issue_RoundTrip` — issue then consume returns payload
   - `TestStateStore_Consume_SecondCall_ReturnsNotFound` — single-use enforced
   - `TestStateStore_Consume_Expired_ReturnsNotFound`
   - `TestStateStore_Issue_HashesRawState` — raw value is never stored
-- [ ] `states.go`:
+- [x] `states.go`:
   - `StateStore{pool}`, `NewStateStore(pool)`
   - `Issue(ctx, kind, payload map[string]any, ttl time.Duration) (rawState string, err error)` — generates 32 random bytes, hashes, calls `db.IssueState`
   - `Consume(ctx, rawState string) (*StateRecord, error)` — hashes, calls `db.ConsumeState`; returns `ErrNotFound` if zero rows
 
 ### `internal/oauth/clients.go` + test
 
-- [ ] `clients_test.go` (failing first):
+- [x] `clients_test.go` (failing first):
   - `TestClientStore_Register_PublicClient_NoSecret`
   - `TestClientStore_Register_ConfidentialClient_HashesSecret`
   - `TestClientStore_LookupByClientID_Found`
   - `TestClientStore_LookupByClientID_Revoked_ReturnsNil`
   - `TestClientStore_ValidateRedirectURI_ExactMatch_OK`
   - `TestClientStore_ValidateRedirectURI_NoMatch_ReturnsError`
-- [ ] `clients.go`:
+- [x] `clients.go`:
   - `ClientStore{pool}`, `NewClientStore(pool)`
   - `Register(ctx, req RegisterRequest) (*OAuthClient, rawSecret string, err error)` — generates `pb_client_<hex>` client_id; for confidential clients generates + hashes secret
   - `LookupByClientID(ctx, clientID string) (*OAuthClient, error)`
@@ -107,14 +107,14 @@ All tasks follow strict TDD: failing test written first, then implementation. Se
 
 ### `internal/oauth/codes.go` + test
 
-- [ ] `codes_test.go` (failing first):
+- [x] `codes_test.go` (failing first):
   - `TestCodeStore_Issue_StoresHash_NotRaw`
   - `TestCodeStore_Consume_ValidCode_ReturnsRecord`
   - `TestCodeStore_Consume_AlreadyUsed_ReturnsError`
   - `TestCodeStore_Consume_Expired_ReturnsError`
   - `TestCodeStore_VerifyPKCE_ValidVerifier_OK`
   - `TestCodeStore_VerifyPKCE_InvalidVerifier_ReturnsError`
-- [ ] `codes.go`:
+- [x] `codes.go`:
   - `CodeStore{pool}`, `NewCodeStore(pool)`
   - `Issue(ctx, req IssueCodeRequest) (rawCode string, err error)` — generates 32 random bytes, hashes, calls `db.IssueCode`
   - `Consume(ctx, rawCode string) (*AuthCode, error)` — hashes, calls `db.ConsumeCode`; `ErrNotFound` / `ErrCodeExpired` / `ErrCodeUsed` on failure
@@ -122,48 +122,61 @@ All tasks follow strict TDD: failing test written first, then implementation. Se
 
 ### `internal/oauth/token_exchange.go` + test
 
-- [ ] `token_exchange_test.go` (failing first):
+- [x] `token_exchange_test.go` (failing first):
   - `TestIssue_TranslatesScopes_ToPermissions`
   - `TestIssue_CreatesTokenWithCorrectPrincipal`
   - `TestIssue_ZeroTTL_CreatesNonExpiringToken`
   - `TestIssue_NonZeroTTL_SetsExpiresAt`
-- [ ] `token_exchange.go`:
+- [x] `token_exchange.go`:
   - `Issuer{tokenStore *auth.TokenStore}`, `NewIssuer(tokenStore)`
   - `Issue(ctx, principalID uuid.UUID, scopes []string, ttl time.Duration) (rawToken string, err error)` — calls `auth.GenerateToken()`, `tokenStore.Create(...)`
 
 ### `internal/oauth/metadata.go` + test
 
-- [ ] `metadata_test.go` (failing first):
+- [x] `metadata_test.go` (failing first):
   - `TestServerMetadata_ContainsRequiredFields`
   - `TestServerMetadata_BaseURL_UsedForEndpoints`
   - `TestServerMetadata_ScopesListed`
-- [ ] `metadata.go`:
+- [x] `metadata.go`:
   - `ServerMetadata(baseURL string) map[string]any` — returns RFC 8414 JSON-serialisable map
 
 ### `internal/oauth/server.go`
 
-- [ ] `server.go`:
+- [x] `server.go`:
   - `Server{clients, codes, states, issuer, cfg}`, `NewServer(...)`
-  - `HandleMetadata(w, r)` — `GET /.well-known/oauth-authorization-server`
-  - `HandleAuthorize(w, r)` — `GET /oauth/authorize`: validate params, store state, redirect to consent
-  - `HandleToken(w, r)` — `POST /oauth/token`: consume code, verify PKCE, issue token
+  - `HandleMetadata(w, r)` — `GET /.well-known/oauth-authorization-server` (RFC 8414 required fields)
+  - `HandleAuthorize(w, r)` — `GET /oauth/authorize`: enforce `response_type=code`, `state`, `client_id`, exact `redirect_uri`, known `scope`, and PKCE requirements; store validated payload in `oauth_states`, redirect to consent
+  - `HandleToken(w, r)` — `POST /oauth/token`: enforce `grant_type=authorization_code`, consume code, enforce exact `redirect_uri` + `client_id` match to code record, verify PKCE, verify `client_secret` for confidential clients, issue token
   - `HandleRegister(w, r)` — `POST /oauth/register`: gated by `cfg.DynamicRegistration`; rate-limit 10/IP/hour (in-memory sliding window)
-  - `HandleRevoke(w, r)` — `POST /oauth/revoke`
-- [ ] `server_test.go` (failing first):
+  - `HandleRevoke(w, r)` — `POST /oauth/revoke` (RFC 7009 style; always 200 for known/unknown token)
+- [x] `server_test.go` (failing first):
   - `TestHandleMetadata_Returns200_WithRequiredFields`
   - `TestHandleAuthorize_MissingClientID_Returns400`
+  - `TestHandleAuthorize_MissingState_Returns400`
+  - `TestHandleAuthorize_InvalidResponseType_Returns400`
   - `TestHandleAuthorize_UnknownClientID_Returns400`
   - `TestHandleAuthorize_BadRedirectURI_Returns400`
+  - `TestHandleAuthorize_UnknownScope_Returns400`
   - `TestHandleAuthorize_MissingCodeChallenge_PublicClient_Returns400`
+  - `TestHandleAuthorize_PlainCodeChallengeMethod_Returns400`
   - `TestHandleAuthorize_ValidRequest_RedirectsToConsentUI`
+  - `TestHandleAuthorize_StoresValidatedPayloadInState`
   - `TestHandleToken_MissingCode_Returns400`
+  - `TestHandleToken_MissingGrantType_Returns400`
   - `TestHandleToken_InvalidCode_Returns400`
+  - `TestHandleToken_RedirectURIMismatch_Returns400`
+  - `TestHandleToken_ClientIDMismatch_Returns400`
   - `TestHandleToken_PKCEMismatch_Returns400`
+  - `TestHandleToken_ConfidentialClient_MissingSecret_Returns401`
+  - `TestHandleToken_ConfidentialClient_WrongSecret_Returns401`
   - `TestHandleToken_ValidRequest_Returns200_WithToken`
   - `TestHandleToken_ReplayCode_Returns400`
   - `TestHandleRegister_ValidPublicClient_Returns201`
+  - `TestHandleRegister_ConfidentialClient_ReturnsClientSecretOnce`
+  - `TestHandleRegister_RateLimitExceeded_Returns429`
   - `TestHandleRegister_DynamicRegistrationDisabled_Returns404`
   - `TestHandleRevoke_ValidToken_Returns200`
+  - `TestHandleRevoke_UnknownToken_Returns200`
 
 ---
 
@@ -173,7 +186,7 @@ All tasks follow strict TDD: failing test written first, then implementation. Se
 
 - [ ] `provider.go`:
   - `UserInfo{ProviderID, Email, DisplayName, AvatarURL string, RawProfile []byte}`
-  - `Provider` interface: `Name() string`, `AuthURL(state string) string`, `Exchange(ctx context.Context, code string) (*UserInfo, error)`
+  - `Provider` interface: `AuthURL(state string) string`, `Exchange(ctx context.Context, code string) (*UserInfo, error)`
 
 ### `internal/social/pkce.go` (state generation helper)
 
@@ -262,12 +275,13 @@ All tasks follow strict TDD: failing test written first, then implementation. Se
   - `TestHandleConsentGet_InvalidState_Returns400`
   - `TestHandleConsentGet_ValidState_RendersConsentPage`
   - `TestHandleConsentPost_NoSession_RedirectsToLogin`
-  - `TestHandleConsentPost_Deny_RedirectsToClientWithError`
-  - `TestHandleConsentPost_Approve_IssuedCode_RedirectsToClient`
+  - `TestHandleConsentPost_Deny_RedirectsToClientWithErrorAndOriginalState`
+  - `TestHandleConsentPost_Approve_IssuedCode_RedirectsToClientWithCodeAndOriginalState`
   - `TestHandleConsentPost_ExpiredState_Returns400`
+  - `TestHandleConsentPost_ReplayState_Returns400`
 - [ ] `oauth_consent.go`:
   - `handleConsentGet(w, r)` — auth-guarded; renders `oauth_consent` template with client name and human-readable scope labels
-  - `handleConsentPost(w, r)` — auth-guarded; on approve: issue code, redirect; on deny: redirect with `error=access_denied`
+  - `handleConsentPost(w, r)` — auth-guarded; consume state once; on approve: issue code, redirect to `redirect_uri` with `code` and original client `state`; on deny: redirect with `error=access_denied` and original client `state`
 
 ### Templates
 
@@ -312,6 +326,9 @@ Already covered in Phase 4 identity tests above.
   - Register client → authorize → consent → token exchange → verify `pb_*` token works on `/v1/memories/recall`
   - Replay attack: same code → `invalid_grant`
   - PKCE mismatch: wrong verifier → `invalid_grant`
+  - Redirect URI mismatch on token exchange → `invalid_grant`
+  - Confidential client with bad secret → `invalid_client`
+  - Dynamic registration disabled in config → `/oauth/register` rejects
 
 ### Social login E2E test (`internal/ui/oauth_social_integration_test.go`, build tag `integration`)
 
@@ -325,4 +342,5 @@ Already covered in Phase 4 identity tests above.
 - [ ] `go.mod` / `go.sum` — no new external dependencies needed (all crypto is stdlib; HTTP calls use stdlib `net/http`)
 - [ ] `config.example.yaml` — add `oauth:` block (already listed in Phase 1, verify it's complete)
 - [ ] `TASKS.md` — add OAuth implementation section once all tasks complete
+- [ ] Verify logs and API responses never include `social_identities.raw_profile` content
 - [ ] Update `designs/DESIGN_OAUTH.md` if any decisions change during implementation

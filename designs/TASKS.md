@@ -27,6 +27,19 @@
 
 ### Maintenance
 
+- [x] 2026-04-02: Started OAuth implementation from `designs/DESIGN_OAUTH.md` (TDD-first), completed Phases 1–3 baseline:
+  - Phase 1 (DB + config):
+    - Added migrations `000011_oauth.up/down.sql` with `social_identities`, `oauth_clients`, `oauth_auth_codes`, `oauth_states` (+ indexes/triggers/checks).
+    - Extended migration integration tests to verify OAuth table presence, key constraints, and explicit `000011` down/up roundtrip behavior.
+    - Added OAuth config structs/defaults (`oauth.server.auth_code_ttl`, `state_ttl`, `token_ttl`, `dynamic_registration`) and config tests.
+    - Extended `config.example.yaml` with full `oauth:` provider and server blocks.
+  - Phase 2 (sqlc query layer):
+    - Added query files: `oauth_clients.sql`, `oauth_codes.sql`, `oauth_states.sql`, `social_identities.sql`.
+    - Regenerated sqlc outputs and added integration tests for consume-once, expiry rejection, and revoked-client lookup exclusion.
+  - Phase 3 (`internal/oauth` core package):
+    - Implemented `pkce.go`, `scopes.go`, `states.go`, `clients.go`, `codes.go`, `token_exchange.go`, `metadata.go`, `server.go`.
+    - Added comprehensive unit tests for PKCE, scope parsing, state lifecycle/hash behavior, client registration/lookup/revoke, code lifecycle/PKCE verification, token issuance, metadata, and HTTP handlers (`/oauth/*`, `/.well-known/oauth-authorization-server`).
+    - Updated `designs/TASKS_OAUTH.md` to mark completed tasks and reconcile validation/security expectations against design.
 - [x] 2026-04-02: Started scope-security hardening Finding 1 with TDD:
   - Added shared API helper package `internal/api/scopeauth`
   - Added `AuthorizeRequestedScope(token, requestedScopeID, effectiveScopeIDs)` enforcing both:

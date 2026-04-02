@@ -188,4 +188,87 @@ database:
 	if cfg.Server.Addr != ":7433" {
 		t.Errorf("default Server.Addr = %q, want :7433", cfg.Server.Addr)
 	}
+	if cfg.OAuth.Server.AuthCodeTTL != 10*time.Minute {
+		t.Errorf("default OAuth.Server.AuthCodeTTL = %v, want 10m", cfg.OAuth.Server.AuthCodeTTL)
+	}
+	if cfg.OAuth.Server.StateTTL != 15*time.Minute {
+		t.Errorf("default OAuth.Server.StateTTL = %v, want 15m", cfg.OAuth.Server.StateTTL)
+	}
+	if cfg.OAuth.Server.TokenTTL != 0 {
+		t.Errorf("default OAuth.Server.TokenTTL = %v, want 0", cfg.OAuth.Server.TokenTTL)
+	}
+	if !cfg.OAuth.Server.DynamicRegistration {
+		t.Error("default OAuth.Server.DynamicRegistration should be true")
+	}
+}
+
+func TestLoad_OAuthProviderRoundTrip(t *testing.T) {
+	path := writeYAML(t, `
+database:
+  url: "postgres://localhost/postbrain"
+oauth:
+  base_url: "https://postbrain.example.com"
+  providers:
+    github:
+      enabled: true
+      client_id: "gh-client-id"
+      client_secret: "gh-client-secret"
+      scopes: ["read:user", "user:email"]
+`)
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if cfg.OAuth.BaseURL != "https://postbrain.example.com" {
+		t.Errorf("OAuth.BaseURL = %q", cfg.OAuth.BaseURL)
+	}
+	gh, ok := cfg.OAuth.Providers["github"]
+	if !ok {
+		t.Fatal("OAuth.Providers[github] missing")
+	}
+	if !gh.Enabled {
+		t.Error("OAuth.Providers[github].Enabled should be true")
+	}
+	if gh.ClientID != "gh-client-id" {
+		t.Errorf("OAuth.Providers[github].ClientID = %q", gh.ClientID)
+	}
+	if gh.ClientSecret != "gh-client-secret" {
+		t.Errorf("OAuth.Providers[github].ClientSecret = %q", gh.ClientSecret)
+	}
+	if len(gh.Scopes) != 2 || gh.Scopes[0] != "read:user" || gh.Scopes[1] != "user:email" {
+		t.Errorf("OAuth.Providers[github].Scopes = %v", gh.Scopes)
+	}
+}
+
+func TestLoad_OAuthServerDurationParsing(t *testing.T) {
+	path := writeYAML(t, `
+database:
+  url: "postgres://localhost/postbrain"
+oauth:
+  server:
+    auth_code_ttl: 7m
+    state_ttl: 21m
+    token_ttl: 30m
+    dynamic_registration: false
+`)
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if cfg.OAuth.Server.AuthCodeTTL != 7*time.Minute {
+		t.Errorf("OAuth.Server.AuthCodeTTL = %v, want 7m", cfg.OAuth.Server.AuthCodeTTL)
+	}
+	if cfg.OAuth.Server.StateTTL != 21*time.Minute {
+		t.Errorf("OAuth.Server.StateTTL = %v, want 21m", cfg.OAuth.Server.StateTTL)
+	}
+	if cfg.OAuth.Server.TokenTTL != 30*time.Minute {
+		t.Errorf("OAuth.Server.TokenTTL = %v, want 30m", cfg.OAuth.Server.TokenTTL)
+	}
+	if cfg.OAuth.Server.DynamicRegistration {
+		t.Error("OAuth.Server.DynamicRegistration should be false")
+	}
 }

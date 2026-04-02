@@ -176,6 +176,43 @@ type MemoryEntity struct {
 	Role     *string
 }
 
+type OauthAuthCode struct {
+	ID            uuid.UUID
+	CodeHash      string
+	ClientID      uuid.UUID
+	PrincipalID   uuid.UUID
+	RedirectUri   string
+	Scopes        []string
+	CodeChallenge string
+	ExpiresAt     time.Time
+	UsedAt        *time.Time
+	CreatedAt     time.Time
+}
+
+type OauthClient struct {
+	ID               uuid.UUID
+	ClientID         string
+	ClientSecretHash *string
+	Name             string
+	RedirectUris     []string
+	GrantTypes       []string
+	Scopes           []string
+	IsPublic         bool
+	Meta             []byte
+	CreatedAt        time.Time
+	RevokedAt        *time.Time
+}
+
+type OauthState struct {
+	ID        uuid.UUID
+	StateHash string
+	Kind      string
+	Payload   []byte
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+	CreatedAt time.Time
+}
+
 type Principal struct {
 	ID          uuid.UUID
 	Kind        string
@@ -301,6 +338,19 @@ type SkillHistory struct {
 	ChangedBy  uuid.UUID
 	ChangeNote *string
 	CreatedAt  time.Time
+}
+
+type SocialIdentity struct {
+	ID          uuid.UUID
+	PrincipalID uuid.UUID
+	Provider    string
+	ProviderID  string
+	Email       *string
+	DisplayName *string
+	AvatarUrl   *string
+	RawProfile  []byte
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 type StalenessFlag struct {

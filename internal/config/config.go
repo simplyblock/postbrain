@@ -17,6 +17,7 @@ type Config struct {
 	Server     ServerConfig     `mapstructure:"server"`
 	Migrations MigrationsConfig `mapstructure:"migrations"`
 	Jobs       JobsConfig       `mapstructure:"jobs"`
+	OAuth      OAuthConfig      `mapstructure:"oauth"`
 }
 
 // DatabaseConfig holds PostgreSQL connection parameters.
@@ -60,6 +61,30 @@ type JobsConfig struct {
 	AgeCheckEnabled          bool `mapstructure:"age_check_enabled"`
 	BackfillSummariesEnabled bool `mapstructure:"backfill_summaries_enabled"`
 	ChunkBackfillEnabled     bool `mapstructure:"chunk_backfill_enabled"`
+}
+
+// OAuthConfig holds social login and OAuth server settings.
+type OAuthConfig struct {
+	BaseURL   string                    `mapstructure:"base_url"`
+	Providers map[string]ProviderConfig `mapstructure:"providers"`
+	Server    OAuthServerConfig         `mapstructure:"server"`
+}
+
+// ProviderConfig holds social provider OAuth client settings.
+type ProviderConfig struct {
+	Enabled      bool     `mapstructure:"enabled"`
+	ClientID     string   `mapstructure:"client_id"`
+	ClientSecret string   `mapstructure:"client_secret"`
+	Scopes       []string `mapstructure:"scopes"`
+	InstanceURL  string   `mapstructure:"instance_url"`
+}
+
+// OAuthServerConfig holds authorization server runtime settings.
+type OAuthServerConfig struct {
+	AuthCodeTTL         time.Duration `mapstructure:"auth_code_ttl"`
+	StateTTL            time.Duration `mapstructure:"state_ttl"`
+	TokenTTL            time.Duration `mapstructure:"token_ttl"`
+	DynamicRegistration bool          `mapstructure:"dynamic_registration"`
 }
 
 // LoadDatabaseURL reads only the database URL from the config file at path
@@ -126,6 +151,11 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("jobs.contradiction_enabled", true)
 	v.SetDefault("jobs.reembed_enabled", true)
 	v.SetDefault("jobs.age_check_enabled", true)
+
+	v.SetDefault("oauth.server.auth_code_ttl", "10m")
+	v.SetDefault("oauth.server.state_ttl", "15m")
+	v.SetDefault("oauth.server.token_ttl", "0")
+	v.SetDefault("oauth.server.dynamic_registration", true)
 
 	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("config: read %q: %w", path, err)
