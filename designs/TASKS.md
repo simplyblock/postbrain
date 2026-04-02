@@ -27,6 +27,11 @@
 
 ### Maintenance
 
+- [x] 2026-04-02: Added comprehensive principal scope-visibility integration matrix:
+  - Table-driven coverage for principal chains: single-node (`user|team|department|company`) and multi-hop (`user->team`, `team->department`, `user->team->company`, up to `user->team->department->company`)
+  - For each principal in chain, asserted `EffectiveScopeIDs` includes self+ancestors only (no descendants)
+  - Added unrelated-branch exclusion assertion (no leakage of outsider scopes)
+  - Added role variants (`member`, `owner`, `admin`) to confirm visibility inheritance is role-agnostic
 - [x] 2026-04-02: Added scope owner reassignment (REST + UI, TDD-first):
   - REST: `PUT /v1/scopes/{id}/owner` with required `principal_id`
   - DB: new `UpdateScopeOwner` query + compat helper
