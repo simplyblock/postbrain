@@ -7,6 +7,10 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -20,6 +24,8 @@ type GoplsTCPResolver struct {
 	conn        net.Conn
 	reader      *bufio.Reader
 	timeout     time.Duration
+	rootURI     string
+	rootPath    string
 	mu          sync.Mutex
 	nextID      int64
 	initialized bool
@@ -27,7 +33,7 @@ type GoplsTCPResolver struct {
 }
 
 // NewGoplsTCPResolver connects to a running gopls TCP endpoint.
-func NewGoplsTCPResolver(addr string, timeout time.Duration) (*GoplsTCPResolver, error) {
+func NewGoplsTCPResolver(addr string, timeout time.Duration, rootURI string) (*GoplsTCPResolver, error) {
 	if timeout <= 0 {
 		timeout = defaultLSPTimeout
 	}
@@ -35,17 +41,25 @@ func NewGoplsTCPResolver(addr string, timeout time.Duration) (*GoplsTCPResolver,
 	if err != nil {
 		return nil, err
 	}
-	return newGoplsTCPResolverWithConn(conn, timeout), nil
+	return newGoplsTCPResolverWithConn(conn, timeout, rootURI), nil
 }
 
-func newGoplsTCPResolverWithConn(conn net.Conn, timeout time.Duration) *GoplsTCPResolver {
+func newGoplsTCPResolverWithConn(conn net.Conn, timeout time.Duration, rootURI string) *GoplsTCPResolver {
 	if timeout <= 0 {
 		timeout = defaultLSPTimeout
 	}
+	rootPath := ""
+	if rootURI != "" {
+		if u, err := url.Parse(rootURI); err == nil && u.Scheme == "file" {
+			rootPath = u.Path
+		}
+	}
 	return &GoplsTCPResolver{
-		conn:    conn,
-		reader:  bufio.NewReader(conn),
-		timeout: timeout,
+		conn:     conn,
+		reader:   bufio.NewReader(conn),
+		timeout:  timeout,
+		rootURI:  rootURI,
+		rootPath: rootPath,
 	}
 }
 
@@ -60,6 +74,10 @@ func (r *GoplsTCPResolver) Resolve(ctx context.Context, file, symbol string) (st
 	}
 	if err := r.ensureInitializedLocked(ctx); err != nil {
 		return "", err
+	}
+
+	if canonical, err := r.resolveViaDefinitionLocked(ctx, file, symbol); err == nil && canonical != "" {
+		return canonical, nil
 	}
 
 	result, err := r.requestLocked(ctx, "workspace/symbol", map[string]any{"query": symbol})
@@ -87,6 +105,120 @@ func (r *GoplsTCPResolver) Resolve(ctx context.Context, file, symbol string) (st
 	return name, nil
 }
 
+func (r *GoplsTCPResolver) resolveViaDefinitionLocked(ctx context.Context, file, symbol string) (string, error) {
+	fileURI, line, char, err := r.callsiteURIAndPosition(file, symbol)
+	if err != nil {
+		return "", err
+	}
+
+	result, err := r.requestLocked(ctx, "textDocument/definition", map[string]any{
+		"textDocument": map[string]any{"uri": fileURI},
+		"position":     map[string]any{"line": line, "character": char},
+	})
+	if err != nil {
+		return "", err
+	}
+
+	locURI := firstDefinitionURI(result)
+	if locURI == "" {
+		return "", fmt.Errorf("empty definition result")
+	}
+
+	defPath, err := filePathFromURI(locURI)
+	if err != nil {
+		return "", err
+	}
+	pkg, err := packageNameFromFile(defPath)
+	if err != nil || pkg == "" {
+		return "", fmt.Errorf("package name not found for %s", defPath)
+	}
+	return pkg + "." + symbol, nil
+}
+
+func (r *GoplsTCPResolver) callsiteURIAndPosition(file, symbol string) (string, int, int, error) {
+	path := file
+	if !filepath.IsAbs(path) && r.rootPath != "" {
+		path = filepath.Join(r.rootPath, filepath.FromSlash(file))
+	}
+	if !filepath.IsAbs(path) {
+		return "", 0, 0, fmt.Errorf("no absolute path for %q", file)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", 0, 0, err
+	}
+	needle := symbol + "("
+	off := strings.Index(string(data), needle)
+	if off < 0 {
+		off = strings.Index(string(data), symbol)
+	}
+	if off < 0 {
+		return "", 0, 0, fmt.Errorf("symbol %q not found in %s", symbol, path)
+	}
+	line, char := offsetToLineChar(data, off)
+	uri := (&url.URL{Scheme: "file", Path: filepath.ToSlash(path)}).String()
+	return uri, line, char, nil
+}
+
+func offsetToLineChar(data []byte, off int) (line int, char int) {
+	for i := 0; i < off && i < len(data); i++ {
+		if data[i] == '\n' {
+			line++
+			char = 0
+			continue
+		}
+		char++
+	}
+	return line, char
+}
+
+func firstDefinitionURI(result any) string {
+	switch v := result.(type) {
+	case []any:
+		if len(v) == 0 {
+			return ""
+		}
+		if m, ok := v[0].(map[string]any); ok {
+			if uri, _ := m["uri"].(string); uri != "" {
+				return uri
+			}
+			if targetURI, _ := m["targetUri"].(string); targetURI != "" {
+				return targetURI
+			}
+		}
+	case map[string]any:
+		if uri, _ := v["uri"].(string); uri != "" {
+			return uri
+		}
+	}
+	return ""
+}
+
+func filePathFromURI(raw string) (string, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", err
+	}
+	if u.Scheme != "file" {
+		return "", fmt.Errorf("unsupported uri scheme %q", u.Scheme)
+	}
+	return u.Path, nil
+}
+
+var packageLineRE = regexp.MustCompile(`(?m)^\s*package\s+([A-Za-z_][A-Za-z0-9_]*)\b`)
+
+func packageNameFromFile(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	m := packageLineRE.FindSubmatch(data)
+	if len(m) < 2 {
+		return "", nil
+	}
+	return string(m[1]), nil
+}
+
 func (r *GoplsTCPResolver) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -110,7 +242,7 @@ func (r *GoplsTCPResolver) ensureInitializedLocked(ctx context.Context) error {
 
 	_, err := r.requestLocked(ctx, "initialize", map[string]any{
 		"processId": nil,
-		"rootUri":   nil,
+		"rootUri":   r.rootURI,
 		"capabilities": map[string]any{
 			"textDocument": map[string]any{},
 			"workspace":    map[string]any{},

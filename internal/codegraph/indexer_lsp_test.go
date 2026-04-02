@@ -12,7 +12,7 @@ func TestLSPResolverForIndex_EmptyAddress_Disabled(t *testing.T) {
 
 	called := false
 	prev := newGoplsTCPResolverFn
-	newGoplsTCPResolverFn = func(string, time.Duration) (LSPResolver, error) {
+	newGoplsTCPResolverFn = func(string, time.Duration, string) (LSPResolver, error) {
 		called = true
 		return nil, nil
 	}
@@ -32,12 +32,15 @@ func TestLSPResolverForIndex_Enabled_ReturnsResolver(t *testing.T) {
 
 	want := &fakeLSPResolver{lang: ".go"}
 	prev := newGoplsTCPResolverFn
-	newGoplsTCPResolverFn = func(addr string, timeout time.Duration) (LSPResolver, error) {
+	newGoplsTCPResolverFn = func(addr string, timeout time.Duration, rootURI string) (LSPResolver, error) {
 		if addr != "127.0.0.1:37373" {
 			t.Fatalf("addr = %q, want %q", addr, "127.0.0.1:37373")
 		}
 		if timeout != 3*time.Second {
 			t.Fatalf("timeout = %v, want %v", timeout, 3*time.Second)
+		}
+		if rootURI != "file:///tmp/repo" {
+			t.Fatalf("rootURI = %q, want %q", rootURI, "file:///tmp/repo")
 		}
 		return want, nil
 	}
@@ -45,6 +48,7 @@ func TestLSPResolverForIndex_Enabled_ReturnsResolver(t *testing.T) {
 
 	got := lspResolverForIndex(context.Background(), IndexOptions{
 		GoLSPAddr:    "127.0.0.1:37373",
+		GoLSPRootURI: "file:///tmp/repo",
 		GoLSPTimeout: 3 * time.Second,
 	})
 	if got != want {
@@ -56,7 +60,7 @@ func TestLSPResolverForIndex_ConstructorError_FallsBackToNil(t *testing.T) {
 	t.Parallel()
 
 	prev := newGoplsTCPResolverFn
-	newGoplsTCPResolverFn = func(string, time.Duration) (LSPResolver, error) {
+	newGoplsTCPResolverFn = func(string, time.Duration, string) (LSPResolver, error) {
 		return nil, errors.New("dial failed")
 	}
 	t.Cleanup(func() { newGoplsTCPResolverFn = prev })

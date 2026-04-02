@@ -64,6 +64,12 @@
     - `internal/codegraph/resolve_lsp_test.go`
     - `internal/codegraph/gopls_tcp_test.go`
     - `internal/codegraph/indexer_lsp_test.go`
+- [x] 2026-04-02: Added Go LSP integration proof test (real `gopls`, integration tag):
+  - `internal/codegraph/lsp_integration_test.go`
+  - Starts `gopls serve` on a local TCP port (skips if binary unavailable)
+  - Indexes the same Go fixture with LSP disabled/enabled
+  - Seeds competing suffix candidates and asserts enabled run resolves `calls` target via LSP path
+  - Added `GoLSPRootURI` wiring and `textDocument/definition`-first resolver path for file-context resolution
 - [x] 2026-04-02: Extended `Makefile` to auto-install `gopls` locally when needed:
   - Added pinned tool vars: `GOPLS`, `GOPLS_VERSION`
   - Added `gopls` install target using existing `go-install-tool` pattern
