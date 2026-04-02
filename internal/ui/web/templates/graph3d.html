@@ -41,7 +41,7 @@
   controls.enableRotate = true;
   controls.enableZoom = true;
 
-  function centerGraphAtOrigin() {
+  function focusCameraOnGraph(ms) {
     const g = graph.graphData();
     if (!g || !g.nodes || g.nodes.length === 0) return;
 
@@ -61,17 +61,21 @@
     const cx = (minX + maxX) / 2;
     const cy = (minY + maxY) / 2;
     const cz = (minZ + maxZ) / 2;
+    const sx = maxX - minX;
+    const sy = maxY - minY;
+    const sz = maxZ - minZ;
+    const maxSpan = Math.max(sx, sy, sz, 1);
+    const cam = graph.camera();
+    const fovRad = (cam.fov || 60) * (Math.PI / 180);
+    const dist = (maxSpan * 0.7) / Math.tan(fovRad / 2);
 
-    for (const n of g.nodes) {
-      if (!Number.isFinite(n.x) || !Number.isFinite(n.y) || !Number.isFinite(n.z)) continue;
-      n.x -= cx; n.y -= cy; n.z -= cz;
-      if (Number.isFinite(n.fx)) n.fx -= cx;
-      if (Number.isFinite(n.fy)) n.fy -= cy;
-      if (Number.isFinite(n.fz)) n.fz -= cz;
-    }
-    controls.target.set(0, 0, 0);
+    controls.target.set(cx, cy, cz);
     controls.update();
-    graph.refresh();
+    graph.cameraPosition(
+      { x: cx, y: cy, z: cz + dist },
+      { x: cx, y: cy, z: cz },
+      ms || 0
+    );
   }
 
   // Keep the camera readable for small and large graphs.
@@ -82,15 +86,12 @@
   graph.d3Force("z", d3.forceZ(0).strength(0.06));
   graph.cooldownTicks(140);
   graph.onEngineStop(() => {
-    // Rebase node coordinates around origin, then fit camera around centered graph.
-    centerGraphAtOrigin();
-    graph.zoomToFit(800, 40);
+    // Deterministically center the camera on the graph bounds.
+    focusCameraOnGraph(700);
   });
-  // Also perform an early fit for fast visual feedback on first render.
+  // Early center for first render before forces fully settle.
   setTimeout(() => {
-    controls.target.set(0, 0, 0);
-    controls.update();
-    graph.zoomToFit(250, 60);
+    focusCameraOnGraph(250);
   }, 200);
 })();
 </script>

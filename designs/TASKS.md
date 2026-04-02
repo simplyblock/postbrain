@@ -80,9 +80,9 @@
   - `controls.enablePan = false`
   - keep rotation + zoom enabled (`enableRotate`, `enableZoom`)
 - [x] 2026-04-02: Added automatic initial/final 3D graph camera fit:
-  - use `zoomToFit` shortly after mount and again on physics engine stop
-  - rebase node coordinates around bounding-box centroid on engine stop
-  - lock orbit target to origin and apply `forceX/forceY/forceZ` centering
+  - use explicit camera targeting to graph bounding-box center (load + engine stop)
+  - compute camera distance from graph extent + camera FOV for deterministic framing
+  - keep `forceX/forceY/forceZ` centering for stable layout evolution
   - keeps graph centered when panning is disabled
 - [x] 2026-04-02: Extended `Makefile` to auto-install `gopls` locally when needed:
   - Added pinned tool vars: `GOPLS`, `GOPLS_VERSION`
