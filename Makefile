@@ -5,6 +5,8 @@ $(LOCALBIN):
 
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 GOLANGCI_LINT_VERSION ?= v2.5.0
+GO_JUNIT_REPORT = $(LOCALBIN)/go-junit-report
+GO_JUNIT_REPORT_VERSION ?= v1.0.0
 MARKITDOWN_VENV ?= $(shell pwd)/.venv-markitdown
 MARKITDOWN_STAMP ?= $(MARKITDOWN_VENV)/.markitdown-all-ready
 MARKITDOWN_VERSION ?= 0.1.5
@@ -15,11 +17,11 @@ build:
 	go build -o postbrain ./cmd/postbrain
 	go build -o postbrain-hook ./cmd/postbrain-hook
 
-test: ensure-markitdown
-	PATH="$(MARKITDOWN_VENV)/bin:$$PATH" go test -coverprofile=coverage.out -covermode=atomic ./...
+test: ensure-markitdown go-junit-report
+	PATH="$(MARKITDOWN_VENV)/bin:$$PATH" go test -coverprofile=coverage.out -covermode=atomic -v 2>&1 ./... | $(GO_JUNIT_REPORT) -set-exit-code > report.xml
 
-test-integration: ensure-markitdown
-	PATH="$(MARKITDOWN_VENV)/bin:$$PATH" go test -tags integration -coverprofile=coverage.out -covermode=atomic ./...
+test-integration: ensure-markitdown go-junit-report
+	PATH="$(MARKITDOWN_VENV)/bin:$$PATH" go test -tags integration -coverprofile=coverage.out -covermode=atomic -v 2>&1 ./... | $(GO_JUNIT_REPORT) -set-exit-code > report.xml
 
 lint: golangci-lint
 	"$(GOLANGCI_LINT)" run ./...
@@ -61,6 +63,10 @@ ensure-markitdown:
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+
+go-junit-report: $(GO_JUNIT_REPORT) ## Download go-junit-report locally if necessary
+$(GO_JUNIT_REPORT): $(LOCALBIN)
+	$(call go-install-tool,$(GO_JUNIT_REPORT),github.com/jstemmer/go-junit-report,$(GO_JUNIT_REPORT_VERSION))
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
