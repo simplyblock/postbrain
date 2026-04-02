@@ -424,10 +424,27 @@ by semantic search alongside file-level memories.
 #### 5a — Async embedding worker
 
 After the indexer creates chunk memories it enqueues their IDs for embedding.
-A background worker (same process, separate goroutine) drains the queue and calls
-the embedding service (code model) in batches. The queue is an in-process buffered
-channel; on restart, any un-embedded memories are detected via a startup sweep
-(`WHERE embedding_code IS NULL AND content_kind = 'code' AND is_active = true`).
+A background worker (same process, separate goroutine) drains a **priority queue**
+and calls the embedding service (code model) in batches.
+
+Priority heuristic (highest first):
+
+`priority = in_degree(calls + imports + uses + defines) + out_degree(calls + imports + uses + defines)`
+
+where degree is computed from the `relations` table for the chunk's linked entity.
+Chunks with many incoming/outgoing links are embedded first because they are more
+likely to be central to understanding and change impact.
+
+Tie-breakers:
+1. More incoming `calls` edges first (likely high fan-in hot paths/APIs)
+2. Newer chunks first (`created_at DESC`)
+
+On restart, any un-embedded memories are re-queued via a startup sweep:
+`WHERE embedding_code IS NULL AND content_kind = 'code' AND is_active = true`.
+
+Note: high degree is a strong but imperfect importance signal (for example, utility
+hubs can be high-degree but low business criticality), so this prioritization should
+remain configurable and observable.
 
 #### 5b — Embedding budget caps (global + per-repo)
 
