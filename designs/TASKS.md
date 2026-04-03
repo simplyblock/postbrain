@@ -57,6 +57,9 @@
     - Kubernetes Helm chart
   - Updated `docs/getting-started.md` to reference the new installation guide instead of embedding install instructions inline.
   - Updated `docs/README.md` start-here navigation to include `Server Installation`.
+- [x] 2026-04-03: Fixed social-login integration test config regression:
+  - Updated `internal/ui/oauth_social_integration_test.go` to set `oauth.social.auto_create_users=true` in the default social-login E2E fixture.
+  - Aligns test behavior with runtime defaults from config loader and restores expected `200` success path for first-time social login.
 - [x] 2026-04-03: Added UI support to edit principals (including users) with slug/display-name updates:
   - Added `POST /ui/principals/{id}` handler path and validation/error handling in `internal/ui/handler.go`.
   - Added principals page edit UI with per-row `Edit` action and edit dialog in `internal/ui/web/templates/principals.html`.
