@@ -1,3 +1,7 @@
+---
+version: 1
+---
+
 # Postbrain — Persistent Memory & Knowledge for Claude Code
 
 Postbrain gives you persistent memory across sessions, a shared knowledge base, and a skill registry. It is exposed as
