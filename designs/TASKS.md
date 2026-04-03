@@ -27,8 +27,12 @@
 
 ### Maintenance
 
+- [x] 2026-04-03: Renamed CLI command directory from `cmd/postbrain-hook` to `cmd/postbrain-cli` to match binary/command naming.
+  - Updated build wiring in `Makefile` to build both `postbrain-hook` and `postbrain-cli` from `./cmd/postbrain-cli`.
+  - Updated repository structure reference in `README.md`.
+  - Updated task-list path references to the new directory.
 - [x] 2026-04-03: Generalized hook CLI toward `postbrain-cli` and removed checkout dependency for Codex skill install:
-  - `cmd/postbrain-hook` root command now uses `postbrain-cli` with alias `postbrain-hook` for compatibility.
+  - `cmd/postbrain-cli` root command now uses `postbrain-cli` with alias `postbrain-hook` for compatibility.
   - Added `install-codex-skill` command that installs `.codex/skills/postbrain.md` from embedded CLI assets.
   - Added tested installer helper package `internal/postbraincli` with unit tests for install + AGENTS marker behavior.
   - Updated `scripts/install-codex-skill.sh` to delegate to `postbrain-cli` when available (fallback to file-copy mode).
@@ -238,7 +242,7 @@
   - `internal/memory/store.go`: log `slog.Warn` on `co_occurs_with` and code-graph `UpsertRelation` failures
   - `internal/knowledge/store.go`: log `slog.Warn` on `same_as` / `co_occurs_with` `UpsertRelation` failures
   - `internal/db/migrate.go`: capture `m.Version()` error as `verErr`; fix `errors.Is` checking wrong variable
-  - `cmd/postbrain-hook/main.go`: add `parseSkillID` helper; use in `sync` and `install` to prevent zero-UUID DB writes
+  - `cmd/postbrain-cli/main.go`: add `parseSkillID` helper; use in `sync` and `install` to prevent zero-UUID DB writes
 - [x] 2026-04-02: Implemented missing UI routes + templates (TDD: failing tests first):
   - `GET /ui/knowledge/new` → `handleKnowledgeNew` + `knowledge_new.html` template
   - `POST /ui/knowledge` → `handleCreateKnowledge` (validates title, scope_id; creates artifact)
@@ -651,7 +655,7 @@
   - Prometheus `/metrics` via `promhttp.Handler()`
   - Background job scheduler started via `jobs.NewScheduler`
 
-### `cmd/postbrain-hook` — Hook CLI
+### `cmd/postbrain-cli` — Hook CLI
 
 - [x] `main.go` — cobra dispatch; reads `POSTBRAIN_URL`, `POSTBRAIN_TOKEN` from env; `--scope` persistent flag
 - [x] `snapshot` subcommand:
