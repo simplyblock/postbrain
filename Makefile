@@ -18,6 +18,7 @@ MARKITDOWN_VERSION ?= 0.1.5
 build:
 	go build -o postbrain ./cmd/postbrain
 	go build -o postbrain-hook ./cmd/postbrain-hook
+	go build -o postbrain-cli ./cmd/postbrain-hook
 
 test: ensure-markitdown go-junit-report
 	PATH="$(MARKITDOWN_VENV)/bin:$$PATH" go test -coverprofile=coverage.out -covermode=atomic -v 2>&1 ./... | $(GO_JUNIT_REPORT) -set-exit-code > report.xml
