@@ -7,8 +7,9 @@
   <button onclick="document.getElementById('dlg-principal').showModal()">+ New Principal</button>
 </div>
 {{if .PrincipalFormError}}<div class="alert alert-error">{{.PrincipalFormError}}</div>{{end}}
+{{if .PrincipalEditError}}<div class="alert alert-error">{{.PrincipalEditError}}</div>{{end}}
 <table>
-  <thead><tr><th>Kind</th><th>Slug</th><th>Display Name</th><th>Created</th></tr></thead>
+  <thead><tr><th>Kind</th><th>Slug</th><th>Display Name</th><th>Created</th><th></th></tr></thead>
   <tbody>
   {{range .Principals}}
   <tr>
@@ -16,9 +17,16 @@
     <td class="mono">{{.Slug}}</td>
     <td>{{.DisplayName}}</td>
     <td class="muted">{{timeAgo .CreatedAt}}</td>
+    <td>
+      <button type="button" class="secondary"
+              data-id="{{.ID}}" data-slug="{{.Slug}}" data-display-name="{{.DisplayName}}"
+              onclick="openPrincipalEdit(this)">
+        Edit
+      </button>
+    </td>
   </tr>
   {{else}}
-  <tr><td colspan="4" class="muted">No principals.</td></tr>
+  <tr><td colspan="5" class="muted">No principals.</td></tr>
   {{end}}
   </tbody>
 </table>
@@ -80,6 +88,23 @@
   </form>
 </dialog>
 
+<!-- ── Dialog: Edit Principal ─────────────────────────────── -->
+<dialog id="dlg-principal-edit">
+  <h2>Edit Principal</h2>
+  <form method="POST" action="/ui/principals" id="principal-edit-form">
+    <label>Slug
+      <input type="text" name="slug" id="principal-edit-slug" required>
+    </label>
+    <label>Display Name
+      <input type="text" name="display_name" id="principal-edit-display-name" required>
+    </label>
+    <div class="dialog-footer">
+      <button type="button" class="secondary" onclick="document.getElementById('dlg-principal-edit').close()">Cancel</button>
+      <button type="submit">Save</button>
+    </div>
+  </form>
+</dialog>
+
 <!-- ── Dialog: Add Membership ─────────────────────────────── -->
 <dialog id="dlg-membership">
   <h2>Add Membership</h2>
@@ -117,5 +142,18 @@
 
 <!-- Re-open dialog if form error on redirect-back -->
 {{if .PrincipalFormError}}<script>document.getElementById('dlg-principal').showModal()</script>{{end}}
+{{if .PrincipalEditError}}<script>document.getElementById('dlg-principal-edit').showModal()</script>{{end}}
 {{if .MembershipFormError}}<script>document.getElementById('dlg-membership').showModal()</script>{{end}}
+<script>
+  function openPrincipalEdit(button) {
+    var id = button.dataset.id;
+    var slug = button.dataset.slug;
+    var displayName = button.dataset.displayName;
+    var form = document.getElementById('principal-edit-form');
+    document.getElementById('principal-edit-slug').value = slug || '';
+    document.getElementById('principal-edit-display-name').value = displayName || '';
+    form.action = '/ui/principals/' + id;
+    document.getElementById('dlg-principal-edit').showModal();
+  }
+</script>
 {{end}}

@@ -217,6 +217,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleSkillHistory(w, r)
 	case strings.HasPrefix(r.URL.Path, "/ui/skills/"):
 		h.handleSkillDetail(w, r)
+	case strings.HasPrefix(r.URL.Path, "/ui/principals/") && r.Method == http.MethodPost:
+		h.handleUpdatePrincipal(w, r)
 	case r.URL.Path == "/ui/principals" && r.Method == http.MethodPost:
 		h.handleCreatePrincipal(w, r)
 	case r.URL.Path == "/ui/principals":
@@ -884,13 +886,18 @@ func (h *Handler) renderScopes(w http.ResponseWriter, r *http.Request, scopeErr 
 }
 
 // renderPrincipals renders the principals page with optional form errors.
-func (h *Handler) renderPrincipals(w http.ResponseWriter, r *http.Request, principalErr, _, membershipErr string) {
+func (h *Handler) renderPrincipals(w http.ResponseWriter, r *http.Request, principalErr, principalEditErr, membershipErr string) {
 	data := struct {
 		Principals          []*db.Principal
 		Memberships         []*db.MembershipRow
 		PrincipalFormError  string
+		PrincipalEditError  string
 		MembershipFormError string
-	}{PrincipalFormError: principalErr, MembershipFormError: membershipErr}
+	}{
+		PrincipalFormError:  principalErr,
+		PrincipalEditError:  principalEditErr,
+		MembershipFormError: membershipErr,
+	}
 
 	if h.pool != nil {
 		principals, err := db.ListPrincipals(r.Context(), h.pool, 50, 0)
@@ -989,6 +996,36 @@ func (h *Handler) handleCreatePrincipal(w http.ResponseWriter, r *http.Request) 
 	ps := principals.NewStore(h.pool)
 	if _, err := ps.Create(r.Context(), kind, slug, displayName, nil); err != nil {
 		h.renderPrincipals(w, r, err.Error(), "", "")
+		return
+	}
+	http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
+}
+
+// handleUpdatePrincipal serves POST /ui/principals/{id}.
+func (h *Handler) handleUpdatePrincipal(w http.ResponseWriter, r *http.Request) {
+	idStr := strings.TrimPrefix(r.URL.Path, "/ui/principals/")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		h.renderPrincipals(w, r, "", "invalid principal id", "")
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		h.renderPrincipals(w, r, "", "bad form data", "")
+		return
+	}
+	slug := r.FormValue("slug")
+	displayName := r.FormValue("display_name")
+	if slug == "" || displayName == "" {
+		h.renderPrincipals(w, r, "", "slug and display_name are required", "")
+		return
+	}
+	if h.pool == nil {
+		h.renderPrincipals(w, r, "", "service unavailable", "")
+		return
+	}
+	ps := principals.NewStore(h.pool)
+	if _, err := ps.UpdateProfile(r.Context(), id, slug, displayName); err != nil {
+		h.renderPrincipals(w, r, "", err.Error(), "")
 		return
 	}
 	http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)

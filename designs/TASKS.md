@@ -27,6 +27,13 @@
 
 ### Maintenance
 
+- [x] 2026-04-03: Added UI support to edit principals (including users) with slug/display-name updates:
+  - Added `POST /ui/principals/{id}` handler path and validation/error handling in `internal/ui/handler.go`.
+  - Added principals page edit UI with per-row `Edit` action and edit dialog in `internal/ui/web/templates/principals.html`.
+  - Added `principals.Store.UpdateProfile(...)` to update `slug` + `display_name` in one operation.
+  - Added tests:
+    - unit: `internal/ui/handler_principals_test.go` (invalid id, validation, nil-pool, dialog render)
+    - integration: `internal/ui/handler_principals_integration_test.go` (successful update + redirect + persisted changes)
 - [x] 2026-04-03: Added container image build for Postbrain server with `markitdown` + `gopls`:
   - Added multi-stage root `Dockerfile` that builds `postbrain`, installs pinned `gopls` (`v0.21.1`), and installs pinned `markitdown[all]` (`0.1.5`).
   - Hardened runtime image to run as a dedicated non-root user (`UID/GID 10001`) with owned config/state directories.
