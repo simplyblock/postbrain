@@ -27,6 +27,17 @@
 
 ### Maintenance
 
+- [x] 2026-04-03: Added artifact chunk entities and linear chunk graph relations (TDD-first):
+  - Added integration test `internal/knowledge/store_chunk_graph_integration_test.go` asserting chunk graph shape on artifact create:
+    - `artifact` entity exists with canonical `artifact:<artifact_id>`
+    - `artifact_chunk` entity exists per chunk with canonical `artifact:<artifact_id>:chunk:<n>`
+    - each chunk has exactly one `chunk_of` relation to the artifact entity
+    - chunks are connected by `next_chunk` only (linear chain), with no `chunk_sibling` relations
+  - Extended `internal/knowledge/store.go:createChunks` to best-effort upsert and connect:
+    - artifact entity (`entity_type=artifact`)
+    - chunk entities (`entity_type=artifact_chunk`)
+    - `chunk_of` (`chunk -> artifact`) and `next_chunk` (`chunk_n -> chunk_n+1`) relations
+    - relation/entity upsert/link failures are logged and do not block artifact writes
 - [x] 2026-04-02: Post-implementation OAuth verification fixes (design parity):
   - `internal/ui/auth.go` + login template now preserve and honor `next` so `/ui/login?next=...` resumes consent flow after token login.
   - `internal/oauth/server.go` token exchange updated so confidential clients can rely on valid `client_secret` without mandatory PKCE verifier (PKCE remains enforced for public clients).
