@@ -27,6 +27,13 @@
 
 ### Maintenance
 
+- [x] 2026-04-03: Aligned runtime config examples/docs with current config code:
+  - Updated `config.example.yaml` to match `internal/config/config.go` keys:
+    - added missing supported keys: `embedding.summary_model`, `jobs.chunk_backfill_enabled`
+    - removed unsupported legacy key: `server.token`
+  - Added concise per-property comments in `config.example.yaml` for public documentation quality.
+  - Updated stale config loader comment in `internal/config/config.go` to reflect current validation (`database.url` required).
+  - Normalized trailing newline formatting in related `internal/postbraincli` files.
 - [x] 2026-04-03: Added public user-oriented documentation set under `docs/`:
   - Added multi-file docs structure:
     - `docs/README.md` (index)

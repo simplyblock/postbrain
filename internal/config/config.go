@@ -115,7 +115,7 @@ func LoadDatabaseURL(path string) (string, error) {
 
 // Load reads configuration from the YAML file at path, applies defaults,
 // overlays environment variables (prefix POSTBRAIN_), and validates required
-// fields. It returns an error if database.url or server.token is empty.
+// fields. It returns an error if database.url is empty.
 func Load(path string) (*Config, error) {
 	v := viper.New()
 
