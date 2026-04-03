@@ -42,6 +42,13 @@
   - Checked out and built the exact `workflow_run.head_sha` commit to guarantee artifact provenance.
   - Kept tag release behavior by resolving tags on the CI-tested commit and releasing only when a tag exists.
   - Updated `.github/workflows/ci.yml` to run on `v*` tags so release-tag commits still execute CI first.
+- [x] 2026-04-03: Switched Docker publishing to artifact-based image builds:
+  - Added `Dockerfile.release` that consumes prebuilt `postbrain` binaries from `dist/linux-<arch>/postbrain` instead of recompiling in-image.
+  - Updated `docker-publish` job in `.github/workflows/build-package.yml` to:
+    - download the merged `release-artifacts` artifact
+    - extract `postbrain-server_linux_{amd64,arm64}.tar.gz` into `dist/linux-{amd64,arm64}`
+    - build and push a multi-arch image with `docker/build-push-action` using `Dockerfile.release`
+  - Preserved Docker Hub tagging strategy (`sha-*`, semantic/tag aliases, `latest` on `main` push flows).
 - [x] 2026-04-03: Added UI support to edit principals (including users) with slug/display-name updates:
   - Added `POST /ui/principals/{id}` handler path and validation/error handling in `internal/ui/handler.go`.
   - Added principals page edit UI with per-row `Edit` action and edit dialog in `internal/ui/web/templates/principals.html`.
