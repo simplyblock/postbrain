@@ -68,6 +68,13 @@
   - Tightened validation:
     - when `httpRoute.enabled=true`, require either `httpRoute.parentRefs` or `gateway.enabled=true`
     - when `gateway.enabled=true`, require non-empty `gateway.gatewayClassName`.
+- [x] 2026-04-03: Extended public Helm deployment docs in server installation:
+  - Expanded `docs/server-installation.md` Helm section with:
+    - install flow and prerequisites
+    - routing modes (Ingress, HTTPRoute+existing Gateway, HTTPRoute+chart-managed Gateway)
+    - certificate integration with cert-manager and secret reference guidance
+    - operational troubleshooting for common Helm/Gateway/certificate issues
+  - Kept docs navigation focused on `Server Installation` as the primary deployment entrypoint.
 - [x] 2026-04-03: Reorganized public docs with dedicated server installation guide:
   - Added `docs/server-installation.md` with explicit install paths for:
     - local process/source build
