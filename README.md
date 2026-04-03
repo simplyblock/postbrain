@@ -678,7 +678,7 @@ calling token's principal is allowed to see.
 postbrain/
 ├── cmd/
 │   ├── postbrain/          # main server binary
-│   └── postbrain-hook/     # CLI helper for agent hooks and skill sync
+│   └── postbrain-cli/      # CLI helper for agent hooks and skill sync
 ├── internal/
 │   ├── api/mcp/            # MCP server and tool handlers
 │   ├── api/rest/           # REST API handlers

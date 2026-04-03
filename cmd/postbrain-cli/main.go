@@ -1,4 +1,4 @@
-// Command postbrain-hook is the Postbrain agent hook CLI.
+// Command postbrain-cli is the Postbrain CLI for hooks and skill tooling.
 package main
 
 import (
