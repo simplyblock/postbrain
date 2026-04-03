@@ -73,6 +73,19 @@
     - corrected merged Linux binary path to `collected/dist/linux-*` after artifact download
     - render `packaging/nfpm/*.yaml` per-arch/per-version before invoking `nfpm` so `${ARCH}` / `${VERSION}` placeholders resolve consistently
     - made merge step path-agnostic by discovering Linux archives recursively in downloaded artifacts and reconstructing `dist/linux-{amd64,arm64}` from tarballs before `nfpm` runs
+- [x] 2026-04-03: Added build-version injection via linker flags:
+  - `cmd/postbrain` and `cmd/postbrain-cli` now expose explicit `version` commands that print build metadata:
+    - semantic build version
+    - git short ref
+    - build timestamp (UTC)
+  - Added test coverage:
+    - `cmd/postbrain/main_test.go` (`postbrain version`)
+    - `cmd/postbrain-cli/main_test.go` (`postbrain-cli version`)
+  - `Makefile` now injects `buildVersion`, `buildGitRef`, and `buildTimestamp` using `-ldflags -X ...` for all build targets (`build`, `build-target`), defaulting to:
+    - `VERSION = git describe --tags --always --dirty`
+    - `GIT_REF = git rev-parse --short HEAD`
+    - `BUILD_TIMESTAMP = date -u +%Y-%m-%dT%H:%M:%SZ`
+  - `build-package` matrix builds now pass the resolved CI release/build version to `make build-target VERSION=...` so binaries and package versions stay aligned.
 - [x] 2026-04-03: Aligned runtime config examples/docs with current config code:
   - Updated `config.example.yaml` to match `internal/config/config.go` keys:
     - added missing supported keys: `embedding.summary_model`, `jobs.chunk_backfill_enabled`

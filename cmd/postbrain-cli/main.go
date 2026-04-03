@@ -74,8 +74,18 @@ func (c *hookClient) get(ctx context.Context, path string) (*http.Response, erro
 }
 
 var scopeFlag string
+var buildVersion = "dev"
+var buildGitRef = "unknown"
+var buildTimestamp = "unknown"
 
 func main() {
+	root := newRootCmd()
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+
+func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:     "postbrain-cli",
 		Aliases: []string{"postbrain-hook"},
@@ -83,9 +93,24 @@ func main() {
 	}
 	root.PersistentFlags().StringVar(&scopeFlag, "scope", "", "scope (e.g. project:acme/api)")
 
-	root.AddCommand(snapshotCmd(), summarizeSessionCmd(), skillCmd(), installCodexSkillCmd(), installClaudeSkillCmd())
-	if err := root.Execute(); err != nil {
-		os.Exit(1)
+	root.AddCommand(snapshotCmd(), summarizeSessionCmd(), skillCmd(), installCodexSkillCmd(), installClaudeSkillCmd(), versionCmd())
+	return root
+}
+
+func versionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print build version",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, err := fmt.Fprintf(
+				cmd.OutOrStdout(),
+				"version=%s git=%s built=%s\n",
+				buildVersion,
+				buildGitRef,
+				buildTimestamp,
+			)
+			return err
+		},
 	}
 }
 

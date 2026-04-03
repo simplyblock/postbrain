@@ -56,7 +56,15 @@ jobs:
       - name: Build target
         shell: bash
         run: |
-          CGO_ENABLED=1 make build-target GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }}
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          elif [[ -n "${{ inputs.release_tag }}" ]]; then
+            VERSION="${{ inputs.release_tag }}"
+            VERSION="${VERSION#v}"
+          else
+            VERSION="0.0.0-dev.${GITHUB_RUN_NUMBER}"
+          fi
+          CGO_ENABLED=1 make build-target GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} VERSION="$VERSION"
 
       - name: Package target archives
         shell: bash

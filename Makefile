@@ -15,13 +15,18 @@ MARKITDOWN_VERSION ?= 0.1.5
 DIST_DIR ?= $(shell pwd)/dist
 TARGET_OSES ?= linux darwin windows
 TARGET_ARCHES ?= amd64 arm64
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+GIT_REF ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+BUILD_TIMESTAMP ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+SERVER_LDFLAGS ?= -X main.buildVersion=$(VERSION) -X main.buildGitRef=$(GIT_REF) -X main.buildTimestamp=$(BUILD_TIMESTAMP)
+CLI_LDFLAGS ?= -X main.buildVersion=$(VERSION) -X main.buildGitRef=$(GIT_REF) -X main.buildTimestamp=$(BUILD_TIMESTAMP)
 
 .PHONY: build build-target build-cross build-archives package-target package-init test test-integration test-scope-authz test-scope-authz-integration lint fmt vet migrate-up migrate-down docker-up docker-down docker-build generate ensure-markitdown ensure-gopls
 
 build:
-	go build -o postbrain ./cmd/postbrain
-	go build -o postbrain-hook ./cmd/postbrain-cli
-	go build -o postbrain-cli ./cmd/postbrain-cli
+	go build -ldflags "$(SERVER_LDFLAGS)" -o postbrain ./cmd/postbrain
+	go build -ldflags "$(CLI_LDFLAGS)" -o postbrain-hook ./cmd/postbrain-cli
+	go build -ldflags "$(CLI_LDFLAGS)" -o postbrain-cli ./cmd/postbrain-cli
 
 build-target:
 	@if [ -z "$(GOOS)" ] || [ -z "$(GOARCH)" ]; then \
@@ -33,8 +38,8 @@ build-target:
 	if [ "$(GOOS)" = "windows" ]; then ext=".exe"; fi; \
 	mkdir -p "$$out"; \
 	echo "building postbrain for $(GOOS)/$(GOARCH)"; \
-	CGO_ENABLED=$${CGO_ENABLED:-0} GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o "$$out/postbrain$$ext" ./cmd/postbrain; \
-	CGO_ENABLED=$${CGO_ENABLED:-0} GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o "$$out/postbrain-cli$$ext" ./cmd/postbrain-cli
+	CGO_ENABLED=$${CGO_ENABLED:-0} GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags "$(SERVER_LDFLAGS)" -o "$$out/postbrain$$ext" ./cmd/postbrain; \
+	CGO_ENABLED=$${CGO_ENABLED:-0} GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags "$(CLI_LDFLAGS)" -o "$$out/postbrain-cli$$ext" ./cmd/postbrain-cli
 
 build-cross:
 	@rm -rf "$(DIST_DIR)"
