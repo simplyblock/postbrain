@@ -27,6 +27,13 @@
 
 ### Maintenance
 
+- [x] 2026-04-03: Added container image build for Postbrain server with `markitdown` + `gopls`:
+  - Added multi-stage root `Dockerfile` that builds `postbrain`, installs pinned `gopls` (`v0.21.1`), and installs pinned `markitdown[all]` (`0.1.5`).
+  - Added `.dockerignore` to reduce build context size and exclude local artifacts.
+  - Updated `docker-compose.yml` `postbrain` service build args for `GOPLS_VERSION` and `MARKITDOWN_VERSION`.
+  - Removed obsolete compose env `POSTBRAIN_SERVER_TOKEN` and retained DB bootstrap env wiring.
+  - Added `docker-build` make target to produce `postbrain:latest` with pinned tool versions.
+  - Added GitHub Actions CI job `docker-build` (in `.github/workflows/ci.yml`) to build the Docker image on push/PR.
 - [x] 2026-04-03: Aligned runtime config examples/docs with current config code:
   - Updated `config.example.yaml` to match `internal/config/config.go` keys:
     - added missing supported keys: `embedding.summary_model`, `jobs.chunk_backfill_enabled`

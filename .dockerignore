@@ -1,0 +1,10 @@
+.git
+.gitignore
+.idea
+.venv-markitdown
+bin
+coverage.out
+report.xml
+postbrain
+postbrain-cli
+*.log

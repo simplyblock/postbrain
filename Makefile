@@ -13,7 +13,7 @@ MARKITDOWN_VENV ?= $(shell pwd)/.venv-markitdown
 MARKITDOWN_STAMP ?= $(MARKITDOWN_VENV)/.markitdown-all-ready
 MARKITDOWN_VERSION ?= 0.1.5
 
-.PHONY: build test test-integration lint fmt vet migrate-up migrate-down docker-up docker-down generate ensure-markitdown ensure-gopls
+.PHONY: build test test-integration lint fmt vet migrate-up migrate-down docker-up docker-down docker-build generate ensure-markitdown ensure-gopls
 
 build:
 	go build -o postbrain ./cmd/postbrain
@@ -46,6 +46,12 @@ docker-up:
 
 docker-down:
 	docker compose down
+
+docker-build:
+	docker build \
+		--build-arg GOPLS_VERSION=$(GOPLS_VERSION) \
+		--build-arg MARKITDOWN_VERSION=$(MARKITDOWN_VERSION) \
+		-t postbrain:latest .
 
 generate:
 	sqlc generate
