@@ -59,16 +59,19 @@ func (p *GitHubProvider) Exchange(ctx context.Context, code string) (*UserInfo, 
 		return nil, err
 	}
 	email := user.Email
+	emailVerified := false
 	primaryVerified, err := p.fetchVerifiedPrimaryEmail(ctx, token)
 	if err == nil && primaryVerified != "" {
 		email = primaryVerified
+		emailVerified = true
 	}
 	return &UserInfo{
-		ProviderID:  strconv.FormatInt(user.ID, 10),
-		Email:       email,
-		DisplayName: user.Name,
-		AvatarURL:   user.AvatarURL,
-		RawProfile:  raw,
+		ProviderID:    strconv.FormatInt(user.ID, 10),
+		Email:         email,
+		EmailVerified: emailVerified,
+		DisplayName:   user.Name,
+		AvatarURL:     user.AvatarURL,
+		RawProfile:    raw,
 	}, nil
 }
 

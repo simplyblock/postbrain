@@ -4,6 +4,7 @@ package social
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/simplyblock/postbrain/internal/db"
@@ -131,5 +132,53 @@ func TestIdentityStore_FindOrCreate_SlugCollision_AppendsProviderID(t *testing.T
 	}
 	if principal.ID.String() != linkedPrincipalID {
 		t.Fatalf("linked principal_id = %s, want %s", linkedPrincipalID, principal.ID)
+	}
+}
+
+func TestIdentityStore_FindOrCreateWithPolicy_AutoCreateDisabled_PreprovisionedEmailLinksPrincipal(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	store := NewIdentityStore(pool)
+	ctx := context.Background()
+
+	q := db.New(pool)
+	existing, err := q.CreatePrincipal(ctx, db.CreatePrincipalParams{
+		Kind:        "user",
+		Slug:        "provisioned@example.com",
+		DisplayName: "Provisioned User",
+		Meta:        []byte(`{}`),
+	})
+	if err != nil {
+		t.Fatalf("seed existing principal: %v", err)
+	}
+
+	principal, err := store.FindOrCreateWithPolicy(ctx, "google", &UserInfo{
+		ProviderID:    "google-123",
+		Email:         "provisioned@example.com",
+		EmailVerified: true,
+		DisplayName:   "Provisioned User",
+		RawProfile:    []byte(`{"sub":"google-123"}`),
+	}, IdentityPolicy{AutoCreateUsers: false})
+	if err != nil {
+		t.Fatalf("FindOrCreateWithPolicy: %v", err)
+	}
+	if principal.ID != existing.ID {
+		t.Fatalf("principal ID = %s, want %s", principal.ID, existing.ID)
+	}
+}
+
+func TestIdentityStore_FindOrCreateWithPolicy_AutoCreateDisabled_UnprovisionedEmailReturnsError(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	store := NewIdentityStore(pool)
+	ctx := context.Background()
+
+	_, err := store.FindOrCreateWithPolicy(ctx, "google", &UserInfo{
+		ProviderID:    "google-456",
+		Email:         "missing@example.com",
+		EmailVerified: true,
+		DisplayName:   "Missing User",
+		RawProfile:    []byte(`{"sub":"google-456"}`),
+	}, IdentityPolicy{AutoCreateUsers: false})
+	if !errors.Is(err, ErrPrincipalNotProvisioned) {
+		t.Fatalf("expected ErrPrincipalNotProvisioned, got %v", err)
 	}
 }

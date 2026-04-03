@@ -108,3 +108,71 @@ func TestUISocialLoginE2E_GitHubMockProvider(t *testing.T) {
 		t.Fatal("pb_session cookie not set after social login flow")
 	}
 }
+
+func TestUISocialLoginE2E_AutoCreateDisabled_RequiresProvisionedPrincipal(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	tokenStore := auth.NewTokenStore(pool)
+	stateStore := oauth.NewStateStore(pool)
+	clientStore := oauth.NewClientStore(pool)
+	codeStore := oauth.NewCodeStore(pool)
+	issuer := oauth.NewIssuer(tokenStore)
+	identityStore := social.NewIdentityStore(pool)
+
+	var appBaseURL string
+	providerSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		state := r.URL.Query().Get("state")
+		http.Redirect(w, r, appBaseURL+"/ui/auth/github/callback?code=mock-code&state="+url.QueryEscape(state), http.StatusFound)
+	}))
+	defer providerSrv.Close()
+
+	providers := map[string]social.Provider{
+		"github": &mockSocialProvider{
+			authURL: providerSrv.URL + "/authorize",
+			info: &social.UserInfo{
+				ProviderID:    "mock-gh-2",
+				Email:         "not-provisioned@example.com",
+				EmailVerified: true,
+				DisplayName:   "Mock GH User 2",
+				AvatarURL:     "https://cdn.example/mock-gh-user2.png",
+				RawProfile:    []byte(`{"id":"mock-gh-2"}`),
+			},
+		},
+	}
+
+	uiCfg := config.OAuthConfig{
+		BaseURL: "http://placeholder.local",
+		Server: config.OAuthServerConfig{
+			StateTTL: 15 * time.Minute,
+			TokenTTL: 0,
+		},
+		Social: config.OAuthSocialConfig{
+			AutoCreateUsers: false,
+		},
+	}
+
+	handler, err := uiapi.NewHandlerWithOAuth(pool, nil, uiCfg, providers, stateStore, clientStore, codeStore, issuer, identityStore)
+	if err != nil {
+		t.Fatalf("new ui handler: %v", err)
+	}
+	mux := http.NewServeMux()
+	mux.Handle("/ui", handler)
+	mux.Handle("/ui/", handler)
+	appSrv := httptest.NewServer(mux)
+	defer appSrv.Close()
+	appBaseURL = appSrv.URL
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("cookie jar: %v", err)
+	}
+	client := &http.Client{Jar: jar}
+
+	resp, err := client.Get(appSrv.URL + "/ui/auth/github")
+	if err != nil {
+		t.Fatalf("social start request: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("final status = %d, want 403", resp.StatusCode)
+	}
+}

@@ -60,11 +60,13 @@ func (p *GoogleProvider) Exchange(ctx context.Context, code string) (*UserInfo, 
 	}
 
 	return &UserInfo{
-		ProviderID:  stringFromAny(claims["sub"]),
-		Email:       stringFromAny(claims["email"]),
-		DisplayName: stringFromAny(claims["name"]),
-		AvatarURL:   stringFromAny(claims["picture"]),
-		RawProfile:  rawClaims,
+		ProviderID:    stringFromAny(claims["sub"]),
+		Email:         stringFromAny(claims["email"]),
+		EmailVerified: boolFromAny(claims["email_verified"]),
+		HostedDomain:  stringFromAny(claims["hd"]),
+		DisplayName:   stringFromAny(claims["name"]),
+		AvatarURL:     stringFromAny(claims["picture"]),
+		RawProfile:    rawClaims,
 	}, nil
 }
 
@@ -144,4 +146,15 @@ func parseJWTClaims(raw string) (map[string]any, []byte, error) {
 func stringFromAny(v any) string {
 	s, _ := v.(string)
 	return s
+}
+
+func boolFromAny(v any) bool {
+	switch t := v.(type) {
+	case bool:
+		return t
+	case string:
+		return strings.EqualFold(t, "true")
+	default:
+		return false
+	}
 }

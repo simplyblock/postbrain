@@ -3,6 +3,7 @@ package social
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -16,12 +17,25 @@ type IdentityStore struct {
 	pool *pgxpool.Pool
 }
 
+var ErrPrincipalNotProvisioned = errors.New("social: principal not pre-provisioned")
+
+// IdentityPolicy controls whether missing social users may be auto-created.
+type IdentityPolicy struct {
+	AutoCreateUsers bool
+}
+
 func NewIdentityStore(pool *pgxpool.Pool) *IdentityStore {
 	return &IdentityStore{pool: pool}
 }
 
 // FindOrCreate resolves an existing social identity or creates a new user principal.
 func (s *IdentityStore) FindOrCreate(ctx context.Context, provider string, info *UserInfo) (*db.Principal, error) {
+	return s.FindOrCreateWithPolicy(ctx, provider, info, IdentityPolicy{AutoCreateUsers: true})
+}
+
+// FindOrCreateWithPolicy resolves an existing social identity and either auto-creates
+// missing principals or links only pre-provisioned principals based on policy.
+func (s *IdentityStore) FindOrCreateWithPolicy(ctx context.Context, provider string, info *UserInfo, policy IdentityPolicy) (*db.Principal, error) {
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {
 		return nil, err
@@ -63,6 +77,34 @@ func (s *IdentityStore) FindOrCreate(ctx context.Context, provider string, info 
 	displayName := strings.TrimSpace(info.DisplayName)
 	if displayName == "" {
 		displayName = baseSlug
+	}
+
+	if !policy.AutoCreateUsers {
+		if info.Email == "" {
+			return nil, ErrPrincipalNotProvisioned
+		}
+		principal, lookupErr := q.GetPrincipalBySlug(ctx, info.Email)
+		if lookupErr != nil {
+			if errors.Is(lookupErr, pgx.ErrNoRows) {
+				return nil, ErrPrincipalNotProvisioned
+			}
+			return nil, fmt.Errorf("lookup principal by email slug: %w", lookupErr)
+		}
+		if _, err := q.UpsertSocialIdentity(ctx, db.UpsertSocialIdentityParams{
+			PrincipalID: principal.ID,
+			Provider:    provider,
+			ProviderID:  info.ProviderID,
+			Email:       optionalString(info.Email),
+			DisplayName: optionalString(info.DisplayName),
+			AvatarUrl:   optionalString(info.AvatarURL),
+			RawProfile:  info.RawProfile,
+		}); err != nil {
+			return nil, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+		return principal, nil
 	}
 
 	slug := baseSlug
