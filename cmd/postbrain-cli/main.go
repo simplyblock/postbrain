@@ -27,6 +27,9 @@ import (
 //go:embed assets/postbrain.md
 var embeddedCodexSkill string
 
+//go:embed assets/claude-code.md
+var embeddedClaudeSkill string
+
 // hookClient is a minimal HTTP client for the Postbrain REST API.
 type hookClient struct {
 	baseURL string
@@ -80,7 +83,7 @@ func main() {
 	}
 	root.PersistentFlags().StringVar(&scopeFlag, "scope", "", "scope (e.g. project:acme/api)")
 
-	root.AddCommand(snapshotCmd(), summarizeSessionCmd(), skillCmd(), installCodexSkillCmd())
+	root.AddCommand(snapshotCmd(), summarizeSessionCmd(), skillCmd(), installCodexSkillCmd(), installClaudeSkillCmd())
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}
@@ -443,6 +446,36 @@ func installCodexSkillCmd() *cobra.Command {
 				return err
 			}
 			slog.Info("install-codex-skill: installed", "path", installedPath, "agents_updated", updatedAgents)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&targetDir, "target", ".", "target directory")
+	return cmd
+}
+
+func installClaudeSkillCmd() *cobra.Command {
+	var targetDir string
+	cmd := &cobra.Command{
+		Use:   "install-claude-skill [target_dir]",
+		Short: "Install .claude/postbrain.md into a target directory",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				targetDir = args[0]
+			}
+			if strings.TrimSpace(targetDir) == "" {
+				targetDir = "."
+			}
+			installedPath, updatedClaude, err := postbraincli.InstallClaudeSkill(
+				targetDir,
+				embeddedClaudeSkill,
+				os.Getenv("POSTBRAIN_URL"),
+				os.Getenv("POSTBRAIN_SCOPE"),
+			)
+			if err != nil {
+				return err
+			}
+			slog.Info("install-claude-skill: installed", "path", installedPath, "claude_updated", updatedClaude)
 			return nil
 		},
 	}
