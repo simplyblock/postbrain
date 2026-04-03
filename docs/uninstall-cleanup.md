@@ -2,6 +2,8 @@
 
 This guide covers safe removal options.
 
+Decide first whether you want to remove only runtime components or also permanently delete stored data.
+
 ## Binary/package uninstall
 
 - Remove installed binaries (`postbrain`, `postbrain-cli`) from PATH locations.
@@ -32,3 +34,5 @@ Only run when permanent deletion is intended.
 
 - drop application database, or
 - delete only Postbrain schemas/tables according to your DB policy
+
+If you are uncertain, keep DB data and remove only compute/runtime resources first.
