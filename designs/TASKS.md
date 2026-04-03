@@ -117,6 +117,13 @@
     - `docs/README.md`
     - `docs/architecture-overview.md`
     - `docs/configuration.md`
+- [x] 2026-04-03: Enriched public docs from list-style notes to explanatory guidance:
+  - Expanded newly added operations/lifecycle pages with practical narrative text (not only bullet inventories), including rationale, decision guidance, and validation notes.
+  - Added deeper explanatory flow to `docs/indexing-model.md`, including an end-to-end indexing/retrieval example.
+  - Improved readability and actionability across:
+    - upgrade, compatibility, release policy
+    - backup/restore, hardening, monitoring, performance
+    - quickstarts, API auth, troubleshooting, uninstall
 - [x] 2026-04-03: Reorganized public docs with dedicated server installation guide:
   - Added `docs/server-installation.md` with explicit install paths for:
     - local process/source build
