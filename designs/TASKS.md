@@ -72,6 +72,7 @@
   - Fixed `build-package` merge + packaging reliability:
     - corrected merged Linux binary path to `collected/dist/linux-*` after artifact download
     - render `packaging/nfpm/*.yaml` per-arch/per-version before invoking `nfpm` so `${ARCH}` / `${VERSION}` placeholders resolve consistently
+    - made merge step path-agnostic by discovering Linux archives recursively in downloaded artifacts and reconstructing `dist/linux-{amd64,arm64}` from tarballs before `nfpm` runs
 - [x] 2026-04-03: Aligned runtime config examples/docs with current config code:
   - Updated `config.example.yaml` to match `internal/config/config.go` keys:
     - added missing supported keys: `embedding.summary_model`, `jobs.chunk_backfill_enabled`

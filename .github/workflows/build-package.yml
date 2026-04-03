@@ -99,9 +99,21 @@ jobs:
         shell: bash
         run: |
           mkdir -p release-artifacts dist
-          cp -R collected/dist/linux-amd64 dist/ || true
-          cp -R collected/dist/linux-arm64 dist/ || true
-          find collected -maxdepth 1 -type f \( -name 'postbrain-server_*' -o -name 'postbrain-client_*' \) -exec cp {} release-artifacts/ \;
+          find collected -type f \( -name 'postbrain-server_*' -o -name 'postbrain-client_*' \) -exec cp {} release-artifacts/ \;
+
+          for arch in amd64 arm64; do
+            server_archive="$(find collected -type f -name "postbrain-server_linux_${arch}.tar.gz" | head -n1)"
+            client_archive="$(find collected -type f -name "postbrain-client_linux_${arch}.tar.gz" | head -n1)"
+
+            if [[ -z "$server_archive" || -z "$client_archive" ]]; then
+              echo "missing Linux archives for ${arch}: server='${server_archive}' client='${client_archive}'" >&2
+              exit 1
+            fi
+
+            mkdir -p "dist/linux-${arch}"
+            tar -xzf "$server_archive" -C "dist/linux-${arch}"
+            tar -xzf "$client_archive" -C "dist/linux-${arch}"
+          done
 
       - name: Install nfpm
         shell: bash
