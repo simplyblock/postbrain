@@ -49,6 +49,14 @@
     - extract `postbrain-server_linux_{amd64,arm64}.tar.gz` into `dist/linux-{amd64,arm64}`
     - build and push a multi-arch image with `docker/build-push-action` using `Dockerfile.release`
   - Preserved Docker Hub tagging strategy (`sha-*`, semantic/tag aliases, `latest` on `main` push flows).
+- [x] 2026-04-03: Reorganized public docs with dedicated server installation guide:
+  - Added `docs/server-installation.md` with explicit install paths for:
+    - local process/source build
+    - GitHub release binary downloads
+    - Docker image (`simplyblock/postbrain`)
+    - Kubernetes Helm chart
+  - Updated `docs/getting-started.md` to reference the new installation guide instead of embedding install instructions inline.
+  - Updated `docs/README.md` start-here navigation to include `Server Installation`.
 - [x] 2026-04-03: Added UI support to edit principals (including users) with slug/display-name updates:
   - Added `POST /ui/principals/{id}` handler path and validation/error handling in `internal/ui/handler.go`.
   - Added principals page edit UI with per-row `Edit` action and edit dialog in `internal/ui/web/templates/principals.html`.

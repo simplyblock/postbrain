@@ -9,6 +9,7 @@ between sessions.
 
 - [Introduction](./introduction.md): what Postbrain is and why it matters.
 - [Getting Started](./getting-started.md): first-time setup for local/custom and managed environments.
+- [Server Installation](./server-installation.md): install/run the server via source, releases, Docker, or Helm.
 - [Configuration](./configuration.md): complete config reference with practical explanations.
 
 ## Product guides
