@@ -27,6 +27,21 @@
 
 ### Maintenance
 
+- [x] 2026-04-03: Added initial Helm deployment chart with generated runtime config:
+  - Added chart scaffold under `deploy/helm/postbrain` (`Chart.yaml`, `values.yaml`, templates).
+  - Added generated Postbrain `config.yaml` from Helm values via template helper and mounted as Kubernetes Secret.
+  - Added Deployment, Service, ServiceAccount, optional Ingress templates.
+  - Set default image repository to Docker Hub `simplyblock/postbrain`.
+- [x] 2026-04-03: Added Gateway API HTTPRoute support to Helm routing and enforced valid routing mode:
+  - Added optional `gateway.networking.k8s.io/v1` `HTTPRoute` template.
+  - Added routing validation to fail render when neither or both of Ingress/HTTPRoute are enabled.
+  - Added `httpRoute.*` values (`enabled`, `parentRefs`, `hostnames`, `pathPrefix`) and defaulted chart to Ingress enabled.
+- [x] 2026-04-03: Made `build-package` workflow depend on successful `CI` workflow completion:
+  - Switched `.github/workflows/build-package.yml` trigger to `workflow_run` on `CI` (`completed`) plus manual dispatch.
+  - Guarded jobs to run only when upstream CI conclusion is `success`.
+  - Checked out and built the exact `workflow_run.head_sha` commit to guarantee artifact provenance.
+  - Kept tag release behavior by resolving tags on the CI-tested commit and releasing only when a tag exists.
+  - Updated `.github/workflows/ci.yml` to run on `v*` tags so release-tag commits still execute CI first.
 - [x] 2026-04-03: Added UI support to edit principals (including users) with slug/display-name updates:
   - Added `POST /ui/principals/{id}` handler path and validation/error handling in `internal/ui/handler.go`.
   - Added principals page edit UI with per-row `Edit` action and edit dialog in `internal/ui/web/templates/principals.html`.
