@@ -27,6 +27,24 @@
 
 ### Maintenance
 
+- [x] 2026-04-03: Added public user-oriented documentation set under `docs/`:
+  - Added multi-file docs structure:
+    - `docs/README.md` (index)
+    - `docs/introduction.md`
+    - `docs/architecture-overview.md`
+    - `docs/getting-started.md`
+    - `docs/configuration.md`
+    - `docs/oauth-logins.md`
+    - `docs/using-with-coding-agents.md`
+    - `docs/using-with-chatgpt.md`
+    - `docs/common-workflows.md`
+    - `docs/security.md`
+    - `docs/operations.md`
+    - `docs/faq.md`
+  - Updated content to public/user-facing language (less internal implementation framing).
+  - Documented common real-world workflows and linked them from onboarding guides.
+  - Added dedicated OAuth login + OAuth server configuration/validation documentation.
+  - Updated configuration docs to reflect current schema semantics (`server.token` removed).
 - [x] 2026-04-03: Updated README with Getting Started instructions for skill installation:
   - Added a dedicated `Getting Started` section under Claude connection docs.
   - Documented both installer commands:
