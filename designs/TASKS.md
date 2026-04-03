@@ -60,6 +60,15 @@
     - Windows package inputs:
       - `packaging/winget/Simplyblock.PostbrainServer*.yaml`
       - `packaging/winget/Simplyblock.PostbrainClient*.yaml`
+- [x] 2026-04-03: Reworked CI build/release pipeline split:
+  - Restored `.github/workflows/ci.yml` build job to simple `make build` to validate full application build in one step.
+  - Added dedicated `.github/workflows/build-package.yml` pipeline for release engineering:
+    - multi-OS/multi-arch matrix server build (`linux`, `darwin`, `windows` × `amd64`, `arm64`) with `CGO_ENABLED=1`
+    - per-target archive generation via `make package-target`
+    - merge all matrix outputs into a unified artifact set
+    - Linux package generation (`.deb` + `.rpm`) for `postbrain-server` and `postbrain-client` via `nfpm`
+    - checksum generation and GitHub release publication with all merged artifacts
+  - Added reusable `make package-target GOOS=<os> GOARCH=<arch>` target used by both local and CI packaging flows.
 - [x] 2026-04-03: Aligned runtime config examples/docs with current config code:
   - Updated `config.example.yaml` to match `internal/config/config.go` keys:
     - added missing supported keys: `embedding.summary_model`, `jobs.chunk_backfill_enabled`

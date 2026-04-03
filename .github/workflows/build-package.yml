@@ -1,0 +1,166 @@
+name: Build and Package
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to publish (e.g. v1.2.3)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-matrix:
+    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            runner: ubuntu-24.04
+          - goos: linux
+            goarch: arm64
+            runner: ubuntu-24.04-arm
+          - goos: darwin
+            goarch: amd64
+            runner: macos-13
+          - goos: darwin
+            goarch: arm64
+            runner: macos-14
+          - goos: windows
+            goarch: amd64
+            runner: windows-2025
+          - goos: windows
+            goarch: arm64
+            runner: windows-11-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build target
+        shell: bash
+        run: |
+          CGO_ENABLED=1 make build-target GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }}
+
+      - name: Package target archives
+        shell: bash
+        run: |
+          make package-target GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }}
+
+      - name: Upload target artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            dist/${{ matrix.goos }}-${{ matrix.goarch }}/**
+            dist/postbrain-server_${{ matrix.goos }}_${{ matrix.goarch }}.*
+            dist/postbrain-client_${{ matrix.goos }}_${{ matrix.goarch }}.*
+          if-no-files-found: error
+
+  merge-and-package:
+    name: Merge and Package
+    runs-on: ubuntu-24.04
+    needs:
+      - build-matrix
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download matrix artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: build-*
+          merge-multiple: true
+          path: collected
+
+      - name: Merge artifacts
+        shell: bash
+        run: |
+          mkdir -p release-artifacts dist
+          cp -R collected/linux-amd64 dist/ || true
+          cp -R collected/linux-arm64 dist/ || true
+          find collected -maxdepth 1 -type f \( -name 'postbrain-server_*' -o -name 'postbrain-client_*' \) -exec cp {} release-artifacts/ \;
+
+      - name: Install nfpm
+        shell: bash
+        run: |
+          GOBIN="$RUNNER_TEMP/bin" go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.3
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Build deb/rpm packages
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          elif [[ -n "${{ inputs.release_tag }}" ]]; then
+            VERSION="${{ inputs.release_tag }}"
+            VERSION="${VERSION#v}"
+          else
+            VERSION="0.0.0-dev.${GITHUB_RUN_NUMBER}"
+          fi
+
+          for arch in amd64 arm64; do
+            ARCH="$arch" VERSION="$VERSION" nfpm pkg -f packaging/nfpm/postbrain-server.yaml -p deb \
+              --target "release-artifacts/postbrain-server_${VERSION}_linux_${arch}.deb"
+            ARCH="$arch" VERSION="$VERSION" nfpm pkg -f packaging/nfpm/postbrain-server.yaml -p rpm \
+              --target "release-artifacts/postbrain-server_${VERSION}_linux_${arch}.rpm"
+            ARCH="$arch" VERSION="$VERSION" nfpm pkg -f packaging/nfpm/postbrain-client.yaml -p deb \
+              --target "release-artifacts/postbrain-client_${VERSION}_linux_${arch}.deb"
+            ARCH="$arch" VERSION="$VERSION" nfpm pkg -f packaging/nfpm/postbrain-client.yaml -p rpm \
+              --target "release-artifacts/postbrain-client_${VERSION}_linux_${arch}.rpm"
+          done
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          (cd release-artifacts && sha256sum * > checksums.txt)
+
+      - name: Upload merged release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: release-artifacts/**
+
+  release:
+    name: Release
+    runs-on: ubuntu-24.04
+    needs:
+      - merge-and-package
+    if: ${{ github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}
+    permissions:
+      contents: write
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: release-artifacts
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
+          target_commitish: ${{ github.sha }}
+          files: release-artifacts/*
