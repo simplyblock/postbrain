@@ -67,9 +67,10 @@ Additional rules:
 - Commit messages must include:
   - A short summary line (≤ 72 characters).
   - A meaningful body explaining *what* changed and *why*.
-  - A `Co-authored-by:` trailer for every agent-created commit:
+  - A `Co-authored-by:` trailer for every agent-created commit, using the
+    current agent's own identity (name + no-reply email):
     ```
-    Co-authored-by: Claude Sonnet 4.6 <noreply@anthropic.com>
+    Co-authored-by: <Agent Name> <noreply@provider.example>
     ```
 
 ### Task Tracking
