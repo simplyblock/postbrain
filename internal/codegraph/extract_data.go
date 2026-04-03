@@ -1,3 +1,5 @@
+//go:build cgo
+
 // extract_data.go contains extractors for CSS, HTML, Dockerfile, HCL,
 // Protobuf, SQL, TOML, and YAML.
 // These languages are not procedural; the graph focuses on named declarations

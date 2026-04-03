@@ -12,13 +12,60 @@ GOPLS_VERSION ?= v0.21.1
 MARKITDOWN_VENV ?= $(shell pwd)/.venv-markitdown
 MARKITDOWN_STAMP ?= $(MARKITDOWN_VENV)/.markitdown-all-ready
 MARKITDOWN_VERSION ?= 0.1.5
+DIST_DIR ?= $(shell pwd)/dist
+TARGET_OSES ?= linux darwin windows
+TARGET_ARCHES ?= amd64 arm64
 
-.PHONY: build test test-integration test-scope-authz test-scope-authz-integration lint fmt vet migrate-up migrate-down docker-up docker-down docker-build generate ensure-markitdown ensure-gopls
+.PHONY: build build-target build-cross build-archives package-init test test-integration test-scope-authz test-scope-authz-integration lint fmt vet migrate-up migrate-down docker-up docker-down docker-build generate ensure-markitdown ensure-gopls
 
 build:
 	go build -o postbrain ./cmd/postbrain
 	go build -o postbrain-hook ./cmd/postbrain-cli
 	go build -o postbrain-cli ./cmd/postbrain-cli
+
+build-target:
+	@if [ -z "$(GOOS)" ] || [ -z "$(GOARCH)" ]; then \
+		echo "GOOS and GOARCH are required, e.g. make build-target GOOS=linux GOARCH=amd64"; \
+		exit 1; \
+	fi
+	@out="$(DIST_DIR)/$(GOOS)-$(GOARCH)"; \
+	ext=""; \
+	if [ "$(GOOS)" = "windows" ]; then ext=".exe"; fi; \
+	mkdir -p "$$out"; \
+	echo "building postbrain for $(GOOS)/$(GOARCH)"; \
+	CGO_ENABLED=$${CGO_ENABLED:-0} GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o "$$out/postbrain$$ext" ./cmd/postbrain; \
+	CGO_ENABLED=$${CGO_ENABLED:-0} GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o "$$out/postbrain-cli$$ext" ./cmd/postbrain-cli
+
+build-cross:
+	@rm -rf "$(DIST_DIR)"
+	@for goos in $(TARGET_OSES); do \
+		for goarch in $(TARGET_ARCHES); do \
+			$(MAKE) build-target GOOS=$$goos GOARCH=$$goarch CGO_ENABLED=0; \
+		done; \
+	done
+
+build-archives: build-cross
+	@for goos in $(TARGET_OSES); do \
+		for goarch in $(TARGET_ARCHES); do \
+			target="$(DIST_DIR)/$$goos-$$goarch"; \
+			base="postbrain_$$goos_$$goarch"; \
+			ext=""; \
+			if [ "$$goos" = "windows" ]; then ext=".exe"; fi; \
+			tmpdir="$$(mktemp -d)"; \
+			cp "$$target/postbrain$$ext" "$$tmpdir/"; \
+			cp "$$target/postbrain-cli$$ext" "$$tmpdir/"; \
+			cp config.example.yaml "$$tmpdir/config.example.yaml"; \
+			if [ "$$goos" = "windows" ]; then \
+				( cd "$$tmpdir" && zip -q "$(DIST_DIR)/$$base.zip" "postbrain$$ext" "postbrain-cli$$ext" "config.example.yaml" ); \
+			else \
+				tar -czf "$(DIST_DIR)/$$base.tar.gz" -C "$$tmpdir" "postbrain$$ext" "postbrain-cli$$ext" "config.example.yaml"; \
+			fi; \
+			rm -rf "$$tmpdir"; \
+		done; \
+	done
+
+package-init:
+	@echo "Initial package manifests are in packaging/ (nfpm, homebrew, macports, winget)."
 
 test: ensure-markitdown go-junit-report
 	PATH="$(MARKITDOWN_VENV)/bin:$$PATH" go test -coverprofile=coverage.out -covermode=atomic -v 2>&1 ./... | $(GO_JUNIT_REPORT) -set-exit-code > report.xml

@@ -1,3 +1,5 @@
+//go:build cgo
+
 // extract_scripting.go contains extractors for Bash, Lua, PHP, and Ruby.
 package codegraph
 
