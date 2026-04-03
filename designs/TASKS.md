@@ -91,6 +91,32 @@
     - `client` -> installs `postbrain-cli`
   - Supports version pinning via arg/env (`vX.Y.Z`) and defaults to latest GitHub release tag.
   - Updated install docs to reference script usage as an alternative to manual downloads/package managers.
+- [x] 2026-04-03: Expanded public documentation coverage for production operations and lifecycle:
+  - Added pages:
+    - `docs/upgrade-guide.md`
+    - `docs/compatibility.md`
+    - `docs/release-policy.md`
+    - `docs/backup-restore.md`
+    - `docs/production-hardening.md`
+    - `docs/monitoring-alerting.md`
+    - `docs/performance-tuning.md`
+    - `docs/platform-quickstarts.md`
+    - `docs/api-auth-examples.md`
+    - `docs/troubleshooting-playbook.md`
+    - `docs/uninstall-cleanup.md`
+  - Updated docs index (`docs/README.md`) to include the new operational/public guidance pages.
+  - Intentionally excluded HA/scaling guidance per current documentation scope decision.
+- [x] 2026-04-03: Added dedicated indexing model documentation:
+  - Added `docs/indexing-model.md` explaining:
+    - indexed item types (memories, artifacts, chunks, entities, relations)
+    - artifact chunk graph relations (`chunk_of`, `next_chunk`)
+    - scope-aware indexing boundaries
+    - hybrid retrieval usage of indexed data (vector/FTS/trigram/graph context)
+    - lifecycle and maintenance behavior
+  - Linked indexing docs from:
+    - `docs/README.md`
+    - `docs/architecture-overview.md`
+    - `docs/configuration.md`
 - [x] 2026-04-03: Reorganized public docs with dedicated server installation guide:
   - Added `docs/server-installation.md` with explicit install paths for:
     - local process/source build

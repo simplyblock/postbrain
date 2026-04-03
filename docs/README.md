@@ -22,6 +22,18 @@ between sessions.
 ## Technical and operations
 
 - [Architecture Overview](./architecture-overview.md)
+- [Indexing Model](./indexing-model.md)
 - [Security and Access Model](./security.md)
 - [Operations and Troubleshooting](./operations.md)
+- [Upgrade Guide](./upgrade-guide.md)
+- [Compatibility Matrix](./compatibility.md)
+- [Release and Versioning Policy](./release-policy.md)
+- [Backup and Restore](./backup-restore.md)
+- [Production Hardening Checklist](./production-hardening.md)
+- [Monitoring and Alerting](./monitoring-alerting.md)
+- [Performance and Cost Tuning](./performance-tuning.md)
+- [Platform Quickstarts](./platform-quickstarts.md)
+- [API Auth Examples](./api-auth-examples.md)
+- [Troubleshooting Playbook](./troubleshooting-playbook.md)
+- [Uninstall and Cleanup](./uninstall-cleanup.md)
 - [FAQ](./faq.md)
