@@ -21,10 +21,16 @@ jobs:
           cache: true
 
       - name: Run scope authz unit tests
-        run: go test ./internal/api/scopeauth ./internal/memory
+        run: make test-scope-authz
 
       - name: Run scope authz integration tests
-        run: go test -tags integration ./internal/api/rest ./internal/api/mcp -run "Test(REST|MCP)_ScopeAuthz_|TestREST_Recall_IntersectsFanOutWithPrincipalScopes"
+        run: make test-scope-authz-integration
+
+      - name: Test Summary
+        uses: test-summary/action@v2
+        with:
+          paths: ./report-scope-authz-*.xml
+        if: always()
 
   test:
     name: Quick Unit Tests

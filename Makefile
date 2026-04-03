@@ -13,7 +13,7 @@ MARKITDOWN_VENV ?= $(shell pwd)/.venv-markitdown
 MARKITDOWN_STAMP ?= $(MARKITDOWN_VENV)/.markitdown-all-ready
 MARKITDOWN_VERSION ?= 0.1.5
 
-.PHONY: build test test-integration lint fmt vet migrate-up migrate-down docker-up docker-down docker-build generate ensure-markitdown ensure-gopls
+.PHONY: build test test-integration test-scope-authz test-scope-authz-integration lint fmt vet migrate-up migrate-down docker-up docker-down docker-build generate ensure-markitdown ensure-gopls
 
 build:
 	go build -o postbrain ./cmd/postbrain
@@ -25,6 +25,12 @@ test: ensure-markitdown go-junit-report
 
 test-integration: ensure-markitdown go-junit-report ensure-gopls
 	PATH="$(MARKITDOWN_VENV)/bin:$$PATH" go test -tags integration -coverprofile=coverage.out -covermode=atomic -v 2>&1 ./... | $(GO_JUNIT_REPORT) -set-exit-code > report.xml
+
+test-scope-authz: go-junit-report
+	go test -v 2>&1 ./internal/api/scopeauth ./internal/memory | $(GO_JUNIT_REPORT) -set-exit-code > report-scope-authz-unit.xml
+
+test-scope-authz-integration: go-junit-report
+	go test -tags integration -v 2>&1 ./internal/api/rest ./internal/api/mcp -run "Test(REST|MCP)_ScopeAuthz_|TestREST_Recall_IntersectsFanOutWithPrincipalScopes" | $(GO_JUNIT_REPORT) -set-exit-code > report-scope-authz-integration.xml
 
 lint: golangci-lint
 	"$(GOLANGCI_LINT)" run ./...
