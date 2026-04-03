@@ -53,6 +53,14 @@
   - Updated `deploy/helm/postbrain/templates/deployment.yaml` to set explicit `command: ["postbrain"]`.
   - Keeps existing args (`serve --config /etc/postbrain/config.yaml`) so the runtime entrypoint no longer attempts to execute a non-existent `serve` binary.
   - Resolves pod startup failure: `exec serve failed: No such file or directory`.
+- [x] 2026-04-03: Added optional cert-manager `Certificate` resource to Helm chart:
+  - Added `deploy/helm/postbrain/templates/certificate.yaml` gated by `certificate.enabled`.
+  - Added certificate values in `deploy/helm/postbrain/values.yaml`:
+    - `certificate.name`, `labels`, `secretName`
+    - `certificate.privateKey.rotationPolicy`
+    - `certificate.issuerRef.{name,kind,group}`
+    - `certificate.dnsNames`
+  - Enables values-driven certificate provisioning for ingress/gateway TLS secret management.
 - [x] 2026-04-03: Reorganized public docs with dedicated server installation guide:
   - Added `docs/server-installation.md` with explicit install paths for:
     - local process/source build
