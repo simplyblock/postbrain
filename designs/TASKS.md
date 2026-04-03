@@ -69,6 +69,9 @@
     - Linux package generation (`.deb` + `.rpm`) for `postbrain-server` and `postbrain-client` via `nfpm`
     - checksum generation and GitHub release publication with all merged artifacts
   - Added reusable `make package-target GOOS=<os> GOARCH=<arch>` target used by both local and CI packaging flows.
+  - Fixed `build-package` merge + packaging reliability:
+    - corrected merged Linux binary path to `collected/dist/linux-*` after artifact download
+    - render `packaging/nfpm/*.yaml` per-arch/per-version before invoking `nfpm` so `${ARCH}` / `${VERSION}` placeholders resolve consistently
 - [x] 2026-04-03: Aligned runtime config examples/docs with current config code:
   - Updated `config.example.yaml` to match `internal/config/config.go` keys:
     - added missing supported keys: `embedding.summary_model`, `jobs.chunk_backfill_enabled`

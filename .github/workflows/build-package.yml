@@ -99,8 +99,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p release-artifacts dist
-          cp -R collected/linux-amd64 dist/ || true
-          cp -R collected/linux-arm64 dist/ || true
+          cp -R collected/dist/linux-amd64 dist/ || true
+          cp -R collected/dist/linux-arm64 dist/ || true
           find collected -maxdepth 1 -type f \( -name 'postbrain-server_*' -o -name 'postbrain-client_*' \) -exec cp {} release-artifacts/ \;
 
       - name: Install nfpm
@@ -122,13 +122,18 @@ jobs:
           fi
 
           for arch in amd64 arm64; do
-            ARCH="$arch" VERSION="$VERSION" nfpm pkg -f packaging/nfpm/postbrain-server.yaml -p deb \
+            sed "s|\${ARCH}|$arch|g; s|\${VERSION}|$VERSION|g" \
+              packaging/nfpm/postbrain-server.yaml > "$RUNNER_TEMP/postbrain-server-$arch.yaml"
+            sed "s|\${ARCH}|$arch|g; s|\${VERSION}|$VERSION|g" \
+              packaging/nfpm/postbrain-client.yaml > "$RUNNER_TEMP/postbrain-client-$arch.yaml"
+
+            nfpm pkg -f "$RUNNER_TEMP/postbrain-server-$arch.yaml" -p deb \
               --target "release-artifacts/postbrain-server_${VERSION}_linux_${arch}.deb"
-            ARCH="$arch" VERSION="$VERSION" nfpm pkg -f packaging/nfpm/postbrain-server.yaml -p rpm \
+            nfpm pkg -f "$RUNNER_TEMP/postbrain-server-$arch.yaml" -p rpm \
               --target "release-artifacts/postbrain-server_${VERSION}_linux_${arch}.rpm"
-            ARCH="$arch" VERSION="$VERSION" nfpm pkg -f packaging/nfpm/postbrain-client.yaml -p deb \
+            nfpm pkg -f "$RUNNER_TEMP/postbrain-client-$arch.yaml" -p deb \
               --target "release-artifacts/postbrain-client_${VERSION}_linux_${arch}.deb"
-            ARCH="$arch" VERSION="$VERSION" nfpm pkg -f packaging/nfpm/postbrain-client.yaml -p rpm \
+            nfpm pkg -f "$RUNNER_TEMP/postbrain-client-$arch.yaml" -p rpm \
               --target "release-artifacts/postbrain-client_${VERSION}_linux_${arch}.rpm"
           done
 
