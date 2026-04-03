@@ -1,12 +1,9 @@
 name: Build and Package
 
 on:
-  pull_request:
-  push:
-    branches:
-      - main
-    tags:
-      - "v*"
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       release_tag:
@@ -20,6 +17,7 @@ permissions:
 jobs:
   build-matrix:
     name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -46,6 +44,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -53,17 +54,27 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Build target
+      - name: Resolve build version
+        id: vars
         shell: bash
         run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-          elif [[ -n "${{ inputs.release_tag }}" ]]; then
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.release_tag }}" ]]; then
             VERSION="${{ inputs.release_tag }}"
             VERSION="${VERSION#v}"
           else
-            VERSION="0.0.0-dev.${GITHUB_RUN_NUMBER}"
+            TAG="$(git tag --points-at HEAD | grep -E '^v' | head -n1 || true)"
+            if [[ -n "$TAG" ]]; then
+              VERSION="${TAG#v}"
+            else
+              VERSION="0.0.0-dev.${GITHUB_RUN_NUMBER}"
+            fi
           fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build target
+        shell: bash
+        run: |
+          VERSION="${{ steps.vars.outputs.version }}"
           CGO_ENABLED=1 make build-target GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} VERSION="$VERSION"
 
       - name: Package target archives
@@ -83,12 +94,18 @@ jobs:
 
   merge-and-package:
     name: Merge and Package
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-24.04
     needs:
       - build-matrix
+    outputs:
+      release_tag: ${{ steps.vars.outputs.release_tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -129,17 +146,34 @@ jobs:
           GOBIN="$RUNNER_TEMP/bin" go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.3
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
+      - name: Resolve package version
+        id: vars
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.release_tag }}" ]]; then
+            TAG="${{ inputs.release_tag }}"
+            if [[ "$TAG" != v* ]]; then
+              TAG="v${TAG}"
+            fi
+            VERSION="${TAG#v}"
+            RELEASE_TAG="$TAG"
+          else
+            TAG="$(git tag --points-at HEAD | grep -E '^v' | head -n1 || true)"
+            if [[ -n "$TAG" ]]; then
+              VERSION="${TAG#v}"
+              RELEASE_TAG="$TAG"
+            else
+              VERSION="0.0.0-dev.${GITHUB_RUN_NUMBER}"
+              RELEASE_TAG=""
+            fi
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
       - name: Build deb/rpm packages
         shell: bash
         run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-          elif [[ -n "${{ inputs.release_tag }}" ]]; then
-            VERSION="${{ inputs.release_tag }}"
-            VERSION="${VERSION#v}"
-          else
-            VERSION="0.0.0-dev.${GITHUB_RUN_NUMBER}"
-          fi
+          VERSION="${{ steps.vars.outputs.version }}"
 
           for arch in amd64 arm64; do
             sed "s|\${ARCH}|$arch|g; s|\${VERSION}|$VERSION|g" \
@@ -173,7 +207,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs:
       - merge-and-package
-    if: ${{ github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && needs.merge-and-package.outputs.release_tag != '') }}
     permissions:
       contents: write
     steps:
@@ -186,6 +220,6 @@ jobs:
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
-          target_commitish: ${{ github.sha }}
+          tag_name: ${{ needs.merge-and-package.outputs.release_tag }}
+          target_commitish: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           files: release-artifacts/*
