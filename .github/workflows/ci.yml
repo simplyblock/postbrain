@@ -77,7 +77,7 @@ jobs:
         if: always()
 
   build:
-    name: Cross-Platform Build
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -89,15 +89,8 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Build binaries matrix
-        run: make build-archives
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: postbrain-binaries
-          path: |
-            dist/**
+      - name: Build binaries
+        run: make build
 
   docker-build:
     name: Docker Build

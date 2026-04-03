@@ -16,7 +16,7 @@ DIST_DIR ?= $(shell pwd)/dist
 TARGET_OSES ?= linux darwin windows
 TARGET_ARCHES ?= amd64 arm64
 
-.PHONY: build build-target build-cross build-archives package-init test test-integration test-scope-authz test-scope-authz-integration lint fmt vet migrate-up migrate-down docker-up docker-down docker-build generate ensure-markitdown ensure-gopls
+.PHONY: build build-target build-cross build-archives package-target package-init test test-integration test-scope-authz test-scope-authz-integration lint fmt vet migrate-up migrate-down docker-up docker-down docker-build generate ensure-markitdown ensure-gopls
 
 build:
 	go build -o postbrain ./cmd/postbrain
@@ -47,26 +47,33 @@ build-cross:
 build-archives: build-cross
 	@for goos in $(TARGET_OSES); do \
 		for goarch in $(TARGET_ARCHES); do \
-			target="$(DIST_DIR)/$$goos-$$goarch"; \
-			ext=""; \
-			if [ "$$goos" = "windows" ]; then ext=".exe"; fi; \
-			server_base="postbrain-server_$${goos}_$${goarch}"; \
-			client_base="postbrain-client_$${goos}_$${goarch}"; \
-			server_tmpdir="$$(mktemp -d)"; \
-			client_tmpdir="$$(mktemp -d)"; \
-			cp "$$target/postbrain$$ext" "$$server_tmpdir/"; \
-			cp config.example.yaml "$$server_tmpdir/config.example.yaml"; \
-			cp "$$target/postbrain-cli$$ext" "$$client_tmpdir/"; \
-			if [ "$$goos" = "windows" ]; then \
-				( cd "$$server_tmpdir" && zip -q "$(DIST_DIR)/$$server_base.zip" "postbrain$$ext" "config.example.yaml" ); \
-				( cd "$$client_tmpdir" && zip -q "$(DIST_DIR)/$$client_base.zip" "postbrain-cli$$ext" ); \
-			else \
-				tar -czf "$(DIST_DIR)/$$server_base.tar.gz" -C "$$server_tmpdir" "postbrain$$ext" "config.example.yaml"; \
-				tar -czf "$(DIST_DIR)/$$client_base.tar.gz" -C "$$client_tmpdir" "postbrain-cli$$ext"; \
-			fi; \
-			rm -rf "$$server_tmpdir" "$$client_tmpdir"; \
+			$(MAKE) package-target GOOS=$$goos GOARCH=$$goarch; \
 		done; \
 	done
+
+package-target:
+	@if [ -z "$(GOOS)" ] || [ -z "$(GOARCH)" ]; then \
+		echo "GOOS and GOARCH are required, e.g. make package-target GOOS=linux GOARCH=amd64"; \
+		exit 1; \
+	fi
+	@target="$(DIST_DIR)/$(GOOS)-$(GOARCH)"; \
+	ext=""; \
+	if [ "$(GOOS)" = "windows" ]; then ext=".exe"; fi; \
+	server_base="postbrain-server_$(GOOS)_$(GOARCH)"; \
+	client_base="postbrain-client_$(GOOS)_$(GOARCH)"; \
+	server_tmpdir="$$(mktemp -d)"; \
+	client_tmpdir="$$(mktemp -d)"; \
+	cp "$$target/postbrain$$ext" "$$server_tmpdir/"; \
+	cp config.example.yaml "$$server_tmpdir/config.example.yaml"; \
+	cp "$$target/postbrain-cli$$ext" "$$client_tmpdir/"; \
+	if [ "$(GOOS)" = "windows" ]; then \
+		( cd "$$server_tmpdir" && zip -q "$(DIST_DIR)/$$server_base.zip" "postbrain$$ext" "config.example.yaml" ); \
+		( cd "$$client_tmpdir" && zip -q "$(DIST_DIR)/$$client_base.zip" "postbrain-cli$$ext" ); \
+	else \
+		tar -czf "$(DIST_DIR)/$$server_base.tar.gz" -C "$$server_tmpdir" "postbrain$$ext" "config.example.yaml"; \
+		tar -czf "$(DIST_DIR)/$$client_base.tar.gz" -C "$$client_tmpdir" "postbrain-cli$$ext"; \
+	fi; \
+	rm -rf "$$server_tmpdir" "$$client_tmpdir"
 
 package-init:
 	@echo "Initial split package manifests are in packaging/ for postbrain-server and postbrain-client."
