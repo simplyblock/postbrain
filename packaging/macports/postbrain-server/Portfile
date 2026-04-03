@@ -1,0 +1,30 @@
+# $Id$
+
+PortSystem          1.0
+PortGroup           github 1.0
+
+github.setup        simplyblock postbrain 0.0.0 v
+revision            0
+name                postbrain-server
+categories          devel
+maintainers         nomaintainer
+license             Apache-2
+description         Postbrain server daemon
+long_description    Postbrain server provides persistent memory and knowledge APIs for coding agents.
+
+checksums           rmd160  REPLACE_WITH_RMD160 \
+                    sha256  REPLACE_WITH_SHA256 \
+                    size    REPLACE_WITH_SIZE
+
+depends_build       bin:go:go
+
+use_configure       no
+
+build.cmd           make
+build.target        build
+
+destroot {
+    xinstall -m 0755 ${worksrcpath}/postbrain ${destroot}${prefix}/bin/postbrain
+    xinstall -d ${destroot}${prefix}/etc/postbrain
+    xinstall -m 0644 ${worksrcpath}/config.example.yaml ${destroot}${prefix}/etc/postbrain/config.yaml
+}

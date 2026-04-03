@@ -45,13 +45,21 @@
     - tree-sitter extractors are now `//go:build cgo`
     - `extract_nocgo.go` provides graceful unsupported-language fallbacks for non-Go languages when `CGO_ENABLED=0`
     - added no-CGO regression test `internal/codegraph/extract_nocgo_test.go`
-  - Added initial packaging manifests under `packaging/`:
-    - `packaging/nfpm/postbrain.yaml` (base DEB/RPM input)
-    - `packaging/debian/control`
-    - `packaging/redhat/postbrain.spec`
-    - `packaging/homebrew/postbrain.rb`
-    - `packaging/macports/Portfile`
-    - `packaging/winget/*.yaml`
+  - Split package scaffolding into `postbrain-server` and `postbrain-client`:
+    - build archives now emit per-component artifacts:
+      - `postbrain-server_<os>_<arch>.(tar.gz|zip)`
+      - `postbrain-client_<os>_<arch>.(tar.gz|zip)`
+    - Linux package inputs:
+      - `packaging/nfpm/postbrain-server.yaml`
+      - `packaging/nfpm/postbrain-client.yaml`
+      - `packaging/debian/control` with two binary package stanzas
+      - `packaging/redhat/postbrain-server.spec` and `postbrain-client.spec`
+    - macOS package inputs:
+      - `packaging/homebrew/postbrain-server.rb` and `postbrain-client.rb`
+      - `packaging/macports/postbrain-server/Portfile` and `postbrain-client/Portfile`
+    - Windows package inputs:
+      - `packaging/winget/Simplyblock.PostbrainServer*.yaml`
+      - `packaging/winget/Simplyblock.PostbrainClient*.yaml`
 - [x] 2026-04-03: Aligned runtime config examples/docs with current config code:
   - Updated `config.example.yaml` to match `internal/config/config.go` keys:
     - added missing supported keys: `embedding.summary_model`, `jobs.chunk_backfill_enabled`

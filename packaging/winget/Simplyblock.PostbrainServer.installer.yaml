@@ -1,0 +1,16 @@
+PackageIdentifier: Simplyblock.PostbrainServer
+PackageVersion: 0.0.0
+InstallerType: zip
+InstallModes:
+  - interactive
+  - silent
+  - silentWithProgress
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/simplyblock/postbrain/releases/download/v0.0.0/postbrain-server_windows_amd64.zip
+    InstallerSha256: REPLACE_WITH_SHA256
+  - Architecture: arm64
+    InstallerUrl: https://github.com/simplyblock/postbrain/releases/download/v0.0.0/postbrain-server_windows_arm64.zip
+    InstallerSha256: REPLACE_WITH_SHA256
+ManifestType: installer
+ManifestVersion: 1.6.0
