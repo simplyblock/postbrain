@@ -67,6 +67,9 @@ func TestUISocialLoginE2E_GitHubMockProvider(t *testing.T) {
 			StateTTL: 15 * time.Minute,
 			TokenTTL: 0,
 		},
+		Social: config.OAuthSocialConfig{
+			AutoCreateUsers: true,
+		},
 	}
 
 	handler, err := uiapi.NewHandlerWithOAuth(pool, nil, uiCfg, providers, stateStore, clientStore, codeStore, issuer, identityStore)
