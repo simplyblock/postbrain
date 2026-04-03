@@ -47,6 +47,20 @@ Use this when you want prebuilt binaries without local compilation.
 postbrain serve --config /path/to/config.yaml
 ```
 
+Quick one-liner installer (server binary, latest release):
+
+```bash
+./scripts/install-postbrain.sh server
+./scripts/install-postbrain.sh server v1.2.3
+```
+
+Release artifacts also include package files such as:
+
+- `postbrain-server_<version>_linux_amd64.deb`
+- `postbrain-server_<version>_linux_arm64.deb`
+- `postbrain-server_<version>_linux_amd64.rpm`
+- `postbrain-server_<version>_linux_arm64.rpm`
+
 ## Option 3: Docker image
 
 Use this for simple containerized deployment.

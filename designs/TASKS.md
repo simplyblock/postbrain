@@ -75,6 +75,22 @@
     - certificate integration with cert-manager and secret reference guidance
     - operational troubleshooting for common Helm/Gateway/certificate issues
   - Kept docs navigation focused on `Server Installation` as the primary deployment entrypoint.
+- [x] 2026-04-03: Rebalanced installation docs to keep server/client responsibilities clear:
+  - Kept `docs/server-installation.md` focused on server runtime deployment paths only.
+  - Moved explicit `postbrain-cli` installation guidance into `docs/getting-started.md`:
+    - release client archives
+    - Linux client packages (`.deb`, `.rpm`)
+    - package-manager manifest locations (Homebrew, MacPorts, winget)
+  - Updated step ordering in getting-started to install client tooling before skill installation.
+- [x] 2026-04-03: Added release installer helper script for server/client binaries:
+  - Added `scripts/install-postbrain.sh` with automatic OS/arch detection:
+    - OS: `linux`, `darwin`
+    - arch: `amd64`, `arm64`
+  - Supports component selection:
+    - `server` -> installs `postbrain`
+    - `client` -> installs `postbrain-cli`
+  - Supports version pinning via arg/env (`vX.Y.Z`) and defaults to latest GitHub release tag.
+  - Updated install docs to reference script usage as an alternative to manual downloads/package managers.
 - [x] 2026-04-03: Reorganized public docs with dedicated server installation guide:
   - Added `docs/server-installation.md` with explicit install paths for:
     - local process/source build

@@ -15,7 +15,35 @@ This includes:
 - Docker image deployment
 - Kubernetes Helm deployment
 
-## 2. Create API tokens
+## 2. Install client tooling (`postbrain-cli`)
+
+Install `postbrain-cli` from one of these paths:
+
+- GitHub Releases:
+  - download `postbrain-client_<os>_<arch>` archive
+  - extract `postbrain-cli` into your PATH
+- Linux packages:
+  - `.deb`: `postbrain-client_<version>_linux_<arch>.deb`
+  - `.rpm`: `postbrain-client_<version>_linux_<arch>.rpm`
+- Package manifests:
+  - Homebrew: `packaging/homebrew/`
+  - MacPorts: `packaging/macports/`
+  - winget: `packaging/winget/`
+
+Quick one-liner installer (client binary, latest release):
+
+```bash
+./scripts/install-postbrain.sh client
+./scripts/install-postbrain.sh client v1.2.3
+```
+
+Verify:
+
+```bash
+postbrain-cli version
+```
+
+## 3. Create API tokens
 
 Postbrain APIs require bearer tokens.
 
@@ -31,7 +59,7 @@ Then set client-side environment variables:
 - `POSTBRAIN_TOKEN` (issued bearer token)
 - optional `POSTBRAIN_SCOPE` for default scope selection
 
-## 3. Install initial skills
+## 4. Install initial skills
 
 Use the CLI to install Postbrain skill files into your project.
 
@@ -49,7 +77,7 @@ postbrain-cli install-claude-skill --target /path/to/project
 
 If `--target` is omitted, current directory (`.`) is treated as the project root.
 
-## 4. Optional: enable OAuth/social login
+## 5. Optional: enable OAuth/social login
 
 If you want browser login and OAuth client integrations:
 
@@ -60,7 +88,7 @@ If you want browser login and OAuth client integrations:
 
 See [OAuth Logins and Configuration](./oauth-logins.md).
 
-## 5. Validate setup quickly
+## 6. Validate setup quickly
 
 After startup:
 
@@ -70,6 +98,6 @@ After startup:
 
 If both succeed, your base setup is working.
 
-## 6. Learn by example
+## 7. Learn by example
 
 See [Common Usage Workflows](./common-workflows.md) for practical patterns you can adopt immediately.
