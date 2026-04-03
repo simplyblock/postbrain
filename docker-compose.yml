@@ -34,13 +34,18 @@ services:
       - ollama
 
   postbrain:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GOPLS_VERSION: v0.21.1
+        MARKITDOWN_VERSION: "0.1.5"
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       POSTBRAIN_DATABASE_URL: "postgres://postbrain:postbrain@postgres:5432/postbrain"
-      POSTBRAIN_SERVER_TOKEN: ""
+      POSTBRAIN_DATABASE_AUTO_MIGRATE: "true"
     ports:
       - "7433:7433"
     profiles:
