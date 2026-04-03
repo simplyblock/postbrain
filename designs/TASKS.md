@@ -61,6 +61,13 @@
     - `certificate.issuerRef.{name,kind,group}`
     - `certificate.dnsNames`
   - Enables values-driven certificate provisioning for ingress/gateway TLS secret management.
+- [x] 2026-04-03: Added optional Gateway API `Gateway` resource to Helm chart for HTTPRoute deployments:
+  - Added `deploy/helm/postbrain/templates/gateway.yaml` gated by `gateway.enabled`.
+  - Added `gateway.*` values for name, class, labels/annotations, and listener configuration (protocol, port, hostname, allowedRoutes, tls/certificateRefs).
+  - Updated `HTTPRoute` template to auto-reference the chart-managed gateway when `httpRoute.parentRefs` is unset and `gateway.enabled=true`.
+  - Tightened validation:
+    - when `httpRoute.enabled=true`, require either `httpRoute.parentRefs` or `gateway.enabled=true`
+    - when `gateway.enabled=true`, require non-empty `gateway.gatewayClassName`.
 - [x] 2026-04-03: Reorganized public docs with dedicated server installation guide:
   - Added `docs/server-installation.md` with explicit install paths for:
     - local process/source build

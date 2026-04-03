@@ -1,0 +1,36 @@
+{{- if .Values.gateway.enabled -}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ include "postbrain.gatewayName" . }}
+  labels:
+    {{- include "postbrain.labels" . | nindent 4 }}
+    {{- with .Values.gateway.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.gateway.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  gatewayClassName: {{ .Values.gateway.gatewayClassName | quote }}
+  listeners:
+    {{- range .Values.gateway.listeners }}
+    - name: {{ .name | quote }}
+      protocol: {{ .protocol | quote }}
+      port: {{ .port }}
+      {{- with .hostname }}
+      hostname: {{ . | quote }}
+      {{- end }}
+      {{- with .allowedRoutes }}
+      allowedRoutes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if and .tls .tls.certificateRefs }}
+      tls:
+        mode: {{ .tls.mode | default "Terminate" | quote }}
+        certificateRefs:
+          {{- toYaml .tls.certificateRefs | nindent 10 }}
+      {{- end }}
+    {{- end }}
+{{- end }}
