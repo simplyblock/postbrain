@@ -19,6 +19,9 @@ RUN GOBIN=/out go install golang.org/x/tools/gopls@${GOPLS_VERSION}
 
 FROM python:3.12-slim AS runtime
 ARG MARKITDOWN_VERSION
+ARG APP_USER=postbrain
+ARG APP_UID=10001
+ARG APP_GID=10001
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates tini \
@@ -27,11 +30,21 @@ RUN apt-get update \
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir "markitdown[all]==${MARKITDOWN_VERSION}"
 
-COPY --from=builder /out/postbrain /usr/local/bin/postbrain
-COPY --from=gopls /out/gopls /usr/local/bin/gopls
+RUN groupadd --system --gid "${APP_GID}" "${APP_USER}" \
+    && useradd --system --uid "${APP_UID}" --gid "${APP_GID}" \
+       --create-home --home-dir "/home/${APP_USER}" --shell /usr/sbin/nologin "${APP_USER}" \
+    && mkdir -p /etc/postbrain /var/lib/postbrain \
+    && chown -R "${APP_UID}:${APP_GID}" /etc/postbrain /var/lib/postbrain "/home/${APP_USER}" \
+    && chmod 755 /usr/local/bin
 
-RUN mkdir -p /etc/postbrain
-COPY config.example.yaml /etc/postbrain/config.yaml
+COPY --from=builder --chown=${APP_UID}:${APP_GID} /out/postbrain /usr/local/bin/postbrain
+COPY --from=gopls --chown=${APP_UID}:${APP_GID} /out/gopls /usr/local/bin/gopls
+
+COPY --chown=${APP_UID}:${APP_GID} config.example.yaml /etc/postbrain/config.yaml
+
+ENV HOME=/home/${APP_USER}
+WORKDIR /home/${APP_USER}
+USER ${APP_UID}:${APP_GID}
 
 EXPOSE 7433
 

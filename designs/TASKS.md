@@ -29,6 +29,7 @@
 
 - [x] 2026-04-03: Added container image build for Postbrain server with `markitdown` + `gopls`:
   - Added multi-stage root `Dockerfile` that builds `postbrain`, installs pinned `gopls` (`v0.21.1`), and installs pinned `markitdown[all]` (`0.1.5`).
+  - Hardened runtime image to run as a dedicated non-root user (`UID/GID 10001`) with owned config/state directories.
   - Added `.dockerignore` to reduce build context size and exclude local artifacts.
   - Updated `docker-compose.yml` `postbrain` service build args for `GOPLS_VERSION` and `MARKITDOWN_VERSION`.
   - Removed obsolete compose env `POSTBRAIN_SERVER_TOKEN` and retained DB bootstrap env wiring.
