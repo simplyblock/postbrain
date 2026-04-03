@@ -35,6 +35,23 @@
   - Removed obsolete compose env `POSTBRAIN_SERVER_TOKEN` and retained DB bootstrap env wiring.
   - Added `docker-build` make target to produce `postbrain:latest` with pinned tool versions.
   - Added GitHub Actions CI job `docker-build` (in `.github/workflows/ci.yml`) to build the Docker image on push/PR.
+- [x] 2026-04-03: Added cross-platform binary build matrix and initial package scaffolding:
+  - Added `make build-target`, `make build-cross`, and `make build-archives` for `postbrain` and `postbrain-cli` across:
+    - `linux` (`amd64`, `arm64`)
+    - `darwin` (`amd64`, `arm64`)
+    - `windows` (`amd64`, `arm64`)
+  - Updated CI build job to run `make build-archives` and upload `dist/**` artifacts.
+  - Added no-CGO extractor fallback in `internal/codegraph` with build tags:
+    - tree-sitter extractors are now `//go:build cgo`
+    - `extract_nocgo.go` provides graceful unsupported-language fallbacks for non-Go languages when `CGO_ENABLED=0`
+    - added no-CGO regression test `internal/codegraph/extract_nocgo_test.go`
+  - Added initial packaging manifests under `packaging/`:
+    - `packaging/nfpm/postbrain.yaml` (base DEB/RPM input)
+    - `packaging/debian/control`
+    - `packaging/redhat/postbrain.spec`
+    - `packaging/homebrew/postbrain.rb`
+    - `packaging/macports/Portfile`
+    - `packaging/winget/*.yaml`
 - [x] 2026-04-03: Aligned runtime config examples/docs with current config code:
   - Updated `config.example.yaml` to match `internal/config/config.go` keys:
     - added missing supported keys: `embedding.summary_model`, `jobs.chunk_backfill_enabled`

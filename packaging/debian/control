@@ -1,0 +1,14 @@
+Source: postbrain
+Section: devel
+Priority: optional
+Maintainer: Simplyblock <opensource@simplyblock.io>
+Build-Depends: debhelper-compat (= 13), golang-any
+Standards-Version: 4.6.2
+Homepage: https://github.com/simplyblock/postbrain
+
+Package: postbrain
+Architecture: amd64 arm64
+Depends: ${misc:Depends}
+Description: Persistent memory and knowledge server for coding agents
+ Postbrain provides server and CLI components for shared memory and
+ knowledge across coding agents.
