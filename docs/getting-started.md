@@ -4,30 +4,16 @@ This guide helps you run Postbrain for the first time.
 
 ## 1. Pick your deployment style
 
-### Managed database (for example Vela PostgreSQL)
+Server installation options are documented in:
 
-Use this when your team already has managed Postgres.
+- [Server Installation](./server-installation.md)
 
-You need:
+This includes:
 
-- a PostgreSQL database URL for Postbrain
-- required extensions available in that database (`vector`, `pg_trgm`, `uuid-ossp`)
-- a Postbrain service process running with that database URL
-
-### Local/custom installation
-
-Use this for local development and self-managed environments.
-
-Typical flow:
-
-```bash
-docker compose up -d postgres
-cp config.example.yaml config.yaml
-make build
-./postbrain serve --config config.yaml
-```
-
-By default, the server listens on `http://localhost:7433`.
+- local process (source build)
+- GitHub release binaries
+- Docker image deployment
+- Kubernetes Helm deployment
 
 ## 2. Create API tokens
 
