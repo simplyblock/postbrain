@@ -67,6 +67,21 @@ func (s *Store) Update(ctx context.Context, id uuid.UUID, displayName string, me
 	return &p, nil
 }
 
+// UpdateProfile updates slug and display_name of a principal, returning the updated record.
+func (s *Store) UpdateProfile(ctx context.Context, id uuid.UUID, slug, displayName string) (*db.Principal, error) {
+	var p db.Principal
+	err := s.pool.QueryRow(ctx,
+		`UPDATE principals SET slug=$2, display_name=$3, updated_at=now()
+		 WHERE id=$1
+		 RETURNING id, kind, slug, display_name, meta, created_at, updated_at`,
+		id, slug, displayName,
+	).Scan(&p.ID, &p.Kind, &p.Slug, &p.DisplayName, &p.Meta, &p.CreatedAt, &p.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("principals: update profile: %w", err)
+	}
+	return &p, nil
+}
+
 // List returns principals ordered by creation time, with pagination.
 func (s *Store) List(ctx context.Context, limit, offset int) ([]*db.Principal, error) {
 	ps, err := db.ListPrincipals(ctx, s.pool, limit, offset)
