@@ -5,6 +5,8 @@ Welcome to the Postbrain docs.
 Postbrain helps teams and AI agents keep reliable long-term memory and shared knowledge, instead of losing context
 between sessions.
 
+This documentation is also published via GitHub Pages for repository browsing.
+
 ## Start here
 
 - [Introduction](./introduction.md): what Postbrain is and why it matters.

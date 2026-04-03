@@ -124,6 +124,18 @@
     - upgrade, compatibility, release policy
     - backup/restore, hardening, monitoring, performance
     - quickstarts, API auth, troubleshooting, uninstall
+- [x] 2026-04-03: Added minimal Astro docs site and GitHub Pages publication pipeline:
+  - Added `site/` Astro project with:
+    - `site/package.json`
+    - `site/astro.config.mjs`
+    - `site/src/pages/index.astro`
+    - `site/scripts/sync-docs.mjs`
+  - Site build uses repository `docs/` directory as source content by syncing markdown files into Astro pages at build time.
+  - Extended `.github/workflows/build-package.yml` with:
+    - `docs-pages-build` job (Node setup + Astro build + pages artifact upload)
+    - `docs-pages-deploy` job (`actions/deploy-pages`) for GitHub Pages publication
+    - deployment gating to successful CI `workflow_run` on main pushes (and manual dispatch support)
+  - Updated `.gitignore` for generated site content and node dependencies.
 - [x] 2026-04-03: Reorganized public docs with dedicated server installation guide:
   - Added `docs/server-installation.md` with explicit install paths for:
     - local process/source build
