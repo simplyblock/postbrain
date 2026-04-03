@@ -27,6 +27,12 @@
 
 ### Maintenance
 
+- [x] 2026-04-03: Updated README with Getting Started instructions for skill installation:
+  - Added a dedicated `Getting Started` section under Claude connection docs.
+  - Documented both installer commands:
+    - `postbrain-cli install-codex-skill --target ...`
+    - `postbrain-cli install-claude-skill --target ...`
+  - Clarified that both can be installed in mixed-agent repositories.
 - [x] 2026-04-03: Renamed CLI command directory from `cmd/postbrain-hook` to `cmd/postbrain-cli` to match binary/command naming.
   - Updated build wiring in `Makefile` to build both `postbrain-hook` and `postbrain-cli` from `./cmd/postbrain-cli`.
   - Updated repository structure reference in `README.md`.
