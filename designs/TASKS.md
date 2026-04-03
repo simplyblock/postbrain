@@ -27,6 +27,13 @@
 
 ### Maintenance
 
+- [x] 2026-04-03: Updated `.codex/skills/postbrain.md` with stricter MCP memory workflow policy:
+  - Startup scope bootstrap now checks `.codex/postbrain-base.md`, `README.md`, `AGENTS.md`, and common docs before prompting.
+  - Added explicit opt-in/opt-out persistence to `.codex/postbrain-base.md` when no scope is defined.
+  - Made `recall` mandatory before each new task and `remember` mandatory after each tool step/sub-task.
+  - Added guidance to use `summary` + detailed `content` in memories with precise, extensive entity tagging.
+  - Clarified memory vs artifact usage (iteration vs long-lived decisions/designs).
+  - Added Postbrain registry skill discovery/install expectations via `skill_search`/`skill_install`.
 - [x] 2026-04-03: Added artifact chunk entities and linear chunk graph relations (TDD-first):
   - Added integration test `internal/knowledge/store_chunk_graph_integration_test.go` asserting chunk graph shape on artifact create:
     - `artifact` entity exists with canonical `artifact:<artifact_id>`
