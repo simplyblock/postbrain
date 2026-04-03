@@ -6,8 +6,13 @@ metadata:
   labels:
     {{- include "postbrain.labels" . | nindent 4 }}
 spec:
+  {{- if .Values.httpRoute.parentRefs }}
   parentRefs:
     {{- toYaml .Values.httpRoute.parentRefs | nindent 4 }}
+  {{- else if .Values.gateway.enabled }}
+  parentRefs:
+    - name: {{ include "postbrain.gatewayName" . }}
+  {{- end }}
   {{- with .Values.httpRoute.hostnames }}
   hostnames:
     {{- toYaml . | nindent 4 }}

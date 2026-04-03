@@ -40,6 +40,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- end -}}
 
+{{- define "postbrain.gatewayName" -}}
+{{- default (printf "%s-gateway" (include "postbrain.fullname" .)) .Values.gateway.name -}}
+{{- end -}}
+
 {{- define "postbrain.validateRouting" -}}
 {{- if and (not .Values.ingress.enabled) (not .Values.httpRoute.enabled) -}}
 {{- fail "One routing option must be enabled: set either ingress.enabled=true or httpRoute.enabled=true." -}}
@@ -47,8 +51,11 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if and .Values.ingress.enabled .Values.httpRoute.enabled -}}
 {{- fail "Enable only one routing option: ingress.enabled or httpRoute.enabled." -}}
 {{- end -}}
-{{- if and .Values.httpRoute.enabled (eq (len .Values.httpRoute.parentRefs) 0) -}}
-{{- fail "httpRoute.parentRefs must be set when httpRoute.enabled=true." -}}
+{{- if and .Values.httpRoute.enabled (eq (len .Values.httpRoute.parentRefs) 0) (not .Values.gateway.enabled) -}}
+{{- fail "When httpRoute.enabled=true, set httpRoute.parentRefs or enable gateway.enabled=true." -}}
+{{- end -}}
+{{- if and .Values.gateway.enabled (eq .Values.gateway.gatewayClassName "") -}}
+{{- fail "gateway.gatewayClassName must be set when gateway.enabled=true." -}}
 {{- end -}}
 {{- end -}}
 
