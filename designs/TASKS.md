@@ -246,6 +246,11 @@
   - Added dedicated CI scope-auth gate in `.github/workflows/ci.yml`:
     - unit: `go test ./internal/api/scopeauth ./internal/memory`
     - integration: `go test -tags integration ./internal/api/rest ./internal/api/mcp -run "Test(REST|MCP)_ScopeAuthz_|TestREST_Recall_IntersectsFanOutWithPrincipalScopes"`
+- [x] 2026-04-03: Aligned Scope Authz Gate with Make + JUnit outputs:
+  - Added `test-scope-authz` and `test-scope-authz-integration` targets in `Makefile`.
+  - Scope Authz CI job now runs those Make targets instead of raw `go test` commands.
+  - Added Scope Authz Test Summary step reading `report-scope-authz-*.xml`.
+  - Updated `.gitignore` from `report.xml` to `report*.xml` to ignore all generated JUnit reports.
 - [x] 2026-04-02: Completed cross-cutting scope-auth observability and inventory tasks (TDD-first):
   - Added explicit REST/MCP scope-taking inventory tables used by inventory guard tests:
     - `restScopeRouteInventory` in `internal/api/rest/scopeauth_inventory_test.go`
