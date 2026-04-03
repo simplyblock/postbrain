@@ -94,6 +94,30 @@ Add to `~/.claude/settings.json` or `.claude/settings.json` in a project:
 }
 ```
 
+### Getting Started
+
+Install the Postbrain skill into your project for the agent you use:
+
+If `--target` is omitted, the current directory (`.`) is used as the project root.
+
+For Codex:
+
+```bash
+postbrain-cli install-codex-skill --target /path/to/project
+# or, from inside the project directory:
+postbrain-cli install-codex-skill
+```
+
+For Claude Code:
+
+```bash
+postbrain-cli install-claude-skill --target /path/to/project
+# or, from inside the project directory:
+postbrain-cli install-claude-skill
+```
+
+You can install both when a repository is used by multiple agents.
+
 ### Recommended hooks
 
 ```json
@@ -114,12 +138,6 @@ Add to `~/.claude/settings.json` or `.claude/settings.json` in a project:
 
 ```bash
 postbrain-cli skill sync --scope project:$POSTBRAIN_SCOPE --agent claude-code
-```
-
-Install the Postbrain Codex skill into any directory (without needing this repository checked out once `postbrain-cli` is installed):
-
-```bash
-postbrain-cli install-codex-skill --target /path/to/project
 ```
 
 ---
