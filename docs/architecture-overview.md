@@ -45,6 +45,9 @@ Postbrain has three core runtime parts:
 - durable promotion path from short-lived memory to long-lived knowledge
 - resilient writes (best-effort enrichment does not block core operations)
 
+For a detailed breakdown of indexed records (artifacts, chunks, entities, relations), see
+[Indexing Model](./indexing-model.md).
+
 ## Deployment model
 
 Postbrain is typically deployed as:

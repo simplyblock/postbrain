@@ -37,6 +37,9 @@ environment variables.
 | `embedding.request_timeout` | Timeout for embedding/analyze requests.            |
 | `embedding.batch_size`      | Batch size for embedding jobs.                     |
 
+For how embeddings/chunks/entities are used during indexing and retrieval, see
+[Indexing Model](./indexing-model.md).
+
 ## `server`
 
 | Key               | What it controls                          |
