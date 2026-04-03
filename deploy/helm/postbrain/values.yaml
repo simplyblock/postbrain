@@ -43,6 +43,19 @@ ingress:
           pathType: Prefix
   tls: []
 
+certificate:
+  enabled: false
+  name: ""
+  labels: {}
+  secretName: "postbrain-cert-secret"
+  privateKey:
+    rotationPolicy: Always
+  issuerRef:
+    name: "letsencrypt-dns"
+    kind: ClusterIssuer
+    group: cert-manager.io
+  dnsNames: []
+
 httpRoute:
   enabled: false
   parentRefs: []
