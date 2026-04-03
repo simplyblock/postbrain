@@ -414,6 +414,22 @@ func (s *Store) createChunks(ctx context.Context, artifactID, scopeID, authorID 
 	if len(chunks) <= 1 {
 		return
 	}
+	artifactCanonical := fmt.Sprintf("artifact:%s", artifactID)
+	artifactEntity, err := db.UpsertEntity(ctx, s.pool, &db.Entity{
+		ScopeID:    scopeID,
+		EntityType: "artifact",
+		Name:       artifactID.String(),
+		Canonical:  artifactCanonical,
+	})
+	if err != nil {
+		slog.WarnContext(ctx, "knowledge: artifact entity upsert failed", "artifact_id", artifactID, "err", err)
+	}
+	if artifactEntity != nil {
+		if linkErr := db.LinkArtifactToEntity(ctx, s.pool, artifactID, artifactEntity.ID, "related"); linkErr != nil {
+			slog.WarnContext(ctx, "knowledge: artifact entity link failed", "artifact_id", artifactID, "err", linkErr)
+		}
+	}
+	chunkEntityIDs := make([]uuid.UUID, 0, len(chunks))
 	for i, chunk := range chunks {
 		vec, err := s.svc.EmbedText(ctx, chunk)
 		if err != nil {
@@ -434,6 +450,45 @@ func (s *Store) createChunks(ctx context.Context, artifactID, scopeID, authorID 
 		}
 		if _, err := db.CreateMemory(ctx, s.pool, m); err != nil {
 			slog.WarnContext(ctx, "knowledge: chunk store failed", "artifact_id", artifactID, "chunk", i, "err", err)
+		}
+		if artifactEntity == nil {
+			continue
+		}
+		chunkEntity, err := db.UpsertEntity(ctx, s.pool, &db.Entity{
+			ScopeID:    scopeID,
+			EntityType: "artifact_chunk",
+			Name:       fmt.Sprintf("chunk-%d", i),
+			Canonical:  ref,
+		})
+		if err != nil {
+			slog.WarnContext(ctx, "knowledge: chunk entity upsert failed", "artifact_id", artifactID, "chunk", i, "err", err)
+			continue
+		}
+		chunkEntityIDs = append(chunkEntityIDs, chunkEntity.ID)
+		if linkErr := db.LinkArtifactToEntity(ctx, s.pool, artifactID, chunkEntity.ID, "related"); linkErr != nil {
+			slog.WarnContext(ctx, "knowledge: chunk entity link failed", "artifact_id", artifactID, "chunk", i, "err", linkErr)
+		}
+		if _, relErr := db.UpsertRelation(ctx, s.pool, &db.Relation{
+			ScopeID:        scopeID,
+			SubjectID:      chunkEntity.ID,
+			Predicate:      "chunk_of",
+			ObjectID:       artifactEntity.ID,
+			Confidence:     1.0,
+			SourceArtifact: &artifactID,
+		}); relErr != nil {
+			slog.WarnContext(ctx, "knowledge: chunk_of relation upsert failed", "artifact_id", artifactID, "chunk", i, "err", relErr)
+		}
+	}
+	for i := 0; i < len(chunkEntityIDs)-1; i++ {
+		if _, err := db.UpsertRelation(ctx, s.pool, &db.Relation{
+			ScopeID:        scopeID,
+			SubjectID:      chunkEntityIDs[i],
+			Predicate:      "next_chunk",
+			ObjectID:       chunkEntityIDs[i+1],
+			Confidence:     1.0,
+			SourceArtifact: &artifactID,
+		}); err != nil {
+			slog.WarnContext(ctx, "knowledge: next_chunk relation upsert failed", "artifact_id", artifactID, "from", i, "to", i+1, "err", err)
 		}
 	}
 	slog.InfoContext(ctx, "knowledge: created chunks", "artifact_id", artifactID, "count", len(chunks))

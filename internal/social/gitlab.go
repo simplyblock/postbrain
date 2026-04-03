@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/simplyblock/postbrain/internal/closeutil"
 	"github.com/simplyblock/postbrain/internal/config"
 )
 
@@ -81,7 +82,7 @@ func (p *GitLabProvider) exchangeToken(ctx context.Context, code string) (string
 	if err != nil {
 		return "", err
 	}
-	defer res.Body.Close()
+	defer closeutil.Log(res.Body, "social: gitlab token exchange: close response body")
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return "", fmt.Errorf("gitlab token exchange status=%d", res.StatusCode)
 	}
@@ -113,7 +114,7 @@ func (p *GitLabProvider) fetchUser(ctx context.Context, accessToken string) (*st
 	if err != nil {
 		return nil, nil, err
 	}
-	defer res.Body.Close()
+	defer closeutil.Log(res.Body, "social: gitlab user fetch: close response body")
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return nil, nil, fmt.Errorf("gitlab user fetch status=%d", res.StatusCode)
 	}

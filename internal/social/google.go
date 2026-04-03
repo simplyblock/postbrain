@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/simplyblock/postbrain/internal/closeutil"
 	"github.com/simplyblock/postbrain/internal/config"
 )
 
@@ -76,7 +77,7 @@ func (p *GoogleProvider) fetchTokenEndpoint(ctx context.Context) (string, error)
 	if err != nil {
 		return "", err
 	}
-	defer res.Body.Close()
+	defer closeutil.Log(res.Body, "social: google discovery: close response body")
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return "", fmt.Errorf("google discovery status=%d", res.StatusCode)
 	}
@@ -108,7 +109,7 @@ func (p *GoogleProvider) exchangeIDToken(ctx context.Context, tokenEndpoint, cod
 	if err != nil {
 		return "", err
 	}
-	defer res.Body.Close()
+	defer closeutil.Log(res.Body, "social: google token exchange: close response body")
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return "", fmt.Errorf("google token exchange status=%d", res.StatusCode)
 	}
