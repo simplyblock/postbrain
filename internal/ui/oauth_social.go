@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/simplyblock/postbrain/internal/oauth"
+	"github.com/simplyblock/postbrain/internal/social"
 )
 
 func (h *Handler) handleSocialStart(w http.ResponseWriter, r *http.Request) {
@@ -62,8 +63,26 @@ func (h *Handler) handleSocialCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	principal, err := h.identities.FindOrCreate(r.Context(), providerName, info)
+	if h.oauthCfg.Social.RequireVerifiedEmail && !info.EmailVerified {
+		http.Error(w, "email is not verified", http.StatusForbidden)
+		return
+	}
+	if !isAllowedEmailDomain(info.Email, info.HostedDomain, h.oauthCfg.Social.AllowedEmailDomains) {
+		http.Error(w, "email domain is not allowed", http.StatusForbidden)
+		return
+	}
+
+	principal, err := h.identities.FindOrCreateWithPolicy(
+		r.Context(),
+		providerName,
+		info,
+		social.IdentityPolicy{AutoCreateUsers: h.oauthCfg.Social.AutoCreateUsers},
+	)
 	if err != nil {
+		if errors.Is(err, social.ErrPrincipalNotProvisioned) {
+			http.Error(w, "account is not provisioned", http.StatusForbidden)
+			return
+		}
 		http.Error(w, "failed to link social identity", http.StatusInternalServerError)
 		return
 	}
@@ -86,6 +105,29 @@ func (h *Handler) handleSocialCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, c)
 	http.Redirect(w, r, "/ui", http.StatusSeeOther)
+}
+
+func isAllowedEmailDomain(email, hostedDomain string, allowedDomains []string) bool {
+	if len(allowedDomains) == 0 {
+		return true
+	}
+
+	emailDomain := ""
+	if at := strings.LastIndex(email, "@"); at >= 0 && at+1 < len(email) {
+		emailDomain = strings.ToLower(strings.TrimSpace(email[at+1:]))
+	}
+	hd := strings.ToLower(strings.TrimSpace(hostedDomain))
+
+	for _, d := range allowedDomains {
+		want := strings.ToLower(strings.TrimSpace(d))
+		if want == "" {
+			continue
+		}
+		if emailDomain == want || hd == want {
+			return true
+		}
+	}
+	return false
 }
 
 func socialProviderFromPath(path string) string {

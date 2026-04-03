@@ -30,5 +30,5 @@ type oauthClientLookup interface {
 }
 
 type socialIdentityStore interface {
-	FindOrCreate(ctx context.Context, provider string, info *social.UserInfo) (*db.Principal, error)
+	FindOrCreateWithPolicy(ctx context.Context, provider string, info *social.UserInfo, policy social.IdentityPolicy) (*db.Principal, error)
 }

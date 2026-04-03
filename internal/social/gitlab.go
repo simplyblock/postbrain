@@ -58,11 +58,12 @@ func (p *GitLabProvider) Exchange(ctx context.Context, code string) (*UserInfo, 
 		return nil, err
 	}
 	return &UserInfo{
-		ProviderID:  strconv.FormatInt(user.ID, 10),
-		Email:       user.Email,
-		DisplayName: user.Name,
-		AvatarURL:   user.AvatarURL,
-		RawProfile:  raw,
+		ProviderID:    strconv.FormatInt(user.ID, 10),
+		Email:         user.Email,
+		EmailVerified: user.Email != "",
+		DisplayName:   user.Name,
+		AvatarURL:     user.AvatarURL,
+		RawProfile:    raw,
 	}, nil
 }
 

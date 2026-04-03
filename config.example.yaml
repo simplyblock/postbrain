@@ -99,3 +99,12 @@ oauth:
     token_ttl: 0
     # Allow dynamic OAuth client registration endpoint.
     dynamic_registration: true
+
+  social:
+    # Automatically create a new principal for first-time social logins.
+    auto_create_users: true
+    # Require provider-verified email before linking or creating a principal.
+    require_verified_email: false
+    # Optional allowlist of email domains permitted for social login.
+    # Empty means all domains are allowed.
+    allowed_email_domains: []

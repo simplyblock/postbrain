@@ -86,6 +86,20 @@
     - `GIT_REF = git rev-parse --short HEAD`
     - `BUILD_TIMESTAMP = date -u +%Y-%m-%dT%H:%M:%SZ`
   - `build-package` matrix builds now pass the resolved CI release/build version to `make build-target VERSION=...` so binaries and package versions stay aligned.
+- [x] 2026-04-03: Added configurable social user provisioning policy:
+  - Added `oauth.social` config block:
+    - `auto_create_users` (default `true`)
+    - `require_verified_email` (default `false`)
+    - `allowed_email_domains` (default empty allow-all)
+  - Social callback now enforces optional verified-email and domain allowlist checks before principal linking.
+  - Added social identity policy support:
+    - `FindOrCreateWithPolicy(..., AutoCreateUsers=true|false)`
+    - when disabled, social login links only pre-provisioned principals by email slug and returns `account is not provisioned` otherwise
+  - Extended social user metadata with provider-level fields (`EmailVerified`, `HostedDomain`) and populated Google claims (`email_verified`, `hd`).
+  - Added tests:
+    - unit: domain allowlist helper
+    - integration: auto-create disabled requires pre-provisioned principal
+    - integration: identity-store pre-provisioned link + unprovisioned rejection
 - [x] 2026-04-03: Aligned runtime config examples/docs with current config code:
   - Updated `config.example.yaml` to match `internal/config/config.go` keys:
     - added missing supported keys: `embedding.summary_model`, `jobs.chunk_backfill_enabled`

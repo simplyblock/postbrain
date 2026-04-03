@@ -68,6 +68,7 @@ type OAuthConfig struct {
 	BaseURL   string                    `mapstructure:"base_url"`
 	Providers map[string]ProviderConfig `mapstructure:"providers"`
 	Server    OAuthServerConfig         `mapstructure:"server"`
+	Social    OAuthSocialConfig         `mapstructure:"social"`
 }
 
 // ProviderConfig holds social provider OAuth client settings.
@@ -85,6 +86,13 @@ type OAuthServerConfig struct {
 	StateTTL            time.Duration `mapstructure:"state_ttl"`
 	TokenTTL            time.Duration `mapstructure:"token_ttl"`
 	DynamicRegistration bool          `mapstructure:"dynamic_registration"`
+}
+
+// OAuthSocialConfig controls social user provisioning behavior.
+type OAuthSocialConfig struct {
+	AutoCreateUsers      bool     `mapstructure:"auto_create_users"`
+	RequireVerifiedEmail bool     `mapstructure:"require_verified_email"`
+	AllowedEmailDomains  []string `mapstructure:"allowed_email_domains"`
 }
 
 // LoadDatabaseURL reads only the database URL from the config file at path
@@ -156,6 +164,9 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("oauth.server.state_ttl", "15m")
 	v.SetDefault("oauth.server.token_ttl", "0")
 	v.SetDefault("oauth.server.dynamic_registration", true)
+	v.SetDefault("oauth.social.auto_create_users", true)
+	v.SetDefault("oauth.social.require_verified_email", false)
+	v.SetDefault("oauth.social.allowed_email_domains", []string{})
 
 	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("config: read %q: %w", path, err)

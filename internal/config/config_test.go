@@ -200,6 +200,15 @@ database:
 	if !cfg.OAuth.Server.DynamicRegistration {
 		t.Error("default OAuth.Server.DynamicRegistration should be true")
 	}
+	if !cfg.OAuth.Social.AutoCreateUsers {
+		t.Error("default OAuth.Social.AutoCreateUsers should be true")
+	}
+	if cfg.OAuth.Social.RequireVerifiedEmail {
+		t.Error("default OAuth.Social.RequireVerifiedEmail should be false")
+	}
+	if len(cfg.OAuth.Social.AllowedEmailDomains) != 0 {
+		t.Errorf("default OAuth.Social.AllowedEmailDomains = %v, want empty", cfg.OAuth.Social.AllowedEmailDomains)
+	}
 }
 
 func TestLoad_OAuthProviderRoundTrip(t *testing.T) {
@@ -208,6 +217,10 @@ database:
   url: "postgres://localhost/postbrain"
 oauth:
   base_url: "https://postbrain.example.com"
+  social:
+    auto_create_users: false
+    require_verified_email: true
+    allowed_email_domains: ["example.com"]
   providers:
     github:
       enabled: true
@@ -239,6 +252,15 @@ oauth:
 	}
 	if len(gh.Scopes) != 2 || gh.Scopes[0] != "read:user" || gh.Scopes[1] != "user:email" {
 		t.Errorf("OAuth.Providers[github].Scopes = %v", gh.Scopes)
+	}
+	if cfg.OAuth.Social.AutoCreateUsers {
+		t.Error("OAuth.Social.AutoCreateUsers should be false")
+	}
+	if !cfg.OAuth.Social.RequireVerifiedEmail {
+		t.Error("OAuth.Social.RequireVerifiedEmail should be true")
+	}
+	if len(cfg.OAuth.Social.AllowedEmailDomains) != 1 || cfg.OAuth.Social.AllowedEmailDomains[0] != "example.com" {
+		t.Errorf("OAuth.Social.AllowedEmailDomains = %v", cfg.OAuth.Social.AllowedEmailDomains)
 	}
 }
 
