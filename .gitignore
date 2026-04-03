@@ -46,3 +46,7 @@ values.release.yaml
 # Build tools
 bin/
 .venv-*/
+node_modules/
+site/src/pages/docs/
+site/dist/
+site/.astro/
