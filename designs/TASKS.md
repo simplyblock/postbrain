@@ -49,6 +49,10 @@
     - extract `postbrain-server_linux_{amd64,arm64}.tar.gz` into `dist/linux-{amd64,arm64}`
     - build and push a multi-arch image with `docker/build-push-action` using `Dockerfile.release`
   - Preserved Docker Hub tagging strategy (`sha-*`, semantic/tag aliases, `latest` on `main` push flows).
+- [x] 2026-04-03: Fixed Helm container command wiring for server startup:
+  - Updated `deploy/helm/postbrain/templates/deployment.yaml` to set explicit `command: ["postbrain"]`.
+  - Keeps existing args (`serve --config /etc/postbrain/config.yaml`) so the runtime entrypoint no longer attempts to execute a non-existent `serve` binary.
+  - Resolves pod startup failure: `exec serve failed: No such file or directory`.
 - [x] 2026-04-03: Reorganized public docs with dedicated server installation guide:
   - Added `docs/server-installation.md` with explicit install paths for:
     - local process/source build

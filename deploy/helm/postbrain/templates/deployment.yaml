@@ -26,6 +26,8 @@ spec:
         - name: postbrain
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - postbrain
           args:
             - serve
             - --config
