@@ -48,24 +48,28 @@ build-archives: build-cross
 	@for goos in $(TARGET_OSES); do \
 		for goarch in $(TARGET_ARCHES); do \
 			target="$(DIST_DIR)/$$goos-$$goarch"; \
-			base="postbrain_$$goos_$$goarch"; \
 			ext=""; \
 			if [ "$$goos" = "windows" ]; then ext=".exe"; fi; \
-			tmpdir="$$(mktemp -d)"; \
-			cp "$$target/postbrain$$ext" "$$tmpdir/"; \
-			cp "$$target/postbrain-cli$$ext" "$$tmpdir/"; \
-			cp config.example.yaml "$$tmpdir/config.example.yaml"; \
+			server_base="postbrain-server_$${goos}_$${goarch}"; \
+			client_base="postbrain-client_$${goos}_$${goarch}"; \
+			server_tmpdir="$$(mktemp -d)"; \
+			client_tmpdir="$$(mktemp -d)"; \
+			cp "$$target/postbrain$$ext" "$$server_tmpdir/"; \
+			cp config.example.yaml "$$server_tmpdir/config.example.yaml"; \
+			cp "$$target/postbrain-cli$$ext" "$$client_tmpdir/"; \
 			if [ "$$goos" = "windows" ]; then \
-				( cd "$$tmpdir" && zip -q "$(DIST_DIR)/$$base.zip" "postbrain$$ext" "postbrain-cli$$ext" "config.example.yaml" ); \
+				( cd "$$server_tmpdir" && zip -q "$(DIST_DIR)/$$server_base.zip" "postbrain$$ext" "config.example.yaml" ); \
+				( cd "$$client_tmpdir" && zip -q "$(DIST_DIR)/$$client_base.zip" "postbrain-cli$$ext" ); \
 			else \
-				tar -czf "$(DIST_DIR)/$$base.tar.gz" -C "$$tmpdir" "postbrain$$ext" "postbrain-cli$$ext" "config.example.yaml"; \
+				tar -czf "$(DIST_DIR)/$$server_base.tar.gz" -C "$$server_tmpdir" "postbrain$$ext" "config.example.yaml"; \
+				tar -czf "$(DIST_DIR)/$$client_base.tar.gz" -C "$$client_tmpdir" "postbrain-cli$$ext"; \
 			fi; \
-			rm -rf "$$tmpdir"; \
+			rm -rf "$$server_tmpdir" "$$client_tmpdir"; \
 		done; \
 	done
 
 package-init:
-	@echo "Initial package manifests are in packaging/ (nfpm, homebrew, macports, winget)."
+	@echo "Initial split package manifests are in packaging/ for postbrain-server and postbrain-client."
 
 test: ensure-markitdown go-junit-report
 	PATH="$(MARKITDOWN_VENV)/bin:$$PATH" go test -coverprofile=coverage.out -covermode=atomic -v 2>&1 ./... | $(GO_JUNIT_REPORT) -set-exit-code > report.xml

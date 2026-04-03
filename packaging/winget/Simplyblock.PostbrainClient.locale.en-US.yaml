@@ -1,12 +1,12 @@
-PackageIdentifier: Simplyblock.Postbrain
+PackageIdentifier: Simplyblock.PostbrainClient
 PackageVersion: 0.0.0
 PackageLocale: en-US
 Publisher: Simplyblock
 PublisherUrl: https://github.com/simplyblock
 PublisherSupportUrl: https://github.com/simplyblock/postbrain/issues
-PackageName: Postbrain
+PackageName: Postbrain Client
 PackageUrl: https://github.com/simplyblock/postbrain
-ShortDescription: Persistent memory and knowledge server for coding agents
+ShortDescription: Postbrain CLI client
 License: Apache-2.0
 LicenseUrl: https://github.com/simplyblock/postbrain/blob/main/LICENSE
 ManifestType: defaultLocale

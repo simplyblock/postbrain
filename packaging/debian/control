@@ -6,9 +6,14 @@ Build-Depends: debhelper-compat (= 13), golang-any
 Standards-Version: 4.6.2
 Homepage: https://github.com/simplyblock/postbrain
 
-Package: postbrain
+Package: postbrain-server
 Architecture: amd64 arm64
 Depends: ${misc:Depends}
-Description: Persistent memory and knowledge server for coding agents
- Postbrain provides server and CLI components for shared memory and
- knowledge across coding agents.
+Description: Postbrain server daemon
+ Postbrain server provides persistent memory and knowledge APIs for coding agents.
+
+Package: postbrain-client
+Architecture: amd64 arm64
+Depends: ${misc:Depends}
+Description: Postbrain CLI client
+ Postbrain client provides command-line utilities for interacting with a Postbrain server.
