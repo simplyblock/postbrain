@@ -28,7 +28,7 @@ go.work.sum
 
 # Built binaries
 /postbrain
-/postbrain-hook
+/postbrain-cli
 
 # Local config overrides
 config.test.yaml
