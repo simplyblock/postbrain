@@ -101,10 +101,10 @@ Add to `~/.claude/settings.json` or `.claude/settings.json` in a project:
   "hooks": {
     "PostToolUse": [{
       "matcher": "Edit|Write|Bash",
-      "command": "postbrain-hook snapshot --scope project:$POSTBRAIN_SCOPE"
+      "command": "postbrain-cli snapshot --scope project:$POSTBRAIN_SCOPE"
     }],
     "Stop": [{
-      "command": "postbrain-hook summarize-session --scope project:$POSTBRAIN_SCOPE"
+      "command": "postbrain-cli summarize-session --scope project:$POSTBRAIN_SCOPE"
     }]
   }
 }
@@ -113,7 +113,13 @@ Add to `~/.claude/settings.json` or `.claude/settings.json` in a project:
 ### Sync skills on session start
 
 ```bash
-postbrain-hook skill sync --scope project:$POSTBRAIN_SCOPE --agent claude-code
+postbrain-cli skill sync --scope project:$POSTBRAIN_SCOPE --agent claude-code
+```
+
+Install the Postbrain Codex skill into any directory (without needing this repository checked out once `postbrain-cli` is installed):
+
+```bash
+postbrain-cli install-codex-skill --target /path/to/project
 ```
 
 ---

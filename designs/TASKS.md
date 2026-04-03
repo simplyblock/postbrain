@@ -27,6 +27,13 @@
 
 ### Maintenance
 
+- [x] 2026-04-03: Generalized hook CLI toward `postbrain-cli` and removed checkout dependency for Codex skill install:
+  - `cmd/postbrain-hook` root command now uses `postbrain-cli` with alias `postbrain-hook` for compatibility.
+  - Added `install-codex-skill` command that installs `.codex/skills/postbrain.md` from embedded CLI assets.
+  - Added tested installer helper package `internal/postbraincli` with unit tests for install + AGENTS marker behavior.
+  - Updated `scripts/install-codex-skill.sh` to delegate to `postbrain-cli` when available (fallback to file-copy mode).
+  - Updated `Makefile build` to emit `postbrain-cli` alongside `postbrain` and `postbrain-hook`.
+  - Updated README hook/sync examples to prefer `postbrain-cli` and documented `install-codex-skill`.
 - [x] 2026-04-03: Updated `.codex/skills/postbrain.md` with stricter MCP memory workflow policy:
   - Startup scope bootstrap now checks `.codex/postbrain-base.md`, `README.md`, `AGENTS.md`, and common docs before prompting.
   - Added explicit opt-in/opt-out persistence to `.codex/postbrain-base.md` when no scope is defined.

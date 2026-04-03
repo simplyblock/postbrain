@@ -14,9 +14,16 @@
 
 set -euo pipefail
 
+TARGET_DIR="${1:-${PWD}}"
+
+# Prefer installed CLI when available so users do not need this repository
+# checked out to install the skill.
+if command -v postbrain-cli >/dev/null 2>&1; then
+  exec postbrain-cli install-codex-skill --target "${TARGET_DIR}"
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_SKILL="${SCRIPT_DIR}/../.codex/skills/postbrain.md"
-TARGET_DIR="${1:-${PWD}}"
 DEST_DIR="${TARGET_DIR}/.codex/skills"
 DEST_FILE="${DEST_DIR}/postbrain.md"
 AGENTS_FILE="${TARGET_DIR}/AGENTS.md"

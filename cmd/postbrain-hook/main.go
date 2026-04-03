@@ -4,6 +4,7 @@ package main
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,8 +20,12 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/closeutil"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/postbraincli"
 	"github.com/simplyblock/postbrain/internal/skills"
 )
+
+//go:embed assets/postbrain.md
+var embeddedCodexSkill string
 
 // hookClient is a minimal HTTP client for the Postbrain REST API.
 type hookClient struct {
@@ -69,12 +74,13 @@ var scopeFlag string
 
 func main() {
 	root := &cobra.Command{
-		Use:   "postbrain-hook",
-		Short: "Postbrain hook CLI for agent integration",
+		Use:     "postbrain-cli",
+		Aliases: []string{"postbrain-hook"},
+		Short:   "Postbrain CLI for hooks, skills, and local installer tooling",
 	}
 	root.PersistentFlags().StringVar(&scopeFlag, "scope", "", "scope (e.g. project:acme/api)")
 
-	root.AddCommand(snapshotCmd(), summarizeSessionCmd(), skillCmd())
+	root.AddCommand(snapshotCmd(), summarizeSessionCmd(), skillCmd(), installCodexSkillCmd())
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}
@@ -412,4 +418,34 @@ func parseSkillID(raw string) (uuid.UUID, error) {
 		return uuid.UUID{}, fmt.Errorf("skill: invalid id %q: %w", raw, err)
 	}
 	return id, nil
+}
+
+func installCodexSkillCmd() *cobra.Command {
+	var targetDir string
+	cmd := &cobra.Command{
+		Use:   "install-codex-skill [target_dir]",
+		Short: "Install .codex/skills/postbrain.md into a target directory",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				targetDir = args[0]
+			}
+			if strings.TrimSpace(targetDir) == "" {
+				targetDir = "."
+			}
+			installedPath, updatedAgents, err := postbraincli.InstallCodexSkill(
+				targetDir,
+				embeddedCodexSkill,
+				os.Getenv("POSTBRAIN_URL"),
+				os.Getenv("POSTBRAIN_SCOPE"),
+			)
+			if err != nil {
+				return err
+			}
+			slog.Info("install-codex-skill: installed", "path", installedPath, "agents_updated", updatedAgents)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&targetDir, "target", ".", "target directory")
+	return cmd
 }
