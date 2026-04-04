@@ -27,6 +27,15 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Redesigned docs site root page (`/`) into a project landing page:
+  - Replaced the simple docs-index card list in `site/src/pages/index.astro` with a presentable product-style homepage.
+  - Added:
+    - top navigation (`Getting Started`, `Documentation`, `GitHub`)
+    - hero with value proposition and direct call-to-action buttons
+    - quickstart block with concrete bootstrap commands
+    - capability overview cards (`memory`, `knowledge`, retrieval, scope governance, tooling, deployment)
+    - typical workflow section and curated documentation entry points
+  - Kept visual direction aligned with existing docs/web style (dark palette, accent color, card-based surfaces).
 - [x] 2026-04-04: Polished GitHub Pages docs UX and content framing:
   - Reworked `site/src/layouts/DocsLayout.astro` to improve readability and navigation:
     - sidebar grouping by sections parsed from `docs/README.md`

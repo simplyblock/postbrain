@@ -51,6 +51,16 @@ const pages = orderFromDocsReadme(docsFiles)
       href: isReadme ? `${baseUrl}docs/` : `${baseUrl}docs/${slug}/`
     };
   });
+
+const highlightDocs = pages.filter((page) => [
+  "getting-started",
+  "server-installation",
+  "configuration",
+  "using-with-coding-agents",
+  "common-workflows",
+  "security",
+  "indexing-model"
+].includes(page.slug));
 ---
 
 <html lang="en">
@@ -67,27 +77,92 @@ const pages = orderFromDocsReadme(docsFiles)
         --text: #e2e8f0;
         --text-muted: #8892a4;
         --accent: #6c8cff;
+        --accent-soft: rgba(108, 140, 255, 0.16);
+        --success: #63d9a1;
+      }
+      * {
+        box-sizing: border-box;
       }
       body {
         margin: 0;
-        background: radial-gradient(circle at 0% 0%, #1f2846 0%, var(--bg) 45%);
+        background:
+          radial-gradient(circle at 5% 0%, #1f2846 0%, transparent 34%),
+          radial-gradient(circle at 90% 10%, #1a2442 0%, transparent 30%),
+          var(--bg);
         color: var(--text);
         font-family: "Inter", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
         line-height: 1.5;
       }
-      .container {
-        max-width: 1024px;
-        margin: 0 auto;
-        padding: 2.2rem 1rem 3rem;
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        border-bottom: 1px solid rgba(45, 49, 72, 0.8);
+        backdrop-filter: blur(8px);
+        background: rgba(15, 17, 23, 0.8);
       }
-      h1 {
-        margin: 0 0 0.75rem;
-        font-size: 2rem;
+      .topbar-inner {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 0.8rem 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .brand {
+        color: var(--text);
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        text-decoration: none;
+      }
+      .top-links {
+        display: flex;
+        gap: 0.9rem;
+      }
+      .top-links a {
+        color: var(--text-muted);
+        text-decoration: none;
+      }
+      .top-links a:hover {
+        color: var(--text);
+      }
+      .container {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 2rem 1rem 4rem;
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 1.1rem;
+        align-items: stretch;
+      }
+      .hero-main {
+        background: linear-gradient(180deg, #1a1f31 0%, #151a29 100%);
+        border: 1px solid #313a58;
+        border-radius: 14px;
+        padding: 1.4rem 1.45rem;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.25rem 0.55rem;
+        font-size: 0.78rem;
+        color: #b8c9ff;
+        background: var(--accent-soft);
+        border: 1px solid rgba(108, 140, 255, 0.35);
+        border-radius: 999px;
+      }
+      .hero h1 {
+        margin: 0.8rem 0 0.75rem;
+        font-size: clamp(1.85rem, 3.2vw, 2.65rem);
+        line-height: 1.15;
       }
       .lead {
-        margin: 0 0 1.5rem;
+        margin: 0 0 1rem;
         color: var(--text-muted);
-        max-width: 760px;
+        max-width: 72ch;
       }
       a {
         color: var(--accent);
@@ -96,54 +171,248 @@ const pages = orderFromDocsReadme(docsFiles)
       a:hover {
         text-decoration: underline;
       }
-      .cta {
-        display: inline-block;
-        margin-bottom: 1.6rem;
-        padding: 0.6rem 1rem;
+      .cta-row {
+        margin-top: 1rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.65rem;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.35rem;
+        padding: 0.58rem 0.95rem;
         border: 1px solid var(--border);
         border-radius: 8px;
-        background: color-mix(in srgb, var(--accent) 18%, transparent);
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .btn.primary {
+        background: color-mix(in srgb, var(--accent) 22%, #0f1322);
+        border-color: #4a61b5;
+        color: #e7edff;
+      }
+      .btn.muted {
+        background: rgba(26, 29, 39, 0.9);
+        color: var(--text-muted);
+      }
+      .quick {
+        background: var(--bg-surface);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 1rem 1.05rem;
+      }
+      .quick h2 {
+        margin: 0 0 0.6rem;
+        font-size: 1rem;
+      }
+      .quick ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      .quick li + li {
+        margin-top: 0.5rem;
+      }
+      .quick code {
+        color: #dbe5ff;
+      }
+      .section {
+        margin-top: 1.2rem;
+        background: var(--bg-surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1rem;
+      }
+      .section h2 {
+        margin: 0 0 0.7rem;
+        font-size: 1.08rem;
+      }
+      .kicker {
+        margin: 0 0 0.85rem;
+        color: var(--text-muted);
+        font-size: 0.95rem;
       }
       .grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
         gap: 0.9rem;
       }
       .card {
-        background: var(--bg-surface);
-        border: 1px solid var(--border);
+        background: rgba(18, 22, 34, 0.95);
+        border: 1px solid #2a314b;
         border-radius: 8px;
-        padding: 0.9rem 1rem;
+        padding: 0.85rem 0.9rem;
       }
       .card h2 {
-        margin: 0 0 0.35rem;
-        font-size: 1rem;
+        margin: 0 0 0.4rem;
+        font-size: 0.97rem;
       }
       .card p {
         margin: 0;
         color: var(--text-muted);
-        font-size: 0.92rem;
+        font-size: 0.9rem;
+      }
+      .steps {
+        margin: 0;
+        padding-left: 1.2rem;
+      }
+      .steps li + li {
+        margin-top: 0.45rem;
+      }
+      .steps strong {
+        color: #e8eeff;
+      }
+      pre {
+        margin: 0.8rem 0 0;
+        overflow-x: auto;
+        border-radius: 10px;
+        border: 1px solid #303854;
+        background: linear-gradient(180deg, #1f2433 0%, #1a1d27 100%);
+        padding: 0.7rem 0.8rem;
+      }
+      pre code {
+        font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+        font-size: 0.86rem;
+        line-height: 1.22;
+        color: #dbe5ff;
+      }
+      .footer-note {
+        margin-top: 1.2rem;
+        color: var(--text-muted);
+        font-size: 0.9rem;
+      }
+      .tick {
+        color: var(--success);
+        font-weight: 700;
+        margin-right: 0.3rem;
+      }
+      @media (max-width: 930px) {
+        .hero {
+          grid-template-columns: 1fr;
+        }
+      }
+      @media (max-width: 600px) {
+        .top-links {
+          gap: 0.55rem;
+          font-size: 0.92rem;
+        }
+        .container {
+          padding: 1.15rem 0.75rem 2.2rem;
+        }
       }
     </style>
   </head>
   <body>
-    <div class="container">
-      <h1>Postbrain Documentation</h1>
-      <p class="lead">
-        Practical guides for installing, operating, and integrating Postbrain. Content is synced from the repository
-        docs and published to GitHub Pages.
-      </p>
-      <a class="cta" href={`${baseUrl}docs/getting-started/`}>Start with Getting Started</a>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href={baseUrl}>Postbrain</a>
+        <nav class="top-links">
+          <a href={`${baseUrl}docs/getting-started/`}>Getting Started</a>
+          <a href={`${baseUrl}docs/`}>Documentation</a>
+          <a href="https://github.com/simplyblock/postbrain" target="_blank" rel="noreferrer">GitHub</a>
+        </nav>
+      </div>
+    </header>
 
-      <div class="grid">
-        {
-          pages.map((page) => (
-            <a class="card" href={page.href}>
-              <h2>{page.title}</h2>
-              <p>Open guide</p>
-            </a>
-          ))
-        }
+    <div class="container">
+      <section class="hero">
+        <article class="hero-main">
+          <span class="badge">Long-term Memory for Coding Agents</span>
+          <h1>Keep context across sessions, tools, and teams.</h1>
+          <p class="lead">
+            Postbrain adds durable memory, reviewed knowledge, and reusable skills to agent workflows. It turns
+            session-only progress into shared, scope-controlled context your team can reuse.
+          </p>
+          <p class="lead">
+            Default assistant memory is often isolated per user/account/device/agent context. Postbrain makes that
+            context portable and governable at project, team, and company levels.
+          </p>
+          <div class="cta-row">
+            <a class="btn primary" href={`${baseUrl}docs/getting-started/`}>Get Started</a>
+            <a class="btn muted" href={`${baseUrl}docs/common-workflows/`}>See Workflows</a>
+            <a class="btn muted" href={`${baseUrl}docs/server-installation/`}>Install Server</a>
+          </div>
+        </article>
+        <aside class="quick">
+          <h2>Quickstart</h2>
+          <ul>
+            <li><span class="tick">✓</span> Deploy server and run `postbrain onboard`</li>
+            <li><span class="tick">✓</span> Issue a scoped token for your automation/user</li>
+            <li><span class="tick">✓</span> Install Codex/Claude skill in your repo</li>
+            <li><span class="tick">✓</span> Start storing and recalling context per scope</li>
+          </ul>
+          <pre><code>postbrain onboard --config ./config.yaml
+postbrain token create --name "project-bot" --principal "team-platform"
+postbrain-cli install-codex-skill --target /path/to/repo</code></pre>
+        </aside>
+      </section>
+
+      <section class="section">
+        <h2>What You Get</h2>
+        <p class="kicker">A memory system designed for engineering workflows, not just chat history.</p>
+        <div class="grid">
+          <article class="card">
+            <h2>Persistent Memory Layer</h2>
+            <p>Capture decisions, observations, and task progress continuously and recall them in later sessions.</p>
+          </article>
+          <article class="card">
+            <h2>Knowledge Promotion</h2>
+            <p>Promote stable outcomes into reviewed artifacts so high-value context becomes durable reference.</p>
+          </article>
+          <article class="card">
+            <h2>Hybrid Retrieval</h2>
+            <p>Combine vector, full-text, trigram, and graph-aware retrieval for higher recall quality.</p>
+          </article>
+          <article class="card">
+            <h2>Scope-Controlled Access</h2>
+            <p>Apply project/team/company boundaries so context sharing is explicit, auditable, and safe.</p>
+          </article>
+          <article class="card">
+            <h2>Agent Tooling</h2>
+            <p>Use `postbrain-cli` and skills for Codex/Claude to integrate memory into everyday coding loops.</p>
+          </article>
+          <article class="card">
+            <h2>Operational Deployment</h2>
+            <p>Run locally, in containers, or on Kubernetes with Helm and OAuth/social login support.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Typical Flow</h2>
+        <ol class="steps">
+          <li><strong>Capture</strong>: agents write memories while implementing or debugging.</li>
+          <li><strong>Recall</strong>: new tasks start by pulling relevant context in the same scope.</li>
+          <li><strong>Promote</strong>: durable outcomes become knowledge artifacts and reusable skills.</li>
+          <li><strong>Share with control</strong>: teams consume shared context through scope boundaries.</li>
+        </ol>
+      </section>
+
+      <section class="section">
+        <h2>Documentation Entry Points</h2>
+        <p class="kicker">Start with these guides for setup, operations, and day-to-day usage.</p>
+        <div class="grid">
+          {
+            highlightDocs.map((page) => (
+              <a class="card" href={page.href}>
+                <h2>{page.title}</h2>
+                <p>Open guide</p>
+              </a>
+            ))
+          }
+        </div>
+        <p class="footer-note">
+          Full reference: <a href={`${baseUrl}docs/`}>Documentation Index</a>
+        </p>
+      </section>
+      <section class="footer-note">
+        Postbrain is open source and built for production agent workflows with explicit memory lifecycle and
+        scope-based governance.
+      </section>
+      <div class="footer-note">
+        <a href="https://github.com/simplyblock/postbrain" target="_blank" rel="noreferrer">View repository on GitHub</a>
       </div>
     </div>
   </body>
