@@ -25,7 +25,6 @@ CLI_LDFLAGS ?= -X main.buildVersion=$(VERSION) -X main.buildGitRef=$(GIT_REF) -X
 
 build:
 	go build -ldflags "$(SERVER_LDFLAGS)" -o postbrain ./cmd/postbrain
-	go build -ldflags "$(CLI_LDFLAGS)" -o postbrain-hook ./cmd/postbrain-cli
 	go build -ldflags "$(CLI_LDFLAGS)" -o postbrain-cli ./cmd/postbrain-cli
 
 build-target:
