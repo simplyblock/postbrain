@@ -57,7 +57,7 @@ CREATE INDEX ON embeddings_model_<uuid>
 `object_type` is not repeated in the vector table — it is implicit via the model's `content_type` and is stored in `embedding_index`.
 
 ### Object Linkage Strategy
-Central `embedding_index` table + per-model vector tables. The `embedding_model_id` FK columns in `memories`, `entities`, `knowledge_artifacts`, and `skills` are **dropped in the same migration** that introduces `embedding_index`. No coexistence period at the column level.
+Central `embedding_index` table + per-model vector tables. Legacy `embedding_model_id` FK columns in `memories`, `entities`, `knowledge_artifacts`, and `skills` are retained during compatibility and removed in a later cleanup migration.
 
 ### Multi-Content-Type Per Object
 A memory can have both a text embedding and a code embedding. In the new architecture it gets one row per model in `embedding_index` and one row per model in the corresponding per-model vector table. The `content_type` on `embedding_models` encodes the distinction.
@@ -147,9 +147,9 @@ All of the following must be true before Step 11 begins:
 
 - [ ] Introduce `embedding_index` table per resolved schema above.
 
-- [ ] Drop `embedding_model_id` FK columns from `memories`, `entities`, `knowledge_artifacts`, `skills` in the same migration.
+- [x] Keep `embedding_model_id` FK columns during compatibility phase; cleanup deferred to dedicated migration.
 
-- [ ] Define naming and validation rules for per-model tables:
+- [x] Define naming and validation rules for per-model tables:
   - deterministic table name from UUID (strip dashes),
   - SQL identifier safety guaranteed by UUID character set.
 
@@ -157,7 +157,7 @@ All of the following must be true before Step 11 begins:
 
 ## Phase 2: Migrations & Bootstrap
 
-- [ ] Add non-breaking migration(s) to introduce new metadata columns, `embedding_index`, and helper SQL primitives for dynamic table creation.
+- [x] Add non-breaking migration(s) to introduce new metadata columns and `embedding_index`.
 
 - [ ] Add bootstrap logic to copy legacy inline vectors into new per-model tables and mark `embedding_index` rows as `ready`.
 
@@ -241,7 +241,7 @@ All of the following must be true before Step 11 begins:
 
 ## Phase 8: Compatibility & Cutover
 
-- [ ] Phase A (dual-write): write to new model tables; legacy columns already dropped.
+- [ ] Phase A (dual-write): write to new model tables while legacy columns are still present.
 - [ ] Phase B (bootstrap): copy legacy vectors into new model tables.
 - [ ] Phase C (dual-read): read from new tables first, fallback legacy vector data if `embedding_index` row missing/not ready.
 - [ ] Phase D (cleanup migration): drop legacy embedding vector columns/indexes after explicit sign-off per criteria above.
@@ -308,14 +308,14 @@ Every step follows strict Red → Green → Refactor before moving to the next s
 
 ### Step 1: Schema Preparation
 
-- [ ] RED: migration tests for new `embedding_models` columns (`provider`, `service_url`, `provider_model`, `table_name`, `is_ready`), `embedding_index` table, and removal of `embedding_model_id` FK columns from object tables.
-- [ ] GREEN: add migration(s) implementing the above. Preserve existing `is_active` partial unique indexes.
+- [x] RED: migration tests for new `embedding_models` columns (`provider`, `service_url`, `provider_model`, `table_name`, `is_ready`) and `embedding_index` table, with legacy FK columns retained during compatibility.
+- [x] GREEN: add migration(s) implementing the above. Preserve existing `is_active` partial unique indexes.
 - [ ] REFACTOR: tighten constraints/indexes and migration comments.
 
 ### Step 2: Dynamic Table Provisioning Primitives
 
-- [ ] RED: tests for safe table-name generation (`embeddings_model_<uuid_no_dashes>`) and per-model table + HNSW index creation.
-- [ ] GREEN: implement helper(s) to generate table name from UUID and execute CREATE TABLE + index DDL.
+- [x] RED: tests for safe table-name generation (`embeddings_model_<uuid_no_dashes>`) and per-model table + HNSW index creation.
+- [x] GREEN: implement helper(s) to generate table name from UUID and execute CREATE TABLE + index DDL.
 - [ ] REFACTOR: isolate SQL generation for reuse in registration flow.
 
 ### Step 3: Model Registration Backend Flow
