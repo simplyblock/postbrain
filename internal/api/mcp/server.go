@@ -110,6 +110,13 @@ func (s *Server) registerTools() {
 		mcpgo.WithNumber("graph_depth", mcpgo.Description("Graph traversal depth for code results: 0=off, 1=direct neighbours (default: 1)")),
 	), withToolMetrics("recall", s.handleRecall))
 
+	// graph_query
+	s.mcpServer.AddTool(mcpgo.NewTool("graph_query",
+		mcpgo.WithDescription("Execute a scoped Cypher query against the AGE graph overlay"),
+		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
+		mcpgo.WithString("cypher", mcpgo.Required(), mcpgo.Description("Cypher query body to execute")),
+	), withToolMetrics("graph_query", s.handleGraphQuery))
+
 	// forget
 	s.mcpServer.AddTool(mcpgo.NewTool("forget",
 		mcpgo.WithDescription("Deactivate or permanently delete a memory"),
