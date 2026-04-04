@@ -27,6 +27,16 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Implemented REST Cypher query endpoint using AGE runtime support:
+  - Replaced `/v1/graph/query` 501 stub in `internal/api/rest/graph.go` with full handler logic:
+    - request JSON parsing (`cypher`, `scope_id`)
+    - input validation (`invalid request body`, `cypher is required`, `invalid scope_id`)
+    - AGE execution via `graph.RunCypherQuery(...)`
+    - `ErrAGEUnavailable` mapped to `501 AGE unavailable`
+    - successful response shape: `{ "rows": [...] }`
+  - Added tests:
+    - unit: `internal/api/rest/graph_test.go` (`queryCypher` validation and nil-pool behavior)
+    - integration: `internal/api/rest/graph_query_integration_test.go` (AGE-aware 501/200 behavior end-to-end)
 - [x] 2026-04-04: Implemented AGE overlay sync primitives in `internal/graph/age_sync.go`:
   - Added `SyncEntityToAGE(ctx, pool, entity)`:
     - `MERGE` vertex by `id`
@@ -1001,7 +1011,7 @@
 - [x] `helpers.go` — `writeJSON`, `writeError`, `readJSON`, `uuidParam`, `paginationFromRequest`
 - [x] `router_test.go` — GET /health 200, POST /v1/memories no auth 401, invalid token 401
 - [x] `upload.go` + `upload_test.go` — `POST /v1/knowledge/upload` multipart file upload; text extraction via `internal/ingest`; 401 test; supports .txt, .md, .pdf, .docx
-- [x] `graph.go` — `GET /v1/entities?scope_id=&type=&limit=&offset=` and `GET /v1/graph?scope_id=` implemented; `POST /v1/graph/query` returns 501 (AGE unavailable — deferred)
+- [x] `graph.go` — `GET /v1/entities?scope_id=&type=&limit=&offset=`, `GET /v1/graph?scope_id=`, and `POST /v1/graph/query` implemented (AGE-aware: returns 501 when AGE unavailable)
 
 ### `cmd/postbrain` — Server Binary
 
