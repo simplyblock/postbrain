@@ -27,6 +27,26 @@ func TestLoginGET_RendersForm(t *testing.T) {
 	}
 }
 
+func TestLoginGET_DoesNotRenderAppSidebar(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/ui/login", nil)
+	w := httptest.NewRecorder()
+
+	h.handleLogin(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	body := w.Body.String()
+	if strings.Contains(body, "<nav>") {
+		t.Fatalf("login page should not render app sidebar nav, got body: %s", body)
+	}
+	if !strings.Contains(body, "<h1>Sign in to Postbrain</h1>") {
+		t.Fatalf("expected login heading in body, got: %s", body)
+	}
+}
+
 func TestLoginGET_WithNext_RendersHiddenNextField(t *testing.T) {
 	t.Parallel()
 	h := newTestHandler(t)
