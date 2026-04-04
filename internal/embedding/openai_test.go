@@ -184,3 +184,47 @@ func TestOpenAIEmbedder_CustomBaseURL_EmptyAPIKeyOmitsAuthorizationHeader(t *tes
 		t.Fatalf("Authorization header = %q, want empty", seenAuth)
 	}
 }
+
+func TestOpenAIEmbedder_ArrayResponse_SingleInput(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([][]float32{{0.1, 0.2, 0.3}})
+	}))
+	defer srv.Close()
+
+	cfg := newOpenAICfg("")
+	cfg.OpenAIBaseURL = srv.URL
+	e := NewOpenAIEmbedder(cfg, "text-embedding-3-small", cfg.OpenAIBaseURL)
+	got, err := e.Embed(context.Background(), "hello")
+	if err != nil {
+		t.Fatalf("Embed: %v", err)
+	}
+	if len(got) != 3 || got[0] != 0.1 || got[1] != 0.2 || got[2] != 0.3 {
+		t.Fatalf("unexpected embedding: %v", got)
+	}
+}
+
+func TestOpenAIEmbedder_ArrayResponse_BatchInput(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([][]float32{
+			{1, 1},
+			{2, 2},
+		})
+	}))
+	defer srv.Close()
+
+	cfg := newOpenAICfg("")
+	cfg.OpenAIBaseURL = srv.URL
+	e := NewOpenAIEmbedder(cfg, "text-embedding-3-small", cfg.OpenAIBaseURL)
+	got, err := e.EmbedBatch(context.Background(), []string{"one", "two"})
+	if err != nil {
+		t.Fatalf("EmbedBatch: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len(got)=%d, want 2", len(got))
+	}
+	if len(got[0]) != 2 || got[0][0] != 1 || got[1][0] != 2 {
+		t.Fatalf("unexpected embeddings: %v", got)
+	}
+}
