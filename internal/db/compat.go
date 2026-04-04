@@ -1678,6 +1678,56 @@ func ListPendingPromotions(ctx context.Context, pool *pgxpool.Pool, targetScopeI
 	return ps, nil
 }
 
+// ListPromotions returns promotion requests, optionally filtered by scope and/or status.
+// Pass zero UUID to query all scopes. Pass empty status to query all statuses.
+func ListPromotions(ctx context.Context, pool *pgxpool.Pool, targetScopeID uuid.UUID, status string, limit int) ([]*PromotionRequest, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	base := `SELECT id, memory_id, requested_by, target_scope_id, target_visibility,
+	        proposed_title, proposed_collection_id, status, reviewer_id, review_note,
+	        reviewed_at, result_artifact_id, created_at
+	 FROM promotion_requests`
+	order := ` ORDER BY created_at DESC LIMIT $1`
+	args := []any{limit}
+
+	query := base
+	switch {
+	case targetScopeID == (uuid.UUID{}) && status == "":
+		// all scopes, all statuses
+	case targetScopeID == (uuid.UUID{}):
+		query += ` WHERE status = $2`
+		args = append(args, status)
+	case status == "":
+		query += ` WHERE target_scope_id = $2`
+		args = append(args, targetScopeID)
+	default:
+		query += ` WHERE target_scope_id = $2 AND status = $3`
+		args = append(args, targetScopeID, status)
+	}
+	query += order
+
+	rows, err := pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("db: list promotions: %w", err)
+	}
+	defer rows.Close()
+
+	var ps []*PromotionRequest
+	for rows.Next() {
+		var p PromotionRequest
+		if err := rows.Scan(
+			&p.ID, &p.MemoryID, &p.RequestedBy, &p.TargetScopeID, &p.TargetVisibility,
+			&p.ProposedTitle, &p.ProposedCollectionID, &p.Status, &p.ReviewerID, &p.ReviewNote,
+			&p.ReviewedAt, &p.ResultArtifactID, &p.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("db: list promotions scan: %w", err)
+		}
+		ps = append(ps, &p)
+	}
+	return ps, rows.Err()
+}
+
 // ── Skills ────────────────────────────────────────────────────────────────────
 
 // CreateSkill inserts a new skill row.
