@@ -30,6 +30,7 @@ environment variables.
 |-----------------------------|----------------------------------------------------|
 | `embedding.backend`         | Which embedding provider backend to use.           |
 | `embedding.ollama_url`      | Ollama endpoint for local embedding calls.         |
+| `embedding.openai_base_url` | Optional OpenAI-compatible base URL override.      |
 | `embedding.text_model`      | Text embedding model slug.                         |
 | `embedding.code_model`      | Code embedding model slug.                         |
 | `embedding.summary_model`   | Optional summarize/analyze model override.         |
@@ -39,6 +40,10 @@ environment variables.
 
 For how embeddings/chunks/entities are used during indexing and retrieval, see
 [Indexing Model](./indexing-model.md).
+
+When `embedding.backend` is `openai`:
+- `embedding.openai_api_key` is required if `embedding.openai_base_url` is empty (default OpenAI API).
+- `embedding.openai_api_key` is optional when `embedding.openai_base_url` points to a local/self-hosted OpenAI-compatible endpoint.
 
 ## `server`
 

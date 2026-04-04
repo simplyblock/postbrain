@@ -88,6 +88,35 @@ func TestOpenAISummarizer_Summarize(t *testing.T) {
 	}
 }
 
+func TestOpenAISummarizer_CustomBaseURL_EmptyAPIKeyOmitsAuthorizationHeader(t *testing.T) {
+	t.Parallel()
+	seenAuth := "unset"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenAuth = r.Header.Get("Authorization")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]any{"content": "OpenAI summary."}},
+			},
+		}); err != nil {
+			t.Errorf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	cfg := &config.EmbeddingConfig{OpenAIBaseURL: srv.URL}
+	s := NewOpenAISummarizer(cfg, "gpt-4o-mini", cfg.OpenAIBaseURL)
+	got, err := s.Summarize(context.Background(), "Document text here.")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "OpenAI summary." {
+		t.Errorf("expected summary, got %q", got)
+	}
+	if seenAuth != "" {
+		t.Fatalf("Authorization header = %q, want empty", seenAuth)
+	}
+}
+
 func TestEmbeddingService_SummarizeNoModel(t *testing.T) {
 	t.Parallel()
 	svc := &EmbeddingService{} // no summarizer configured

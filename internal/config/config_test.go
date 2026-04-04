@@ -30,6 +30,7 @@ database:
 embedding:
   backend:         ollama
   ollama_url:      "http://localhost:11434"
+  openai_base_url: "http://localhost:8080/v1"
   text_model:      "nomic-embed-text"
   code_model:      "nomic-embed-code"
   openai_api_key:  "sk-test"
@@ -83,6 +84,9 @@ func TestLoad_AllFields(t *testing.T) {
 	}
 	if cfg.Embedding.OllamaURL != "http://localhost:11434" {
 		t.Errorf("Embedding.OllamaURL = %q", cfg.Embedding.OllamaURL)
+	}
+	if cfg.Embedding.OpenAIBaseURL != "http://localhost:8080/v1" {
+		t.Errorf("Embedding.OpenAIBaseURL = %q", cfg.Embedding.OpenAIBaseURL)
 	}
 	if cfg.Embedding.TextModel != "nomic-embed-text" {
 		t.Errorf("Embedding.TextModel = %q", cfg.Embedding.TextModel)
@@ -181,6 +185,9 @@ database:
 	}
 	if cfg.Embedding.Backend != "ollama" {
 		t.Errorf("default Embedding.Backend = %q, want ollama", cfg.Embedding.Backend)
+	}
+	if cfg.Embedding.OpenAIBaseURL != "" {
+		t.Errorf("default Embedding.OpenAIBaseURL = %q, want empty", cfg.Embedding.OpenAIBaseURL)
 	}
 	if cfg.Embedding.BatchSize != 64 {
 		t.Errorf("default Embedding.BatchSize = %d, want 64", cfg.Embedding.BatchSize)

@@ -33,6 +33,7 @@ type DatabaseConfig struct {
 type EmbeddingConfig struct {
 	Backend        string        `mapstructure:"backend"`
 	OllamaURL      string        `mapstructure:"ollama_url"`
+	OpenAIBaseURL  string        `mapstructure:"openai_base_url"`
 	TextModel      string        `mapstructure:"text_model"`
 	CodeModel      string        `mapstructure:"code_model"`
 	SummaryModel   string        `mapstructure:"summary_model"`
@@ -143,6 +144,7 @@ func Load(path string) (*Config, error) {
 
 	v.SetDefault("embedding.backend", "ollama")
 	v.SetDefault("embedding.ollama_url", "http://localhost:11434")
+	v.SetDefault("embedding.openai_base_url", "")
 	v.SetDefault("embedding.text_model", "nomic-embed-text")
 	v.SetDefault("embedding.code_model", "nomic-embed-code")
 	v.SetDefault("embedding.openai_api_key", "")

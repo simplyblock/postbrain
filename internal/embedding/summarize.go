@@ -192,7 +192,9 @@ func (s *OpenAISummarizer) Summarize(ctx context.Context, text string) (string, 
 		return "", fmt.Errorf("openai summarize: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+s.cfg.OpenAIAPIKey)
+	if s.cfg.OpenAIAPIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+s.cfg.OpenAIAPIKey)
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -247,7 +249,9 @@ func (s *OpenAISummarizer) Analyze(ctx context.Context, text string) (*DocumentA
 		return nil, fmt.Errorf("openai analyze: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+s.cfg.OpenAIAPIKey)
+	if s.cfg.OpenAIAPIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+s.cfg.OpenAIAPIKey)
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

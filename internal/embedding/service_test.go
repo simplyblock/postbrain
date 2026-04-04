@@ -57,6 +57,18 @@ func openAICfgForService(textModel, codeModel string) *config.EmbeddingConfig {
 	}
 }
 
+func openAICfgForServiceWithBaseURL(textModel, codeModel, apiKey, baseURL string) *config.EmbeddingConfig {
+	return &config.EmbeddingConfig{
+		Backend:        "openai",
+		OpenAIAPIKey:   apiKey,
+		OpenAIBaseURL:  baseURL,
+		TextModel:      textModel,
+		CodeModel:      codeModel,
+		RequestTimeout: 5 * time.Second,
+		BatchSize:      64,
+	}
+}
+
 // --- NewService construction tests ---
 
 func TestNewService_OllamaBackendNoCodeModel(t *testing.T) {
@@ -95,6 +107,32 @@ func TestNewService_OpenAIBackend(t *testing.T) {
 	}
 	if svc.TextEmbedder() == nil {
 		t.Error("TextEmbedder() should not be nil")
+	}
+}
+
+func TestNewService_OpenAIBackend_DefaultBaseURLRequiresAPIKey(t *testing.T) {
+	cfg := openAICfgForServiceWithBaseURL("text-embedding-3-small", "", "", "")
+	_, err := NewService(cfg)
+	if err == nil {
+		t.Fatal("expected error for missing openai_api_key with default base URL, got nil")
+	}
+	if !containsString(err.Error(), "openai_api_key") {
+		t.Fatalf("error = %q, want mention of openai_api_key", err.Error())
+	}
+}
+
+func TestNewService_OpenAIBackend_CustomBaseURLAllowsEmptyAPIKey(t *testing.T) {
+	cfg := openAICfgForServiceWithBaseURL("text-embedding-3-small", "", "", "http://localhost:8080/v1")
+	svc, err := NewService(cfg)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	text, ok := svc.TextEmbedder().(*OpenAIEmbedder)
+	if !ok {
+		t.Fatalf("TextEmbedder type = %T, want *OpenAIEmbedder", svc.TextEmbedder())
+	}
+	if text.baseURL != "http://localhost:8080/v1" {
+		t.Fatalf("OpenAI baseURL = %q, want custom URL", text.baseURL)
 	}
 }
 
