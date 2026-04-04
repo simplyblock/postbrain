@@ -124,3 +124,13 @@ func TestHandleRecall_MemoryLayerOnly(t *testing.T) {
 	}
 	_ = result
 }
+
+func TestNewServer_NoPool_DoesNotRegisterGraphQuery(t *testing.T) {
+	s := NewServer(nil, nil, nil)
+	if s == nil {
+		t.Fatal("expected non-nil server")
+	}
+	if tool := s.MCPServer().GetTool("graph_query"); tool != nil {
+		t.Fatal("graph_query must not be registered when database/AGE is unavailable")
+	}
+}
