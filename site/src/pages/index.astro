@@ -2,15 +2,18 @@
 import { readdirSync } from "node:fs";
 
 const docsDir = new URL("../../../docs/", import.meta.url);
+const baseUrl = import.meta.env.BASE_URL ?? "/";
 const pages = readdirSync(docsDir)
   .filter((name) => name.toLowerCase().endsWith(".md"))
   .sort((a, b) => a.localeCompare(b))
   .map((name) => {
-    const slug = name.replace(/\.md$/i, "");
+    const isReadme = name.toLowerCase() === "readme.md";
+    const slug = isReadme ? "" : name.replace(/\.md$/i, "");
     return {
       name,
       slug,
-      title: slug.replace(/[-_]/g, " ")
+      title: (isReadme ? "Documentation Overview" : slug).replace(/[-_]/g, " "),
+      href: isReadme ? `${baseUrl}docs/` : `${baseUrl}docs/${slug}/`
     };
   });
 ---
@@ -19,51 +22,94 @@ const pages = readdirSync(docsDir)
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Postbrain Docs</title>
+    <title>Postbrain Documentation</title>
     <style>
       :root {
-        color-scheme: light;
+        --bg: #0f1117;
+        --bg-surface: #1a1d27;
+        --bg-hover: #22263a;
+        --border: #2d3148;
+        --text: #e2e8f0;
+        --text-muted: #8892a4;
+        --accent: #6c8cff;
       }
       body {
-        margin: 0 auto;
-        max-width: 920px;
-        padding: 2rem 1rem 3rem;
-        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        margin: 0;
+        background: radial-gradient(circle at 0% 0%, #1f2846 0%, var(--bg) 45%);
+        color: var(--text);
+        font-family: "Inter", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
         line-height: 1.5;
       }
+      .container {
+        max-width: 1024px;
+        margin: 0 auto;
+        padding: 2.2rem 1rem 3rem;
+      }
       h1 {
-        margin-top: 0;
+        margin: 0 0 0.75rem;
+        font-size: 2rem;
       }
-      ul {
-        padding-left: 1.2rem;
-      }
-      li + li {
-        margin-top: 0.35rem;
+      .lead {
+        margin: 0 0 1.5rem;
+        color: var(--text-muted);
+        max-width: 760px;
       }
       a {
-        color: #0b5fff;
+        color: var(--accent);
         text-decoration: none;
       }
       a:hover {
         text-decoration: underline;
       }
-      .hint {
-        color: #444;
-        margin-bottom: 1rem;
+      .cta {
+        display: inline-block;
+        margin-bottom: 1.6rem;
+        padding: 0.6rem 1rem;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--accent) 18%, transparent);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 0.9rem;
+      }
+      .card {
+        background: var(--bg-surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.9rem 1rem;
+      }
+      .card h2 {
+        margin: 0 0 0.35rem;
+        font-size: 1rem;
+      }
+      .card p {
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 0.92rem;
       }
     </style>
   </head>
   <body>
-    <h1>Postbrain Documentation</h1>
-    <p class="hint">Generated from the repository <code>docs/</code> directory.</p>
-    <ul>
-      {
-        pages.map((page) => (
-          <li>
-            <a href={`/docs/${page.slug}/`}>{page.title}</a>
-          </li>
-        ))
-      }
-    </ul>
+    <div class="container">
+      <h1>Postbrain Documentation</h1>
+      <p class="lead">
+        Practical guides for installing, operating, and integrating Postbrain. Content is synced from the repository
+        docs and published to GitHub Pages.
+      </p>
+      <a class="cta" href={`${baseUrl}docs/getting-started/`}>Start with Getting Started</a>
+
+      <div class="grid">
+        {
+          pages.map((page) => (
+            <a class="card" href={page.href}>
+              <h2>{page.title}</h2>
+              <p>Open guide</p>
+            </a>
+          ))
+        }
+      </div>
+    </div>
   </body>
 </html>
