@@ -2,53 +2,55 @@
 
 ## Why this exists
 
-AI assistants are good at short-term context, but most workflows still suffer from memory loss:
+AI assistants are fast, but they are still session-bound in most real workflows. Their built-in memory is usually tied
+to a specific user/account/device/agent context, which means it does not naturally propagate across teammates, service
+accounts, or organization scopes. Teams repeatedly lose context between tasks, re-discover the same decisions, and
+rebuild prompts that should already exist as shared operational knowledge. This creates friction, inconsistent outcomes,
+and unnecessary repetition.
 
-- important decisions get repeated or contradicted later
-- project context is lost between sessions
-- teams cannot easily share what one assistant already learned
-- useful instructions are hard to make durable and reusable
+Postbrain is the memory and knowledge layer for those workflows. It keeps useful context durable across sessions and
+across agents, so work does not reset every time a chat window closes.
 
-Postbrain solves this by adding durable memory and knowledge on top of your normal agent workflows.
+## What Postbrain is
 
-## What Postbrain does
+Postbrain stores and retrieves three kinds of context:
 
-Postbrain gives you:
+1. `memory`: quick, high-frequency observations captured while work is happening
+2. `knowledge`: durable artifacts meant to be reviewed, reused, and shared
+3. `skills`: reusable instruction assets that can be installed into agent environments
 
-- persistent memory for observations, decisions, and session outcomes
-- shared knowledge artifacts for long-lived documentation and standards
-- scope-based access control for teams and organizations
-- hybrid retrieval that can find both semantic and exact-match context
+This model supports both speed and quality. You can capture raw working notes immediately, then promote stable outcomes
+into long-lived knowledge once they are ready.
 
 ## How memory and knowledge work
 
-Postbrain separates content by purpose:
+In a typical workflow, agents write memories continuously during task execution. Before starting new tasks, they recall
+relevant context from prior work in the same scope. When a pattern, decision, or implementation detail becomes stable,
+it is promoted into a knowledge artifact so future sessions can consume a cleaner, curated version.
 
-- memory: fast, iterative, high-frequency context
-- knowledge: reviewed, durable artifacts meant to be reused
-- skills: reusable instruction assets for agents
-
-In practice, teams usually:
-
-1. write memories while working
-2. recall those memories before new tasks
-3. promote durable outcomes into knowledge
+The result is a practical lifecycle: capture fast, refine later, and reuse confidently.
 
 ## How retrieval works
 
-Retrieval combines multiple methods:
+Postbrain uses hybrid retrieval instead of relying on a single search strategy. Semantic vector search handles intent
+and meaning; full-text search handles precise keyword and code-symbol lookups; trigram matching helps with fuzzy
+queries; and graph traversal adds connected context (for example related artifacts, entities, and chunk relationships).
 
-- vector similarity for semantic relevance
-- full-text search for precise keyword queries
-- trigram matching for fuzzy text lookup
-- graph-based relation traversal for connected context
+Because these strategies are combined and scope-filtered, retrieval is both more accurate and safer for multi-team
+usage.
 
-This improves reliability versus a single retrieval method.
+## Access and scope boundaries
 
-## Who this is for
+All content is tied to scopes and principals. This means memory and knowledge are not only searchable, but also
+constrained by authorization rules. A caller can only retrieve what its token and effective principal scope chain allow.
 
-Postbrain is useful for:
+This is essential in real organizations, where project, team, and company context must be shared intentionally rather
+than globally.
 
-- teams using coding agents in daily development
-- internal AI assistants that need project memory
-- organizations that want controlled, reusable AI context over time
+## Who should use Postbrain
+
+Postbrain is designed for teams that use coding agents or internal AI assistants as part of daily engineering work and
+want reliable long-term memory without sacrificing access control. It is especially useful when multiple contributors
+work on the same repositories, standards, and systems over time.
+
+If you are setting up Postbrain for the first time, continue with [Getting Started](./getting-started.md).
