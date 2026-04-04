@@ -27,6 +27,20 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Added configurable OpenAI-compatible endpoint support for embedding/summarization:
+  - Added `embedding.openai_base_url` to runtime config (`internal/config/config.go`) with default empty value.
+  - Wired OpenAI constructors in `internal/embedding/service.go` to use `openai_base_url` for text/code/summarize/analyze clients.
+  - Added validation for OpenAI backend:
+    - requires `embedding.openai_api_key` only when `embedding.openai_base_url` is not configured.
+    - allows empty API key for custom OpenAI-compatible endpoints (for example local llama.cpp).
+  - Updated OpenAI request handling to omit `Authorization` header when API key is empty.
+  - Added test coverage:
+    - `internal/config/config_test.go` for `openai_base_url` round-trip + defaults.
+    - `internal/embedding/service_test.go` for key requirement + custom base URL acceptance.
+    - `internal/embedding/openai_test.go` and `internal/embedding/summarize_test.go` for optional auth-header behavior with custom endpoints.
+  - Updated user-facing config docs:
+    - `config.example.yaml`
+    - `docs/configuration.md`
 - [x] 2026-04-04: Added initial AGE PageRank primitive for entity ranking:
   - Added `internal/graph/pagerank.go` with `RunPageRank(ctx, pool)`:
     - validates non-nil DB pool

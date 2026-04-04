@@ -15,13 +15,16 @@ embedding:
   backend: ollama
   # Base URL for Ollama embedding requests.
   ollama_url: "http://localhost:11434"
+  # Optional OpenAI-compatible base URL override (for example: local llama.cpp).
+  # Leave empty to use the default OpenAI API endpoint.
+  openai_base_url: ""
   # Model slug for text embeddings.
   text_model: "nomic-embed-text"
   # Model slug for code embeddings.
   code_model: "nomic-embed-code"
   # Optional model slug for summarize/analyze generation.
   summary_model: ""
-  # OpenAI API key (used when backend requires it).
+  # OpenAI API key. Required for default OpenAI endpoint, optional for custom openai_base_url.
   openai_api_key: ""
   # Timeout for embedding/summarize/analyze requests.
   request_timeout: 30s

@@ -159,3 +159,28 @@ func TestOpenAIEmbedder_MissingAPIKeyReturns401(t *testing.T) {
 		t.Fatal("expected error for 401 response, got nil")
 	}
 }
+
+func TestOpenAIEmbedder_CustomBaseURL_EmptyAPIKeyOmitsAuthorizationHeader(t *testing.T) {
+	seenAuth := "unset"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{
+				{"embedding": []float32{1, 2}, "index": 0},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	cfg := newOpenAICfg("")
+	cfg.OpenAIBaseURL = srv.URL
+	e := NewOpenAIEmbedder(cfg, "text-embedding-3-small", cfg.OpenAIBaseURL)
+	_, err := e.Embed(context.Background(), "hello")
+	if err != nil {
+		t.Fatalf("Embed: %v", err)
+	}
+	if seenAuth != "" {
+		t.Fatalf("Authorization header = %q, want empty", seenAuth)
+	}
+}

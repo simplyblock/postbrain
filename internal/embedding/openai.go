@@ -137,7 +137,9 @@ func (e *OpenAIEmbedder) embedBatchOnce(ctx context.Context, texts []string) ([]
 		return nil, fmt.Errorf("openai: create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+e.cfg.OpenAIAPIKey)
+	if e.cfg.OpenAIAPIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+e.cfg.OpenAIAPIKey)
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
