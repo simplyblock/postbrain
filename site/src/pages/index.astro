@@ -1,11 +1,46 @@
 ---
 import { readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
 const docsDir = new URL("../../../docs/", import.meta.url);
 const baseUrl = import.meta.env.BASE_URL ?? "/";
-const pages = readdirSync(docsDir)
+const docsFiles = readdirSync(docsDir)
   .filter((name) => name.toLowerCase().endsWith(".md"))
-  .sort((a, b) => a.localeCompare(b))
+  .sort((a, b) => a.localeCompare(b));
+
+function orderFromDocsReadme(files) {
+  const readmePath = new URL("../../../docs/README.md", import.meta.url);
+  let readme = "";
+  try {
+    readme = readFileSync(readmePath, "utf8");
+  } catch {
+    return files;
+  }
+
+  const ordered = [];
+  const seen = new Set();
+  const linkRe = /\[[^\]]+\]\(\.\/([^)]+?\.md)\)/g;
+  let m;
+  while ((m = linkRe.exec(readme)) !== null) {
+    const file = path.basename(m[1]);
+    const lower = file.toLowerCase();
+    if (!seen.has(lower) && files.some((f) => f.toLowerCase() === lower)) {
+      ordered.push(file);
+      seen.add(lower);
+    }
+  }
+  for (const f of files) {
+    const lower = f.toLowerCase();
+    if (!seen.has(lower)) {
+      ordered.push(f);
+      seen.add(lower);
+    }
+  }
+  return ordered;
+}
+
+const pages = orderFromDocsReadme(docsFiles)
   .map((name) => {
     const isReadme = name.toLowerCase() === "readme.md";
     const slug = isReadme ? "" : name.replace(/\.md$/i, "");

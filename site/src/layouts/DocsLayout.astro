@@ -14,16 +14,83 @@ const docsFiles = readdirSync(sourceDocsDir)
   .filter((name) => name.toLowerCase().endsWith(".md"))
   .sort((a, b) => a.localeCompare(b));
 
-const docsPages = docsFiles.map((name) => {
-  const sourceText = readFileSync(path.join(sourceDocsDir, name), "utf8");
+function parseReadmeSections(files) {
+  const readmePath = path.join(sourceDocsDir, "README.md");
+  let readme = "";
+  try {
+    readme = readFileSync(readmePath, "utf8");
+  } catch {
+    return null;
+  }
+
+  const available = new Map(files.map((f) => [f.toLowerCase(), f]));
+  const sections = [];
+  const seen = new Set();
+
+  let current = null;
+  for (const line of readme.split(/\r?\n/)) {
+    const headingMatch = line.match(/^##\s+(.+?)\s*$/);
+    if (headingMatch) {
+      current = { title: headingMatch[1], files: [] };
+      sections.push(current);
+      continue;
+    }
+
+    const linkMatch = line.match(/^\s*-\s+\[[^\]]+\]\(\.\/([^)]+?\.md)\)/);
+    if (linkMatch && current) {
+      const file = path.basename(linkMatch[1]);
+      const lower = file.toLowerCase();
+      if (!seen.has(lower) && available.has(lower)) {
+        current.files.push(available.get(lower));
+        seen.add(lower);
+      }
+    }
+  }
+
+  if (sections.length === 0) {
+    return null;
+  }
+
+  const uncategorized = files.filter((f) => !seen.has(f.toLowerCase()));
+  if (uncategorized.length > 0) {
+    sections.push({ title: "More", files: uncategorized });
+  }
+
+  return sections;
+}
+
+function buildPage(file) {
+  const sourceText = readFileSync(path.join(sourceDocsDir, file), "utf8");
   const heading = sourceText.match(/^#\s+(.+)\s*$/m)?.[1];
-  const slug = name.toLowerCase() === "readme.md" ? "" : name.replace(/\.md$/i, "");
+  const slug = file.toLowerCase() === "readme.md" ? "" : file.replace(/\.md$/i, "");
   const title = heading ?? (slug === "" ? "Documentation" : slug.replace(/[-_]/g, " "));
   return {
     title,
     href: slug === "" ? `${baseUrl}docs/` : `${baseUrl}docs/${slug}/`
   };
-});
+}
+
+const docsPagesByFile = new Map(docsFiles.map((file) => [file.toLowerCase(), buildPage(file)]));
+const readmeSections = parseReadmeSections(docsFiles);
+
+const navSections = [];
+if (readmeSections) {
+  for (const section of readmeSections) {
+    const pages = section.files
+      .map((file) => docsPagesByFile.get(file.toLowerCase()))
+      .filter((page) => page && page.href !== `${baseUrl}docs/`);
+    if (pages.length > 0) {
+      navSections.push({ title: section.title, pages });
+    }
+  }
+}
+
+if (navSections.length === 0) {
+  const fallbackPages = docsFiles
+    .map((file) => docsPagesByFile.get(file.toLowerCase()))
+    .filter((page) => page && page.href !== `${baseUrl}docs/`);
+  navSections.push({ title: "Contents", pages: fallbackPages });
+}
 
 const currentPath = Astro.url.pathname;
 const sourceFile = frontmatter.sourceFile ? String(frontmatter.sourceFile) : "";
@@ -87,6 +154,9 @@ const editOnGitHubHref = sourceFile
         letter-spacing: 0.08em;
         color: var(--text-muted);
       }
+      nav .caption:not(:first-of-type) {
+        margin-top: 0.9rem;
+      }
       nav a.page-link {
         display: block;
         padding: 0.42rem 1.2rem;
@@ -104,6 +174,9 @@ const editOnGitHubHref = sourceFile
         color: var(--text);
         background: color-mix(in srgb, var(--accent) 14%, transparent);
         border-left-color: var(--accent);
+      }
+      nav .section-end {
+        margin-bottom: 0.9rem;
       }
       .content-wrap {
         min-width: 0;
@@ -132,8 +205,8 @@ const editOnGitHubHref = sourceFile
       }
       main {
         max-width: 960px;
-        margin: 0 auto;
-        padding: 1.5rem 1.8rem 3rem;
+        margin: 0;
+        padding: 1.5rem 2rem 3rem;
       }
       :global(article h1) { font-size: 1.8rem; margin: 0.4rem 0 1rem; }
       :global(article h2) { margin-top: 1.8rem; font-size: 1.24rem; }
@@ -142,7 +215,7 @@ const editOnGitHubHref = sourceFile
       :global(article ul), :global(article ol) { padding-left: 1.2rem; }
       :global(article a) { color: var(--accent); text-decoration: none; }
       :global(article a:hover) { text-decoration: underline; }
-      :global(article code) {
+      :global(article :not(pre) > code) {
         font-family: var(--font-mono);
         background: var(--bg-hover);
         border: 1px solid var(--border);
@@ -155,14 +228,89 @@ const editOnGitHubHref = sourceFile
         background: var(--bg-surface);
         border: 1px solid var(--border);
         border-radius: var(--radius);
-        padding: 0.95rem 1rem;
+        padding: 0.7rem 0.85rem;
         overflow-x: auto;
+        margin: 0.8rem 0 1rem;
+      }
+      :global(article pre.astro-code) {
+        background: linear-gradient(180deg, #1f2433 0%, #1a1d27 100%) !important;
+        border-color: #303854;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        font-size: 0.88rem;
+        line-height: 1.16 !important;
+        padding-top: 0.72rem;
+        padding-bottom: 0.72rem;
+      }
+      :global(article pre.astro-code code) {
+        background: transparent;
+        border: 0;
+        padding: 0;
+        color: #dbe5ff;
+        font-size: inherit;
+        line-height: inherit !important;
+        white-space: normal !important;
+        font-variant-ligatures: none;
+        display: block;
+      }
+      :global(article pre.astro-code .line) {
+        display: block;
+        min-height: 0 !important;
+        line-height: inherit !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        white-space: pre !important;
+      }
+      :global(article pre.astro-code .line:empty) { display: none; }
+      :global(article pre.astro-code .line + .line) { margin-top: 0 !important; }
+      :global(article pre.astro-code span) {
+        text-decoration: none !important;
+        line-height: inherit !important;
+        vertical-align: baseline !important;
+        margin: 0 !important;
+        padding: 0 !important;
       }
       :global(article blockquote) {
         margin: 1rem 0;
         border-left: 3px solid var(--accent-dim);
         padding: 0.25rem 0 0.25rem 0.8rem;
         color: var(--text-muted);
+      }
+      :global(article table) {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        margin: 1rem 0 1.4rem;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+        background: color-mix(in srgb, var(--bg-surface) 88%, #111522);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+      }
+      :global(article thead th) {
+        text-align: left;
+        font-weight: 650;
+        color: #e8eeff;
+        background: linear-gradient(180deg, #242b40 0%, #20263a 100%);
+        border-bottom: 1px solid #343d59;
+        padding: 0.62rem 0.78rem;
+      }
+      :global(article tbody td) {
+        padding: 0.52rem 0.78rem;
+        color: var(--text);
+        border-bottom: 1px solid rgba(56, 66, 96, 0.75);
+        vertical-align: top;
+      }
+      :global(article tbody tr:nth-child(even) td) {
+        background: rgba(137, 164, 255, 0.035);
+      }
+      :global(article tbody tr:hover td) {
+        background: rgba(108, 140, 255, 0.08);
+      }
+      :global(article tbody tr:last-child td) {
+        border-bottom: 0;
+      }
+      :global(article table code) {
+        font-size: 0.84em;
       }
       @media (max-width: 1024px) {
         body {
@@ -176,20 +324,33 @@ const editOnGitHubHref = sourceFile
           max-height: 260px;
         }
       }
+      @media (max-width: 760px) {
+        :global(article table) {
+          display: block;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+      }
     </style>
   </head>
   <body>
     <nav>
       <a class="brand" href={`${baseUrl}docs/`}>Postbrain Docs</a>
-      <div class="caption">Contents</div>
       {
-        docsPages.map((page) => (
-          <a
-            class={`page-link ${currentPath === page.href ? "active" : ""}`}
-            href={page.href}
-          >
-            {page.title}
-          </a>
+        navSections.map((section) => (
+          <>
+            <div class="caption">{section.title}</div>
+            {
+              section.pages.map((page) => (
+                <a
+                  class={`page-link ${currentPath === page.href ? "active" : ""} ${page === section.pages[section.pages.length - 1] ? "section-end" : ""}`}
+                  href={page.href}
+                >
+                  {page.title}
+                </a>
+              ))
+            }
+          </>
         ))
       }
     </nav>

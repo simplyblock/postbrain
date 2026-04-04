@@ -27,6 +27,15 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Polished GitHub Pages docs UX and content framing:
+  - Reworked `site/src/layouts/DocsLayout.astro` to improve readability and navigation:
+    - sidebar grouping by sections parsed from `docs/README.md`
+    - removed duplicate docs index entry from sidebar link list
+    - increased visual separation between sidebar sections
+    - left-aligned main docs content column (instead of centered)
+    - improved code block rendering (balanced padding, compact but readable line metrics, fixed Shiki newline spacing artifacts)
+    - improved table styling for reference pages (header contrast, row striping, spacing, hover state, mobile overflow)
+  - Refined `docs/introduction.md` narrative and explicitly documented that default agent memory is typically bound to a specific user/account/device/agent context and not naturally shared across teams/org scopes.
 - [x] 2026-04-04: Expanded first-run documentation with complete bootstrap flow:
   - Updated `docs/getting-started.md` with a practical initial configuration runbook covering:
     - bootstrap via `postbrain onboard` (admin principal + first token)
