@@ -27,6 +27,14 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Enforced scope authz gates for graph read/query REST endpoints:
+  - Added `authorizeRequestedScope` enforcement in:
+    - `GET /v1/entities`
+    - `GET /v1/graph`
+    - `POST /v1/graph/query`
+  - Ensures token/principal scope restrictions are applied before graph data access.
+  - Extended integration coverage:
+    - `internal/api/rest/graph_query_integration_test.go` now includes `TestGraphQuery_DeniesTokenScopeMismatch` expecting HTTP 403 on scope mismatch.
 - [x] 2026-04-04: Added MCP `graph_query` tool with AGE-aware execution:
   - Added `internal/api/mcp/graph_query.go` handler:
     - validates `scope` + `cypher`

@@ -27,6 +27,7 @@ func TestGraphQuery_AGEAwareBehavior(t *testing.T) {
 	cfg := &config.Config{}
 
 	principal := testhelper.CreateTestPrincipal(t, pool, "user", "graph-query-user-"+uuid.NewString())
+	scope := testhelper.CreateTestScope(t, pool, "project", "graph-query-scope-"+uuid.NewString(), nil, principal.ID)
 	rawToken, hashToken, err := auth.GenerateToken()
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
@@ -39,7 +40,7 @@ func TestGraphQuery_AGEAwareBehavior(t *testing.T) {
 		t.Fatalf("EnsureAGEOverlay: %v", err)
 	}
 
-	scopeID := uuid.New()
+	scopeID := scope.ID
 	if graph.DetectAGE(ctx, pool) {
 		if err := graph.SyncEntityToAGE(ctx, pool, &db.Entity{
 			ID:         uuid.New(),
@@ -91,5 +92,47 @@ func TestGraphQuery_AGEAwareBehavior(t *testing.T) {
 	}
 	if len(rows) == 0 {
 		t.Fatalf("rows = 0, want >= 1")
+	}
+}
+
+func TestGraphQuery_DeniesTokenScopeMismatch(t *testing.T) {
+	ctx := context.Background()
+	pool := testhelper.NewTestPool(t)
+	svc := testhelper.NewMockEmbeddingService()
+	cfg := &config.Config{}
+
+	principal := testhelper.CreateTestPrincipal(t, pool, "user", "graph-query-deny-user-"+uuid.NewString())
+	allowed := testhelper.CreateTestScope(t, pool, "project", "graph-query-allowed-"+uuid.NewString(), nil, principal.ID)
+	denied := testhelper.CreateTestScope(t, pool, "project", "graph-query-denied-"+uuid.NewString(), nil, principal.ID)
+
+	rawToken, hashToken, err := auth.GenerateToken()
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+	if _, err := db.CreateToken(ctx, pool, principal.ID, hashToken, "graph-query-deny-token", []uuid.UUID{allowed.ID}, nil, nil); err != nil {
+		t.Fatalf("CreateToken restricted: %v", err)
+	}
+
+	handler := rest.NewRouter(pool, svc, cfg).Handler()
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	reqBody := map[string]any{
+		"scope_id": denied.ID.String(),
+		"cypher":   "RETURN n",
+	}
+	buf, _ := json.Marshal(reqBody)
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/graph/query", bytes.NewReader(buf))
+	req.Header.Set("Authorization", "Bearer "+rawToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("query request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
 	}
 }
