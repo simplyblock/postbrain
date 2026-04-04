@@ -27,6 +27,10 @@
 
 ### Maintenance
 
+- [x] 2026-04-03: Fixed GitHub Pages docs link routing for Astro-generated pages:
+  - Updated `site/scripts/sync-docs.mjs` to rewrite all relative markdown links from `*.md` to route-style `*/` paths during docs sync.
+  - Covers plain and relative markdown links (e.g. `foo.md`, `./foo.md`, `../foo.md#section`) while leaving absolute URLs and in-page anchors untouched.
+  - Prevents broken navigation on `https://simplyblock.github.io/postbrain/` caused by unresolved `.md` links.
 - [x] 2026-04-03: Added initial Helm deployment chart with generated runtime config:
   - Added chart scaffold under `deploy/helm/postbrain` (`Chart.yaml`, `values.yaml`, templates).
   - Added generated Postbrain `config.yaml` from Helm values via template helper and mounted as Kubernetes Secret.
