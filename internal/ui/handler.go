@@ -1608,71 +1608,56 @@ func (h *Handler) handleQuery(w http.ResponseWriter, r *http.Request) {
 			data.ScopeID = scopeID.String()
 		}
 
-		var allResults []*retrieval.Result
-
-		if data.Layers["memory"] && h.memStore != nil {
-			mems, err := h.memStore.Recall(ctx, memory.RecallInput{
-				Query:      data.Query,
-				ScopeID:    scopeID,
-				SearchMode: data.SearchMode,
-				Limit:      data.Limit * 2,
-			})
-			if err != nil {
-				data.Error = "memory recall: " + err.Error()
-			} else {
-				for _, m := range mems {
-					r := &retrieval.Result{
-						Layer:      retrieval.LayerMemory,
-						ID:         m.Memory.ID,
-						Score:      m.Score,
-						Content:    m.Memory.Content,
-						MemoryType: m.Memory.MemoryType,
-					}
-					if m.Memory.SourceRef != nil {
-						r.SourceRef = *m.Memory.SourceRef
-					}
-					allResults = append(allResults, r)
-				}
+		principalID := h.principalFromCookie(r)
+		var authorizedScopeIDs []uuid.UUID
+		if principalID != uuid.Nil && h.pool != nil {
+			ms := principals.NewMembershipStore(h.pool)
+			ids, authErr := ms.EffectiveScopeIDs(ctx, principalID)
+			if authErr == nil {
+				authorizedScopeIDs = ids
 			}
 		}
 
-		if data.Layers["knowledge"] && h.knwStore != nil {
-			arts, err := h.knwStore.Recall(ctx, h.pool, knowledge.RecallInput{
-				Query:   data.Query,
-				ScopeID: scopeID,
-				Limit:   data.Limit * 2,
-			})
-			if err != nil && data.Error == "" {
-				data.Error = "knowledge recall: " + err.Error()
-			} else {
-				for _, a := range arts {
-					content := a.Artifact.Content
-					if a.Artifact.Summary != nil && *a.Artifact.Summary != "" {
-						content = *a.Artifact.Summary
-					}
-					allResults = append(allResults, &retrieval.Result{
-						Layer:         retrieval.LayerKnowledge,
-						ID:            a.Artifact.ID,
-						Score:         a.Score,
-						Title:         a.Artifact.Title,
-						Content:       content,
-						KnowledgeType: a.Artifact.KnowledgeType,
-						Visibility:    a.Artifact.Visibility,
-						Status:        a.Artifact.Status,
-						Endorsements:  int(a.Artifact.EndorsementCount),
-					})
-				}
-			}
+		activeLayers := map[retrieval.Layer]bool{
+			retrieval.LayerMemory:    data.Layers["memory"],
+			retrieval.LayerKnowledge: data.Layers["knowledge"],
+			retrieval.LayerSkill:     data.Layers["skill"],
 		}
 
-		merged := retrieval.Merge(allResults, data.Limit, 0)
+		merged, err := retrieval.OrchestrateRecall(ctx, retrieval.OrchestrateDeps{
+			Pool:     h.pool,
+			MemStore: h.memStore,
+			KnwStore: h.knwStore,
+			Svc:      h.svc,
+		}, retrieval.OrchestrateInput{
+			Query:              data.Query,
+			ScopeID:            scopeID,
+			PrincipalID:        principalID,
+			AuthorizedScopeIDs: authorizedScopeIDs,
+			SearchMode:         data.SearchMode,
+			Limit:              data.Limit,
+			MinScore:           0,
+			GraphDepth:         1,
+			ActiveLayers:       activeLayers,
+		})
+		if err != nil {
+			data.Error = "query recall: " + err.Error()
+		}
 		for _, res := range merged {
+			content := res.Content
+			if res.Layer == retrieval.LayerSkill && content == "" {
+				content = res.Description
+			}
+			title := res.Title
+			if res.Layer == retrieval.LayerSkill {
+				title = res.Name
+			}
 			data.Results = append(data.Results, queryResult{
 				Layer:         string(res.Layer),
 				ID:            res.ID.String(),
 				Score:         res.Score,
-				Title:         res.Title,
-				Content:       res.Content,
+				Title:         title,
+				Content:       content,
 				MemoryType:    res.MemoryType,
 				KnowledgeType: res.KnowledgeType,
 				SourceRef:     res.SourceRef,

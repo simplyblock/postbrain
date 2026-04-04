@@ -139,6 +139,14 @@ func (s *Store) Recall(ctx context.Context, input RecallInput) ([]*MemoryResult,
 		if err != nil {
 			return nil, err
 		}
+		// Fallback: many existing code memories have no embedding_code yet.
+		// If code-vector recall yields nothing, use lexical code search (FTS).
+		if len(rows) == 0 {
+			rows, err = rdb.RecallMemoriesByFTS(ctx, scopeIDs, input.Query, input.Limit*2)
+			if err != nil {
+				return nil, err
+			}
+		}
 		for i := range rows {
 			r := rows[i]
 			merged[r.Memory.ID] = &r

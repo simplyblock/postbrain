@@ -27,6 +27,23 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Unified recall behavior across MCP and UI query playground, with safer graph defaults:
+  - Added shared retrieval orchestrator:
+    - `internal/retrieval/orchestrate.go`
+    - centralizes memory/knowledge/skill recall + merge + optional graph-context augmentation
+  - Switched MCP `recall` to use the shared orchestrator instead of duplicating per-layer retrieval logic.
+  - Set `graph_depth` default to `1` (still user-overridable and capped at `2`) and added tests for parse/default/cap behavior:
+    - `internal/api/mcp/recall_test.go`
+  - Updated MCP tool metadata for `graph_depth` to reflect the new default.
+  - Updated UI query handler to use the same shared orchestrator so behavior matches MCP recall semantics.
+  - Added integration regression coverage to ensure selected-scope query includes ancestor-scope memories:
+    - `internal/ui/handler_query_integration_test.go`
+  - Improved query playground toolbar layout/styling for clearer responsive behavior:
+    - `internal/ui/web/templates/query.html`
+    - `internal/ui/web/static/pico.min.css`
+  - Improved code-mode memory recall fallback to include FTS results when code embeddings are unavailable/empty, with unit tests:
+    - `internal/memory/recall.go`
+    - `internal/memory/recall_test.go`
 - [x] 2026-04-04: Extended local development PostgreSQL image to include Apache AGE:
   - Added `deploy/docker/postgres-dev/Dockerfile` based on `pgvector/pgvector:pg18` that builds and installs Apache AGE from source.
   - Switched `docker-compose.yml` `postgres` service from a direct image reference to a local build using the new Dockerfile.
