@@ -27,6 +27,15 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Added initial AGE PageRank primitive for entity ranking:
+  - Added `internal/graph/pagerank.go` with `RunPageRank(ctx, pool)`:
+    - validates non-nil DB pool
+    - returns `graph.ErrAGEUnavailable` when AGE is not available
+    - executes AGE PageRank (`age_pagerank`) over `Entity`/`RELATION`
+    - writes scores to `entities.meta["pagerank"]`
+  - Added test coverage:
+    - unit: `internal/graph/pagerank_test.go` (`nil pool` guard)
+    - integration: `internal/graph/pagerank_integration_test.go` (unavailable-mode behavior)
 - [x] 2026-04-04: Made MCP AGE graph tooling registration conditional on AGE availability:
   - `internal/api/mcp/server.go` now detects AGE at server startup and only registers `graph_query` when AGE is available.
   - Keeps MCP tool inventory aligned with runtime capabilities instead of exposing unavailable graph tools.
@@ -963,7 +972,7 @@
 - [x] `age_query.go` — (optional):
   - `RunCypherQuery(ctx, pool, scopeID, cypher string) ([]map[string]any, error)` — prepend scope filter to Cypher
   - Return `ErrAGEUnavailable` if AGE not detected
-- [ ] `pagerank.go` — (optional):
+- [x] `pagerank.go` — (optional):
   - Weekly job: compute PageRank over the AGE graph for the `relations` edge set
   - Write scores back to `entities.meta["pagerank"]`
 
