@@ -15,7 +15,7 @@ import (
 func newOllamaCfg(url string) *config.EmbeddingConfig {
 	return &config.EmbeddingConfig{
 		Backend:        "ollama",
-		OllamaURL:      url,
+		ServiceURL:     url,
 		TextModel:      "nomic-embed-text",
 		RequestTimeout: 5 * time.Second,
 		BatchSize:      64,

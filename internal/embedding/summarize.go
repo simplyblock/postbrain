@@ -76,7 +76,7 @@ func (s *OllamaSummarizer) Summarize(ctx context.Context, text string) (string, 
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		s.cfg.OllamaURL+"/api/generate", bytes.NewReader(body))
+		serviceURLOrDefault(s.cfg, defaultOllamaServiceURL)+"/api/generate", bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("ollama summarize: build request: %w", err)
 	}
@@ -121,7 +121,7 @@ func (s *OllamaSummarizer) Analyze(ctx context.Context, text string) (*DocumentA
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		s.cfg.OllamaURL+"/api/generate", bytes.NewReader(body))
+		serviceURLOrDefault(s.cfg, defaultOllamaServiceURL)+"/api/generate", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("ollama analyze: build request: %w", err)
 	}
