@@ -234,8 +234,12 @@ func (s *Synthesiser) embedContent(ctx context.Context, text string) ([]float32,
 		slug := s.svc.TextEmbedder().ModelSlug()
 		q := db.New(s.pool)
 		model, err := q.GetActiveTextModel(ctx)
-		if err == nil && model != nil && model.Slug == slug {
-			return vec, &model.ID, nil
+		if err == nil && model != nil {
+			vec = embedding.FitDimensions(vec, int(model.Dimensions))
+			if model.Slug == slug {
+				return vec, &model.ID, nil
+			}
+			return vec, nil, nil
 		}
 	}
 	return vec, nil, nil
