@@ -272,3 +272,31 @@ func TestOpenAIEmbedder_EnvelopeResponse_NestedEmbedding_SingleInput(t *testing.
 		t.Fatalf("unexpected embedding: %v", got)
 	}
 }
+
+func TestOpenAIEmbedder_ObjectArrayResponse_ColumnVector_SingleInput(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			{
+				"index": 0,
+				"embedding": [][]float32{
+					{0.3},
+					{0.4},
+					{0.5},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	cfg := newOpenAICfg("")
+	cfg.OpenAIBaseURL = srv.URL
+	e := NewOpenAIEmbedder(cfg, "text-embedding-3-small", cfg.OpenAIBaseURL)
+	got, err := e.Embed(context.Background(), "hello")
+	if err != nil {
+		t.Fatalf("Embed: %v", err)
+	}
+	if len(got) != 3 || got[0] != 0.3 || got[1] != 0.4 || got[2] != 0.5 {
+		t.Fatalf("unexpected embedding: %v", got)
+	}
+}

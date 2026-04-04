@@ -240,10 +240,18 @@ func parseEmbeddingVector(raw json.RawMessage) ([]float32, error) {
 	}
 	var nested [][]float32
 	if err := json.Unmarshal(raw, &nested); err == nil {
-		if len(nested) != 1 {
-			return nil, fmt.Errorf("expected single nested embedding, got %d", len(nested))
+		if len(nested) == 1 {
+			return nested[0], nil
 		}
-		return nested[0], nil
+		// Some OpenAI-compatible servers return a column vector [[x],[y],...].
+		flat := make([]float32, len(nested))
+		for i, row := range nested {
+			if len(row) != 1 {
+				return nil, fmt.Errorf("expected single nested embedding, got %d", len(nested))
+			}
+			flat[i] = row[0]
+		}
+		return flat, nil
 	}
 	return nil, fmt.Errorf("unsupported embedding format")
 }
