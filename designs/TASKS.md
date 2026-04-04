@@ -27,6 +27,18 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Implemented AGE overlay sync primitives in `internal/graph/age_sync.go`:
+  - Added `SyncEntityToAGE(ctx, pool, entity)`:
+    - `MERGE` vertex by `id`
+    - upserts scope/entity metadata (`scope_id`, `entity_type`, `name`, `canonical`)
+    - returns `ErrAGEUnavailable` when AGE is not installed
+  - Added `SyncRelationToAGE(ctx, pool, rel)`:
+    - `MATCH` endpoints by `subject_id`/`object_id`
+    - `MERGE` edge by `(subject,predicate,object)` using `RELATION`
+    - upserts edge metadata (`confidence`, `scope_id`)
+    - returns `ErrAGEUnavailable` when AGE is not installed
+  - Added integration coverage:
+    - `internal/graph/age_sync_integration_test.go` validates unavailable-mode behavior and successful entity+relation sync when AGE is present.
 - [x] 2026-04-04: Implemented initial AGE query support primitives in `internal/graph`:
   - Added `DetectAGE(ctx, pool) bool` for runtime AGE availability detection.
   - Added `ErrAGEUnavailable` and `RunCypherQuery(ctx, pool, scopeID, cypher)`:
@@ -907,7 +919,7 @@
 - [x] `internal/knowledge/store.go` — `artifact_entities` linking: for each extracted entity, calls `db.LinkArtifactToEntity` with role `"related"`; connects same-canonical entities in the same scope with `same_as` relations (subject/object order normalised to lower UUID first to prevent duplicates)
 - [x] `internal/db/compat.go` — `ListEntitiesByCanonical`, `LinkArtifactToEntity` helper functions supporting the same_as linking path
 
-- [ ] `age_sync.go` — (optional, skipped if AGE unavailable):
+- [x] `age_sync.go` — (optional, skipped if AGE unavailable):
   - `SyncEntityToAGE(ctx, pool, entity *Entity) error` — MERGE vertex by id property
   - `SyncRelationToAGE(ctx, pool, rel *Relation) error` — MERGE edge by (subject, predicate, object)
 - [x] `age_query.go` — (optional):
