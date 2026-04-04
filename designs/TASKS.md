@@ -27,6 +27,13 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Made MCP AGE graph tooling registration conditional on AGE availability:
+  - `internal/api/mcp/server.go` now detects AGE at server startup and only registers `graph_query` when AGE is available.
+  - Keeps MCP tool inventory aligned with runtime capabilities instead of exposing unavailable graph tools.
+  - Updated integration behavior/tests:
+    - `internal/api/mcp/graph_query_integration_test.go` now expects `graph_query` to be absent when AGE is unavailable and present when available.
+  - Added regression unit test:
+    - `internal/api/mcp/server_test.go` (`TestNewServer_NoPool_DoesNotRegisterGraphQuery`)
 - [x] 2026-04-04: Enforced scope authz gates for graph read/query REST endpoints:
   - Added `authorizeRequestedScope` enforcement in:
     - `GET /v1/entities`

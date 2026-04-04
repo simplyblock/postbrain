@@ -5,7 +5,6 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"testing"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -45,8 +44,14 @@ func TestMCP_GraphQuery_AGEAwareBehavior(t *testing.T) {
 
 	srv := mcpapi.NewServer(pool, svc, cfg).MCPServer()
 	tool := srv.GetTool("graph_query")
+	if !ageAvailable {
+		if tool != nil {
+			t.Fatal("graph_query tool should not be registered when AGE is unavailable")
+		}
+		return
+	}
 	if tool == nil {
-		t.Fatal("graph_query tool not registered")
+		t.Fatal("graph_query tool not registered with AGE available")
 	}
 
 	req := mcpgo.CallToolRequest{}
@@ -64,16 +69,6 @@ func TestMCP_GraphQuery_AGEAwareBehavior(t *testing.T) {
 	}
 
 	text := result.Content[0].(mcpgo.TextContent).Text
-	if !ageAvailable {
-		if !result.IsError {
-			t.Fatalf("expected graph_query error when AGE unavailable, got success: %s", text)
-		}
-		if !strings.Contains(text, "AGE unavailable") {
-			t.Fatalf("expected AGE unavailable error, got: %s", text)
-		}
-		return
-	}
-
 	if result.IsError {
 		t.Fatalf("graph_query returned error with AGE available: %s", text)
 	}

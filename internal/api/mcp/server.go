@@ -14,6 +14,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/graph"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 	"github.com/simplyblock/postbrain/internal/memory"
 	"github.com/simplyblock/postbrain/internal/metrics"
@@ -37,6 +38,7 @@ type Server struct {
 	knwColl    *knowledge.CollectionStore
 	knwProm    *knowledge.Promoter
 	membership *principals.MembershipStore
+	ageEnabled bool
 }
 
 // NewServer creates all stores, registers all 13 tools, and returns the Server.
@@ -57,6 +59,7 @@ func NewServer(pool *pgxpool.Pool, svc *embedding.EmbeddingService, cfg *config.
 		s.sklLife = skills.NewLifecycle(pool, s.membership)
 		s.knwColl = knowledge.NewCollectionStore(pool)
 		s.knwProm = knowledge.NewPromoter(pool, svc)
+		s.ageEnabled = graph.DetectAGE(context.Background(), pool)
 	}
 
 	s.mcpServer = mcpserver.NewMCPServer("postbrain", "1.0.0")
@@ -110,12 +113,14 @@ func (s *Server) registerTools() {
 		mcpgo.WithNumber("graph_depth", mcpgo.Description("Graph traversal depth for code results: 0=off, 1=direct neighbours (default: 1)")),
 	), withToolMetrics("recall", s.handleRecall))
 
-	// graph_query
-	s.mcpServer.AddTool(mcpgo.NewTool("graph_query",
-		mcpgo.WithDescription("Execute a scoped Cypher query against the AGE graph overlay"),
-		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
-		mcpgo.WithString("cypher", mcpgo.Required(), mcpgo.Description("Cypher query body to execute")),
-	), withToolMetrics("graph_query", s.handleGraphQuery))
+	// graph_query (AGE-only)
+	if s.ageEnabled {
+		s.mcpServer.AddTool(mcpgo.NewTool("graph_query",
+			mcpgo.WithDescription("Execute a scoped Cypher query against the AGE graph overlay"),
+			mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
+			mcpgo.WithString("cypher", mcpgo.Required(), mcpgo.Description("Cypher query body to execute")),
+		), withToolMetrics("graph_query", s.handleGraphQuery))
+	}
 
 	// forget
 	s.mcpServer.AddTool(mcpgo.NewTool("forget",
