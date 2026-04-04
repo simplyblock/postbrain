@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -68,19 +69,24 @@ func BootstrapLegacyEmbeddingsForModel(ctx context.Context, pool *pgxpool.Pool, 
 		if err != nil {
 			return nil, err
 		}
+		slog.InfoContext(ctx, "db: bootstrap embeddings stage", "model_id", modelID, "content_type", contentTyp, "stage", "memory_code", "upserted", up, "indexed", idx)
 		stats.UpsertedRows += up
 		stats.IndexedRows += idx
 	} else {
-		for _, fn := range []func(context.Context, DBTX, string, uuid.UUID) (int64, int64, error){
-			bootstrapTextMemoryEmbeddings,
-			bootstrapEntityEmbeddings,
-			bootstrapKnowledgeEmbeddings,
-			bootstrapSkillEmbeddings,
+		for _, stage := range []struct {
+			name string
+			fn   func(context.Context, DBTX, string, uuid.UUID) (int64, int64, error)
+		}{
+			{name: "memory_text", fn: bootstrapTextMemoryEmbeddings},
+			{name: "entity", fn: bootstrapEntityEmbeddings},
+			{name: "knowledge_artifact", fn: bootstrapKnowledgeEmbeddings},
+			{name: "skill", fn: bootstrapSkillEmbeddings},
 		} {
-			up, idx, err := fn(ctx, tx, name, modelID)
+			up, idx, err := stage.fn(ctx, tx, name, modelID)
 			if err != nil {
 				return nil, err
 			}
+			slog.InfoContext(ctx, "db: bootstrap embeddings stage", "model_id", modelID, "content_type", contentTyp, "stage", stage.name, "upserted", up, "indexed", idx)
 			stats.UpsertedRows += up
 			stats.IndexedRows += idx
 		}
@@ -89,6 +95,7 @@ func BootstrapLegacyEmbeddingsForModel(ctx context.Context, pool *pgxpool.Pool, 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("db: bootstrap legacy embeddings: commit tx: %w", err)
 	}
+	slog.InfoContext(ctx, "db: bootstrap embeddings complete", "model_id", modelID, "content_type", contentTyp, "upserted_rows", stats.UpsertedRows, "indexed_rows", stats.IndexedRows)
 	return stats, nil
 }
 
@@ -98,6 +105,10 @@ func bootstrapTextMemoryEmbeddings(ctx context.Context, tx DBTX, tableName strin
 		SELECT 'memory', m.id, m.scope_id, m.embedding
 		FROM memories m
 		WHERE m.embedding_model_id = $1 AND m.embedding IS NOT NULL
+		  AND NOT EXISTS (
+			SELECT 1 FROM embedding_index ei
+			WHERE ei.object_type = 'memory' AND ei.object_id = m.id AND ei.model_id = $1 AND ei.status = 'ready'
+		  )
 		ON CONFLICT (object_type, object_id)
 		DO UPDATE SET scope_id = EXCLUDED.scope_id, embedding = EXCLUDED.embedding, updated_at = now()
 	`, tableName)
@@ -111,6 +122,10 @@ func bootstrapTextMemoryEmbeddings(ctx context.Context, tx DBTX, tableName strin
 		SELECT 'memory', m.id, $1, 'ready', 0, NULL
 		FROM memories m
 		WHERE m.embedding_model_id = $1 AND m.embedding IS NOT NULL
+		  AND NOT EXISTS (
+			SELECT 1 FROM embedding_index ei
+			WHERE ei.object_type = 'memory' AND ei.object_id = m.id AND ei.model_id = $1 AND ei.status = 'ready'
+		  )
 		ON CONFLICT (object_type, object_id, model_id)
 		DO UPDATE SET status = 'ready', retry_count = 0, last_error = NULL, updated_at = now()
 	`, modelID)
@@ -126,6 +141,10 @@ func bootstrapCodeMemoryEmbeddings(ctx context.Context, tx DBTX, tableName strin
 		SELECT 'memory', m.id, m.scope_id, m.embedding_code
 		FROM memories m
 		WHERE m.embedding_code_model_id = $1 AND m.embedding_code IS NOT NULL
+		  AND NOT EXISTS (
+			SELECT 1 FROM embedding_index ei
+			WHERE ei.object_type = 'memory' AND ei.object_id = m.id AND ei.model_id = $1 AND ei.status = 'ready'
+		  )
 		ON CONFLICT (object_type, object_id)
 		DO UPDATE SET scope_id = EXCLUDED.scope_id, embedding = EXCLUDED.embedding, updated_at = now()
 	`, tableName)
@@ -139,6 +158,10 @@ func bootstrapCodeMemoryEmbeddings(ctx context.Context, tx DBTX, tableName strin
 		SELECT 'memory', m.id, $1, 'ready', 0, NULL
 		FROM memories m
 		WHERE m.embedding_code_model_id = $1 AND m.embedding_code IS NOT NULL
+		  AND NOT EXISTS (
+			SELECT 1 FROM embedding_index ei
+			WHERE ei.object_type = 'memory' AND ei.object_id = m.id AND ei.model_id = $1 AND ei.status = 'ready'
+		  )
 		ON CONFLICT (object_type, object_id, model_id)
 		DO UPDATE SET status = 'ready', retry_count = 0, last_error = NULL, updated_at = now()
 	`, modelID)
@@ -154,6 +177,10 @@ func bootstrapEntityEmbeddings(ctx context.Context, tx DBTX, tableName string, m
 		SELECT 'entity', e.id, e.scope_id, e.embedding
 		FROM entities e
 		WHERE e.embedding_model_id = $1 AND e.embedding IS NOT NULL
+		  AND NOT EXISTS (
+			SELECT 1 FROM embedding_index ei
+			WHERE ei.object_type = 'entity' AND ei.object_id = e.id AND ei.model_id = $1 AND ei.status = 'ready'
+		  )
 		ON CONFLICT (object_type, object_id)
 		DO UPDATE SET scope_id = EXCLUDED.scope_id, embedding = EXCLUDED.embedding, updated_at = now()
 	`, tableName)
@@ -167,6 +194,10 @@ func bootstrapEntityEmbeddings(ctx context.Context, tx DBTX, tableName string, m
 		SELECT 'entity', e.id, $1, 'ready', 0, NULL
 		FROM entities e
 		WHERE e.embedding_model_id = $1 AND e.embedding IS NOT NULL
+		  AND NOT EXISTS (
+			SELECT 1 FROM embedding_index ei
+			WHERE ei.object_type = 'entity' AND ei.object_id = e.id AND ei.model_id = $1 AND ei.status = 'ready'
+		  )
 		ON CONFLICT (object_type, object_id, model_id)
 		DO UPDATE SET status = 'ready', retry_count = 0, last_error = NULL, updated_at = now()
 	`, modelID)
@@ -182,6 +213,10 @@ func bootstrapKnowledgeEmbeddings(ctx context.Context, tx DBTX, tableName string
 		SELECT 'knowledge_artifact', k.id, k.owner_scope_id, k.embedding
 		FROM knowledge_artifacts k
 		WHERE k.embedding_model_id = $1 AND k.embedding IS NOT NULL
+		  AND NOT EXISTS (
+			SELECT 1 FROM embedding_index ei
+			WHERE ei.object_type = 'knowledge_artifact' AND ei.object_id = k.id AND ei.model_id = $1 AND ei.status = 'ready'
+		  )
 		ON CONFLICT (object_type, object_id)
 		DO UPDATE SET scope_id = EXCLUDED.scope_id, embedding = EXCLUDED.embedding, updated_at = now()
 	`, tableName)
@@ -195,6 +230,10 @@ func bootstrapKnowledgeEmbeddings(ctx context.Context, tx DBTX, tableName string
 		SELECT 'knowledge_artifact', k.id, $1, 'ready', 0, NULL
 		FROM knowledge_artifacts k
 		WHERE k.embedding_model_id = $1 AND k.embedding IS NOT NULL
+		  AND NOT EXISTS (
+			SELECT 1 FROM embedding_index ei
+			WHERE ei.object_type = 'knowledge_artifact' AND ei.object_id = k.id AND ei.model_id = $1 AND ei.status = 'ready'
+		  )
 		ON CONFLICT (object_type, object_id, model_id)
 		DO UPDATE SET status = 'ready', retry_count = 0, last_error = NULL, updated_at = now()
 	`, modelID)
@@ -210,6 +249,10 @@ func bootstrapSkillEmbeddings(ctx context.Context, tx DBTX, tableName string, mo
 		SELECT 'skill', s.id, s.scope_id, s.embedding
 		FROM skills s
 		WHERE s.embedding_model_id = $1 AND s.embedding IS NOT NULL
+		  AND NOT EXISTS (
+			SELECT 1 FROM embedding_index ei
+			WHERE ei.object_type = 'skill' AND ei.object_id = s.id AND ei.model_id = $1 AND ei.status = 'ready'
+		  )
 		ON CONFLICT (object_type, object_id)
 		DO UPDATE SET scope_id = EXCLUDED.scope_id, embedding = EXCLUDED.embedding, updated_at = now()
 	`, tableName)
@@ -223,6 +266,10 @@ func bootstrapSkillEmbeddings(ctx context.Context, tx DBTX, tableName string, mo
 		SELECT 'skill', s.id, $1, 'ready', 0, NULL
 		FROM skills s
 		WHERE s.embedding_model_id = $1 AND s.embedding IS NOT NULL
+		  AND NOT EXISTS (
+			SELECT 1 FROM embedding_index ei
+			WHERE ei.object_type = 'skill' AND ei.object_id = s.id AND ei.model_id = $1 AND ei.status = 'ready'
+		  )
 		ON CONFLICT (object_type, object_id, model_id)
 		DO UPDATE SET status = 'ready', retry_count = 0, last_error = NULL, updated_at = now()
 	`, modelID)

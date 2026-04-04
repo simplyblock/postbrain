@@ -354,8 +354,8 @@ Every step follows strict Red → Green → Refactor before moving to the next s
 
  - [x] RED: integration tests for bootstrap copying legacy inline vectors into new per-model tables and marking `embedding_index` rows as `ready`.
  - [x] GREEN: add bootstrap routine that reads legacy vector columns and writes to per-model tables; no provider calls.
-- [ ] REFACTOR: add resumability (skip already-`ready` rows) and progress logging.
-  - Progress: added bootstrap routine + integration tests for text and code models; resumability/progress logging refactor still pending.
+- [x] REFACTOR: add resumability (skip already-`ready` rows) and progress logging.
+  - Progress: bootstrap queries now skip rows already marked `ready` for the target model and emit per-stage/final progress logs; second-run skip behavior covered by integration test.
 
 ### Step 9: Read/Recall Path Integration (Dual-Read)
 

@@ -98,6 +98,13 @@
   - Refactored `internal/db/embedding_bootstrap.go` to use shared model metadata lookup.
   - Added integration coverage:
     - `internal/db/embedding_repository_integration_test.go::TestEmbeddingRepository_UpsertEmbedding_ModelNotReady`.
+- [x] 2026-04-04: Completed Step 8 bootstrap resumability/progress refactor (TDD-first):
+  - Added integration test:
+    - `internal/db/embedding_bootstrap_integration_test.go::TestBootstrapLegacyEmbeddingsForModel_SecondRunSkipsReadyRows`
+    - validates resumability by asserting second bootstrap run reports zero additional upserts/index updates.
+  - Refactored `internal/db/embedding_bootstrap.go`:
+    - each bootstrap source query now skips objects already `ready` in `embedding_index` for the target model
+    - added per-stage and final progress logs (`slog.InfoContext`) with upsert/index counters.
 - [x] 2026-04-04: Added model-aware multi-provider embedder factory primitives and runtime wiring (TDD-first):
   - Added model-driven factory in `internal/embedding/factory.go`:
     - `ModelConfig`, `ModelConfigStore`, `ModelEmbedderFactory`
