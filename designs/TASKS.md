@@ -27,6 +27,15 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Expanded first-run documentation with complete bootstrap flow:
+  - Updated `docs/getting-started.md` with a practical initial configuration runbook covering:
+    - bootstrap via `postbrain onboard` (admin principal + first token)
+    - initial principal hierarchy creation (`company`, `team`, `user`)
+    - membership chain setup (`user -> team -> company`)
+    - initial scope hierarchy creation (`company`, `team`, `project`, `user`)
+    - project token creation, repository attachment, first sync trigger, and sync status checks
+    - initial Codex/Claude skill install + skill sync guidance
+  - Updated `docs/api-auth-examples.md` token creation command to include required `--principal` argument.
 - [x] 2026-04-03: Fixed GitHub Pages docs link routing for Astro-generated pages:
   - Updated `site/scripts/sync-docs.mjs` to rewrite all relative markdown links from `*.md` to route-style `*/` paths during docs sync.
   - Covers plain and relative markdown links (e.g. `foo.md`, `./foo.md`, `../foo.md#section`) while leaving absolute URLs and in-page anchors untouched.

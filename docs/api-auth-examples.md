@@ -26,7 +26,7 @@ curl -sS -H "Authorization: Bearer ${POSTBRAIN_TOKEN}" \
 Create dedicated tokens per workload instead of sharing one long-lived token across systems:
 
 ```bash
-postbrain token create --name "automation"
+postbrain token create --name "automation" --principal "acme-platform"
 ```
 
 ## Scope-aware usage pattern
