@@ -320,39 +320,42 @@ Every step follows strict Red → Green → Refactor before moving to the next s
 
 ### Step 3: Model Registration Backend Flow
 
-- [ ] RED: tests for registration transaction behavior (insert model, CREATE TABLE + index, set `table_name`/`is_ready`, insert `pending` rows in `embedding_index` for all existing objects). Test rollback on failure. Test `ON CONFLICT (slug)` idempotency.
-- [ ] GREEN: implement registration as a single transaction; no compensating cleanup needed.
-- [ ] REFACTOR: split validation/provisioning/persistence responsibilities.
+- [x] RED: tests for registration transaction behavior (insert model, CREATE TABLE + index, set `table_name`/`is_ready`, insert `pending` rows in `embedding_index` for all existing objects). Test rollback on failure. Test `ON CONFLICT (slug)` idempotency.
+- [x] GREEN: implement registration as a single transaction; no compensating cleanup needed.
+- [x] REFACTOR: split validation/provisioning/persistence responsibilities.
 
 ### Step 4: CLI Command for Model Registration
 
-- [ ] RED: command tests for argument validation and success/failure output.
-- [ ] GREEN: add `embedding-model register`, `embedding-model activate`, `embedding-model list` commands.
+- [x] RED: command tests for argument validation and success/failure output.
+- [x] GREEN: add `embedding-model register`, `embedding-model activate`, `embedding-model list` commands.
 - [ ] REFACTOR: share parsing/validation across embedding-model commands.
 
 ### Step 5: Multi-Provider Embedder Factory
 
-- [ ] RED: tests for `EmbedderForModel(modelID)` provider resolution, `service_url` routing, and `EmbedResult` returned by `EmbeddingService.EmbedText`/`EmbedCode`.
-- [ ] GREEN: implement factory for `ollama` and `openai`; update `EmbeddingService` to wrap factory and return `EmbedResult`.
+- [x] RED: tests for `EmbedderForModel(modelID)` provider resolution, `service_url` routing, and `EmbedResult` returned by `EmbeddingService.EmbedText`/`EmbedCode`.
+- [x] GREEN: implement factory for `ollama` and `openai`; update `EmbeddingService` to wrap factory and return `EmbedResult`.
 - [ ] REFACTOR: unify client construction and error messaging.
 
 ### Step 6: Embedding Repository Layer
 
-- [ ] RED: tests for per-model-table upsert/get/ANN routing, dimension enforcement, and `ScopeFilter` application per object type.
-- [ ] GREEN: add repository API in `internal/db` with `EmbeddingQuery` / `ScopeFilter`; repository joins back to source object tables for scope filtering; always queries DB for model/table lookup (no cache).
-- [ ] REFACTOR: centralize model/table lookup and retry-safe DB access.
+- [x] RED: tests for per-model-table upsert/get/ANN routing, dimension enforcement, and `ScopeFilter` application per object type.
+- [x] GREEN: add repository API in `internal/db` with `EmbeddingQuery` / `ScopeFilter`; repository joins back to source object tables for scope filtering; always queries DB for model/table lookup (no cache).
+- [x] REFACTOR: centralize model/table lookup and retry-safe DB access.
+  - Progress: added shared model metadata lookup helpers and converted repository writes to retry-safe transactional upserts (`serialization_failure`/`deadlock_detected` retry semantics), with focused unit + integration coverage.
 
 ### Step 7: Write Path Integration (Dual-Write Start)
 
-- [ ] RED: tests ensuring memory/knowledge/skills/entity writes store embeddings in new model table and insert/update `embedding_index` row to `ready`.
-- [ ] GREEN: integrate repository into write paths using `EmbedResult.ModelID`.
+- [x] RED: tests ensuring memory/knowledge/skills/entity writes store embeddings in new model table and insert/update `embedding_index` row to `ready`.
+- [x] GREEN: integrate repository into write paths using `EmbedResult.ModelID`.
 - [ ] REFACTOR: reduce duplication across memory/knowledge/synthesis write paths.
+  - Progress: memory, knowledge, skills, and entity write paths now dual-write with integration coverage; shared write-path refactor still pending.
 
 ### Step 8: Bootstrap / Backfill
 
-- [ ] RED: integration tests for bootstrap copying legacy inline vectors into new per-model tables and marking `embedding_index` rows as `ready`.
-- [ ] GREEN: add bootstrap routine that reads legacy vector columns and writes to per-model tables; no provider calls.
+ - [x] RED: integration tests for bootstrap copying legacy inline vectors into new per-model tables and marking `embedding_index` rows as `ready`.
+ - [x] GREEN: add bootstrap routine that reads legacy vector columns and writes to per-model tables; no provider calls.
 - [ ] REFACTOR: add resumability (skip already-`ready` rows) and progress logging.
+  - Progress: added bootstrap routine + integration tests for text and code models; resumability/progress logging refactor still pending.
 
 ### Step 9: Read/Recall Path Integration (Dual-Read)
 

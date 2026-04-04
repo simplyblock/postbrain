@@ -27,6 +27,109 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Integrated memory write-path dual-write to model tables (Step 7 partial, TDD-first):
+  - Extended `internal/memory/store.go` to consume model-aware embedding results when available:
+    - added result-aware embed helpers (`embedText`, `embedCode`) using `EmbedTextResult` / `EmbedCodeResult`.
+    - persisted `embedding_model_id` / `embedding_code_model_id` on legacy rows during create/update/duplicate-update.
+  - Added repository dual-write hook for memory rows:
+    - writes embedding vectors to per-model table via `EmbeddingRepository.UpsertEmbedding`
+    - updates `embedding_index` status to `ready`.
+  - Covered with integration test:
+    - `internal/memory/memory_integration_test.go::TestMemoryCreate_DualWritesToEmbeddingRepository`
+    - validates both `embedding_index` row and model-table row existence after create.
+  - Remaining in Step 7:
+    - apply the same dual-write integration to knowledge, skills, and entity write paths.
+- [x] 2026-04-04: Integrated knowledge write-path dual-write to model tables (Step 7 partial, TDD-first):
+  - Extended `internal/knowledge/store.go`:
+    - added result-aware embedding support for `embedContent` via `EmbedTextResult`
+    - persists active `embedding_model_id` from `EmbedResult.ModelID`
+    - dual-writes create/update embeddings into per-model tables using `EmbeddingRepository.UpsertEmbedding`.
+  - Added integration coverage:
+    - `internal/knowledge/store_dualwrite_integration_test.go::TestKnowledgeCreate_DualWritesToEmbeddingRepository`
+    - validates `embedding_index` ready row + model-table row for `knowledge_artifact`.
+- [x] 2026-04-04: Integrated skills write-path dual-write to model tables (Step 7 partial, TDD-first):
+  - Extended `internal/skills/store.go`:
+    - create/update now use `EmbedTextResult`
+    - persists `embedding_model_id` from `EmbedResult.ModelID`
+    - dual-writes to model tables via `EmbeddingRepository.UpsertEmbedding`.
+  - Added integration coverage:
+    - `internal/skills/store_dualwrite_integration_test.go::TestSkillsCreate_DualWritesToEmbeddingRepository`
+    - validates `embedding_index` ready row + model-table row for `skill`.
+- [x] 2026-04-04: Integrated entity upsert dual-write to model tables (Step 7 partial, TDD-first):
+  - Extended `db.UpsertEntity` in `internal/db/compat.go`:
+    - when `embedding` + `embedding_model_id` are present, it now dual-writes into per-model embedding tables
+    - updates `embedding_index` to `ready` via `EmbeddingRepository.UpsertEmbedding`.
+  - Added integration coverage:
+    - `internal/db/entity_dualwrite_integration_test.go::TestUpsertEntity_DualWritesToEmbeddingRepository`
+    - validates `embedding_index` ready row + model-table row for `entity`.
+- [x] 2026-04-04: Started embedding repository layer (Step 6 initial slice, TDD-first):
+  - Added `internal/db/embedding_repository.go` with:
+    - repository contract types (`EmbeddingQuery`, `ScopeFilter`, `UpsertEmbeddingInput`)
+    - `UpsertEmbedding` for per-model table writes + `embedding_index` status update to `ready`
+    - `GetEmbedding` for model-table reads
+    - `QuerySimilar` ANN query support with scope join/filter wiring.
+    - strict object-type and dimension validation
+    - safe dynamic table-name validation and model metadata lookup from `embedding_models`.
+  - Added integration coverage in `internal/db/embedding_repository_integration_test.go`:
+    - successful upsert+read roundtrip
+    - dimension mismatch rejection
+    - scope-filtered ANN retrieval for memory object type.
+  - Remaining in Step 6:
+    - complete ANN scope-join coverage across all object types + refactor pass.
+- [x] 2026-04-04: Completed Step 6 refactor pass for repository metadata/retry handling (TDD-first):
+  - Added `internal/db/retry.go` + `internal/db/retry_test.go`:
+    - `runWithRetry` utility with retry classification for transactional conflict errors
+    - retries on PostgreSQL `40001` and `40P01`, no retries for non-retryable errors.
+  - Added `internal/db/embedding_model_metadata.go`:
+    - centralized embedding model metadata lookup helpers
+    - shared ready-table resolution + table-name safety checks.
+  - Refactored `internal/db/embedding_repository.go`:
+    - `UpsertEmbedding` now uses one transaction for model-table upsert + `embedding_index` update
+    - write path wrapped with retry helper for serialization/deadlock conflicts
+    - switched lookup calls to shared metadata helper.
+  - Refactored `internal/db/embedding_bootstrap.go` to use shared model metadata lookup.
+  - Added integration coverage:
+    - `internal/db/embedding_repository_integration_test.go::TestEmbeddingRepository_UpsertEmbedding_ModelNotReady`.
+- [x] 2026-04-04: Added model-aware multi-provider embedder factory primitives and runtime wiring (TDD-first):
+  - Added model-driven factory in `internal/embedding/factory.go`:
+    - `ModelConfig`, `ModelConfigStore`, `ModelEmbedderFactory`
+    - `EmbedderForModel(modelID)` with provider-specific construction for `ollama` and `openai`
+    - per-model `service_url` routing and guardrails for OpenAI default URL auth requirements.
+  - Added DB-backed model metadata resolver in `internal/embedding/model_store.go`:
+    - `GetModelConfig(modelID)` reads provider/runtime fields from `embedding_models`
+    - `ActiveModelIDByContentType(text|code)` resolves active models.
+  - Extended `EmbeddingService` in `internal/embedding/service.go`:
+    - added `EmbedResult{ModelID, Embedding}`
+    - added `EmbedTextResult` / `EmbedCodeResult`
+    - kept existing `EmbedText` / `EmbedCode` API as compatibility wrappers returning vectors only.
+    - added model-factory hook (`SetModelFactory`) plus startup helper `EnableModelDrivenFactory(...)` in `internal/embedding/service_factory_setup.go`.
+  - Wired model-driven factory setup during server startup:
+    - `cmd/postbrain/main.go` now calls `svc.EnableModelDrivenFactory(ctx, pool, &cfg.Embedding)` after service creation.
+  - Added unit coverage:
+    - `internal/embedding/factory_test.go`
+    - `internal/embedding/model_store_test.go`
+    - `internal/embedding/service_test.go` (nil-pool factory setup guard).
+- [x] 2026-04-04: Implemented embedding model registration transaction + initial CLI model management commands (TDD-first):
+  - Added backend registration flow in `internal/db/embedding_model_registration.go`:
+    - `RegisterEmbeddingModel(ctx, pool, params)` validates input and runs one transaction for:
+      - model upsert (`ON CONFLICT (slug)` idempotency),
+      - optional active-model switch per content type,
+      - per-model table provisioning,
+      - `table_name`/`is_ready` metadata update,
+      - pending-row seeding in `embedding_index` for all existing `memory`/`entity`/`knowledge_artifact`/`skill` objects.
+  - Hardened per-model provisioning in `internal/db/embedding_tables.go`:
+    - internal transactional helper support,
+    - explicit existing-table dimension mismatch detection to fail fast and preserve rollback semantics.
+  - Added integration tests in `internal/db/embedding_model_registration_integration_test.go`:
+    - success path with full pending-row fanout,
+    - slug idempotency,
+    - rollback behavior on provisioning dimension mismatch.
+  - Added `postbrain-cli embedding-model` command group in `cmd/postbrain-cli/main.go`:
+    - `register`, `activate`, `list`
+    - supports `--database-url` (or config/env fallback via `--config` + `POSTBRAIN_DATABASE_URL`).
+  - Added CLI command tests in `cmd/postbrain-cli/main_test.go` for:
+    - register flag validation + success/error behavior,
+    - activate flag validation + success behavior.
 - [x] 2026-04-04: Added non-breaking embedding schema migration + per-model table provisioning primitives:
   - Added migration `000013_embedding_index`:
     - extends `embedding_models` with provider/runtime metadata (`provider`, `service_url`, `provider_model`, `table_name`, `is_ready`)
