@@ -35,6 +35,48 @@ body {
   min-height: 100vh;
 }
 
+/* ── Auth layout ─────────────────────────────────────────── */
+body.auth-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 2rem;
+}
+
+.auth-main {
+  width: 100%;
+  max-width: 560px;
+  padding: 0;
+}
+
+.auth-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 2px);
+  padding: 1.5rem 1.6rem;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
+}
+
+.auth-card h1 {
+  margin-bottom: 0.35rem;
+}
+
+.auth-card h2 {
+  margin-top: 1.15rem;
+}
+
+.auth-social-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.auth-form {
+  max-width: 100%;
+}
+
 /* ── Sidebar nav ─────────────────────────────────────────── */
 nav {
   grid-column: 1;

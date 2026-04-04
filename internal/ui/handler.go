@@ -262,7 +262,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // For HTMX requests (HX-Request: true header), renders only the content template.
 func (h *Handler) render(w http.ResponseWriter, r *http.Request, tmplName string, title string, data any) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if r.Header.Get("HX-Request") == "true" || tmplName == "login" {
+	if r.Header.Get("HX-Request") == "true" {
 		if err := h.templates.ExecuteTemplate(w, tmplName, data); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -274,7 +274,11 @@ func (h *Handler) render(w http.ResponseWriter, r *http.Request, tmplName string
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := h.templates.ExecuteTemplate(w, "base", struct {
+	layout := "base"
+	if tmplName == "login" {
+		layout = "auth_base"
+	}
+	if err := h.templates.ExecuteTemplate(w, layout, struct {
 		Title   string
 		Content template.HTML
 	}{

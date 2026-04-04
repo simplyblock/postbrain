@@ -1,0 +1,15 @@
+{{define "auth_base"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} — Postbrain</title>
+  <link rel="stylesheet" href="/ui/static/pico.min.css">
+  <script src="/ui/static/htmx.min.js"></script>
+</head>
+<body class="auth-body">
+<main class="auth-main">{{.Content}}</main>
+</body>
+</html>
+{{end}}
