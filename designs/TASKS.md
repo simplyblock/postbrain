@@ -27,6 +27,19 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Added non-breaking embedding schema migration + per-model table provisioning primitives:
+  - Added migration `000013_embedding_index`:
+    - extends `embedding_models` with provider/runtime metadata (`provider`, `service_url`, `provider_model`, `table_name`, `is_ready`)
+    - adds central `embedding_index` table with constraints/index/updated_at trigger
+    - intentionally keeps legacy `embedding_model_id` columns for compatibility (cleanup deferred)
+  - Added migration integration coverage:
+    - `internal/db/embedding_schema_migration_integration_test.go`
+  - Added per-model table helpers in `internal/db/embedding_tables.go`:
+    - `EmbeddingTableName(modelID)` -> `embeddings_model_<uuid_no_dashes>`
+    - `EnsureEmbeddingModelTable(ctx, pool, modelID, dims)` creates table + scope index + HNSW index + updated_at trigger idempotently
+  - Added tests:
+    - unit: `internal/db/embedding_tables_test.go`
+    - integration: `internal/db/embedding_tables_integration_test.go`
 - [x] 2026-04-04: Restored styled standalone login layout:
   - Added dedicated `auth_base` template (`internal/ui/web/templates/auth_base.html`) so `/ui/login` remains separate from the sidebar app shell while still loading shared UI styles/scripts.
   - Updated `render()` in `internal/ui/handler.go` to wrap `login` with `auth_base` (instead of raw template output), while preserving HTMX partial behavior.
