@@ -2,6 +2,26 @@
 
 This guide helps you run Postbrain for the first time.
 
+## 0. Bootstrap the first admin principal + token
+
+For a fresh installation, use the built-in onboarding command. It runs migrations, creates (or reuses) an admin
+principal, creates an initial scope, and prints a new API token.
+
+```bash
+postbrain onboard \
+  --config ./config.yaml \
+  --slug admin \
+  --display-name "Postbrain Admin" \
+  --token-name "bootstrap-admin"
+```
+
+Store the printed token immediately, then export:
+
+```bash
+export POSTBRAIN_URL="http://localhost:7433"
+export POSTBRAIN_TOKEN="<token-from-onboard>"
+```
+
 ## 1. Pick your deployment style
 
 Server installation options are documented in:
@@ -47,9 +67,11 @@ postbrain-cli version
 
 Postbrain APIs require bearer tokens.
 
-Create/manage tokens with server CLI commands:
+Create/manage tokens with server CLI commands.
 
-- `postbrain token create`
+Note: `token create` requires both a token name and the owning principal slug.
+
+- `postbrain token create --name "<name>" --principal "<principal-slug>"`
 - `postbrain token list`
 - `postbrain token revoke`
 
@@ -98,6 +120,130 @@ After startup:
 
 If both succeed, your base setup is working.
 
-## 7. Learn by example
+## 7. Initial organization setup (company -> team -> project -> user)
+
+After bootstrap, create your first principal/scope hierarchy. Examples below use `curl` + `jq`.
+
+### 7.1 Create principals
+
+```bash
+company_id="$(
+  curl -sS -X POST "${POSTBRAIN_URL}/v1/principals" \
+    -H "Authorization: Bearer ${POSTBRAIN_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{"kind":"company","slug":"acme","display_name":"ACME Inc"}' | jq -r '.ID'
+)"
+
+team_id="$(
+  curl -sS -X POST "${POSTBRAIN_URL}/v1/principals" \
+    -H "Authorization: Bearer ${POSTBRAIN_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{"kind":"team","slug":"acme-platform","display_name":"Platform Team"}' | jq -r '.ID'
+)"
+
+user_id="$(
+  curl -sS -X POST "${POSTBRAIN_URL}/v1/principals" \
+    -H "Authorization: Bearer ${POSTBRAIN_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{"kind":"user","slug":"alice","display_name":"Alice"}' | jq -r '.ID'
+)"
+```
+
+### 7.2 Add membership chain
+
+User belongs to team, team belongs to company:
+
+```bash
+curl -sS -X POST "${POSTBRAIN_URL}/v1/principals/${company_id}/members" \
+  -H "Authorization: Bearer ${POSTBRAIN_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d "{\"member_id\":\"${team_id}\",\"role\":\"member\"}"
+
+curl -sS -X POST "${POSTBRAIN_URL}/v1/principals/${team_id}/members" \
+  -H "Authorization: Bearer ${POSTBRAIN_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d "{\"member_id\":\"${user_id}\",\"role\":\"member\"}"
+```
+
+### 7.3 Create scopes
+
+```bash
+company_scope_id="$(
+  curl -sS -X POST "${POSTBRAIN_URL}/v1/scopes" \
+    -H "Authorization: Bearer ${POSTBRAIN_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d "{\"kind\":\"company\",\"external_id\":\"acme\",\"name\":\"ACME\",\"principal_id\":\"${company_id}\"}" | jq -r '.ID'
+)"
+
+team_scope_id="$(
+  curl -sS -X POST "${POSTBRAIN_URL}/v1/scopes" \
+    -H "Authorization: Bearer ${POSTBRAIN_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d "{\"kind\":\"team\",\"external_id\":\"acme/platform\",\"name\":\"Platform\",\"principal_id\":\"${team_id}\",\"parent_id\":\"${company_scope_id}\"}" | jq -r '.ID'
+)"
+
+project_scope_id="$(
+  curl -sS -X POST "${POSTBRAIN_URL}/v1/scopes" \
+    -H "Authorization: Bearer ${POSTBRAIN_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d "{\"kind\":\"project\",\"external_id\":\"acme/platform/postbrain\",\"name\":\"Postbrain\",\"principal_id\":\"${team_id}\",\"parent_id\":\"${team_scope_id}\"}" | jq -r '.ID'
+)"
+
+user_scope_id="$(
+  curl -sS -X POST "${POSTBRAIN_URL}/v1/scopes" \
+    -H "Authorization: Bearer ${POSTBRAIN_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d "{\"kind\":\"user\",\"external_id\":\"alice\",\"name\":\"Alice Personal\",\"principal_id\":\"${user_id}\",\"parent_id\":\"${team_scope_id}\"}" | jq -r '.ID'
+)"
+```
+
+Set default working scope for agent tooling:
+
+```bash
+export POSTBRAIN_SCOPE="project:acme/platform/postbrain"
+```
+
+### 7.4 Create a project token
+
+```bash
+postbrain token create --name "postbrain-project" --principal "acme-platform"
+```
+
+Use the returned token for CI/agents that should only work in this project context.
+
+### 7.5 Attach a Git repository to the project scope
+
+```bash
+curl -sS -X POST "${POSTBRAIN_URL}/v1/scopes/${project_scope_id}/repo" \
+  -H "Authorization: Bearer ${POSTBRAIN_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{"repo_url":"https://github.com/simplyblock/postbrain.git","default_branch":"main"}'
+```
+
+Trigger initial indexing:
+
+```bash
+curl -sS -X POST "${POSTBRAIN_URL}/v1/scopes/${project_scope_id}/repo/sync" \
+  -H "Authorization: Bearer ${POSTBRAIN_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+Check indexing status:
+
+```bash
+curl -sS -H "Authorization: Bearer ${POSTBRAIN_TOKEN}" \
+  "${POSTBRAIN_URL}/v1/scopes/${project_scope_id}/repo/sync"
+```
+
+### 7.6 Install and sync skills in the project
+
+```bash
+postbrain-cli install-codex-skill --target /path/to/project
+postbrain-cli install-claude-skill --target /path/to/project
+postbrain-cli skill sync --scope "project:acme/platform/postbrain" --agent "claude-code"
+```
+
+## 8. Learn by example
 
 See [Common Usage Workflows](./common-workflows.md) for practical patterns you can adopt immediately.
