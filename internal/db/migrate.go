@@ -77,6 +77,9 @@ func CheckAndMigrate(ctx context.Context, pool *pgxpool.Pool, autoMigrate bool) 
 	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return fmt.Errorf("migrate: apply migrations: %w", err)
 	}
+	if err := EnsureAGEOverlay(ctx, pool); err != nil {
+		return fmt.Errorf("migrate: ensure age overlay: %w", err)
+	}
 
 	newVersion, _, err := m.Version()
 	if err != nil && !errors.Is(err, migrate.ErrNilVersion) {

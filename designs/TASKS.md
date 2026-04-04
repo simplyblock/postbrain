@@ -27,6 +27,16 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Added runtime AGE overlay bootstrap so AGE can be enabled after initial migration:
+  - Added `db.EnsureAGEOverlay(ctx, pool)` in `internal/db/age_overlay.go`:
+    - idempotent best-effort `CREATE EXTENSION age` + `LOAD 'age'` + `create_graph('postbrain')`
+    - safely degrades with NOTICE when AGE is unavailable
+  - Wired AGE bootstrap into migration flow:
+    - `internal/db/migrate.go` now runs `EnsureAGEOverlay` after `migrate.Up()` (including no-change runs)
+  - Wired server startup fallback when `database.auto_migrate=false`:
+    - `cmd/postbrain/main.go` now calls `EnsureAGEOverlay` during startup in that mode
+  - Added integration regression test:
+    - `internal/db/age_overlay_integration_test.go` validates no-error/idempotent behavior and asserts graph presence when AGE exists.
 - [x] 2026-04-04: Unified recall behavior across MCP and UI query playground, with safer graph defaults:
   - Added shared retrieval orchestrator:
     - `internal/retrieval/orchestrate.go`
