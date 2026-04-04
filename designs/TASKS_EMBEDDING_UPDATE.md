@@ -347,8 +347,8 @@ Every step follows strict Red → Green → Refactor before moving to the next s
 
 - [x] RED: tests ensuring memory/knowledge/skills/entity writes store embeddings in new model table and insert/update `embedding_index` row to `ready`.
 - [x] GREEN: integrate repository into write paths using `EmbedResult.ModelID`.
-- [ ] REFACTOR: reduce duplication across memory/knowledge/synthesis write paths.
-  - Progress: memory, knowledge, skills, and entity write paths now dual-write with integration coverage; shared write-path refactor still pending.
+- [x] REFACTOR: reduce duplication across memory/knowledge/synthesis write paths.
+  - Progress: introduced shared dual-write helper (`db.UpsertEmbeddingIfPresent`) and refactored memory/knowledge/skills stores to use it; helper behavior covered with unit tests.
 
 ### Step 8: Bootstrap / Backfill
 

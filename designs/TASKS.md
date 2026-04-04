@@ -62,6 +62,14 @@
   - Added integration coverage:
     - `internal/db/entity_dualwrite_integration_test.go::TestUpsertEntity_DualWritesToEmbeddingRepository`
     - validates `embedding_index` ready row + model-table row for `entity`.
+- [x] 2026-04-04: Reduced Step 7 write-path duplication with shared dual-write helper (TDD-first):
+  - Added `internal/db/embedding_dualwrite.go` + `internal/db/embedding_dualwrite_test.go`:
+    - `db.UpsertEmbeddingIfPresent` centralizes no-op guards and upsert call wiring
+    - covered no-op conditions, expected upsert payload, and error propagation.
+  - Refactored stores to use shared helper:
+    - `internal/memory/store.go` (`dualWriteMemoryEmbeddings`)
+    - `internal/knowledge/store.go` (`dualWriteArtifactEmbedding`)
+    - `internal/skills/store.go` (`dualWriteSkillEmbedding`).
 - [x] 2026-04-04: Started embedding repository layer (Step 6 initial slice, TDD-first):
   - Added `internal/db/embedding_repository.go` with:
     - repository contract types (`EmbeddingQuery`, `ScopeFilter`, `UpsertEmbeddingInput`)

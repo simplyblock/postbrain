@@ -36,6 +36,10 @@ type embeddingService interface {
 	TextEmbedder() embeddingIface
 }
 
+type embeddingResultService interface {
+	EmbedTextResult(ctx context.Context, text string) (*embedding.EmbedResult, error)
+}
+
 // embeddingIface is the subset of embedding.Embedder needed to read the model slug.
 // embedding.Embedder satisfies this interface.
 type embeddingIface interface {
@@ -51,6 +55,10 @@ type embeddingServiceAdapter struct {
 
 func (a *embeddingServiceAdapter) EmbedText(ctx context.Context, text string) ([]float32, error) {
 	return a.svc.EmbedText(ctx, text)
+}
+
+func (a *embeddingServiceAdapter) EmbedTextResult(ctx context.Context, text string) (*embedding.EmbedResult, error) {
+	return a.svc.EmbedTextResult(ctx, text)
 }
 
 func (a *embeddingServiceAdapter) Summarize(ctx context.Context, text string) (string, error) {
@@ -116,6 +124,7 @@ type Store struct {
 	creator artifactCreator
 	getter  artifactGetter
 	updater artifactUpdater
+	repo    *db.EmbeddingRepository
 }
 
 // NewStore creates a new Store backed by the given pool and embedding service.
@@ -126,6 +135,7 @@ func NewStore(pool *pgxpool.Pool, svc *embedding.EmbeddingService) *Store {
 		creator: &poolArtifactCreator{pool: pool},
 		getter:  &poolArtifactGetter{pool: pool},
 		updater: &poolArtifactUpdater{pool: pool},
+		repo:    db.NewEmbeddingRepository(pool),
 	}
 }
 
@@ -199,6 +209,9 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.KnowledgeArt
 	if err != nil {
 		return nil, fmt.Errorf("knowledge: create: %w", err)
 	}
+	if err := s.dualWriteArtifactEmbedding(ctx, created.ID, created.OwnerScopeID, embeddingVec, modelID); err != nil {
+		return nil, fmt.Errorf("knowledge: dual-write create: %w", err)
+	}
 
 	// Best-effort: link extracted entities and their co-occurrence relations.
 	s.linkExtractedEntities(ctx, created.ID, input.OwnerScopeID, entities)
@@ -246,6 +259,9 @@ func (s *Store) Update(ctx context.Context, id, callerID uuid.UUID, title, conte
 	updated, err := s.updater.updateArtifact(ctx, id, title, content, summary, embeddingVec, modelID)
 	if err != nil {
 		return nil, fmt.Errorf("knowledge: update: %w", err)
+	}
+	if err := s.dualWriteArtifactEmbedding(ctx, updated.ID, updated.OwnerScopeID, embeddingVec, modelID); err != nil {
+		return nil, fmt.Errorf("knowledge: dual-write update: %w", err)
 	}
 
 	// Flag covering digests stale when a published source is updated — non-fatal.
@@ -382,6 +398,31 @@ func (s *Store) embedContent(ctx context.Context, text string) ([]float32, *uuid
 	if s.svc == nil {
 		return nil, nil, nil
 	}
+	if svc, ok := s.svc.(embeddingResultService); ok {
+		res, err := svc.EmbedTextResult(ctx, text)
+		if err != nil {
+			return nil, nil, err
+		}
+		if res == nil {
+			return nil, nil, fmt.Errorf("embedding service returned nil result")
+		}
+		if len(res.Embedding) == 0 {
+			return nil, nil, fmt.Errorf("embedding service returned empty vector (is the model available?)")
+		}
+		if s.pool != nil {
+			q := db.New(s.pool)
+			model, err := q.GetActiveTextModel(ctx)
+			if err == nil && model != nil {
+				res.Embedding = embedding.FitDimensions(res.Embedding, int(model.Dimensions))
+			}
+		}
+		if res.ModelID != uuid.Nil {
+			modelID := res.ModelID
+			return res.Embedding, &modelID, nil
+		}
+		return res.Embedding, nil, nil
+	}
+
 	vec, err := s.svc.EmbedText(ctx, text)
 	if err != nil {
 		return nil, nil, err
@@ -403,6 +444,15 @@ func (s *Store) embedContent(ctx context.Context, text string) ([]float32, *uuid
 		}
 	}
 	return vec, nil, nil
+}
+
+func (s *Store) dualWriteArtifactEmbedding(
+	ctx context.Context,
+	artifactID, scopeID uuid.UUID,
+	embeddingVec []float32,
+	modelID *uuid.UUID,
+) error {
+	return db.UpsertEmbeddingIfPresent(ctx, s.repo, "knowledge_artifact", artifactID, scopeID, embeddingVec, modelID)
 }
 
 // createChunks splits a large artifact's content into overlapping segments and
