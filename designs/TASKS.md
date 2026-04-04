@@ -35,6 +35,8 @@
       (single nested vector is flattened)
     - column-vector nested shape: `[{ "index": n, "embedding": [[x],[y],...] }]`
       (flattened to `[x,y,...]`)
+    - matrix nested shape: `[{ "index": n, "embedding": [[...],[...],...] }]`
+      (mean-pooled to a single vector)
   - Added single-input compatibility for bare vector/envelope variants.
   - Added regression tests in `internal/embedding/openai_test.go`:
     - `TestOpenAIEmbedder_ArrayResponse_SingleInput`
@@ -42,6 +44,7 @@
     - `TestOpenAIEmbedder_ObjectArrayResponse_NestedEmbedding_SingleInput`
     - `TestOpenAIEmbedder_EnvelopeResponse_NestedEmbedding_SingleInput`
     - `TestOpenAIEmbedder_ObjectArrayResponse_ColumnVector_SingleInput`
+    - `TestOpenAIEmbedder_ObjectArrayResponse_MatrixEmbedding_SingleInput`
   - Resolves runtime decode failures like:
     - `json: cannot unmarshal array into Go value of type embedding.openAIResponse`
 - [x] 2026-04-04: Added configurable OpenAI-compatible endpoint support for embedding/summarization:

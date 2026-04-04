@@ -245,13 +245,37 @@ func parseEmbeddingVector(raw json.RawMessage) ([]float32, error) {
 		}
 		// Some OpenAI-compatible servers return a column vector [[x],[y],...].
 		flat := make([]float32, len(nested))
+		columnVector := true
 		for i, row := range nested {
 			if len(row) != 1 {
-				return nil, fmt.Errorf("expected single nested embedding, got %d", len(nested))
+				columnVector = false
+				break
 			}
 			flat[i] = row[0]
 		}
-		return flat, nil
+		if columnVector {
+			return flat, nil
+		}
+		// Fallback for matrix embeddings (for example token-level vectors):
+		// mean-pool rows into a single vector.
+		cols := len(nested[0])
+		if cols == 0 {
+			return nil, fmt.Errorf("unsupported embedding format")
+		}
+		pooled := make([]float32, cols)
+		for _, row := range nested {
+			if len(row) != cols {
+				return nil, fmt.Errorf("expected single nested embedding, got %d", len(nested))
+			}
+			for j := 0; j < cols; j++ {
+				pooled[j] += row[j]
+			}
+		}
+		inv := float32(1.0 / float64(len(nested)))
+		for j := 0; j < cols; j++ {
+			pooled[j] *= inv
+		}
+		return pooled, nil
 	}
 	return nil, fmt.Errorf("unsupported embedding format")
 }
