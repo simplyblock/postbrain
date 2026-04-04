@@ -27,6 +27,10 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Rendered `/ui/login` as a standalone page without app sidebar shell:
+  - Added regression test `TestLoginGET_DoesNotRenderAppSidebar` in `internal/ui/handler_auth_test.go`.
+  - Updated `internal/ui/handler.go` render logic to bypass base layout for `login` template.
+  - Keeps existing HTMX partial behavior unchanged and prevents sidebar/navigation from appearing on unauthenticated login page.
 - [x] 2026-04-04: Added detailed embedding re-architecture execution plan:
   - Created `designs/TASKS_EMBEDDING_UPDATE.md` with ordered, TDD-gated action items for:
     - per-model embedding tables (`embeddings_model_<uuid_no_dashes>`)
