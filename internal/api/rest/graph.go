@@ -28,6 +28,10 @@ func (ro *Router) listEntities(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "database unavailable")
 		return
 	}
+	if err := ro.authorizeRequestedScope(r.Context(), scopeID); err != nil {
+		writeScopeAuthzError(w, r, scopeID, err)
+		return
+	}
 
 	entityType := r.URL.Query().Get("type")
 	pg := paginationFromRequest(r)
@@ -61,6 +65,10 @@ func (ro *Router) getGraph(w http.ResponseWriter, r *http.Request) {
 	}
 	if ro.pool == nil {
 		writeError(w, http.StatusInternalServerError, "database unavailable")
+		return
+	}
+	if err := ro.authorizeRequestedScope(r.Context(), scopeID); err != nil {
+		writeScopeAuthzError(w, r, scopeID, err)
 		return
 	}
 
@@ -129,6 +137,10 @@ func (ro *Router) queryCypher(w http.ResponseWriter, r *http.Request) {
 	}
 	if ro.pool == nil {
 		writeError(w, http.StatusInternalServerError, "database unavailable")
+		return
+	}
+	if err := ro.authorizeRequestedScope(r.Context(), scopeID); err != nil {
+		writeScopeAuthzError(w, r, scopeID, err)
 		return
 	}
 
