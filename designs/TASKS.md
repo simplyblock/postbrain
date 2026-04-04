@@ -27,6 +27,13 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Added detailed embedding re-architecture execution plan:
+  - Created `designs/TASKS_EMBEDDING_UPDATE.md` with ordered, TDD-gated action items for:
+    - per-model embedding tables (`embeddings_model_<uuid_no_dashes>`)
+    - central embedding metadata table + model table mapping
+    - multi-provider model registration and re-embedding support
+    - fast/aggressive cutover phases and validation gates
+  - Captured and locked all previously open design decisions in that task plan.
 - [x] 2026-04-04: Unified embedding endpoint config into `embedding.service_url`:
   - Replaced split config keys (`embedding.ollama_url`, `embedding.openai_base_url`) with unified `embedding.service_url`.
   - Updated runtime config struct/defaults and added backward-compat fallback mapping for legacy keys in `internal/config/config.go`.
