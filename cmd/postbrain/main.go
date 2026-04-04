@@ -99,6 +99,10 @@ func runServe(cmd *cobra.Command, args []string) error {
 		if err := db.CheckAndMigrate(ctx, pool, true); err != nil {
 			return fmt.Errorf("migrate: %w", err)
 		}
+	} else {
+		if err := db.EnsureAGEOverlay(ctx, pool); err != nil {
+			return fmt.Errorf("ensure age overlay: %w", err)
+		}
 	}
 
 	svc, err := embedding.NewService(&cfg.Embedding)
