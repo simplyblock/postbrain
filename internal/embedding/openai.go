@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -152,22 +153,13 @@ func (e *OpenAIEmbedder) embedBatchOnce(ctx context.Context, texts []string) ([]
 		return nil, fmt.Errorf("openai: unexpected status %d: %s", resp.StatusCode, bytes.TrimSpace(errBody))
 	}
 
-	var result openAIResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("openai: read response body: %w", err)
+	}
+	ordered, err := parseOpenAIEmbeddingsResponse(raw, len(texts))
+	if err != nil {
 		return nil, fmt.Errorf("openai: decode response: %w", err)
-	}
-
-	if len(result.Data) != len(texts) {
-		return nil, fmt.Errorf("openai: expected %d embeddings, got %d", len(texts), len(result.Data))
-	}
-
-	// OpenAI may return data in any order; sort by index to restore original order.
-	ordered := make([][]float32, len(texts))
-	for _, item := range result.Data {
-		if item.Index < 0 || item.Index >= len(texts) {
-			return nil, fmt.Errorf("openai: embedding index %d out of range", item.Index)
-		}
-		ordered[item.Index] = item.Embedding
 	}
 
 	if len(ordered) > 0 {
@@ -179,4 +171,45 @@ func (e *OpenAIEmbedder) embedBatchOnce(ctx context.Context, texts []string) ([]
 	}
 
 	return ordered, nil
+}
+
+func parseOpenAIEmbeddingsResponse(raw []byte, expected int) ([][]float32, error) {
+	var standard openAIResponse
+	if err := json.Unmarshal(raw, &standard); err == nil && standard.Data != nil {
+		if len(standard.Data) != expected {
+			return nil, fmt.Errorf("expected %d embeddings, got %d", expected, len(standard.Data))
+		}
+		ordered := make([][]float32, expected)
+		for _, item := range standard.Data {
+			if item.Index < 0 || item.Index >= expected {
+				return nil, fmt.Errorf("embedding index %d out of range", item.Index)
+			}
+			ordered[item.Index] = item.Embedding
+		}
+		return ordered, nil
+	}
+
+	var array [][]float32
+	if err := json.Unmarshal(raw, &array); err == nil {
+		if len(array) != expected {
+			return nil, fmt.Errorf("expected %d embeddings, got %d", expected, len(array))
+		}
+		return array, nil
+	}
+
+	// Some OpenAI-compatible servers return a bare vector for single-input requests.
+	if expected == 1 {
+		var vector []float32
+		if err := json.Unmarshal(raw, &vector); err == nil {
+			return [][]float32{vector}, nil
+		}
+		var envelope struct {
+			Embedding []float32 `json:"embedding"`
+		}
+		if err := json.Unmarshal(raw, &envelope); err == nil && envelope.Embedding != nil {
+			return [][]float32{envelope.Embedding}, nil
+		}
+	}
+
+	return nil, errors.New(string(raw))
 }

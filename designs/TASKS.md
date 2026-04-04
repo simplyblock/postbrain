@@ -27,6 +27,16 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Improved OpenAI-compatible embedding response compatibility:
+  - Fixed `internal/embedding/openai.go` decode path to accept both:
+    - standard OpenAI shape: `{ "data": [{ "embedding": [...], "index": n }] }`
+    - array shape used by some local OpenAI-compatible servers: `[[...], [...]]`
+  - Added single-input compatibility for bare vector/envelope variants.
+  - Added regression tests in `internal/embedding/openai_test.go`:
+    - `TestOpenAIEmbedder_ArrayResponse_SingleInput`
+    - `TestOpenAIEmbedder_ArrayResponse_BatchInput`
+  - Resolves runtime decode failures like:
+    - `json: cannot unmarshal array into Go value of type embedding.openAIResponse`
 - [x] 2026-04-04: Added configurable OpenAI-compatible endpoint support for embedding/summarization:
   - Added `embedding.openai_base_url` to runtime config (`internal/config/config.go`) with default empty value.
   - Wired OpenAI constructors in `internal/embedding/service.go` to use `openai_base_url` for text/code/summarize/analyze clients.
