@@ -2,11 +2,11 @@
 # install-postbrain.sh - Install postbrain or postbrain-cli from GitHub releases.
 #
 # Usage:
-#   ./scripts/install-postbrain.sh [server|client] [version]
+#   ./install-postbrain.sh [server|client] [version]
 #
 # Examples:
-#   ./scripts/install-postbrain.sh server
-#   ./scripts/install-postbrain.sh client v1.2.3
+#   ./install-postbrain.sh server
+#   ./install-postbrain.sh client v1.2.3
 #
 # Environment:
 #   POSTBRAIN_REPO       GitHub repo slug (default: simplyblock/postbrain)

@@ -27,6 +27,19 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Extended project landing page content and flow design:
+  - Added public installer script for docs hosting:
+    - `site/public/install-postbrain.sh`
+  - Updated homepage quickstart to use hosted one-liner install commands from `https://simplyblock.github.io/postbrain/install-postbrain.sh`.
+  - Repositioned quickstart below hero to preserve the enterprise-oriented value proposition prominence.
+  - Refined quickstart checklist presentation:
+    - two-column checkmark list on desktop
+    - added team collaboration step (“Collaborate with team members in shared scopes”)
+  - Expanded homepage information architecture in `site/src/pages/index.astro`:
+    - explicit supported agent integrations
+    - explicit model/backend support framing
+    - added missing “Skill Sharing” and “MCP + REST Interfaces” value points
+  - Reworked “Typical Flow” from a plain list into a horizontal timeline with separate explanatory cards underneath.
 - [x] 2026-04-04: Redesigned docs site root page (`/`) into a project landing page:
   - Replaced the simple docs-index card list in `site/src/pages/index.astro` with a presentable product-style homepage.
   - Added:

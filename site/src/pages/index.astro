@@ -132,10 +132,7 @@ const highlightDocs = pages.filter((page) => [
         padding: 2rem 1rem 4rem;
       }
       .hero {
-        display: grid;
-        grid-template-columns: 1.2fr 0.8fr;
-        gap: 1.1rem;
-        align-items: stretch;
+        display: block;
       }
       .hero-main {
         background: linear-gradient(180deg, #1a1f31 0%, #151a29 100%);
@@ -211,9 +208,12 @@ const highlightDocs = pages.filter((page) => [
         list-style: none;
         padding: 0;
         margin: 0;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.38rem 0.9rem;
       }
-      .quick li + li {
-        margin-top: 0.5rem;
+      .quick li {
+        margin: 0;
       }
       .quick code {
         color: #dbe5ff;
@@ -255,14 +255,93 @@ const highlightDocs = pages.filter((page) => [
         font-size: 0.9rem;
       }
       .steps {
-        margin: 0;
-        padding-left: 1.2rem;
+        list-style: none;
+        margin: 0 0 0.9rem;
+        padding: 0;
+        position: relative;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.9rem;
       }
-      .steps li + li {
-        margin-top: 0.45rem;
+      .steps::before {
+        content: "";
+        position: absolute;
+        left: 12%;
+        right: 12%;
+        top: 16px;
+        height: 2px;
+        background: linear-gradient(90deg, rgba(108, 140, 255, 0.55) 0%, rgba(108, 140, 255, 0.18) 100%);
+      }
+      .steps li {
+        position: relative;
+        padding-top: 2.65rem;
+        text-align: center;
+      }
+      .steps li::before {
+        content: attr(data-step);
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        top: 0;
+        width: 34px;
+        height: 34px;
+        border-radius: 999px;
+        border: 1px solid rgba(108, 140, 255, 0.6);
+        background: radial-gradient(circle at 35% 20%, #4f67b9 0%, #2a345c 75%);
+        color: #ebf1ff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.84rem;
+        font-weight: 700;
+        z-index: 1;
       }
       .steps strong {
         color: #e8eeff;
+      }
+      .steps .step-label {
+        font-weight: 700;
+        color: #e8eeff;
+        font-size: 0.98rem;
+      }
+      .step-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.9rem;
+      }
+      .step-card {
+        background: rgba(19, 24, 39, 0.92);
+        border: 1px solid #2d3754;
+        border-radius: 10px;
+        padding: 0.65rem 0.72rem;
+      }
+      .step-card p {
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 0.92rem;
+      }
+      .split {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.9rem;
+      }
+      .list-clean {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .list-clean li {
+        margin: 0;
+        padding: 0.35rem 0;
+        color: var(--text);
+        border-bottom: 1px dashed rgba(57, 70, 105, 0.65);
+      }
+      .list-clean li:last-child {
+        border-bottom: 0;
+      }
+      .meta {
+        color: var(--text-muted);
+        font-size: 0.9rem;
       }
       pre {
         margin: 0.8rem 0 0;
@@ -288,11 +367,6 @@ const highlightDocs = pages.filter((page) => [
         font-weight: 700;
         margin-right: 0.3rem;
       }
-      @media (max-width: 930px) {
-        .hero {
-          grid-template-columns: 1fr;
-        }
-      }
       @media (max-width: 600px) {
         .top-links {
           gap: 0.55rem;
@@ -300,6 +374,35 @@ const highlightDocs = pages.filter((page) => [
         }
         .container {
           padding: 1.15rem 0.75rem 2.2rem;
+        }
+        .quick ul {
+          grid-template-columns: 1fr;
+        }
+      }
+      @media (max-width: 860px) {
+        .split {
+          grid-template-columns: 1fr;
+        }
+        .steps {
+          grid-template-columns: 1fr 1fr;
+        }
+        .steps::before {
+          left: 10%;
+          right: 10%;
+        }
+        .step-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+      @media (max-width: 600px) {
+        .steps {
+          grid-template-columns: 1fr;
+        }
+        .steps::before {
+          display: none;
+        }
+        .step-grid {
+          grid-template-columns: 1fr;
         }
       }
     </style>
@@ -319,15 +422,16 @@ const highlightDocs = pages.filter((page) => [
     <div class="container">
       <section class="hero">
         <article class="hero-main">
-          <span class="badge">Long-term Memory for Coding Agents</span>
-          <h1>Keep context across sessions, tools, and teams.</h1>
+          <span class="badge">Making Agents Enterprise-Ready</span>
+          <h1>Make AI agents reliable, governable, and team-ready.</h1>
           <p class="lead">
             Postbrain adds durable memory, reviewed knowledge, and reusable skills to agent workflows. It turns
-            session-only progress into shared, scope-controlled context your team can reuse.
+            session-only output into governed, reusable organizational context.
           </p>
           <p class="lead">
-            Default assistant memory is often isolated per user/account/device/agent context. Postbrain makes that
-            context portable and governable at project, team, and company levels.
+            Default assistant memory is often isolated per user/account/device/agent context. Postbrain makes context
+            portable with explicit scope boundaries, auditability, and operational control at project, team, and
+            company levels.
           </p>
           <div class="cta-row">
             <a class="btn primary" href={`${baseUrl}docs/getting-started/`}>Get Started</a>
@@ -335,18 +439,23 @@ const highlightDocs = pages.filter((page) => [
             <a class="btn muted" href={`${baseUrl}docs/server-installation/`}>Install Server</a>
           </div>
         </article>
-        <aside class="quick">
-          <h2>Quickstart</h2>
-          <ul>
-            <li><span class="tick">✓</span> Deploy server and run `postbrain onboard`</li>
-            <li><span class="tick">✓</span> Issue a scoped token for your automation/user</li>
-            <li><span class="tick">✓</span> Install Codex/Claude skill in your repo</li>
-            <li><span class="tick">✓</span> Start storing and recalling context per scope</li>
-          </ul>
-          <pre><code>postbrain onboard --config ./config.yaml
+      </section>
+
+      <section class="section quick">
+        <h2>Quickstart</h2>
+        <ul>
+          <li><span class="tick">✓</span> Install server/client with one hosted script</li>
+          <li><span class="tick">✓</span> Deploy server and run `postbrain onboard`</li>
+          <li><span class="tick">✓</span> Issue a scoped token for your automation/user</li>
+          <li><span class="tick">✓</span> Install Codex/Claude skill in your repo</li>
+          <li><span class="tick">✓</span> Start storing and recalling context per scope</li>
+          <li><span class="tick">✓</span> Collaborate with team members in shared scopes</li>
+        </ul>
+        <pre><code>curl -fsSL https://simplyblock.github.io/postbrain/install-postbrain.sh | bash -s -- server
+curl -fsSL https://simplyblock.github.io/postbrain/install-postbrain.sh | bash -s -- client
+postbrain onboard --config ./config.yaml
 postbrain token create --name "project-bot" --principal "team-platform"
 postbrain-cli install-codex-skill --target /path/to/repo</code></pre>
-        </aside>
       </section>
 
       <section class="section">
@@ -354,7 +463,7 @@ postbrain-cli install-codex-skill --target /path/to/repo</code></pre>
         <p class="kicker">A memory system designed for engineering workflows, not just chat history.</p>
         <div class="grid">
           <article class="card">
-            <h2>Persistent Memory Layer</h2>
+            <h2>Reliable Memory Layer</h2>
             <p>Capture decisions, observations, and task progress continuously and recall them in later sessions.</p>
           </article>
           <article class="card">
@@ -362,20 +471,61 @@ postbrain-cli install-codex-skill --target /path/to/repo</code></pre>
             <p>Promote stable outcomes into reviewed artifacts so high-value context becomes durable reference.</p>
           </article>
           <article class="card">
+            <h2>Skill Sharing Across Teams</h2>
+            <p>Publish and reuse skills across scopes so proven agent behaviors become shared team/company assets.</p>
+          </article>
+          <article class="card">
             <h2>Hybrid Retrieval</h2>
             <p>Combine vector, full-text, trigram, and graph-aware retrieval for higher recall quality.</p>
           </article>
           <article class="card">
-            <h2>Scope-Controlled Access</h2>
+            <h2>Enterprise Access Controls</h2>
             <p>Apply project/team/company boundaries so context sharing is explicit, auditable, and safe.</p>
           </article>
           <article class="card">
-            <h2>Agent Tooling</h2>
+            <h2>Agent Governance Tooling</h2>
             <p>Use `postbrain-cli` and skills for Codex/Claude to integrate memory into everyday coding loops.</p>
           </article>
           <article class="card">
-            <h2>Operational Deployment</h2>
+            <h2>MCP + REST Interfaces</h2>
+            <p>Integrate through MCP tools for agents and REST endpoints for backend services and automation.</p>
+          </article>
+          <article class="card">
+            <h2>Production-Grade Deployment</h2>
             <p>Run locally, in containers, or on Kubernetes with Helm and OAuth/social login support.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Ecosystem Support</h2>
+        <p class="kicker">Use Postbrain with common coding agents and flexible model backends.</p>
+        <div class="split">
+          <article class="card">
+            <h2>Supported Agent Integrations</h2>
+            <ul class="list-clean">
+              <li><strong>OpenAI Codex</strong> via installable Codex skill</li>
+              <li><strong>Claude Code</strong> via installable Claude skill</li>
+              <li><strong>ChatGPT-based flows</strong> via API/backend integration</li>
+              <li><strong>Mixed-agent repositories</strong> sharing one scoped memory model</li>
+            </ul>
+            <p class="meta">
+              See <a href={`${baseUrl}docs/using-with-coding-agents/`}>Using with Coding Agents</a> and
+              <a href={`${baseUrl}docs/using-with-chatgpt/`}> Using with ChatGPT</a>.
+            </p>
+          </article>
+          <article class="card">
+            <h2>Model and Backend Support</h2>
+            <ul class="list-clean">
+              <li><strong>OpenAI-compatible backends</strong> for embedding/analyze paths</li>
+              <li><strong>Ollama</strong> for local/self-hosted embedding paths</li>
+              <li><strong>Separate text/code embedding models</strong> configurable by slug</li>
+              <li><strong>Optional summary/analyze model override</strong> for lifecycle jobs</li>
+            </ul>
+            <p class="meta">
+              See <a href={`${baseUrl}docs/configuration/`}>Configuration</a> (`embedding.*`) and
+              <a href={`${baseUrl}docs/indexing-model/`}> Indexing Model</a>.
+            </p>
           </article>
         </div>
       </section>
@@ -383,11 +533,33 @@ postbrain-cli install-codex-skill --target /path/to/repo</code></pre>
       <section class="section">
         <h2>Typical Flow</h2>
         <ol class="steps">
-          <li><strong>Capture</strong>: agents write memories while implementing or debugging.</li>
-          <li><strong>Recall</strong>: new tasks start by pulling relevant context in the same scope.</li>
-          <li><strong>Promote</strong>: durable outcomes become knowledge artifacts and reusable skills.</li>
-          <li><strong>Share with control</strong>: teams consume shared context through scope boundaries.</li>
+          <li data-step="1">
+            <div class="step-label">Capture</div>
+          </li>
+          <li data-step="2">
+            <div class="step-label">Recall</div>
+          </li>
+          <li data-step="3">
+            <div class="step-label">Promote</div>
+          </li>
+          <li data-step="4">
+            <div class="step-label">Share with control</div>
+          </li>
         </ol>
+        <div class="step-grid">
+          <article class="step-card">
+            <p>Agents write memories while implementing, debugging, and reviewing code.</p>
+          </article>
+          <article class="step-card">
+            <p>New tasks start by pulling relevant context in the same project/team scope.</p>
+          </article>
+          <article class="step-card">
+            <p>Stable outcomes become knowledge artifacts and reusable skills.</p>
+          </article>
+          <article class="step-card">
+            <p>Teams consume shared context through explicit, auditable scope boundaries.</p>
+          </article>
+        </div>
       </section>
 
       <section class="section">
@@ -408,8 +580,8 @@ postbrain-cli install-codex-skill --target /path/to/repo</code></pre>
         </p>
       </section>
       <section class="footer-note">
-        Postbrain is open source and built for production agent workflows with explicit memory lifecycle and
-        scope-based governance.
+        Postbrain is open source and built to make agent workflows enterprise-ready through durable memory,
+        scope-based governance, and production deployment paths.
       </section>
       <div class="footer-note">
         <a href="https://github.com/simplyblock/postbrain" target="_blank" rel="noreferrer">View repository on GitHub</a>
