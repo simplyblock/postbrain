@@ -27,6 +27,13 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Restored styled standalone login layout:
+  - Added dedicated `auth_base` template (`internal/ui/web/templates/auth_base.html`) so `/ui/login` remains separate from the sidebar app shell while still loading shared UI styles/scripts.
+  - Updated `render()` in `internal/ui/handler.go` to wrap `login` with `auth_base` (instead of raw template output), while preserving HTMX partial behavior.
+  - Refined login markup and auth-specific styling:
+    - `internal/ui/web/templates/login.html`
+    - `internal/ui/web/static/pico.min.css`
+  - Added regression test `TestLoginGET_UsesStyledStandaloneLayout` in `internal/ui/handler_auth_test.go`.
 - [x] 2026-04-04: Rendered `/ui/login` as a standalone page without app sidebar shell:
   - Added regression test `TestLoginGET_DoesNotRenderAppSidebar` in `internal/ui/handler_auth_test.go`.
   - Updated `internal/ui/handler.go` render logic to bypass base layout for `login` template.

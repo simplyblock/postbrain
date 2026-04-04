@@ -47,6 +47,26 @@ func TestLoginGET_DoesNotRenderAppSidebar(t *testing.T) {
 	}
 }
 
+func TestLoginGET_UsesStyledStandaloneLayout(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/ui/login", nil)
+	w := httptest.NewRecorder()
+
+	h.handleLogin(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "/ui/static/pico.min.css") {
+		t.Fatalf("expected login page to include stylesheet link, got: %s", body)
+	}
+	if !strings.Contains(body, "class=\"auth-body\"") {
+		t.Fatalf("expected standalone auth layout body class, got: %s", body)
+	}
+}
+
 func TestLoginGET_WithNext_RendersHiddenNextField(t *testing.T) {
 	t.Parallel()
 	h := newTestHandler(t)
