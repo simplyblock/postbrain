@@ -29,24 +29,49 @@ func TestListEntities_NilPool_Returns500(t *testing.T) {
 	}
 }
 
-// TestQueryCypher_Returns501 verifies that queryCypher always returns 501.
-func TestQueryCypher_Returns501(t *testing.T) {
+func TestQueryCypher_InvalidBody_Returns400(t *testing.T) {
 	ro := &Router{}
-	body := `{"cypher":"MATCH (n) RETURN n","scope_id":"00000000-0000-0000-0000-000000000001"}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/graph/query", strings.NewReader("{"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	ro.queryCypher(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestQueryCypher_InvalidScopeID_Returns400(t *testing.T) {
+	ro := &Router{}
+	body := `{"cypher":"RETURN n","scope_id":"not-a-uuid"}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/graph/query", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	ro.queryCypher(w, req)
 
-	if w.Code != http.StatusNotImplemented {
-		t.Errorf("expected 501, got %d", w.Code)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
 	}
+}
+
+func TestQueryCypher_NilPool_Returns500(t *testing.T) {
+	ro := &Router{}
+	body := `{"cypher":"RETURN n","scope_id":"00000000-0000-0000-0000-000000000001"}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/graph/query", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	ro.queryCypher(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
+	}
+
 	var resp map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("could not parse body: %v", err)
 	}
-	if resp["error"] != "AGE unavailable" {
-		t.Errorf("expected error=AGE unavailable, got %v", resp["error"])
+	if resp["error"] != "database unavailable" {
+		t.Errorf("expected error=database unavailable, got %v", resp["error"])
 	}
 }
 

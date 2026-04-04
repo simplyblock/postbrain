@@ -1,7 +1,9 @@
 package rest
 
 import (
+	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -107,9 +109,39 @@ func (ro *Router) getGraph(w http.ResponseWriter, r *http.Request) {
 
 // queryCypher handles POST /v1/graph/query.
 // Body: {"cypher": "...", "scope_id": "..."}.
-// Returns {"error": "AGE unavailable"} with 501 (AGE not yet implemented).
 func (ro *Router) queryCypher(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "AGE unavailable")
+	var req struct {
+		Cypher  string `json:"cypher"`
+		ScopeID string `json:"scope_id"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if strings.TrimSpace(req.Cypher) == "" {
+		writeError(w, http.StatusBadRequest, "cypher is required")
+		return
+	}
+	scopeID, err := uuid.Parse(req.ScopeID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid scope_id")
+		return
+	}
+	if ro.pool == nil {
+		writeError(w, http.StatusInternalServerError, "database unavailable")
+		return
+	}
+
+	rows, err := graph.RunCypherQuery(r.Context(), ro.pool, scopeID, req.Cypher)
+	if err != nil {
+		if errors.Is(err, graph.ErrAGEUnavailable) {
+			writeError(w, http.StatusNotImplemented, "AGE unavailable")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to run graph query")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"rows": rows})
 }
 
 type traversalNeighbourJSON struct {
