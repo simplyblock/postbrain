@@ -1,13 +1,30 @@
 {{define "promotions"}}
 <h1>Promotion Queue</h1>
+<form class="toolbar" method="GET" action="/ui/promotions">
+  <select name="scope_id">
+    <option value=""{{if eq .ScopeID ""}} selected{{end}}>All scopes</option>
+    {{range .Scopes}}
+    <option value="{{.ID}}"{{if eq $.ScopeID .ID.String}} selected{{end}}>{{.Kind}}:{{.ExternalID}}</option>
+    {{end}}
+  </select>
+  <select name="status">
+    <option value="all"{{if eq .Status "all"}} selected{{end}}>All statuses</option>
+    <option value="pending"{{if eq .Status "pending"}} selected{{end}}>pending</option>
+    <option value="approved"{{if eq .Status "approved"}} selected{{end}}>approved</option>
+    <option value="rejected"{{if eq .Status "rejected"}} selected{{end}}>rejected</option>
+    <option value="merged"{{if eq .Status "merged"}} selected{{end}}>merged</option>
+  </select>
+  <button type="submit">Filter</button>
+</form>
 <table>
   <thead>
-    <tr><th>Memory ID</th><th>Proposed Title</th><th>Status</th><th>Requested</th><th>Actions</th></tr>
+    <tr><th>Memory ID</th><th>Target Scope</th><th>Proposed Title</th><th>Status</th><th>Requested</th><th>Actions</th></tr>
   </thead>
   <tbody>
   {{range .Promotions}}
   <tr>
     <td><a href="/ui/memories/{{.MemoryID}}" class="mono">{{.MemoryID}}</a></td>
+    <td class="mono">{{.TargetScopeID}}</td>
     <td>{{deref .ProposedTitle}}</td>
     <td><span class="badge {{statusBadge .Status}}">{{.Status}}</span></td>
     <td class="muted">{{timeAgo .CreatedAt}}</td>
@@ -27,7 +44,7 @@
     </td>
   </tr>
   {{else}}
-  <tr><td colspan="5" class="muted">No pending promotions.</td></tr>
+  <tr><td colspan="6" class="muted">No pending promotions.</td></tr>
   {{end}}
   </tbody>
 </table>

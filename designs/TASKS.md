@@ -27,6 +27,29 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Fixed promotions queue visibility and filtering in Web UI (TDD-first):
+  - Updated `/ui/promotions` handler to support combined filters:
+    - `scope_id` (specific scope or all scopes)
+    - `status` (`all`, `pending`, `approved`, `rejected`, `merged`)
+  - Changed default promotions view to `status=all` so non-pending requests are visible by default.
+  - Added strict query validation and explicit error handling:
+    - invalid `scope_id` -> `400 invalid scope id`
+    - invalid `status` -> `400 invalid status`
+    - DB load failures -> `500` (instead of silently rendering empty results)
+  - Extended promotions template with:
+    - scope selector
+    - status selector
+    - target scope column in result rows
+  - Added tests:
+    - unit: `internal/ui/handler_promotions_test.go`
+    - integration: `internal/ui/handler_promotions_integration_test.go` (scope filter + approved visibility regression)
+- [x] 2026-04-04: Fixed scope deletion failure caused by promotion request FK constraint (TDD-first):
+  - Added DB regression test `internal/db/scope_delete_promotion_integration_test.go` reproducing:
+    - deleting a scope referenced by approved promotion requests fails with FK violation
+  - Added migration:
+    - `000012_promotion_scope_fk_cascade.up.sql`
+    - `000012_promotion_scope_fk_cascade.down.sql`
+  - Changed `promotion_requests.target_scope_id` FK to `ON DELETE CASCADE`, allowing scope deletion without manual promotion cleanup.
 - [x] 2026-04-04: Extended project landing page content and flow design:
   - Added public installer script for docs hosting:
     - `site/public/install-postbrain.sh`

@@ -596,14 +596,57 @@ func (h *Handler) handleCollectionDetail(w http.ResponseWriter, r *http.Request)
 // handlePromotions serves GET /ui/promotions.
 func (h *Handler) handlePromotions(w http.ResponseWriter, r *http.Request) {
 	data := struct {
+		Scopes     []*db.Scope
+		ScopeID    string
+		Status     string
 		Promotions []*db.PromotionRequest
-	}{}
+	}{
+		ScopeID: r.URL.Query().Get("scope_id"),
+		Status:  r.URL.Query().Get("status"),
+	}
+	if data.Status == "" {
+		data.Status = "all"
+	}
+
+	targetScopeID := uuid.Nil
+	if data.ScopeID != "" {
+		parsed, err := uuid.Parse(data.ScopeID)
+		if err != nil {
+			http.Error(w, "invalid scope id", http.StatusBadRequest)
+			return
+		}
+		targetScopeID = parsed
+	}
+	validStatus := map[string]bool{
+		"all":      true,
+		"pending":  true,
+		"approved": true,
+		"rejected": true,
+		"merged":   true,
+	}
+	if !validStatus[data.Status] {
+		http.Error(w, "invalid status", http.StatusBadRequest)
+		return
+	}
 
 	if h.pool != nil {
-		proms, err := db.ListPendingPromotions(r.Context(), h.pool, uuid.Nil)
-		if err == nil {
-			data.Promotions = proms
+		scopes, err := db.ListScopes(r.Context(), h.pool, 200, 0)
+		if err != nil {
+			http.Error(w, "failed to load scopes", http.StatusInternalServerError)
+			return
 		}
+		data.Scopes = scopes
+
+		statusFilter := ""
+		if data.Status != "all" {
+			statusFilter = data.Status
+		}
+		proms, err := db.ListPromotions(r.Context(), h.pool, targetScopeID, statusFilter, 500)
+		if err != nil {
+			http.Error(w, "failed to load promotions", http.StatusInternalServerError)
+			return
+		}
+		data.Promotions = proms
 	}
 
 	h.render(w, r, "promotions", "Promotion Queue", data)
