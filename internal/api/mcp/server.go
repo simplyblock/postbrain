@@ -107,7 +107,7 @@ func (s *Server) registerTools() {
 		mcpgo.WithNumber("limit", mcpgo.Description("Max results (default: 10)")),
 		mcpgo.WithNumber("min_score", mcpgo.Description("Min combined score 0–1 (default: 0.0)")),
 		mcpgo.WithString("search_mode", mcpgo.Description("text|code|hybrid (default: hybrid)")),
-		mcpgo.WithNumber("graph_depth", mcpgo.Description("Graph traversal depth for code results: 0=off, 1=direct neighbours (default: 0)")),
+		mcpgo.WithNumber("graph_depth", mcpgo.Description("Graph traversal depth for code results: 0=off, 1=direct neighbours (default: 1)")),
 	), withToolMetrics("recall", s.handleRecall))
 
 	// forget

@@ -259,6 +259,66 @@ func TestRecall_DefaultSearchMode_IsHybrid(t *testing.T) {
 	}
 }
 
+func TestRecall_CodeMode_FallsBackToFTSWhenCodeVectorEmpty(t *testing.T) {
+	memID := uuid.New()
+	rdb := &mockRecallDB{
+		codeResults: nil,
+		ftsResults: []db.MemoryScore{
+			{Memory: makeMemory(memID, "semantic", 0.8), VecScore: 0.9},
+		},
+	}
+	s := newTestRecallStore(rdb)
+
+	results, err := s.Recall(context.Background(), RecallInput{
+		Query:      "auth",
+		ScopeID:    uuid.New(),
+		SearchMode: "code",
+		Limit:      10,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rdb.codeCalled == 0 {
+		t.Fatal("expected code-vector recall to be called")
+	}
+	if rdb.ftsCalled == 0 {
+		t.Fatal("expected FTS fallback recall to be called")
+	}
+	if len(results) == 0 {
+		t.Fatal("expected fallback results, got none")
+	}
+}
+
+func TestRecall_CodeMode_DoesNotFallbackToFTSWhenCodeVectorHasResults(t *testing.T) {
+	memID := uuid.New()
+	rdb := &mockRecallDB{
+		codeResults: []db.MemoryScore{
+			{Memory: makeMemory(memID, "semantic", 0.8), VecScore: 0.9},
+		},
+		ftsResults: []db.MemoryScore{{Memory: makeMemory(uuid.New(), "semantic", 0.8), BM25Score: 0.7}},
+	}
+	s := newTestRecallStore(rdb)
+
+	results, err := s.Recall(context.Background(), RecallInput{
+		Query:      "auth",
+		ScopeID:    uuid.New(),
+		SearchMode: "code",
+		Limit:      10,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rdb.codeCalled == 0 {
+		t.Fatal("expected code-vector recall to be called")
+	}
+	if rdb.ftsCalled != 0 {
+		t.Fatalf("expected no FTS fallback when code results exist, got ftsCalled=%d", rdb.ftsCalled)
+	}
+	if len(results) == 0 {
+		t.Fatal("expected code-vector results, got none")
+	}
+}
+
 func TestRecall_IntersectAuthorizedScopeIDs(t *testing.T) {
 	teamScope := uuid.New()
 	ancestorScope := uuid.New()
