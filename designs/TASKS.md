@@ -33,12 +33,15 @@
     - array shape used by some local OpenAI-compatible servers: `[[...], [...]]`
     - indexed object-array shape used by some local servers: `[{ "index": n, "embedding": [[...]] }]`
       (single nested vector is flattened)
+    - column-vector nested shape: `[{ "index": n, "embedding": [[x],[y],...] }]`
+      (flattened to `[x,y,...]`)
   - Added single-input compatibility for bare vector/envelope variants.
   - Added regression tests in `internal/embedding/openai_test.go`:
     - `TestOpenAIEmbedder_ArrayResponse_SingleInput`
     - `TestOpenAIEmbedder_ArrayResponse_BatchInput`
     - `TestOpenAIEmbedder_ObjectArrayResponse_NestedEmbedding_SingleInput`
     - `TestOpenAIEmbedder_EnvelopeResponse_NestedEmbedding_SingleInput`
+    - `TestOpenAIEmbedder_ObjectArrayResponse_ColumnVector_SingleInput`
   - Resolves runtime decode failures like:
     - `json: cannot unmarshal array into Go value of type embedding.openAIResponse`
 - [x] 2026-04-04: Added configurable OpenAI-compatible endpoint support for embedding/summarization:
