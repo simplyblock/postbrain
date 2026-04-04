@@ -27,6 +27,15 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Implemented initial AGE query support primitives in `internal/graph`:
+  - Added `DetectAGE(ctx, pool) bool` for runtime AGE availability detection.
+  - Added `ErrAGEUnavailable` and `RunCypherQuery(ctx, pool, scopeID, cypher)`:
+    - executes Cypher via AGE `cypher('postbrain', ...)`
+    - applies a scope anchor prefix for scoped traversal entry (`MATCH (n:Entity {scope_id: ...}) WITH n ...`)
+    - normalizes result rows into `[]map[string]any`
+  - Added tests:
+    - unit: `internal/graph/age_query_test.go` (scope prefix builder)
+    - integration: `internal/graph/age_query_integration_test.go` (AGE available/unavailable behavior and scoped row filtering)
 - [x] 2026-04-04: Added runtime AGE overlay bootstrap so AGE can be enabled after initial migration:
   - Added `db.EnsureAGEOverlay(ctx, pool)` in `internal/db/age_overlay.go`:
     - idempotent best-effort `CREATE EXTENSION age` + `LOAD 'age'` + `create_graph('postbrain')`
@@ -901,8 +910,7 @@
 - [ ] `age_sync.go` — (optional, skipped if AGE unavailable):
   - `SyncEntityToAGE(ctx, pool, entity *Entity) error` — MERGE vertex by id property
   - `SyncRelationToAGE(ctx, pool, rel *Relation) error` — MERGE edge by (subject, predicate, object)
-  - `DetectAGE(ctx, pool) bool` — `SELECT * FROM ag_catalog.ag_graph LIMIT 1`; return false on error
-- [ ] `age_query.go` — (optional):
+- [x] `age_query.go` — (optional):
   - `RunCypherQuery(ctx, pool, scopeID, cypher string) ([]map[string]any, error)` — prepend scope filter to Cypher
   - Return `ErrAGEUnavailable` if AGE not detected
 - [ ] `pagerank.go` — (optional):
