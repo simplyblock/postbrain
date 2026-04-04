@@ -20,8 +20,8 @@ API and are backed by a single PostgreSQL instance.
 
 ## Prerequisites
 
-- **PostgreSQL 18** with `pg_vector`, `pg_cron`, `pg_partman` installed
-  (the provided `docker-compose.yml` handles this)
+- **PostgreSQL 18** with `pg_vector`, `apache_age`, `pg_cron`, `pg_partman` installed
+  (the provided `docker-compose.yml` builds a local dev image with all extensions)
 - **Go 1.23+**
 - An embedding backend: [Ollama](https://ollama.ai) (local, no API key) or
   an OpenAI API key
@@ -31,7 +31,7 @@ API and are backed by a single PostgreSQL instance.
 ## Quick Start
 
 ```bash
-# 1. Start PostgreSQL (pg_vector image with pg_cron + pg_partman)
+# 1. Start PostgreSQL (local pg_vector + Apache AGE image with pg_cron + pg_partman)
 docker compose up -d postgres
 
 # 2. Copy and edit config

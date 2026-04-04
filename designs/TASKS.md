@@ -27,6 +27,13 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Extended local development PostgreSQL image to include Apache AGE:
+  - Added `deploy/docker/postgres-dev/Dockerfile` based on `pgvector/pgvector:pg18` that builds and installs Apache AGE from source.
+  - Switched `docker-compose.yml` `postgres` service from a direct image reference to a local build using the new Dockerfile.
+  - Enabled AGE preload in Postgres startup flags:
+    - `shared_preload_libraries=age,pg_cron,pg_partman_bgw`
+  - Updated init bootstrap SQL (`scripts/postgres-init.sql`) to create the AGE extension alongside existing `pg_cron`, `pg_partman`, and `vector`.
+  - Updated `README.md` prerequisites/quickstart wording to reflect that the compose dev DB includes AGE.
 - [x] 2026-04-04: Fixed promotions queue visibility and filtering in Web UI (TDD-first):
   - Updated `/ui/promotions` handler to support combined filters:
     - `scope_id` (specific scope or all scopes)

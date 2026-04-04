@@ -1,6 +1,10 @@
 services:
   postgres:
-    image: pgvector/pgvector:pg18
+    build:
+      context: .
+      dockerfile: deploy/docker/postgres-dev/Dockerfile
+      args:
+        AGE_GIT_REF: "master"
     environment:
       POSTGRES_USER: postbrain
       POSTGRES_PASSWORD: postbrain
@@ -18,7 +22,7 @@ services:
     command:
       - "postgres"
       - "-c"
-      - "shared_preload_libraries=pg_cron,pg_partman_bgw"
+      - "shared_preload_libraries=age,pg_cron,pg_partman_bgw"
       - "-c"
       - "cron.database_name=postbrain"
       - "-c"
