@@ -29,8 +29,7 @@ environment variables.
 | Key                         | What it controls                                   |
 |-----------------------------|----------------------------------------------------|
 | `embedding.backend`         | Which embedding provider backend to use.           |
-| `embedding.ollama_url`      | Ollama endpoint for local embedding calls.         |
-| `embedding.openai_base_url` | Optional OpenAI-compatible base URL override.      |
+| `embedding.service_url`     | Backend service URL (Ollama or OpenAI-compatible). |
 | `embedding.text_model`      | Text embedding model slug.                         |
 | `embedding.code_model`      | Code embedding model slug.                         |
 | `embedding.summary_model`   | Optional summarize/analyze model override.         |
@@ -42,8 +41,13 @@ For how embeddings/chunks/entities are used during indexing and retrieval, see
 [Indexing Model](./indexing-model.md).
 
 When `embedding.backend` is `openai`:
-- `embedding.openai_api_key` is required if `embedding.openai_base_url` is empty (default OpenAI API).
-- `embedding.openai_api_key` is optional when `embedding.openai_base_url` points to a local/self-hosted OpenAI-compatible endpoint.
+- `embedding.service_url` can point to any OpenAI-compatible endpoint.
+- If `embedding.service_url` is empty, Postbrain uses the default OpenAI API endpoint.
+- `embedding.openai_api_key` is required when `embedding.service_url` is empty; optional for custom/local endpoints.
+
+When `embedding.backend` is `ollama`:
+- `embedding.service_url` is the Ollama base URL.
+- If empty, Postbrain uses `http://localhost:11434`.
 
 ## `server`
 
@@ -97,5 +101,5 @@ Config keys map to env vars by replacing dots with underscores and prefixing `PO
 Examples:
 
 - `database.url` -> `POSTBRAIN_DATABASE_URL`
-- `embedding.ollama_url` -> `POSTBRAIN_EMBEDDING_OLLAMA_URL`
+- `embedding.service_url` -> `POSTBRAIN_EMBEDDING_SERVICE_URL`
 - `oauth.server.state_ttl` -> `POSTBRAIN_OAUTH_SERVER_STATE_TTL`

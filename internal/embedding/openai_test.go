@@ -174,8 +174,8 @@ func TestOpenAIEmbedder_CustomBaseURL_EmptyAPIKeyOmitsAuthorizationHeader(t *tes
 	defer srv.Close()
 
 	cfg := newOpenAICfg("")
-	cfg.OpenAIBaseURL = srv.URL
-	e := NewOpenAIEmbedder(cfg, "text-embedding-3-small", cfg.OpenAIBaseURL)
+	cfg.ServiceURL = srv.URL
+	e := NewOpenAIEmbedder(cfg, "text-embedding-3-small", cfg.ServiceURL)
 	_, err := e.Embed(context.Background(), "hello")
 	if err != nil {
 		t.Fatalf("Embed: %v", err)
@@ -193,8 +193,8 @@ func TestOpenAIEmbedder_ArrayResponse_SingleInput(t *testing.T) {
 	defer srv.Close()
 
 	cfg := newOpenAICfg("")
-	cfg.OpenAIBaseURL = srv.URL
-	e := NewOpenAIEmbedder(cfg, "text-embedding-3-small", cfg.OpenAIBaseURL)
+	cfg.ServiceURL = srv.URL
+	e := NewOpenAIEmbedder(cfg, "text-embedding-3-small", cfg.ServiceURL)
 	got, err := e.Embed(context.Background(), "hello")
 	if err != nil {
 		t.Fatalf("Embed: %v", err)
@@ -215,8 +215,8 @@ func TestOpenAIEmbedder_ArrayResponse_BatchInput(t *testing.T) {
 	defer srv.Close()
 
 	cfg := newOpenAICfg("")
-	cfg.OpenAIBaseURL = srv.URL
-	e := NewOpenAIEmbedder(cfg, "text-embedding-3-small", cfg.OpenAIBaseURL)
+	cfg.ServiceURL = srv.URL
+	e := NewOpenAIEmbedder(cfg, "text-embedding-3-small", cfg.ServiceURL)
 	got, err := e.EmbedBatch(context.Background(), []string{"one", "two"})
 	if err != nil {
 		t.Fatalf("EmbedBatch: %v", err)
@@ -239,8 +239,8 @@ func TestOpenAIEmbedder_ObjectArrayResponse_NestedEmbedding_SingleInput(t *testi
 	defer srv.Close()
 
 	cfg := newOpenAICfg("")
-	cfg.OpenAIBaseURL = srv.URL
-	e := NewOpenAIEmbedder(cfg, "text-embedding-3-small", cfg.OpenAIBaseURL)
+	cfg.ServiceURL = srv.URL
+	e := NewOpenAIEmbedder(cfg, "text-embedding-3-small", cfg.ServiceURL)
 	got, err := e.Embed(context.Background(), "hello")
 	if err != nil {
 		t.Fatalf("Embed: %v", err)
@@ -262,8 +262,8 @@ func TestOpenAIEmbedder_EnvelopeResponse_NestedEmbedding_SingleInput(t *testing.
 	defer srv.Close()
 
 	cfg := newOpenAICfg("")
-	cfg.OpenAIBaseURL = srv.URL
-	e := NewOpenAIEmbedder(cfg, "text-embedding-3-small", cfg.OpenAIBaseURL)
+	cfg.ServiceURL = srv.URL
+	e := NewOpenAIEmbedder(cfg, "text-embedding-3-small", cfg.ServiceURL)
 	got, err := e.Embed(context.Background(), "hello")
 	if err != nil {
 		t.Fatalf("Embed: %v", err)
@@ -290,8 +290,8 @@ func TestOpenAIEmbedder_ObjectArrayResponse_ColumnVector_SingleInput(t *testing.
 	defer srv.Close()
 
 	cfg := newOpenAICfg("")
-	cfg.OpenAIBaseURL = srv.URL
-	e := NewOpenAIEmbedder(cfg, "text-embedding-3-small", cfg.OpenAIBaseURL)
+	cfg.ServiceURL = srv.URL
+	e := NewOpenAIEmbedder(cfg, "text-embedding-3-small", cfg.ServiceURL)
 	got, err := e.Embed(context.Background(), "hello")
 	if err != nil {
 		t.Fatalf("Embed: %v", err)
@@ -318,8 +318,8 @@ func TestOpenAIEmbedder_ObjectArrayResponse_MatrixEmbedding_SingleInput(t *testi
 	defer srv.Close()
 
 	cfg := newOpenAICfg("")
-	cfg.OpenAIBaseURL = srv.URL
-	e := NewOpenAIEmbedder(cfg, "text-embedding-3-small", cfg.OpenAIBaseURL)
+	cfg.ServiceURL = srv.URL
+	e := NewOpenAIEmbedder(cfg, "text-embedding-3-small", cfg.ServiceURL)
 	got, err := e.Embed(context.Background(), "hello")
 	if err != nil {
 		t.Fatalf("Embed: %v", err)

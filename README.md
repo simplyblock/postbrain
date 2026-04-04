@@ -58,11 +58,11 @@ database:
 
 embedding:
   backend:      ollama        # ollama | openai
-  ollama_url:   "http://localhost:11434"
+  service_url:  "http://localhost:11434" # ollama URL or OpenAI-compatible endpoint
   text_model:   "nomic-embed-text"   # 768-dim general text
   code_model:   "nomic-embed-code"   # code fragments (optional)
   summary_model: ""           # model for AI-generated summaries (optional)
-  # openai_api_key: sk-...    # required when backend = openai
+  # openai_api_key: sk-...    # required when backend=openai and service_url is empty
 
 server:
   addr:  ":7433"

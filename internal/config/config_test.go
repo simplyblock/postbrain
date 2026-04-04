@@ -29,8 +29,7 @@ database:
 
 embedding:
   backend:         ollama
-  ollama_url:      "http://localhost:11434"
-  openai_base_url: "http://localhost:8080/v1"
+  service_url:     "http://localhost:11434"
   text_model:      "nomic-embed-text"
   code_model:      "nomic-embed-code"
   openai_api_key:  "sk-test"
@@ -82,11 +81,8 @@ func TestLoad_AllFields(t *testing.T) {
 	if cfg.Embedding.Backend != "ollama" {
 		t.Errorf("Embedding.Backend = %q", cfg.Embedding.Backend)
 	}
-	if cfg.Embedding.OllamaURL != "http://localhost:11434" {
-		t.Errorf("Embedding.OllamaURL = %q", cfg.Embedding.OllamaURL)
-	}
-	if cfg.Embedding.OpenAIBaseURL != "http://localhost:8080/v1" {
-		t.Errorf("Embedding.OpenAIBaseURL = %q", cfg.Embedding.OpenAIBaseURL)
+	if cfg.Embedding.ServiceURL != "http://localhost:11434" {
+		t.Errorf("Embedding.ServiceURL = %q", cfg.Embedding.ServiceURL)
 	}
 	if cfg.Embedding.TextModel != "nomic-embed-text" {
 		t.Errorf("Embedding.TextModel = %q", cfg.Embedding.TextModel)
@@ -186,8 +182,8 @@ database:
 	if cfg.Embedding.Backend != "ollama" {
 		t.Errorf("default Embedding.Backend = %q, want ollama", cfg.Embedding.Backend)
 	}
-	if cfg.Embedding.OpenAIBaseURL != "" {
-		t.Errorf("default Embedding.OpenAIBaseURL = %q, want empty", cfg.Embedding.OpenAIBaseURL)
+	if cfg.Embedding.ServiceURL != "" {
+		t.Errorf("default Embedding.ServiceURL = %q, want empty", cfg.Embedding.ServiceURL)
 	}
 	if cfg.Embedding.BatchSize != 64 {
 		t.Errorf("default Embedding.BatchSize = %d, want 64", cfg.Embedding.BatchSize)
@@ -299,5 +295,22 @@ oauth:
 	}
 	if cfg.OAuth.Server.DynamicRegistration {
 		t.Error("OAuth.Server.DynamicRegistration should be false")
+	}
+}
+
+func TestLoad_LegacyEmbeddingURLKeys_BackCompat(t *testing.T) {
+	path := writeYAML(t, `
+database:
+  url: "postgres://localhost/postbrain"
+embedding:
+  backend: openai
+  openai_base_url: "http://localhost:8080/v1"
+`)
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Embedding.ServiceURL != "http://localhost:8080/v1" {
+		t.Fatalf("Embedding.ServiceURL = %q", cfg.Embedding.ServiceURL)
 	}
 }

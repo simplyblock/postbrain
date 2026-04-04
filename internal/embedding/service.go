@@ -3,7 +3,6 @@ package embedding
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/simplyblock/postbrain/internal/config"
 )
@@ -33,10 +32,10 @@ func NewService(cfg *config.EmbeddingConfig) (*EmbeddingService, error) {
 		return svc, nil
 
 	case "openai":
-		if cfg.OpenAIAPIKey == "" && cfg.OpenAIBaseURL == "" {
-			return nil, fmt.Errorf("openai_api_key is required when embedding.openai_base_url is not set")
+		if cfg.OpenAIAPIKey == "" && cfg.ServiceURL == "" {
+			return nil, fmt.Errorf("openai_api_key is required when embedding.service_url is not set")
 		}
-		baseURL := strings.TrimSpace(cfg.OpenAIBaseURL)
+		baseURL := serviceURLOrDefault(cfg, defaultOpenAIBaseURL)
 		svc := &EmbeddingService{
 			text: NewOpenAIEmbedder(cfg, cfg.TextModel, baseURL),
 		}

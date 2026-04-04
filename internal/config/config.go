@@ -32,8 +32,7 @@ type DatabaseConfig struct {
 // EmbeddingConfig holds embedding service parameters.
 type EmbeddingConfig struct {
 	Backend        string        `mapstructure:"backend"`
-	OllamaURL      string        `mapstructure:"ollama_url"`
-	OpenAIBaseURL  string        `mapstructure:"openai_base_url"`
+	ServiceURL     string        `mapstructure:"service_url"`
 	TextModel      string        `mapstructure:"text_model"`
 	CodeModel      string        `mapstructure:"code_model"`
 	SummaryModel   string        `mapstructure:"summary_model"`
@@ -143,8 +142,7 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("database.connect_timeout", "10s")
 
 	v.SetDefault("embedding.backend", "ollama")
-	v.SetDefault("embedding.ollama_url", "http://localhost:11434")
-	v.SetDefault("embedding.openai_base_url", "")
+	v.SetDefault("embedding.service_url", "")
 	v.SetDefault("embedding.text_model", "nomic-embed-text")
 	v.SetDefault("embedding.code_model", "nomic-embed-code")
 	v.SetDefault("embedding.openai_api_key", "")
@@ -177,6 +175,15 @@ func Load(path string) (*Config, error) {
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("config: unmarshal: %w", err)
+	}
+	// Backward-compatibility for renamed embedding URL keys.
+	if cfg.Embedding.ServiceURL == "" {
+		switch cfg.Embedding.Backend {
+		case "ollama":
+			cfg.Embedding.ServiceURL = v.GetString("embedding.ollama_url")
+		case "openai":
+			cfg.Embedding.ServiceURL = v.GetString("embedding.openai_base_url")
+		}
 	}
 
 	// Validate required fields

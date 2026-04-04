@@ -27,6 +27,17 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Unified embedding endpoint config into `embedding.service_url`:
+  - Replaced split config keys (`embedding.ollama_url`, `embedding.openai_base_url`) with unified `embedding.service_url`.
+  - Updated runtime config struct/defaults and added backward-compat fallback mapping for legacy keys in `internal/config/config.go`.
+  - Updated embedding backends to use the unified endpoint:
+    - Ollama calls now use `service_url` (fallback `http://localhost:11434`)
+    - OpenAI backend uses `service_url` as base URL (fallback default OpenAI API endpoint)
+  - Updated service validation:
+    - `openai_api_key` required only when `backend=openai` and `service_url` is empty.
+  - Updated tests and docs:
+    - config/embedding tests and fixtures
+    - `config.example.yaml`, `docs/configuration.md`, and `README.md` snippets
 - [x] 2026-04-04: Added embedding dimension fitting for knowledge write paths:
   - Added `embedding.FitDimensions(vec, dims)` in `internal/embedding/dimensions.go`:
     - truncates vectors longer than `dims`

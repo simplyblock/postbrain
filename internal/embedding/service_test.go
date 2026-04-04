@@ -38,7 +38,7 @@ func (m *mockEmbedder) Dimensions() int   { return m.dims }
 func ollamaCfgForService(textModel, codeModel string) *config.EmbeddingConfig {
 	return &config.EmbeddingConfig{
 		Backend:        "ollama",
-		OllamaURL:      "http://localhost:11434",
+		ServiceURL:     "http://localhost:11434",
 		TextModel:      textModel,
 		CodeModel:      codeModel,
 		RequestTimeout: 5 * time.Second,
@@ -61,7 +61,7 @@ func openAICfgForServiceWithBaseURL(textModel, codeModel, apiKey, baseURL string
 	return &config.EmbeddingConfig{
 		Backend:        "openai",
 		OpenAIAPIKey:   apiKey,
-		OpenAIBaseURL:  baseURL,
+		ServiceURL:     baseURL,
 		TextModel:      textModel,
 		CodeModel:      codeModel,
 		RequestTimeout: 5 * time.Second,
