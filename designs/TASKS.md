@@ -27,6 +27,19 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Added MCP `graph_query` tool with AGE-aware execution:
+  - Added `internal/api/mcp/graph_query.go` handler:
+    - validates `scope` + `cypher`
+    - resolves `scope` via `kind:external_id`
+    - enforces scope authz via existing MCP scope gates
+    - executes scoped Cypher via `graph.RunCypherQuery`
+    - maps unavailable AGE to tool error (`graph_query: AGE unavailable`)
+  - Registered tool in `internal/api/mcp/server.go`:
+    - name: `graph_query`
+    - args: `scope`, `cypher`
+  - Added tests:
+    - unit: `internal/api/mcp/graph_query_test.go`
+    - integration: `internal/api/mcp/graph_query_integration_test.go`
 - [x] 2026-04-04: Implemented REST Cypher query endpoint using AGE runtime support:
   - Replaced `/v1/graph/query` 501 stub in `internal/api/rest/graph.go` with full handler logic:
     - request JSON parsing (`cypher`, `scope_id`)
@@ -975,7 +988,7 @@
 
 - [x] `server.go` — mcp-go SSE server; Bearer token auth middleware; all 13 tools registered
   - TODO(task-mcp-sessions): create sessions row on connect; update ended_at on disconnect
-  - TODO(task-mcp-age): detect AGE availability and conditionally register graph tools
+  - TODO(task-mcp-age): detect AGE availability and conditionally register advanced graph tools
 - [x] `remember.go` — delegates to `memory.Store.Create`; maps `expires_in`, entities
 - [x] `recall.go` — delegates to memory/knowledge/skill stores; maps `search_mode`, `layers`, `min_score`
 - [x] `forget.go` — soft or hard delete; returns `{memory_id, action}`
@@ -988,6 +1001,7 @@
 - [x] `skill_search.go` — delegates to `skills.Store.Recall`
 - [x] `skill_install.go` — delegates to `skills.Install`
 - [x] `skill_invoke.go` — delegates to `skills.Invoke`; returns expanded body
+- [x] `graph_query.go` — scoped Cypher traversal via AGE overlay; returns `rows` JSON payload
 - [x] `knowledge_detail.go` — returns full artifact content by ID; used when `recall` returns `full_content_available=true`
 - [x] `server_test.go` — 3+ table-driven tests (handleForget shape, handleRemember missing content, handleRecall layer filter)
 
