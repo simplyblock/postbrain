@@ -27,6 +27,16 @@
 
 ### Maintenance
 
+- [x] 2026-04-04: Added embedding dimension fitting for knowledge write paths:
+  - Added `embedding.FitDimensions(vec, dims)` in `internal/embedding/dimensions.go`:
+    - truncates vectors longer than `dims`
+    - zero-pads vectors shorter than `dims`
+    - keeps vectors unchanged when `dims <= 0` or already equal
+  - Added unit coverage in `internal/embedding/dimensions_test.go` (trim/pad/no-op).
+  - Updated knowledge embedding code to fit vectors to active text-model dimensions before DB writes:
+    - `internal/knowledge/store.go` (`embedContent`, plus chunk embedding path now reuses it)
+    - `internal/knowledge/synthesize.go` (`embedContent`)
+  - Prevents SQL dimension mismatch failures (for example `expected 1536 dimensions, not 4096`) when using local OpenAI-compatible models that emit larger vectors.
 - [x] 2026-04-04: Improved OpenAI-compatible embedding response compatibility:
   - Fixed `internal/embedding/openai.go` decode path to accept both:
     - standard OpenAI shape: `{ "data": [{ "embedding": [...], "index": n }] }`

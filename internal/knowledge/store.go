@@ -394,8 +394,12 @@ func (s *Store) embedContent(ctx context.Context, text string) ([]float32, *uuid
 		slug := s.svc.TextEmbedder().ModelSlug()
 		q := db.New(s.pool)
 		model, err := q.GetActiveTextModel(ctx)
-		if err == nil && model != nil && model.Slug == slug {
-			return vec, &model.ID, nil
+		if err == nil && model != nil {
+			vec = embedding.FitDimensions(vec, int(model.Dimensions))
+			if model.Slug == slug {
+				return vec, &model.ID, nil
+			}
+			return vec, nil, nil
 		}
 	}
 	return vec, nil, nil
@@ -431,7 +435,7 @@ func (s *Store) createChunks(ctx context.Context, artifactID, scopeID, authorID 
 	}
 	chunkEntityIDs := make([]uuid.UUID, 0, len(chunks))
 	for i, chunk := range chunks {
-		vec, err := s.svc.EmbedText(ctx, chunk)
+		vec, _, err := s.embedContent(ctx, chunk)
 		if err != nil {
 			slog.WarnContext(ctx, "knowledge: chunk embed failed", "artifact_id", artifactID, "chunk", i, "err", err)
 			continue
