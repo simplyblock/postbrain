@@ -31,10 +31,14 @@
   - Fixed `internal/embedding/openai.go` decode path to accept both:
     - standard OpenAI shape: `{ "data": [{ "embedding": [...], "index": n }] }`
     - array shape used by some local OpenAI-compatible servers: `[[...], [...]]`
+    - indexed object-array shape used by some local servers: `[{ "index": n, "embedding": [[...]] }]`
+      (single nested vector is flattened)
   - Added single-input compatibility for bare vector/envelope variants.
   - Added regression tests in `internal/embedding/openai_test.go`:
     - `TestOpenAIEmbedder_ArrayResponse_SingleInput`
     - `TestOpenAIEmbedder_ArrayResponse_BatchInput`
+    - `TestOpenAIEmbedder_ObjectArrayResponse_NestedEmbedding_SingleInput`
+    - `TestOpenAIEmbedder_EnvelopeResponse_NestedEmbedding_SingleInput`
   - Resolves runtime decode failures like:
     - `json: cannot unmarshal array into Go value of type embedding.openAIResponse`
 - [x] 2026-04-04: Added configurable OpenAI-compatible endpoint support for embedding/summarization:

@@ -57,15 +57,13 @@ type openAIRequest struct {
 	Input []string `json:"input"`
 }
 
-// openAIEmbedData is a single item in the OpenAI response data array.
-type openAIEmbedData struct {
-	Embedding []float32 `json:"embedding"`
-	Index     int       `json:"index"`
+type rawOpenAIEmbedData struct {
+	Embedding json.RawMessage `json:"embedding"`
+	Index     int             `json:"index"`
 }
 
-// openAIResponse is the JSON body returned by OpenAI.
-type openAIResponse struct {
-	Data []openAIEmbedData `json:"data"`
+type rawOpenAIEnvelope struct {
+	Data []rawOpenAIEmbedData `json:"data"`
 }
 
 // Embed embeds a single text by delegating to EmbedBatch.
@@ -174,17 +172,20 @@ func (e *OpenAIEmbedder) embedBatchOnce(ctx context.Context, texts []string) ([]
 }
 
 func parseOpenAIEmbeddingsResponse(raw []byte, expected int) ([][]float32, error) {
-	var standard openAIResponse
-	if err := json.Unmarshal(raw, &standard); err == nil && standard.Data != nil {
-		if len(standard.Data) != expected {
-			return nil, fmt.Errorf("expected %d embeddings, got %d", expected, len(standard.Data))
+	var envelope rawOpenAIEnvelope
+	if err := json.Unmarshal(raw, &envelope); err == nil && envelope.Data != nil {
+		ordered, err := decodeIndexedEmbeddings(envelope.Data, expected)
+		if err != nil {
+			return nil, err
 		}
-		ordered := make([][]float32, expected)
-		for _, item := range standard.Data {
-			if item.Index < 0 || item.Index >= expected {
-				return nil, fmt.Errorf("embedding index %d out of range", item.Index)
-			}
-			ordered[item.Index] = item.Embedding
+		return ordered, nil
+	}
+
+	var indexed []rawOpenAIEmbedData
+	if err := json.Unmarshal(raw, &indexed); err == nil && indexed != nil {
+		ordered, err := decodeIndexedEmbeddings(indexed, expected)
+		if err != nil {
+			return nil, err
 		}
 		return ordered, nil
 	}
@@ -212,4 +213,37 @@ func parseOpenAIEmbeddingsResponse(raw []byte, expected int) ([][]float32, error
 	}
 
 	return nil, errors.New(string(raw))
+}
+
+func decodeIndexedEmbeddings(items []rawOpenAIEmbedData, expected int) ([][]float32, error) {
+	if len(items) != expected {
+		return nil, fmt.Errorf("expected %d embeddings, got %d", expected, len(items))
+	}
+	ordered := make([][]float32, expected)
+	for _, item := range items {
+		if item.Index < 0 || item.Index >= expected {
+			return nil, fmt.Errorf("embedding index %d out of range", item.Index)
+		}
+		vec, err := parseEmbeddingVector(item.Embedding)
+		if err != nil {
+			return nil, err
+		}
+		ordered[item.Index] = vec
+	}
+	return ordered, nil
+}
+
+func parseEmbeddingVector(raw json.RawMessage) ([]float32, error) {
+	var vector []float32
+	if err := json.Unmarshal(raw, &vector); err == nil {
+		return vector, nil
+	}
+	var nested [][]float32
+	if err := json.Unmarshal(raw, &nested); err == nil {
+		if len(nested) != 1 {
+			return nil, fmt.Errorf("expected single nested embedding, got %d", len(nested))
+		}
+		return nested[0], nil
+	}
+	return nil, fmt.Errorf("unsupported embedding format")
 }
