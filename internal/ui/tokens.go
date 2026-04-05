@@ -32,10 +32,8 @@ func (h *Handler) renderTokens(w http.ResponseWriter, r *http.Request, formErr, 
 				data.Tokens = tokens
 			}
 		}
-		scopes, err := db.ListScopes(r.Context(), h.pool, 200, 0)
-		if err == nil {
-			data.Scopes = scopes
-		}
+		scopes, _ := h.authorizedScopesForRequest(r.Context(), r)
+		data.Scopes = scopes
 	}
 
 	h.render(w, r, "tokens", "Token Management", data)

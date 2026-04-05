@@ -27,6 +27,22 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Unified UI scope filtering through one shared authorization function:
+  - Added `authorizedScopesForRequest` in `internal/ui/handler.go` as the single scope-filtering function (effective principal scopes intersected with token `scope_ids` restrictions).
+  - Replaced per-page direct scope listing with this shared function for:
+    - memories
+    - query playground
+    - artifacts
+    - promotions
+    - graph 2D/3D
+    - scope-bound create forms (`knowledge_new`, `collections_new`)
+    - token scope picker.
+  - Added scoped data filtering for pages without a scope selector:
+    - collections
+    - staleness
+    - skills.
+  - Added integration regression coverage in `internal/ui/page_scope_filtering_integration_test.go` to verify hidden scopes/data do not leak across all listed pages.
+
 - [x] 2026-04-05: Restricted UI principals page to reachable principals:
   - Updated `internal/ui/handler.go` `renderPrincipals` to filter principals and membership rows to the authenticated principal’s reachable principal set (self + ancestor membership chain).
   - Added helper `reachablePrincipalIDSet` using `db.GetAllParentIDs`.
