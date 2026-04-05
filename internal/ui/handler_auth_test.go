@@ -244,3 +244,23 @@ func TestRevokeToken_NilPool_Returns503(t *testing.T) {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusServiceUnavailable)
 	}
 }
+
+func TestLogoutPOST_ClearsCookieAndRedirects(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	req := httptest.NewRequest(http.MethodPost, "/ui/logout", nil)
+	w := httptest.NewRecorder()
+
+	h.handleLogout(w, req)
+
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusSeeOther)
+	}
+	if loc := w.Header().Get("Location"); loc != "/ui/login" {
+		t.Fatalf("Location = %q, want %q", loc, "/ui/login")
+	}
+	setCookie := w.Header().Get("Set-Cookie")
+	if !strings.Contains(setCookie, "pb_session=") || !strings.Contains(setCookie, "Max-Age=0") {
+		t.Fatalf("Set-Cookie = %q, want cleared pb_session cookie", setCookie)
+	}
+}

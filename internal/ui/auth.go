@@ -92,3 +92,16 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	renderLogin("", next)
 }
+
+// handleLogout serves POST /ui/logout.
+func (h *Handler) handleLogout(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     cookieName,
+		Value:    "",
+		Path:     "/ui",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	})
+	http.Redirect(w, r, "/ui/login", http.StatusSeeOther)
+}
