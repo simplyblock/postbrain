@@ -27,6 +27,20 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Added screenshot-based Web UI documentation and pages-safe image rewriting:
+  - Added `docs/webui-guide.md` with detailed, user-oriented walkthroughs for:
+    - principals/memberships
+    - scopes/hierarchy
+    - token management
+    - memory list/detail workflows
+    - knowledge upload/artifact workflows
+    - entity graph 3D usage.
+  - Linked the new guide from `docs/README.md`.
+  - Added Web UI screenshot assets under `site/public/assets/images/`.
+  - Updated `site/scripts/sync-docs.mjs` to rewrite docs image links during site sync so:
+    - source markdown remains GitHub-friendly
+    - generated docs pages use correct `/assets/...` (or `/<repo>/assets/...` on GitHub Pages) paths.
+
 - [x] 2026-04-05: Added startup configuration/service visibility logging:
   - Extended `cmd/postbrain/main.go` startup logs to include:
     - config summary (`config_path`, server/db sizing, embedding batch/timeout)
