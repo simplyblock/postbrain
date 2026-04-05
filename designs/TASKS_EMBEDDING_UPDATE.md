@@ -369,7 +369,7 @@ Every step follows strict Red → Green → Refactor before moving to the next s
 - [x] RED: tests for re-embed job processing `pending` rows for a target model ID, retry logic (up to 3), and `failed` status after exhaustion.
 - [x] GREEN: refactor re-embed job to query `embedding_index WHERE status = 'pending' AND model_id = <target>`, call provider, write vector, update status.
 - [ ] REFACTOR: improve batching/error handling/observability.
-  - Progress: `RunText` now consumes `embedding_index` pending rows for memory/knowledge_artifact/skill, updates legacy+model-table embeddings, marks `ready` on success, and increments retry/marks `failed` after max retries.
+  - Progress: both `RunText` and `RunCode` now consume `embedding_index` pending rows, update legacy+model-table embeddings, mark `ready` on success, and increment retry/mark `failed` after max retries.
 
 ### Step 11: Legacy Deprecation (Explicit Sign-off Required)
 

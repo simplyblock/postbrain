@@ -132,6 +132,14 @@
     - updates legacy embedding columns + model tables
     - marks `embedding_index` rows `ready` on success
     - increments `retry_count`, records `last_error`, and marks `failed` on retry exhaustion.
+- [x] 2026-04-05: Completed Step 10 code-path migration to embedding_index pending flow (TDD-first):
+  - Added integration coverage in `internal/jobs/reembed_integration_test.go`:
+    - `TestReembedJob_RunCode_UsesEmbeddingIndexPendingAndMarksReady`
+    - `TestReembedJob_RunCode_FailureIncrementsRetryAndEventuallyFailed`
+  - Refactored `internal/jobs/reembed.go` (`RunCode`):
+    - now reads pending code-memory units from `embedding_index`
+    - updates legacy code embedding + model-table embedding
+    - updates status/retry/last_error consistently with text path.
 - [x] 2026-04-04: Added model-aware multi-provider embedder factory primitives and runtime wiring (TDD-first):
   - Added model-driven factory in `internal/embedding/factory.go`:
     - `ModelConfig`, `ModelConfigStore`, `ModelEmbedderFactory`
