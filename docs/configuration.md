@@ -43,7 +43,7 @@ For how embeddings/chunks/entities are used during indexing and retrieval, see
 
 `embedding.providers` lets you define multiple runtime profiles (for example
 `default`, `openai-prod`, `local-ollama`). Embedding models can then bind to a
-profile via `postbrain-cli embedding-model register --provider-config <name>`.
+profile via `postbrain --config config.yaml embedding-model register --provider-config <name>`.
 Startup embedding and summarize/analyze behavior uses `embedding.providers.default`.
 For `backend: openai`, `api_key` is required when `service_url` is empty (default OpenAI API URL).
 

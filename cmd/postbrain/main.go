@@ -51,7 +51,7 @@ func newRootCmd() *cobra.Command {
 	}
 	root.PersistentFlags().StringVar(&cfgPath, "config", "config.yaml", "path to config file")
 
-	root.AddCommand(serveCmd(), migrateCmd(), tokenCmd(), onboardCmd(), versionCmd())
+	root.AddCommand(serveCmd(), migrateCmd(), tokenCmd(), onboardCmd(), embeddingModelCmd(), versionCmd())
 	return root
 }
 
