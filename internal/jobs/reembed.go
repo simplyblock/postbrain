@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -88,7 +89,7 @@ func (j *ReembedJob) RunText(ctx context.Context) error {
 			objectType string
 			id         uuid.UUID
 			retryCount int
-			content    string
+			content    sql.NullString
 		}
 		var batch []row
 		for rows.Next() {
@@ -97,8 +98,8 @@ func (j *ReembedJob) RunText(ctx context.Context) error {
 				rows.Close()
 				return fmt.Errorf("reembed text: scan row: %w", err)
 			}
-			if strings.TrimSpace(r.content) == "" {
-				_ = j.markEmbeddingFailedAttempt(ctx, r.objectType, r.id, *modelID, r.retryCount, fmt.Errorf("empty content for %s %s", r.objectType, r.id))
+			if strings.TrimSpace(r.content.String) == "" {
+				_ = j.markEmbeddingFailedAttempt(ctx, r.objectType, r.id, *modelID, r.retryCount, fmt.Errorf("empty content for %s %v", r.objectType, r.id))
 				continue
 			}
 			batch = append(batch, r)
@@ -113,7 +114,7 @@ func (j *ReembedJob) RunText(ctx context.Context) error {
 		}
 
 		for _, r := range batch {
-			vec, err := j.svc.EmbedText(ctx, r.content)
+			vec, err := j.svc.EmbedText(ctx, r.content.String)
 			if err != nil {
 				_ = j.markEmbeddingFailedAttempt(ctx, r.objectType, r.id, *modelID, r.retryCount, err)
 				slog.Error("reembed text: embed failed", "object_type", r.objectType, "object_id", r.id, "error", err)
