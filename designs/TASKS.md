@@ -27,6 +27,24 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Added high-dimension ANN support using halfvec expression indexing (TDD-first):
+  - Kept per-model embedding table storage in full precision `vector(dims)` for all models.
+  - Updated `internal/db/embedding_tables.go` provisioning logic:
+    - for `dims <= 2000`: regular HNSW index on `embedding vector_cosine_ops`
+    - for `dims > 2000`: HNSW expression index on `(embedding::halfvec(dims)) halfvec_cosine_ops`.
+  - Updated `internal/db/embedding_repository.go` ANN query path:
+    - for high-dimension models, similarity/order-by uses `embedding::halfvec(dims) <=> $1::halfvec` to match index expression.
+  - Added unit coverage:
+    - `internal/db/embedding_tables_test.go` (`embeddingStorageForDimensions`)
+    - `internal/db/embedding_repository_test.go` (`similarityDistanceExpr`).
+  - Added integration coverage:
+    - `internal/db/embedding_tables_integration_test.go::TestEnsureEmbeddingModelTable_UsesHalfvecForHighDimensions` (column remains `vector(2560)`, index uses `halfvec_cosine_ops` expression).
+  - Extended repository integration coverage:
+    - `internal/db/embedding_repository_integration_test.go::TestEmbeddingRepository_QuerySimilar_HighDimensionHalfvecPath`
+    - verifies high-dimension (`dims > 2000`) QuerySimilar succeeds end-to-end and returns expected nearest hits.
+  - Follow-up test hardening:
+    - relaxed `indexdef` assertion in `internal/db/embedding_tables_integration_test.go` to tolerate PostgreSQL expression normalization (`(embedding)::halfvec(...)`) while still asserting halfvec expression indexing intent.
+
 - [x] 2026-04-05: Fixed re-embed text crash on NULL content rows (TDD-first):
   - Added integration regression test:
     - `internal/jobs/reembed_integration_test.go::TestReembedJob_RunText_NullContentMarksFailed`

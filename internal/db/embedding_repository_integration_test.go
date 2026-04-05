@@ -12,6 +12,14 @@ import (
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
+func sparseVec(dims int, idx int, value float32) []float32 {
+	v := make([]float32, dims)
+	if idx >= 0 && idx < dims {
+		v[idx] = value
+	}
+	return v
+}
+
 func TestEmbeddingRepository_UpsertAndGet(t *testing.T) {
 	pool := testhelper.NewTestPool(t)
 	ctx := context.Background()
@@ -50,6 +58,72 @@ func TestEmbeddingRepository_UpsertAndGet(t *testing.T) {
 	}
 	if len(got) != 3 || got[0] != 1 {
 		t.Fatalf("embedding = %#v, want [1 2 3]", got)
+	}
+}
+
+func TestEmbeddingRepository_QuerySimilar_HighDimensionHalfvecPath(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+
+	owner := testhelper.CreateTestPrincipal(t, pool, "user", "owner-"+uuid.NewString())
+	scope := testhelper.CreateTestScope(t, pool, "project", "scope-"+uuid.NewString(), nil, owner.ID)
+	memoryA := testhelper.CreateTestMemory(t, pool, scope.ID, owner.ID, "hello a")
+	memoryB := testhelper.CreateTestMemory(t, pool, scope.ID, owner.ID, "hello b")
+
+	const dims = 2048
+	model, err := db.RegisterEmbeddingModel(ctx, pool, db.RegisterEmbeddingModelParams{
+		Slug:          "repo-model-high-dim-" + uuid.NewString(),
+		Provider:      "openai",
+		ServiceURL:    "http://localhost:11434/v1",
+		ProviderModel: "text-embedding-3-large",
+		Dimensions:    dims,
+		ContentType:   "text",
+		Activate:      true,
+	})
+	if err != nil {
+		t.Fatalf("register model: %v", err)
+	}
+
+	repo := db.NewEmbeddingRepository(pool)
+	vecA := sparseVec(dims, 0, 1.0)
+	vecB := sparseVec(dims, 0, -1.0)
+
+	if err := repo.UpsertEmbedding(ctx, db.UpsertEmbeddingInput{
+		ObjectType: "memory",
+		ObjectID:   memoryA.ID,
+		ScopeID:    scope.ID,
+		ModelID:    model.ID,
+		Embedding:  vecA,
+	}); err != nil {
+		t.Fatalf("UpsertEmbedding A: %v", err)
+	}
+	if err := repo.UpsertEmbedding(ctx, db.UpsertEmbeddingInput{
+		ObjectType: "memory",
+		ObjectID:   memoryB.ID,
+		ScopeID:    scope.ID,
+		ModelID:    model.ID,
+		Embedding:  vecB,
+	}); err != nil {
+		t.Fatalf("UpsertEmbedding B: %v", err)
+	}
+
+	hits, err := repo.QuerySimilar(ctx, db.EmbeddingQuery{
+		ModelID:    model.ID,
+		ObjectType: "memory",
+		Embedding:  vecA,
+		Limit:      2,
+		Scope: &db.ScopeFilter{
+			ScopePath: scope.Path,
+		},
+	})
+	if err != nil {
+		t.Fatalf("QuerySimilar: %v", err)
+	}
+	if len(hits) != 2 {
+		t.Fatalf("hits len = %d, want 2", len(hits))
+	}
+	if hits[0].ObjectID != memoryA.ID {
+		t.Fatalf("first hit object id = %s, want %s", hits[0].ObjectID, memoryA.ID)
 	}
 }
 

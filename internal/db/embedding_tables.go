@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+const maxVectorHNSWDimensions = 2000
+
 // EmbeddingTableName returns the per-model embedding table name.
 // Naming is fixed to: embeddings_model_<uuid_no_dashes>.
 func EmbeddingTableName(modelID uuid.UUID) string {
@@ -44,8 +46,9 @@ func ensureEmbeddingModelTable(ctx context.Context, execer DBTX, modelID uuid.UU
 	tableName := EmbeddingTableName(modelID)
 	hnswIndex := embeddingHNSWIndexName(modelID)
 	scopeIndex := embeddingScopeIndexName(modelID)
+	columnType, indexExpr, opClass := embeddingStorageForDimensions(dims)
 
-	existingDims, exists, err := readEmbeddingTableDimensions(ctx, execer, tableName)
+	existingType, existingDims, exists, err := readEmbeddingTableDimensions(ctx, execer, tableName)
 	if err != nil {
 		return "", fmt.Errorf("db: ensure embedding model table inspect: %w", err)
 	}
@@ -55,17 +58,22 @@ func ensureEmbeddingModelTable(ctx context.Context, execer DBTX, modelID uuid.UU
 			tableName, existingDims, dims,
 		)
 	}
+	// The table always stores full-precision vector(dims). High-dimension models
+	// use an HNSW expression index on embedding::halfvec(dims).
+	if exists && existingType != columnType {
+		return "", fmt.Errorf("db: ensure embedding model table: type mismatch for %s: have %s want %s", tableName, existingType, columnType)
+	}
 
 	createTableSQL := fmt.Sprintf(`
 CREATE TABLE IF NOT EXISTS %s (
     object_type  TEXT        NOT NULL,
     object_id    UUID        NOT NULL,
     scope_id     UUID        NOT NULL REFERENCES scopes(id) ON DELETE CASCADE,
-    embedding    vector(%d)  NOT NULL,
+    embedding    %s          NOT NULL,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (object_type, object_id)
-);`, tableName, dims)
+);`, tableName, columnType)
 	if _, err := execer.Exec(ctx, createTableSQL); err != nil {
 		return "", fmt.Errorf("db: ensure embedding model table create: %w", err)
 	}
@@ -75,7 +83,7 @@ CREATE TABLE IF NOT EXISTS %s (
 		return "", fmt.Errorf("db: ensure embedding model table scope index: %w", err)
 	}
 
-	createHNSWIndexSQL := fmt.Sprintf(`CREATE INDEX IF NOT EXISTS %s ON %s USING hnsw (embedding vector_cosine_ops);`, hnswIndex, tableName)
+	createHNSWIndexSQL := fmt.Sprintf(`CREATE INDEX IF NOT EXISTS %s ON %s USING hnsw (%s %s);`, hnswIndex, tableName, indexExpr, opClass)
 	if _, err := execer.Exec(ctx, createHNSWIndexSQL); err != nil {
 		return "", fmt.Errorf("db: ensure embedding model table hnsw index: %w", err)
 	}
@@ -103,7 +111,7 @@ END$$;`,
 	return tableName, nil
 }
 
-func readEmbeddingTableDimensions(ctx context.Context, execer DBTX, tableName string) (int, bool, error) {
+func readEmbeddingTableDimensions(ctx context.Context, execer DBTX, tableName string) (string, int, bool, error) {
 	var typ *string
 	err := execer.QueryRow(ctx, `
 		SELECT format_type(a.atttypid, a.atttypmod)
@@ -113,21 +121,32 @@ func readEmbeddingTableDimensions(ctx context.Context, execer DBTX, tableName st
 	`, tableName).Scan(&typ)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return 0, false, nil
+			return "", 0, false, nil
 		}
-		return 0, false, err
+		return "", 0, false, err
 	}
 	if typ == nil || *typ == "" {
-		return 0, false, nil
+		return "", 0, false, nil
 	}
 
+	typeName := strings.TrimSpace(*typ)
 	var dims int
-	if _, scanErr := fmt.Sscanf(*typ, "vector(%d)", &dims); scanErr != nil {
-		return 0, false, fmt.Errorf("parse embedding type %q: %w", *typ, scanErr)
+	if _, scanErr := fmt.Sscanf(typeName, "vector(%d)", &dims); scanErr == nil {
+		return typeName, dims, true, nil
 	}
-	return dims, true, nil
+	if _, scanErr := fmt.Sscanf(typeName, "halfvec(%d)", &dims); scanErr == nil {
+		return typeName, dims, true, nil
+	}
+	return "", 0, false, fmt.Errorf("parse embedding type %q: unsupported embedding column type", *typ)
 }
 
 func quoteLiteral(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+}
+
+func embeddingStorageForDimensions(dims int) (columnType string, indexExpr string, opClass string) {
+	if dims > maxVectorHNSWDimensions {
+		return fmt.Sprintf("vector(%d)", dims), fmt.Sprintf("(embedding::halfvec(%d))", dims), "halfvec_cosine_ops"
+	}
+	return fmt.Sprintf("vector(%d)", dims), "embedding", "vector_cosine_ops"
 }
