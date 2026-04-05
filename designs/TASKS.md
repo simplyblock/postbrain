@@ -27,6 +27,11 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Restricted UI scopes page to writable scopes for current principal:
+  - Updated `internal/ui/handler.go` `renderScopes` to filter listed scopes by the authenticated principal’s effective writable scope set.
+  - Added helper `writableScopeIDSet` to resolve effective scope IDs via membership graph.
+  - Added integration regression coverage in `internal/ui/scopes_integration_test.go` to ensure `/ui/scopes` does not expose non-writable scopes.
+
 - [x] 2026-04-05: Restricted UI token management to token owners:
   - Updated `internal/ui/tokens.go` so `/ui/tokens` lists only tokens for the currently authenticated principal.
   - Added ownership enforcement in `handleRevokeToken` to deny revoking tokens owned by other principals (`403 forbidden`).

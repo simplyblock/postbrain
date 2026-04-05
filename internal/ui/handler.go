@@ -2,6 +2,7 @@
 package ui
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"html/template"
@@ -907,6 +908,7 @@ func (h *Handler) renderScopes(w http.ResponseWriter, r *http.Request, scopeErr 
 	}
 
 	if h.pool != nil {
+		writable := h.writableScopeIDSet(r.Context(), r)
 		principals, err := db.ListPrincipals(r.Context(), h.pool, 50, 0)
 		if err == nil {
 			data.Principals = principals
@@ -916,8 +918,12 @@ func (h *Handler) renderScopes(w http.ResponseWriter, r *http.Request, scopeErr 
 		}
 		scopes, err := db.ListScopes(r.Context(), h.pool, 50, 0)
 		if err == nil {
-			data.Scopes = scopes
+			filtered := make([]*db.Scope, 0, len(scopes))
 			for _, s := range scopes {
+				if _, ok := writable[s.ID]; !ok {
+					continue
+				}
+				filtered = append(filtered, s)
 				st := h.syncer.Status(s.ID)
 				if st.State != codegraph.SyncIdle || st.CommitSHA != "" || st.Error != "" {
 					data.SyncStatus[s.ID.String()] = st
@@ -926,6 +932,7 @@ func (h *Handler) renderScopes(w http.ResponseWriter, r *http.Request, scopeErr 
 					data.ChildCount[s.ID.String()] = n
 				}
 			}
+			data.Scopes = filtered
 		}
 	}
 
@@ -1292,6 +1299,26 @@ func (h *Handler) principalFromCookie(r *http.Request) uuid.UUID {
 		return uuid.Nil
 	}
 	return token.PrincipalID
+}
+
+func (h *Handler) writableScopeIDSet(ctx context.Context, r *http.Request) map[uuid.UUID]struct{} {
+	out := map[uuid.UUID]struct{}{}
+	if h.pool == nil {
+		return out
+	}
+	principalID := h.principalFromCookie(r)
+	if principalID == uuid.Nil {
+		return out
+	}
+	ms := principals.NewMembershipStore(h.pool)
+	ids, err := ms.EffectiveScopeIDs(ctx, principalID)
+	if err != nil {
+		return out
+	}
+	for _, id := range ids {
+		out[id] = struct{}{}
+	}
+	return out
 }
 
 // handleEndorseArtifact serves POST /ui/knowledge/{id}/endorse.
