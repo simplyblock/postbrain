@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"time"
@@ -97,6 +98,85 @@ func (h *Handler) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 	h.renderTokens(w, r, "", raw)
 }
 
+func parseScopeIDs(values []string) ([]uuid.UUID, error) {
+	scopeIDs := make([]uuid.UUID, 0, len(values))
+	seen := make(map[uuid.UUID]struct{}, len(values))
+	for _, s := range values {
+		id, err := uuid.Parse(s)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		scopeIDs = append(scopeIDs, id)
+	}
+	return scopeIDs, nil
+}
+
+func (h *Handler) ownedTokenByID(ctx context.Context, principalID, tokenID uuid.UUID) (*db.Token, error) {
+	tokens, err := db.ListTokens(ctx, h.pool, &principalID)
+	if err != nil {
+		return nil, err
+	}
+	for _, tok := range tokens {
+		if tok.ID == tokenID {
+			return tok, nil
+		}
+	}
+	return nil, nil
+}
+
+// handleUpdateTokenScopes serves POST /ui/tokens/{id}/scopes.
+func (h *Handler) handleUpdateTokenScopes(w http.ResponseWriter, r *http.Request) {
+	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/tokens/"), "/scopes")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		http.Error(w, "invalid token id", http.StatusBadRequest)
+		return
+	}
+	if h.pool == nil {
+		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	principalID := h.principalFromCookie(r)
+	if principalID == uuid.Nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form data", http.StatusBadRequest)
+		return
+	}
+	scopeIDs, err := parseScopeIDs(r.Form["scope_ids"])
+	if err != nil {
+		http.Error(w, "invalid scope id", http.StatusBadRequest)
+		return
+	}
+
+	ownedToken, err := h.ownedTokenByID(r.Context(), principalID, id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if ownedToken == nil {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	ok, err := db.UpdateTokenScopes(r.Context(), h.pool, id, principalID, scopeIDs)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	http.Redirect(w, r, "/ui/tokens", http.StatusSeeOther)
+}
+
 // handleRevokeToken serves POST /ui/tokens/{id}/revoke.
 func (h *Handler) handleRevokeToken(w http.ResponseWriter, r *http.Request) {
 	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/tokens/"), "/revoke")
@@ -114,19 +194,12 @@ func (h *Handler) handleRevokeToken(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	tokens, err := db.ListTokens(r.Context(), h.pool, &principalID)
+	ownedToken, err := h.ownedTokenByID(r.Context(), principalID, id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	owned := false
-	for _, tok := range tokens {
-		if tok.ID == id {
-			owned = true
-			break
-		}
-	}
-	if !owned {
+	if ownedToken == nil {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}

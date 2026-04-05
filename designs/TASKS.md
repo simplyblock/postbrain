@@ -27,6 +27,20 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Added WebUI support to edit token scope restrictions (TDD-first):
+  - Added token scope update endpoint in UI:
+    - `POST /ui/tokens/{id}/scopes` (`internal/ui/tokens.go`)
+    - validates ownership and active token status before updating `scope_ids`.
+  - Added DB helper:
+    - `db.UpdateTokenScopes` in `internal/db/compat.go` for principal-owned token scope updates.
+  - Reused owned-token lookup logic in UI token handlers to keep ownership checks consistent.
+  - Added token scope edit controls to token management page:
+    - per-token “Edit scopes” form with scope checkboxes preselected from current `scope_ids`
+    - implemented via template helper `tokenHasScope`.
+  - Added integration coverage:
+    - `internal/ui/tokens_integration_test.go::TestUpdateTokenScopes_OwnToken_UpdatesScopeIDs`
+    - `internal/ui/tokens_integration_test.go::TestUpdateTokenScopes_OtherPrincipalToken_ReturnsForbidden`.
+
 - [x] 2026-04-05: Restricted scope delete actions in WebUI to scope owners/admins:
   - Kept server-side delete authorization as owner/admin-only (`handleDeleteScope` + `hasScopeAdminAccess`).
   - Updated scopes page rendering in `internal/ui/handler.go` to compute per-scope management capability (`CanManage`/`CanDelete`) and pass it to the template.

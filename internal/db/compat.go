@@ -469,6 +469,23 @@ func RevokeToken(ctx context.Context, pool *pgxpool.Pool, tokenID uuid.UUID) err
 	return q.RevokeToken(ctx, tokenID)
 }
 
+// UpdateTokenScopes updates scope_ids for a token owned by principalID.
+// Returns true when a token row was updated.
+func UpdateTokenScopes(ctx context.Context, pool *pgxpool.Pool, tokenID, principalID uuid.UUID, scopeIDs []uuid.UUID) (bool, error) {
+	ct, err := pool.Exec(ctx,
+		`UPDATE tokens
+		 SET scope_ids = $1
+		 WHERE id = $2
+		   AND principal_id = $3
+		   AND revoked_at IS NULL`,
+		scopeIDs, tokenID, principalID,
+	)
+	if err != nil {
+		return false, fmt.Errorf("db: update token scopes: %w", err)
+	}
+	return ct.RowsAffected() == 1, nil
+}
+
 // UpdateTokenLastUsed sets last_used_at = now().
 func UpdateTokenLastUsed(ctx context.Context, pool *pgxpool.Pool, tokenID uuid.UUID) error {
 	q := New(pool)
