@@ -27,6 +27,10 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Restored OpenAI default embedding endpoint behavior in CLI registration (TDD-first):
+  - Added resolver regression test in `cmd/postbrain-cli/main_test.go` to assert `backend=openai` profiles default to `https://api.openai.com/v1` when `service_url` is omitted.
+  - Updated `resolveProviderRegistrationFields` in `cmd/postbrain-cli/main.go` to apply the OpenAI default endpoint only for OpenAI profiles while keeping explicit `service_url` validation for other providers.
+
 - [x] 2026-04-05: Simplified embedding model registration CLI to provider-config-only resolution (TDD-first):
   - Removed transient provider transport/model fields from CLI option flow in `cmd/postbrain-cli/main.go`.
   - `postbrain-cli embedding-model register` now derives registration metadata strictly from `embedding.providers.<provider-config>`:

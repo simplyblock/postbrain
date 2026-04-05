@@ -708,6 +708,9 @@ func resolveProviderRegistrationFields(opts embeddingModelRegisterOptions, embCf
 	if out.Provider == "" {
 		return out, fmt.Errorf("embedding.providers.%s.backend is required", profileName)
 	}
+	if strings.EqualFold(out.Provider, "openai") && out.ServiceURL == "" {
+		out.ServiceURL = "https://api.openai.com/v1"
+	}
 	if out.ServiceURL == "" {
 		return out, fmt.Errorf("embedding.providers.%s.service_url is required", profileName)
 	}
