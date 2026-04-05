@@ -27,6 +27,21 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Enforced token permissions for REST API requests (TDD-first):
+  - Added shared permission evaluation helpers in `internal/auth/permissions.go`:
+    - `HasReadPermission`
+    - `HasWritePermission`
+    - supports generic (`read`, `write`, `admin`) and OAuth-style (`*:read`, `*:write`) permissions.
+  - Added REST permission middleware in `internal/api/rest/permissionauth.go` and wired it in `internal/api/rest/router.go`:
+    - GET/HEAD/OPTIONS require read permission
+    - mutating methods require write permission.
+  - Added integration coverage:
+    - `internal/api/rest/permission_authz_integration_test.go::TestREST_PermissionAuthz_ReadVsWrite`.
+  - Updated default token permission bootstrap in `internal/db/compat.go`:
+    - tokens created without explicit permissions now default to `["read", "write"]` to preserve existing behavior while enabling enforcement.
+  - Added unit coverage:
+    - `internal/auth/permissions_test.go`.
+
 - [x] 2026-04-05: Added WebUI support to edit token scope restrictions (TDD-first):
   - Added token scope update endpoint in UI:
     - `POST /ui/tokens/{id}/scopes` (`internal/ui/tokens.go`)
