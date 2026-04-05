@@ -382,7 +382,7 @@ All four sign-off criteria must be met before this step begins (see Resolved Des
 ### Step 12: Documentation and Runbooks
 
 - [ ] RED: docs completeness checklist (manual gating item).
-- [ ] GREEN: publish user/admin docs for registration, activation, re-embedding, rollback, and manual `failed`-row reset procedure.
+- [x] GREEN: publish user/admin docs for registration, activation, re-embedding, rollback, and manual `failed`-row reset procedure.
 - [ ] REFACTOR: align terminology across CLI, API, schema, and docs.
 
 ### Step 13: Final Validation Gate
