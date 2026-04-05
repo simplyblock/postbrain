@@ -25,3 +25,29 @@ func TestEmbeddingTableName_UsesExpectedPrefix(t *testing.T) {
 		t.Fatalf("EmbeddingTableName() = %q, want prefix embeddings_model_", got)
 	}
 }
+
+func TestEmbeddingStorageForDimensions_Vector(t *testing.T) {
+	columnType, indexExpr, opClass := embeddingStorageForDimensions(1536)
+	if columnType != "vector(1536)" {
+		t.Fatalf("columnType = %q, want vector(1536)", columnType)
+	}
+	if indexExpr != "embedding" {
+		t.Fatalf("indexExpr = %q, want embedding", indexExpr)
+	}
+	if opClass != "vector_cosine_ops" {
+		t.Fatalf("opClass = %q, want vector_cosine_ops", opClass)
+	}
+}
+
+func TestEmbeddingStorageForDimensions_Halfvec(t *testing.T) {
+	columnType, indexExpr, opClass := embeddingStorageForDimensions(2560)
+	if columnType != "vector(2560)" {
+		t.Fatalf("columnType = %q, want vector(2560)", columnType)
+	}
+	if indexExpr != "(embedding::halfvec(2560))" {
+		t.Fatalf("indexExpr = %q, want (embedding::halfvec(2560))", indexExpr)
+	}
+	if opClass != "halfvec_cosine_ops" {
+		t.Fatalf("opClass = %q, want halfvec_cosine_ops", opClass)
+	}
+}
