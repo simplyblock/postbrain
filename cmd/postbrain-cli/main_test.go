@@ -218,7 +218,7 @@ func TestResolveProviderRegistrationFields_MissingServiceURLFails(t *testing.T) 
 	}, &config.EmbeddingConfig{
 		Providers: map[string]config.EmbeddingProviderConfig{
 			"default": {
-				Backend:   "openai",
+				Backend:   "ollama",
 				TextModel: "text-embedding-3-small",
 			},
 		},
@@ -228,6 +228,27 @@ func TestResolveProviderRegistrationFields_MissingServiceURLFails(t *testing.T) 
 	}
 	if !strings.Contains(err.Error(), "service_url is required") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestResolveProviderRegistrationFields_OpenAIDefaultServiceURL(t *testing.T) {
+	t.Parallel()
+	got, err := resolveProviderRegistrationFields(embeddingModelRegisterOptions{
+		ProviderConfig: "openai-prod",
+		ContentType:    "text",
+	}, &config.EmbeddingConfig{
+		Providers: map[string]config.EmbeddingProviderConfig{
+			"openai-prod": {
+				Backend:   "openai",
+				TextModel: "text-embedding-3-small",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("resolveProviderRegistrationFields: %v", err)
+	}
+	if got.ServiceURL != "https://api.openai.com/v1" {
+		t.Fatalf("service_url = %q, want https://api.openai.com/v1", got.ServiceURL)
 	}
 }
 
