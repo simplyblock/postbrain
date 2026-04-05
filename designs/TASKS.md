@@ -27,6 +27,11 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Restricted REST `/v1/scopes` listing to authorized writable scopes:
+  - Updated `internal/api/rest/scopes.go` to return only scopes in the caller’s authorized scope set (effective principal scopes intersected with token scope restrictions).
+  - Added REST scope-authorization helper in `internal/api/rest/scopeauth.go` for reusable authorized scope resolution.
+  - Added integration coverage in `internal/api/rest/scopes_list_authz_integration_test.go` to verify non-writable scopes are excluded from list results.
+
 - [x] 2026-04-05: Restricted UI scopes page to writable scopes for current principal:
   - Updated `internal/ui/handler.go` `renderScopes` to filter listed scopes by the authenticated principal’s effective writable scope set.
   - Added helper `writableScopeIDSet` to resolve effective scope IDs via membership graph.
