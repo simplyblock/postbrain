@@ -27,6 +27,20 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Hid principal-management UI sections for non-admin users (TDD-first):
+  - Added principal-admin gating in `internal/ui/handler.go` for principal-management routes:
+    - `/ui/principals`
+    - `/ui/principals/{id}`
+    - `/ui/memberships`
+    - `/ui/memberships/delete`
+    - non-admin requests now receive `403 forbidden`.
+  - Updated base layout in `internal/ui/web/templates/base.html`:
+    - "Principals" sidebar entry is now rendered only for users with any principal admin role.
+  - Added integration coverage in `internal/ui/principals_integration_test.go`:
+    - `TestPrincipalsPage_RequiresAdminRole`
+    - `TestSidebar_HidesPrincipalsForNonAdmin`
+    - `TestSidebar_ShowsPrincipalsForAdmin`.
+
 - [x] 2026-04-05: Enforced token permissions in WebUI and surfaced token permissions in UI flows (TDD-first):
   - Added centralized WebUI permission gating in `internal/ui/handler.go`:
     - authenticated UI GET/HEAD/OPTIONS routes require token read permission
