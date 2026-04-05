@@ -29,6 +29,11 @@ type embeddingService interface {
 	CodeEmbedder() embeddingIface // may return nil
 }
 
+type embeddingResultService interface {
+	EmbedTextResult(ctx context.Context, text string) (*embedding.EmbedResult, error)
+	EmbedCodeResult(ctx context.Context, text string) (*embedding.EmbedResult, error)
+}
+
 // embeddingIface is the subset of embedding.Embedder needed here.
 type embeddingIface interface {
 	ModelSlug() string
@@ -44,8 +49,16 @@ func (a *embeddingServiceAdapter) EmbedText(ctx context.Context, text string) ([
 	return a.svc.EmbedText(ctx, text)
 }
 
+func (a *embeddingServiceAdapter) EmbedTextResult(ctx context.Context, text string) (*embedding.EmbedResult, error) {
+	return a.svc.EmbedTextResult(ctx, text)
+}
+
 func (a *embeddingServiceAdapter) EmbedCode(ctx context.Context, text string) ([]float32, error) {
 	return a.svc.EmbedCode(ctx, text)
+}
+
+func (a *embeddingServiceAdapter) EmbedCodeResult(ctx context.Context, text string) (*embedding.EmbedResult, error) {
+	return a.svc.EmbedCodeResult(ctx, text)
 }
 
 func (a *embeddingServiceAdapter) TextEmbedder() embeddingIface {
@@ -111,6 +124,7 @@ type Store struct {
 	pool     *pgxpool.Pool
 	svc      embeddingService
 	creator  memoryDB
+	repo     *db.EmbeddingRepository
 	recallDB recallDB   // overridable for tests
 	fanOut   fanOutFunc // overridable for tests
 }
@@ -121,6 +135,7 @@ func NewStore(pool *pgxpool.Pool, svc *embedding.EmbeddingService) *Store {
 		pool:    pool,
 		svc:     &embeddingServiceAdapter{svc: svc},
 		creator: &poolMemoryDB{pool: pool},
+		repo:    db.NewEmbeddingRepository(pool),
 	}
 }
 
@@ -179,7 +194,7 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 	contentKind := embedding.ClassifyContent(input.Content, safeDeref(input.SourceRef))
 
 	// 2. Embed text.
-	textVec, err := s.svc.EmbedText(ctx, input.Content)
+	textVec, textModelID, err := s.embedText(ctx, input.Content)
 	if err != nil {
 		return nil, fmt.Errorf("memory: embed text: %w", err)
 	}
@@ -189,8 +204,9 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 
 	// 3. Embed code if content_kind == "code" and a code embedder is available.
 	var codeVec []float32
+	var codeModelID *uuid.UUID
 	if contentKind == "code" && s.svc.CodeEmbedder() != nil {
-		codeVec, err = s.svc.EmbedCode(ctx, input.Content)
+		codeVec, codeModelID, err = s.embedCode(ctx, input.Content)
 		if err != nil {
 			return nil, fmt.Errorf("memory: embed code: %w", err)
 		}
@@ -214,9 +230,12 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 	}
 	if len(dupes) > 0 {
 		existing := dupes[0]
-		updated, err := s.creator.UpdateMemoryContent(ctx, existing.ID, input.Content, input.Summary, textVec, codeVec, nil, nil, contentKind, input.Meta)
+		updated, err := s.creator.UpdateMemoryContent(ctx, existing.ID, input.Content, input.Summary, textVec, codeVec, textModelID, codeModelID, contentKind, input.Meta)
 		if err != nil {
 			return nil, fmt.Errorf("memory: update duplicate: %w", err)
+		}
+		if err := s.dualWriteMemoryEmbeddings(ctx, updated.ID, updated.ScopeID, textVec, textModelID, codeVec, codeModelID); err != nil {
+			return nil, fmt.Errorf("memory: dual-write duplicate: %w", err)
 		}
 		return &CreateResult{MemoryID: updated.ID, Action: "updated"}, nil
 	}
@@ -224,25 +243,30 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 	// 6. Insert.
 	textVecVal := pgvector.NewVector(textVec)
 	m := &db.Memory{
-		MemoryType:  input.MemoryType,
-		ScopeID:     input.ScopeID,
-		AuthorID:    input.AuthorID,
-		Content:     input.Content,
-		Summary:     input.Summary,
-		Embedding:   &textVecVal,
-		ContentKind: contentKind,
-		Meta:        input.Meta,
-		Importance:  input.Importance,
-		ExpiresAt:   expiresAt,
-		SourceRef:   input.SourceRef,
+		MemoryType:       input.MemoryType,
+		ScopeID:          input.ScopeID,
+		AuthorID:         input.AuthorID,
+		Content:          input.Content,
+		Summary:          input.Summary,
+		Embedding:        &textVecVal,
+		EmbeddingModelID: textModelID,
+		ContentKind:      contentKind,
+		Meta:             input.Meta,
+		Importance:       input.Importance,
+		ExpiresAt:        expiresAt,
+		SourceRef:        input.SourceRef,
 	}
 	if len(codeVec) > 0 {
 		v := pgvector.NewVector(codeVec)
 		m.EmbeddingCode = &v
+		m.EmbeddingCodeModelID = codeModelID
 	}
 	created, err := s.creator.CreateMemory(ctx, m)
 	if err != nil {
 		return nil, fmt.Errorf("memory: create: %w", err)
+	}
+	if err := s.dualWriteMemoryEmbeddings(ctx, created.ID, created.ScopeID, textVec, textModelID, codeVec, codeModelID); err != nil {
+		return nil, fmt.Errorf("memory: dual-write create: %w", err)
 	}
 
 	// 7. Create chunk child memories for large content so recall can surface
@@ -325,7 +349,7 @@ func (s *Store) Update(ctx context.Context, id uuid.UUID, content string, summar
 	contentKind := embedding.ClassifyContent(content, "")
 	meta := withLongStyleMeta(nil)
 
-	textVec, err := s.svc.EmbedText(ctx, content)
+	textVec, textModelID, err := s.embedText(ctx, content)
 	if err != nil {
 		return nil, fmt.Errorf("memory: update embed text: %w", err)
 	}
@@ -334,14 +358,22 @@ func (s *Store) Update(ctx context.Context, id uuid.UUID, content string, summar
 	}
 
 	var codeVec []float32
+	var codeModelID *uuid.UUID
 	if contentKind == "code" && s.svc.CodeEmbedder() != nil {
-		codeVec, err = s.svc.EmbedCode(ctx, content)
+		codeVec, codeModelID, err = s.embedCode(ctx, content)
 		if err != nil {
 			return nil, fmt.Errorf("memory: update embed code: %w", err)
 		}
 	}
 
-	return s.creator.UpdateMemoryContent(ctx, id, content, summary, textVec, codeVec, nil, nil, contentKind, meta)
+	updated, err := s.creator.UpdateMemoryContent(ctx, id, content, summary, textVec, codeVec, textModelID, codeModelID, contentKind, meta)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.dualWriteMemoryEmbeddings(ctx, updated.ID, updated.ScopeID, textVec, textModelID, codeVec, codeModelID); err != nil {
+		return nil, fmt.Errorf("memory: dual-write update: %w", err)
+	}
+	return updated, nil
 }
 
 // SoftDelete marks a memory as inactive.
@@ -389,6 +421,61 @@ func safeDeref(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+func (s *Store) embedText(ctx context.Context, text string) ([]float32, *uuid.UUID, error) {
+	if svc, ok := s.svc.(embeddingResultService); ok {
+		res, err := svc.EmbedTextResult(ctx, text)
+		if err != nil {
+			return nil, nil, err
+		}
+		if res == nil {
+			return nil, nil, fmt.Errorf("nil embed result")
+		}
+		if res.ModelID != uuid.Nil {
+			id := res.ModelID
+			return res.Embedding, &id, nil
+		}
+		return res.Embedding, nil, nil
+	}
+	vec, err := s.svc.EmbedText(ctx, text)
+	return vec, nil, err
+}
+
+func (s *Store) embedCode(ctx context.Context, text string) ([]float32, *uuid.UUID, error) {
+	if svc, ok := s.svc.(embeddingResultService); ok {
+		res, err := svc.EmbedCodeResult(ctx, text)
+		if err != nil {
+			return nil, nil, err
+		}
+		if res == nil {
+			return nil, nil, fmt.Errorf("nil embed result")
+		}
+		if res.ModelID != uuid.Nil {
+			id := res.ModelID
+			return res.Embedding, &id, nil
+		}
+		return res.Embedding, nil, nil
+	}
+	vec, err := s.svc.EmbedCode(ctx, text)
+	return vec, nil, err
+}
+
+func (s *Store) dualWriteMemoryEmbeddings(
+	ctx context.Context,
+	memoryID, scopeID uuid.UUID,
+	textVec []float32,
+	textModelID *uuid.UUID,
+	codeVec []float32,
+	codeModelID *uuid.UUID,
+) error {
+	if err := db.UpsertEmbeddingIfPresent(ctx, s.repo, "memory", memoryID, scopeID, textVec, textModelID); err != nil {
+		return err
+	}
+	if err := db.UpsertEmbeddingIfPresent(ctx, s.repo, "memory", memoryID, scopeID, codeVec, codeModelID); err != nil {
+		return err
+	}
+	return nil
 }
 
 // extractCodeGraph runs tree-sitter extraction on a code memory and upserts

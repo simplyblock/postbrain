@@ -109,6 +109,9 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("embedding service: %w", err)
 	}
+	if err := svc.EnableModelDrivenFactory(ctx, pool, &cfg.Embedding); err != nil {
+		return fmt.Errorf("embedding model factory: %w", err)
+	}
 
 	// Build HTTP mux.
 	mux := http.NewServeMux()

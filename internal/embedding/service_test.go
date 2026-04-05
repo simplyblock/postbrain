@@ -37,10 +37,14 @@ func (m *mockEmbedder) Dimensions() int   { return m.dims }
 
 func ollamaCfgForService(textModel, codeModel string) *config.EmbeddingConfig {
 	return &config.EmbeddingConfig{
-		Backend:        "ollama",
-		ServiceURL:     "http://localhost:11434",
-		TextModel:      textModel,
-		CodeModel:      codeModel,
+		Providers: map[string]config.EmbeddingProviderConfig{
+			"default": {
+				Backend:    "ollama",
+				ServiceURL: "http://localhost:11434",
+				TextModel:  textModel,
+				CodeModel:  codeModel,
+			},
+		},
 		RequestTimeout: 5 * time.Second,
 		BatchSize:      64,
 	}
@@ -48,10 +52,14 @@ func ollamaCfgForService(textModel, codeModel string) *config.EmbeddingConfig {
 
 func openAICfgForService(textModel, codeModel string) *config.EmbeddingConfig {
 	return &config.EmbeddingConfig{
-		Backend:        "openai",
-		OpenAIAPIKey:   "sk-test",
-		TextModel:      textModel,
-		CodeModel:      codeModel,
+		Providers: map[string]config.EmbeddingProviderConfig{
+			"default": {
+				Backend:   "openai",
+				APIKey:    "sk-test",
+				TextModel: textModel,
+				CodeModel: codeModel,
+			},
+		},
 		RequestTimeout: 5 * time.Second,
 		BatchSize:      64,
 	}
@@ -59,11 +67,15 @@ func openAICfgForService(textModel, codeModel string) *config.EmbeddingConfig {
 
 func openAICfgForServiceWithBaseURL(textModel, codeModel, apiKey, baseURL string) *config.EmbeddingConfig {
 	return &config.EmbeddingConfig{
-		Backend:        "openai",
-		OpenAIAPIKey:   apiKey,
-		ServiceURL:     baseURL,
-		TextModel:      textModel,
-		CodeModel:      codeModel,
+		Providers: map[string]config.EmbeddingProviderConfig{
+			"default": {
+				Backend:    "openai",
+				APIKey:     apiKey,
+				ServiceURL: baseURL,
+				TextModel:  textModel,
+				CodeModel:  codeModel,
+			},
+		},
 		RequestTimeout: 5 * time.Second,
 		BatchSize:      64,
 	}
@@ -114,10 +126,10 @@ func TestNewService_OpenAIBackend_DefaultBaseURLRequiresAPIKey(t *testing.T) {
 	cfg := openAICfgForServiceWithBaseURL("text-embedding-3-small", "", "", "")
 	_, err := NewService(cfg)
 	if err == nil {
-		t.Fatal("expected error for missing openai_api_key with default base URL, got nil")
+		t.Fatal("expected error for missing api_key with default base URL, got nil")
 	}
-	if !containsString(err.Error(), "openai_api_key") {
-		t.Fatalf("error = %q, want mention of openai_api_key", err.Error())
+	if !containsString(err.Error(), "api_key") {
+		t.Fatalf("error = %q, want mention of api_key", err.Error())
 	}
 }
 
@@ -138,8 +150,9 @@ func TestNewService_OpenAIBackend_CustomBaseURLAllowsEmptyAPIKey(t *testing.T) {
 
 func TestNewService_UnsupportedBackendReturnsError(t *testing.T) {
 	cfg := &config.EmbeddingConfig{
-		Backend:   "cohere",
-		TextModel: "embed-english-v3.0",
+		Providers: map[string]config.EmbeddingProviderConfig{
+			"default": {Backend: "cohere"},
+		},
 	}
 	_, err := NewService(cfg)
 	if err == nil {
@@ -147,6 +160,16 @@ func TestNewService_UnsupportedBackendReturnsError(t *testing.T) {
 	}
 	if !containsString(err.Error(), "unsupported embedding backend") {
 		t.Errorf("error message %q does not contain 'unsupported embedding backend'", err.Error())
+	}
+}
+
+func TestEnableModelDrivenFactory_NilPoolReturnsError(t *testing.T) {
+	t.Parallel()
+
+	svc := NewServiceFromEmbedders(&mockEmbedder{vec: []float32{1}}, nil)
+	err := svc.EnableModelDrivenFactory(context.Background(), nil, &config.EmbeddingConfig{})
+	if err == nil {
+		t.Fatal("expected error for nil pool, got nil")
 	}
 }
 

@@ -11,21 +11,34 @@ database:
   connect_timeout: 10s
 
 embedding:
-  # Embedding backend provider (for example: ollama, openai).
-  backend: ollama
-  # Backend service URL:
-  # - ollama backend: Ollama base URL (for example http://localhost:11434)
-  # - openai backend: OpenAI-compatible base URL; empty uses default OpenAI endpoint
-  service_url: "http://localhost:11434"
-  # Model slug for text embeddings.
-  text_model: "nomic-embed-text"
-  # Model slug for code embeddings.
-  code_model: "nomic-embed-code"
-  # Optional model slug for summarize/analyze generation.
-  summary_model: ""
-  # OpenAI API key. Required when backend=openai and service_url is empty.
-  # Optional for custom/local OpenAI-compatible service_url endpoints.
-  openai_api_key: ""
+  # Named embedding runtime profiles.
+  # Startup embedding/summarization uses providers.default.
+  # Model registration can reference these via --provider-config.
+  providers:
+    default:
+      # Runtime backend for this profile (ollama or openai).
+      backend: ollama
+      # Endpoint base URL for this profile.
+      service_url: "http://localhost:11434"
+      # Optional OpenAI API key for this profile (usually empty for ollama).
+      api_key: ""
+      # Model slug for text embeddings.
+      text_model: "nomic-embed-text"
+      # Model slug for code embeddings.
+      code_model: "nomic-embed-code"
+      # Optional model slug for summarize/analyze generation.
+      summary_model: ""
+    openai-prod:
+      # Example second profile using hosted OpenAI.
+      backend: openai
+      # OpenAI-compatible endpoint for this profile.
+      service_url: "https://api.openai.com/v1"
+      # API key used when this profile is selected.
+      api_key: ""
+      # Provider-specific model slugs.
+      text_model: "text-embedding-3-small"
+      code_model: ""
+      summary_model: ""
   # Timeout for embedding/summarize/analyze requests.
   request_timeout: 30s
   # Batch size used for embedding jobs.

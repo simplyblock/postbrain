@@ -294,6 +294,86 @@ func TestRecall_PublishedSkillFound(t *testing.T) {
 	}
 }
 
+func TestRecall_UsesModelTableWhenLegacyEmbeddingMissing(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	svc := testhelper.NewMockEmbeddingService()
+	ctx := t.Context()
+
+	author := testhelper.CreateTestPrincipal(t, pool, "user", "recall-modeltable-author")
+	scope := testhelper.CreateTestScope(t, pool, "project", "recall-modeltable-scope", nil, author.ID)
+	store := skills.NewStore(pool, svc)
+
+	model, err := db.RegisterEmbeddingModel(ctx, pool, db.RegisterEmbeddingModelParams{
+		Slug:          "skills-recall-modeltable-" + uuid.NewString(),
+		Provider:      "ollama",
+		ServiceURL:    "http://localhost:11434",
+		ProviderModel: "nomic-embed-text",
+		Dimensions:    4,
+		ContentType:   "text",
+		Activate:      true,
+	})
+	if err != nil {
+		t.Fatalf("register model: %v", err)
+	}
+
+	skill, err := store.Create(ctx, skills.CreateInput{
+		ScopeID:     scope.ID,
+		AuthorID:    author.ID,
+		Slug:        "modeltable-skill",
+		Name:        "ModelTable Skill",
+		Description: "model table recall integration",
+		Body:        "body",
+		Visibility:  "team",
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	publishSkill(t, pool, skill.ID, author.ID)
+
+	query := "model table recall integration"
+	queryVec, err := svc.EmbedText(ctx, query)
+	if err != nil {
+		t.Fatalf("EmbedText: %v", err)
+	}
+	repo := db.NewEmbeddingRepository(pool)
+	if err := repo.UpsertEmbedding(ctx, db.UpsertEmbeddingInput{
+		ObjectType: "skill",
+		ObjectID:   skill.ID,
+		ScopeID:    scope.ID,
+		ModelID:    model.ID,
+		Embedding:  queryVec,
+	}); err != nil {
+		t.Fatalf("seed model-table embedding: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		UPDATE skills
+		SET embedding = NULL, embedding_model_id = NULL
+		WHERE id = $1
+	`, skill.ID); err != nil {
+		t.Fatalf("clear legacy embedding columns: %v", err)
+	}
+
+	results, err := store.Recall(ctx, svc, skills.RecallInput{
+		Query:     query,
+		ScopeIDs:  []uuid.UUID{scope.ID},
+		AgentType: "any",
+		Limit:     10,
+	})
+	if err != nil {
+		t.Fatalf("Recall: %v", err)
+	}
+	found := false
+	for _, r := range results {
+		if r.Skill.ID == skill.ID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected skill %s in results", skill.ID)
+	}
+}
+
 func TestRecall_LimitRespected(t *testing.T) {
 	pool := testhelper.NewTestPool(t)
 	testhelper.CreateTestEmbeddingModel(t, pool)

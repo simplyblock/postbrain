@@ -31,14 +31,19 @@ type DatabaseConfig struct {
 
 // EmbeddingConfig holds embedding service parameters.
 type EmbeddingConfig struct {
-	Backend        string        `mapstructure:"backend"`
-	ServiceURL     string        `mapstructure:"service_url"`
-	TextModel      string        `mapstructure:"text_model"`
-	CodeModel      string        `mapstructure:"code_model"`
-	SummaryModel   string        `mapstructure:"summary_model"`
-	OpenAIAPIKey   string        `mapstructure:"openai_api_key"`
-	RequestTimeout time.Duration `mapstructure:"request_timeout"`
-	BatchSize      int           `mapstructure:"batch_size"`
+	Providers      map[string]EmbeddingProviderConfig `mapstructure:"providers"`
+	RequestTimeout time.Duration                      `mapstructure:"request_timeout"`
+	BatchSize      int                                `mapstructure:"batch_size"`
+}
+
+// EmbeddingProviderConfig defines one named runtime profile for embedding models.
+type EmbeddingProviderConfig struct {
+	Backend      string `mapstructure:"backend"`
+	ServiceURL   string `mapstructure:"service_url"`
+	APIKey       string `mapstructure:"api_key"`
+	TextModel    string `mapstructure:"text_model"`
+	CodeModel    string `mapstructure:"code_model"`
+	SummaryModel string `mapstructure:"summary_model"`
 }
 
 // ServerConfig holds HTTP/MCP server parameters.
@@ -141,11 +146,6 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("database.max_idle", 5)
 	v.SetDefault("database.connect_timeout", "10s")
 
-	v.SetDefault("embedding.backend", "ollama")
-	v.SetDefault("embedding.service_url", "")
-	v.SetDefault("embedding.text_model", "nomic-embed-text")
-	v.SetDefault("embedding.code_model", "nomic-embed-code")
-	v.SetDefault("embedding.openai_api_key", "")
 	v.SetDefault("embedding.request_timeout", "30s")
 	v.SetDefault("embedding.batch_size", 64)
 
@@ -176,15 +176,7 @@ func Load(path string) (*Config, error) {
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("config: unmarshal: %w", err)
 	}
-	// Backward-compatibility for renamed embedding URL keys.
-	if cfg.Embedding.ServiceURL == "" {
-		switch cfg.Embedding.Backend {
-		case "ollama":
-			cfg.Embedding.ServiceURL = v.GetString("embedding.ollama_url")
-		case "openai":
-			cfg.Embedding.ServiceURL = v.GetString("embedding.openai_base_url")
-		}
-	}
+	normalizeEmbeddingProviderProfiles(&cfg.Embedding)
 
 	// Validate required fields
 	if cfg.Database.URL == "" {
@@ -192,4 +184,28 @@ func Load(path string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+func normalizeEmbeddingProviderProfiles(cfg *EmbeddingConfig) {
+	if cfg == nil {
+		return
+	}
+	if cfg.Providers == nil {
+		cfg.Providers = map[string]EmbeddingProviderConfig{}
+	}
+	if len(cfg.Providers) == 0 {
+		cfg.Providers["default"] = EmbeddingProviderConfig{
+			Backend:      "ollama",
+			ServiceURL:   "",
+			TextModel:    "nomic-embed-text",
+			CodeModel:    "nomic-embed-code",
+			SummaryModel: "",
+		}
+	}
+	for name, p := range cfg.Providers {
+		if p.TextModel == "" {
+			p.TextModel = "nomic-embed-text"
+		}
+		cfg.Providers[name] = p
+	}
 }
