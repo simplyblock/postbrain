@@ -150,6 +150,16 @@ func TestNewService_UnsupportedBackendReturnsError(t *testing.T) {
 	}
 }
 
+func TestEnableModelDrivenFactory_NilPoolReturnsError(t *testing.T) {
+	t.Parallel()
+
+	svc := NewServiceFromEmbedders(&mockEmbedder{vec: []float32{1}}, nil)
+	err := svc.EnableModelDrivenFactory(context.Background(), nil, &config.EmbeddingConfig{})
+	if err == nil {
+		t.Fatal("expected error for nil pool, got nil")
+	}
+}
+
 // --- EmbedText / EmbedCode tests using injected mock embedders ---
 
 func newServiceWithMocks(textEmb, codeEmb Embedder) *EmbeddingService {

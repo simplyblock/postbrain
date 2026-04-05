@@ -105,6 +105,9 @@
   - Refactored `internal/db/embedding_bootstrap.go`:
     - each bootstrap source query now skips objects already `ready` in `embedding_index` for the target model
     - added per-stage and final progress logs (`slog.InfoContext`) with upsert/index counters.
+- [x] 2026-04-05: Finalized carryover commits for completed embedding update steps:
+  - committed previously completed Step 3/4/5 and dual-write integration code that was pending in the worktree
+  - includes CLI model management commands/tests, model-driven embedding factory + runtime wiring, registration/integration tests, and entity/memory/knowledge/skills dual-write test coverage.
 - [x] 2026-04-04: Added model-aware multi-provider embedder factory primitives and runtime wiring (TDD-first):
   - Added model-driven factory in `internal/embedding/factory.go`:
     - `ModelConfig`, `ModelConfigStore`, `ModelEmbedderFactory`

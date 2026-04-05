@@ -855,6 +855,20 @@ func UpsertEntity(ctx context.Context, pool *pgxpool.Pool, e *Entity) (*Entity, 
 	if err != nil {
 		return nil, fmt.Errorf("db: upsert entity: %w", err)
 	}
+
+	if result.EmbeddingModelID != nil && result.Embedding != nil {
+		repo := NewEmbeddingRepository(pool)
+		if err := repo.UpsertEmbedding(ctx, UpsertEmbeddingInput{
+			ObjectType: "entity",
+			ObjectID:   result.ID,
+			ScopeID:    result.ScopeID,
+			ModelID:    *result.EmbeddingModelID,
+			Embedding:  result.Embedding.Slice(),
+		}); err != nil {
+			return nil, fmt.Errorf("db: upsert entity dual-write: %w", err)
+		}
+	}
+
 	return result, nil
 }
 
