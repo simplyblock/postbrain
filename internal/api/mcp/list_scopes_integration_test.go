@@ -43,6 +43,7 @@ func TestMCP_ListScopes_RestrictedToEffectiveWritableScopes(t *testing.T) {
 	ctx = context.WithValue(ctx, auth.ContextKeyToken, &db.Token{
 		PrincipalID: principalA.ID,
 		ScopeIds:    nil,
+		Permissions: []string{"read"},
 	})
 
 	result, err := tool.Handler(ctx, req)

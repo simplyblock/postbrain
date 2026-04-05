@@ -97,7 +97,7 @@ func (s *Server) registerTools() {
 		mcpgo.WithString("source_ref", mcpgo.Description("Provenance reference, e.g. file:src/main.go:42")),
 		mcpgo.WithArray("entities", mcpgo.Description("Entities to link. Each item is an object with 'name' (canonical string) and 'type' (concept|technology|file|person|service|pr|decision). Bare strings are accepted for backwards compatibility and default to type 'concept'.")),
 		mcpgo.WithNumber("expires_in", mcpgo.Description("TTL in seconds; only for memory_type=working")),
-	), withToolMetrics("remember", s.handleRemember))
+	), withToolMetrics("remember", withToolPermission(permissionWrite, s.handleRemember)))
 
 	// recall
 	s.mcpServer.AddTool(mcpgo.NewTool("recall",
@@ -111,7 +111,7 @@ func (s *Server) registerTools() {
 		mcpgo.WithNumber("min_score", mcpgo.Description("Min combined score 0–1 (default: 0.0)")),
 		mcpgo.WithString("search_mode", mcpgo.Description("text|code|hybrid (default: hybrid)")),
 		mcpgo.WithNumber("graph_depth", mcpgo.Description("Graph traversal depth for code results: 0=off, 1=direct neighbours (default: 1)")),
-	), withToolMetrics("recall", s.handleRecall))
+	), withToolMetrics("recall", withToolPermission(permissionRead, s.handleRecall)))
 
 	// graph_query (AGE-only)
 	if s.ageEnabled {
@@ -119,7 +119,7 @@ func (s *Server) registerTools() {
 			mcpgo.WithDescription("Execute a scoped Cypher query against the AGE graph overlay"),
 			mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
 			mcpgo.WithString("cypher", mcpgo.Required(), mcpgo.Description("Cypher query body to execute")),
-		), withToolMetrics("graph_query", s.handleGraphQuery))
+		), withToolMetrics("graph_query", withToolPermission(permissionRead, s.handleGraphQuery)))
 	}
 
 	// forget
@@ -127,7 +127,7 @@ func (s *Server) registerTools() {
 		mcpgo.WithDescription("Deactivate or permanently delete a memory"),
 		mcpgo.WithString("memory_id", mcpgo.Required(), mcpgo.Description("UUID of the memory to delete")),
 		mcpgo.WithBoolean("hard", mcpgo.Description("true = permanent delete, false = soft-delete (default: false)")),
-	), withToolMetrics("forget", s.handleForget))
+	), withToolMetrics("forget", withToolPermission(permissionWrite, s.handleForget)))
 
 	// context
 	s.mcpServer.AddTool(mcpgo.NewTool("context",
@@ -135,7 +135,7 @@ func (s *Server) registerTools() {
 		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
 		mcpgo.WithString("query", mcpgo.Description("What you are about to work on")),
 		mcpgo.WithNumber("max_tokens", mcpgo.Description("Token budget for context (default: 4000)")),
-	), withToolMetrics("context", s.handleContext))
+	), withToolMetrics("context", withToolPermission(permissionRead, s.handleContext)))
 
 	// summarize
 	s.mcpServer.AddTool(mcpgo.NewTool("summarize",
@@ -143,7 +143,7 @@ func (s *Server) registerTools() {
 		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
 		mcpgo.WithString("topic", mcpgo.Description("Topic to cluster and summarize")),
 		mcpgo.WithBoolean("dry_run", mcpgo.Description("If true, preview without writing (default: false)")),
-	), withToolMetrics("summarize", s.handleSummarize))
+	), withToolMetrics("summarize", withToolPermission(permissionWrite, s.handleSummarize)))
 
 	// publish
 	s.mcpServer.AddTool(mcpgo.NewTool("publish",
@@ -156,14 +156,14 @@ func (s *Server) registerTools() {
 		mcpgo.WithString("summary", mcpgo.Description("Short summary")),
 		mcpgo.WithBoolean("auto_review", mcpgo.Description("Move directly to in_review (default: false)")),
 		mcpgo.WithString("collection_slug", mcpgo.Description("Add to this collection slug after creation")),
-	), withToolMetrics("publish", s.handlePublish))
+	), withToolMetrics("publish", withToolPermission(permissionWrite, s.handlePublish)))
 
 	// endorse
 	s.mcpServer.AddTool(mcpgo.NewTool("endorse",
 		mcpgo.WithDescription("Endorse a knowledge artifact or skill"),
 		mcpgo.WithString("artifact_id", mcpgo.Required(), mcpgo.Description("UUID of the artifact or skill to endorse")),
 		mcpgo.WithString("note", mcpgo.Description("Optional endorsement note")),
-	), withToolMetrics("endorse", s.handleEndorse))
+	), withToolMetrics("endorse", withToolPermission(permissionWrite, s.handleEndorse)))
 
 	// promote
 	s.mcpServer.AddTool(mcpgo.NewTool("promote",
@@ -173,7 +173,7 @@ func (s *Server) registerTools() {
 		mcpgo.WithString("target_visibility", mcpgo.Required(), mcpgo.Description("Visibility level")),
 		mcpgo.WithString("proposed_title", mcpgo.Description("Proposed title for the knowledge artifact")),
 		mcpgo.WithString("collection_slug", mcpgo.Description("Optionally add to this collection slug")),
-	), withToolMetrics("promote", s.handlePromote))
+	), withToolMetrics("promote", withToolPermission(permissionWrite, s.handlePromote)))
 
 	// collect
 	s.mcpServer.AddTool(mcpgo.NewTool("collect",
@@ -185,7 +185,7 @@ func (s *Server) registerTools() {
 		mcpgo.WithString("scope", mcpgo.Description("Scope as kind:external_id (required for create_collection and when using collection_slug)")),
 		mcpgo.WithString("name", mcpgo.Description("Collection name (required for create_collection)")),
 		mcpgo.WithString("description", mcpgo.Description("Collection description (optional)")),
-	), withToolMetrics("collect", s.handleCollect))
+	), withToolMetrics("collect", withToolPermission(permissionRead, s.handleCollect)))
 
 	// skill_search
 	s.mcpServer.AddTool(mcpgo.NewTool("skill_search",
@@ -195,7 +195,7 @@ func (s *Server) registerTools() {
 		mcpgo.WithString("agent_type", mcpgo.Description("Filter by agent compatibility")),
 		mcpgo.WithNumber("limit", mcpgo.Description("Max results (default: 10)")),
 		mcpgo.WithBoolean("installed", mcpgo.Description("Filter by installed status")),
-	), withToolMetrics("skill_search", s.handleSkillSearch))
+	), withToolMetrics("skill_search", withToolPermission(permissionRead, s.handleSkillSearch)))
 
 	// skill_install
 	s.mcpServer.AddTool(mcpgo.NewTool("skill_install",
@@ -205,7 +205,7 @@ func (s *Server) registerTools() {
 		mcpgo.WithString("scope", mcpgo.Description("Scope as kind:external_id")),
 		mcpgo.WithString("agent_type", mcpgo.Description("Target agent type")),
 		mcpgo.WithString("workdir", mcpgo.Description("Working directory for installation")),
-	), withToolMetrics("skill_install", s.handleSkillInstall))
+	), withToolMetrics("skill_install", withToolPermission(permissionWrite, s.handleSkillInstall)))
 
 	// skill_invoke
 	s.mcpServer.AddTool(mcpgo.NewTool("skill_invoke",
@@ -215,30 +215,30 @@ func (s *Server) registerTools() {
 		mcpgo.WithString("agent_type", mcpgo.Description("Agent type for filtering")),
 		mcpgo.WithObject("params", mcpgo.Description("Parameter map for substitution")),
 		mcpgo.WithString("session_id", mcpgo.Description("Session ID from session_begin; used to correlate invocation events")),
-	), withToolMetrics("skill_invoke", s.handleSkillInvoke))
+	), withToolMetrics("skill_invoke", withToolPermission(permissionWrite, s.handleSkillInvoke)))
 
 	// knowledge_detail
 	s.mcpServer.AddTool(mcpgo.NewTool("knowledge_detail",
 		mcpgo.WithDescription("Retrieve the full content of a knowledge artifact by ID. Use when recall returns full_content_available=true and the summary is insufficient."),
 		mcpgo.WithString("artifact_id", mcpgo.Required(), mcpgo.Description("UUID of the knowledge artifact")),
-	), withToolMetrics("knowledge_detail", s.handleKnowledgeDetail))
+	), withToolMetrics("knowledge_detail", withToolPermission(permissionRead, s.handleKnowledgeDetail)))
 
 	// list_scopes
 	s.mcpServer.AddTool(mcpgo.NewTool("list_scopes",
 		mcpgo.WithDescription("List all scopes accessible to the current token. Returns scope IDs and their kind:external_id strings for use in other tools."),
-	), withToolMetrics("list_scopes", s.handleListScopes))
+	), withToolMetrics("list_scopes", withToolPermission(permissionRead, s.handleListScopes)))
 
 	// session_begin
 	s.mcpServer.AddTool(mcpgo.NewTool("session_begin",
 		mcpgo.WithDescription("Start a new agent session for a scope. Returns a session_id to pass to skill_invoke for event correlation. Call once at the start of each agent session."),
 		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
-	), withToolMetrics("session_begin", s.handleSessionBegin))
+	), withToolMetrics("session_begin", withToolPermission(permissionWrite, s.handleSessionBegin)))
 
 	// session_end
 	s.mcpServer.AddTool(mcpgo.NewTool("session_end",
 		mcpgo.WithDescription("Close an agent session. Call when the agent session is ending (e.g. in a Stop hook)."),
 		mcpgo.WithString("session_id", mcpgo.Required(), mcpgo.Description("Session ID returned by session_begin")),
-	), withToolMetrics("session_end", s.handleSessionEnd))
+	), withToolMetrics("session_end", withToolPermission(permissionWrite, s.handleSessionEnd)))
 
 	// synthesize_topic
 	s.mcpServer.AddTool(mcpgo.NewTool("synthesize_topic",
@@ -247,7 +247,7 @@ func (s *Server) registerTools() {
 		mcpgo.WithArray("source_ids", mcpgo.Required(), mcpgo.Description("UUIDs of the source artifacts to synthesise (minimum 2, all must be published non-digest artifacts)")),
 		mcpgo.WithString("title", mcpgo.Description("Digest title; inferred from sources if omitted")),
 		mcpgo.WithBoolean("auto_review", mcpgo.Description("Move directly to in_review (default: false)")),
-	), withToolMetrics("synthesize_topic", s.handleSynthesizeTopic))
+	), withToolMetrics("synthesize_topic", withToolPermission(permissionWrite, s.handleSynthesizeTopic)))
 }
 
 // Handler returns an http.Handler that serves both the MCP Streamable HTTP
