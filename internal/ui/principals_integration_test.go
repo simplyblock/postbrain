@@ -194,15 +194,8 @@ func TestPrincipalsPage_PrincipalSlugChangeRequiresAdmin(t *testing.T) {
 			t.Fatalf("request failed: %v", err)
 		}
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-		}
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatalf("read body: %v", err)
-		}
-		if !strings.Contains(string(body), "principal admin required") {
-			t.Fatalf("expected principal admin required error, got %q", string(body))
+		if resp.StatusCode != http.StatusForbidden {
+			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
 		}
 
 		after, err := db.GetPrincipalByID(ctx, pool, target.ID)
