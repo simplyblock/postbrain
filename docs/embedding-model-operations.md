@@ -18,13 +18,9 @@ per-model storage table, and seeds `embedding_index` pending rows for existing
 objects.
 
 ```bash
-postbrain-cli embedding-model register \
-  --config config.yaml \
+postbrain --config config.yaml embedding-model register \
   --slug openai-text-3-small-v1 \
-  --provider openai \
   --provider-config openai-prod \
-  --service-url https://api.openai.com/v1 \
-  --provider-model text-embedding-3-small \
   --dimensions 1536 \
   --content-type text \
   --activate
@@ -33,13 +29,9 @@ postbrain-cli embedding-model register \
 For code embeddings:
 
 ```bash
-postbrain-cli embedding-model register \
-  --config config.yaml \
+postbrain --config config.yaml embedding-model register \
   --slug local-code-nomic-v1 \
-  --provider ollama \
   --provider-config default \
-  --service-url http://localhost:11434 \
-  --provider-model nomic-embed-text \
   --dimensions 768 \
   --content-type code \
   --activate
@@ -50,7 +42,7 @@ If `--provider-config` is omitted, Postbrain uses `default`.
 ## 2) List and validate model state
 
 ```bash
-postbrain-cli embedding-model list --config config.yaml
+postbrain --config config.yaml embedding-model list
 ```
 
 Check:
@@ -72,15 +64,13 @@ ORDER BY content_type, slug;
 Activation is independent from registration and applies per content type:
 
 ```bash
-postbrain-cli embedding-model activate \
-  --config config.yaml \
+postbrain --config config.yaml embedding-model activate \
   --slug openai-text-3-small-v1 \
   --content-type text
 ```
 
 ```bash
-postbrain-cli embedding-model activate \
-  --config config.yaml \
+postbrain --config config.yaml embedding-model activate \
   --slug local-code-nomic-v1 \
   --content-type code
 ```
@@ -150,8 +140,7 @@ If a newly activated model causes regressions:
 Rollback command:
 
 ```bash
-postbrain-cli embedding-model activate \
-  --config config.yaml \
+postbrain --config config.yaml embedding-model activate \
   --slug <previous-model-slug> \
   --content-type text
 ```
@@ -160,7 +149,7 @@ postbrain-cli embedding-model activate \
 
 Run after register/activate/rollback operations:
 
-1. `postbrain-cli embedding-model list` shows expected active model.
+1. `postbrain --config config.yaml embedding-model list` shows expected active model.
 2. `embedding_index` has no unexpected growth in `failed`.
 3. Query playground recall returns expected results for a known scope.
 4. Logs show no repeating embedding/reembed errors.

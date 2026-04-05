@@ -27,6 +27,33 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Moved embedding model administration from `postbrain-cli` to `postbrain` (TDD-first):
+  - Added server-side `embedding-model` command group in `cmd/postbrain/embedding_model_cmd.go`:
+    - `register`, `activate`, `list`
+    - same provider-profile resolution behavior, including OpenAI default endpoint fallback when `service_url` is omitted.
+  - Wired command into `postbrain` root command (`cmd/postbrain/main.go`) next to other operational commands.
+  - Removed `embedding-model` command wiring and implementation from `cmd/postbrain-cli/main.go`.
+  - Migrated CLI command coverage to `cmd/postbrain/embedding_model_cmd_test.go` and trimmed `cmd/postbrain-cli/main_test.go` to remaining responsibilities.
+  - Updated operator docs to use `postbrain --config ... embedding-model ...`:
+    - `docs/embedding-model-operations.md`
+    - `docs/configuration.md`
+    - `docs/troubleshooting-playbook.md`
+
+- [x] 2026-04-05: Restored OpenAI default embedding endpoint behavior in CLI registration (TDD-first):
+  - Added resolver regression test in `cmd/postbrain-cli/main_test.go` to assert `backend=openai` profiles default to `https://api.openai.com/v1` when `service_url` is omitted.
+  - Updated `resolveProviderRegistrationFields` in `cmd/postbrain-cli/main.go` to apply the OpenAI default endpoint only for OpenAI profiles while keeping explicit `service_url` validation for other providers.
+
+- [x] 2026-04-05: Simplified embedding model registration CLI to provider-config-only resolution (TDD-first):
+  - Removed transient provider transport/model fields from CLI option flow in `cmd/postbrain-cli/main.go`.
+  - `postbrain-cli embedding-model register` now derives registration metadata strictly from `embedding.providers.<provider-config>`:
+    - `backend` -> DB `provider`
+    - `service_url` -> DB `service_url`
+    - `<content_type>_model` -> DB `provider_model`
+  - Added validation that selected provider profile includes required `service_url`.
+  - Updated CLI tests in `cmd/postbrain-cli/main_test.go`:
+    - resolver tests now assert resolved `provider_config` + profile-derived fields
+    - added regression test for missing profile `service_url`.
+
 - [x] 2026-04-05: Addressed embedding/re-embed edge cases identified in PR review (TDD-first):
   - `internal/skills/store.go`:
     - `embedText` now treats nil service, nil embed result, and empty embedding vectors as errors.

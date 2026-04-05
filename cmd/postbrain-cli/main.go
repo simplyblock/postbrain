@@ -16,11 +16,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/cobra"
 
 	"github.com/simplyblock/postbrain/internal/closeutil"
-	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/postbraincli"
 	"github.com/simplyblock/postbrain/internal/skills"
@@ -80,35 +78,6 @@ var buildVersion = "dev"
 var buildGitRef = "unknown"
 var buildTimestamp = "unknown"
 
-type embeddingModelRegisterOptions struct {
-	DatabaseURL    string
-	ConfigPath     string
-	Slug           string
-	Provider       string
-	ServiceURL     string
-	ProviderModel  string
-	ProviderConfig string
-	Dimensions     int
-	ContentType    string
-	Activate       bool
-}
-
-type embeddingModelActivateOptions struct {
-	DatabaseURL string
-	ConfigPath  string
-	Slug        string
-	ContentType string
-}
-
-type embeddingModelListOptions struct {
-	DatabaseURL string
-	ConfigPath  string
-}
-
-var registerEmbeddingModelCmdFn = runRegisterEmbeddingModelCommand
-var activateEmbeddingModelCmdFn = runActivateEmbeddingModelCommand
-var listEmbeddingModelCmdFn = runListEmbeddingModelsCommand
-
 func main() {
 	root := newRootCmd()
 	if err := root.Execute(); err != nil {
@@ -124,7 +93,7 @@ func newRootCmd() *cobra.Command {
 	}
 	root.PersistentFlags().StringVar(&scopeFlag, "scope", "", "scope (e.g. project:acme/api)")
 
-	root.AddCommand(snapshotCmd(), summarizeSessionCmd(), skillCmd(), embeddingModelCmd(), installCodexSkillCmd(), installClaudeSkillCmd(), versionCmd())
+	root.AddCommand(snapshotCmd(), summarizeSessionCmd(), skillCmd(), installCodexSkillCmd(), installClaudeSkillCmd(), versionCmd())
 	return root
 }
 
@@ -537,225 +506,4 @@ func installClaudeSkillCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&targetDir, "target", ".", "target directory")
 	return cmd
-}
-
-func embeddingModelCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "embedding-model",
-		Short: "Embedding model management",
-	}
-	cmd.AddCommand(embeddingModelRegisterCmd(), embeddingModelActivateCmd(), embeddingModelListCmd())
-	return cmd
-}
-
-func embeddingModelRegisterCmd() *cobra.Command {
-	opts := embeddingModelRegisterOptions{}
-	cmd := &cobra.Command{
-		Use:   "register",
-		Short: "Register an embedding model and provision its storage table",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			msg, err := registerEmbeddingModelCmdFn(cmd.Context(), opts)
-			if err != nil {
-				return err
-			}
-			_, err = fmt.Fprintln(cmd.OutOrStdout(), msg)
-			return err
-		},
-	}
-	cmd.Flags().StringVar(&opts.DatabaseURL, "database-url", "", "PostgreSQL URL (overrides config file and POSTBRAIN_DATABASE_URL)")
-	cmd.Flags().StringVar(&opts.ConfigPath, "config", "config.yaml", "path to config file")
-	cmd.Flags().StringVar(&opts.Slug, "slug", "", "model slug (required)")
-	cmd.Flags().StringVar(&opts.Provider, "provider", "", "embedding provider, e.g. openai or ollama (required)")
-	cmd.Flags().StringVar(&opts.ServiceURL, "service-url", "", "embedding service URL (required)")
-	cmd.Flags().StringVar(&opts.ProviderModel, "provider-model", "", "provider-side model name (required)")
-	cmd.Flags().StringVar(&opts.ProviderConfig, "provider-config", "default", "named embedding provider profile to use")
-	cmd.Flags().IntVar(&opts.Dimensions, "dimensions", 0, "embedding vector dimensions (required)")
-	cmd.Flags().StringVar(&opts.ContentType, "content-type", "", "content type: text or code (required)")
-	cmd.Flags().BoolVar(&opts.Activate, "activate", false, "set as active model for this content type")
-	_ = cmd.MarkFlagRequired("slug")
-	_ = cmd.MarkFlagRequired("provider")
-	_ = cmd.MarkFlagRequired("service-url")
-	_ = cmd.MarkFlagRequired("provider-model")
-	_ = cmd.MarkFlagRequired("dimensions")
-	_ = cmd.MarkFlagRequired("content-type")
-	return cmd
-}
-
-func embeddingModelActivateCmd() *cobra.Command {
-	opts := embeddingModelActivateOptions{}
-	cmd := &cobra.Command{
-		Use:   "activate",
-		Short: "Activate a registered embedding model for one content type",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			msg, err := activateEmbeddingModelCmdFn(cmd.Context(), opts)
-			if err != nil {
-				return err
-			}
-			_, err = fmt.Fprintln(cmd.OutOrStdout(), msg)
-			return err
-		},
-	}
-	cmd.Flags().StringVar(&opts.DatabaseURL, "database-url", "", "PostgreSQL URL (overrides config file and POSTBRAIN_DATABASE_URL)")
-	cmd.Flags().StringVar(&opts.ConfigPath, "config", "config.yaml", "path to config file")
-	cmd.Flags().StringVar(&opts.Slug, "slug", "", "model slug (required)")
-	cmd.Flags().StringVar(&opts.ContentType, "content-type", "", "content type: text or code (required)")
-	_ = cmd.MarkFlagRequired("slug")
-	_ = cmd.MarkFlagRequired("content-type")
-	return cmd
-}
-
-func embeddingModelListCmd() *cobra.Command {
-	opts := embeddingModelListOptions{}
-	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List registered embedding models",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			msg, err := listEmbeddingModelCmdFn(cmd.Context(), opts)
-			if err != nil {
-				return err
-			}
-			_, err = fmt.Fprintln(cmd.OutOrStdout(), msg)
-			return err
-		},
-	}
-	cmd.Flags().StringVar(&opts.DatabaseURL, "database-url", "", "PostgreSQL URL (overrides config file and POSTBRAIN_DATABASE_URL)")
-	cmd.Flags().StringVar(&opts.ConfigPath, "config", "config.yaml", "path to config file")
-	return cmd
-}
-
-func runRegisterEmbeddingModelCommand(ctx context.Context, opts embeddingModelRegisterOptions) (string, error) {
-	pool, err := openCLIPool(ctx, opts.DatabaseURL, opts.ConfigPath)
-	if err != nil {
-		return "", err
-	}
-	defer pool.Close()
-
-	model, err := db.RegisterEmbeddingModel(ctx, pool, db.RegisterEmbeddingModelParams{
-		Slug:           opts.Slug,
-		Provider:       opts.Provider,
-		ServiceURL:     opts.ServiceURL,
-		ProviderModel:  opts.ProviderModel,
-		ProviderConfig: opts.ProviderConfig,
-		Dimensions:     opts.Dimensions,
-		ContentType:    opts.ContentType,
-		Activate:       opts.Activate,
-	})
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("registered model %s", model.Slug), nil
-}
-
-func runActivateEmbeddingModelCommand(ctx context.Context, opts embeddingModelActivateOptions) (string, error) {
-	if opts.ContentType != "text" && opts.ContentType != "code" {
-		return "", fmt.Errorf("invalid content type %q", opts.ContentType)
-	}
-
-	pool, err := openCLIPool(ctx, opts.DatabaseURL, opts.ConfigPath)
-	if err != nil {
-		return "", err
-	}
-	defer pool.Close()
-
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		return "", fmt.Errorf("begin tx: %w", err)
-	}
-	defer tx.Rollback(ctx) //nolint:errcheck
-
-	if _, err := tx.Exec(ctx, `
-		UPDATE embedding_models
-		SET is_active = false
-		WHERE content_type = $1
-	`, opts.ContentType); err != nil {
-		return "", fmt.Errorf("deactivate models: %w", err)
-	}
-
-	tag, err := tx.Exec(ctx, `
-		UPDATE embedding_models
-		SET is_active = true
-		WHERE slug = $1 AND content_type = $2
-	`, opts.Slug, opts.ContentType)
-	if err != nil {
-		return "", fmt.Errorf("activate model: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
-		return "", fmt.Errorf("model %q with content type %q not found", opts.Slug, opts.ContentType)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return "", fmt.Errorf("commit activation: %w", err)
-	}
-	return fmt.Sprintf("activated model %s for %s", opts.Slug, opts.ContentType), nil
-}
-
-func runListEmbeddingModelsCommand(ctx context.Context, opts embeddingModelListOptions) (string, error) {
-	pool, err := openCLIPool(ctx, opts.DatabaseURL, opts.ConfigPath)
-	if err != nil {
-		return "", err
-	}
-	defer pool.Close()
-
-	rows, err := pool.Query(ctx, `
-		SELECT slug, provider, provider_model, content_type, dimensions, is_active, is_ready, COALESCE(table_name, '')
-		FROM embedding_models
-		ORDER BY content_type, slug
-	`)
-	if err != nil {
-		return "", fmt.Errorf("list embedding models: %w", err)
-	}
-	defer rows.Close()
-
-	var b strings.Builder
-	b.WriteString("slug\tprovider\tprovider_model\tcontent_type\tdimensions\tactive\tready\ttable_name\n")
-	for rows.Next() {
-		var (
-			slug          string
-			provider      *string
-			providerModel *string
-			contentType   string
-			dimensions    int
-			isActive      bool
-			isReady       bool
-			tableName     string
-		)
-		if err := rows.Scan(&slug, &provider, &providerModel, &contentType, &dimensions, &isActive, &isReady, &tableName); err != nil {
-			return "", fmt.Errorf("scan embedding model: %w", err)
-		}
-		b.WriteString(fmt.Sprintf("%s\t%s\t%s\t%s\t%d\t%t\t%t\t%s\n",
-			slug, strOrEmpty(provider), strOrEmpty(providerModel), contentType, dimensions, isActive, isReady, tableName))
-	}
-	if err := rows.Err(); err != nil {
-		return "", fmt.Errorf("iterate embedding models: %w", err)
-	}
-	return strings.TrimSpace(b.String()), nil
-}
-
-func openCLIPool(ctx context.Context, databaseURL, configPath string) (*pgxpool.Pool, error) {
-	url := strings.TrimSpace(databaseURL)
-	if url == "" {
-		cfgPath := strings.TrimSpace(configPath)
-		if cfgPath == "" {
-			cfgPath = "config.yaml"
-		}
-		var err error
-		url, err = config.LoadDatabaseURL(cfgPath)
-		if err != nil {
-			return nil, fmt.Errorf("load database url: %w", err)
-		}
-	}
-
-	return db.NewPool(ctx, &config.DatabaseConfig{
-		URL:            url,
-		MaxOpen:        5,
-		MaxIdle:        2,
-		ConnectTimeout: 15 * time.Second,
-	})
-}
-
-func strOrEmpty(v *string) string {
-	if v == nil {
-		return ""
-	}
-	return *v
 }
