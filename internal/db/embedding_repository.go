@@ -163,6 +163,7 @@ func (r *EmbeddingRepository) QuerySimilar(ctx context.Context, q EmbeddingQuery
 	if len(q.Embedding) != meta.dimensions {
 		return nil, fmt.Errorf("embedding repository: dimension mismatch: have %d want %d", len(q.Embedding), meta.dimensions)
 	}
+	distanceExpr := similarityDistanceExpr(meta.dimensions)
 
 	join, baseWhere := objectTypeJoinAndWhere(q.ObjectType)
 	conds := "t.object_type = $2" + baseWhere
@@ -173,13 +174,13 @@ func (r *EmbeddingRepository) QuerySimilar(ctx context.Context, q EmbeddingQuery
 	}
 
 	sql := fmt.Sprintf(`
-		SELECT t.object_id, 1 - (t.embedding <=> $1::vector) AS score
+		SELECT t.object_id, 1 - (%s) AS score
 		FROM %s t
 		%s
 		WHERE %s
-		ORDER BY t.embedding <=> $1::vector
+		ORDER BY %s
 		LIMIT $3
-	`, meta.tableName, join, conds)
+	`, distanceExpr, meta.tableName, join, conds, distanceExpr)
 	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, fmt.Errorf("embedding repository: query similar: %w", err)
@@ -255,4 +256,11 @@ func parseVectorLiteral(lit string) ([]float32, error) {
 		out = append(out, float32(v))
 	}
 	return out, nil
+}
+
+func similarityDistanceExpr(dims int) string {
+	if dims > maxVectorHNSWDimensions {
+		return fmt.Sprintf("t.embedding::halfvec(%d) <=> $1::halfvec", dims)
+	}
+	return "t.embedding <=> $1::vector"
 }
