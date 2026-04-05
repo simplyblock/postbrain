@@ -2,10 +2,12 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -31,6 +33,10 @@ func EnsureEmbeddingModelTable(ctx context.Context, pool *pgxpool.Pool, modelID 
 	if pool == nil {
 		return "", fmt.Errorf("db: ensure embedding model table: nil pool")
 	}
+	return ensureEmbeddingModelTable(ctx, pool, modelID, dims)
+}
+
+func ensureEmbeddingModelTable(ctx context.Context, execer DBTX, modelID uuid.UUID, dims int) (string, error) {
 	if dims <= 0 {
 		return "", fmt.Errorf("db: ensure embedding model table: invalid dimensions %d", dims)
 	}
@@ -38,6 +44,17 @@ func EnsureEmbeddingModelTable(ctx context.Context, pool *pgxpool.Pool, modelID 
 	tableName := EmbeddingTableName(modelID)
 	hnswIndex := embeddingHNSWIndexName(modelID)
 	scopeIndex := embeddingScopeIndexName(modelID)
+
+	existingDims, exists, err := readEmbeddingTableDimensions(ctx, execer, tableName)
+	if err != nil {
+		return "", fmt.Errorf("db: ensure embedding model table inspect: %w", err)
+	}
+	if exists && existingDims != dims {
+		return "", fmt.Errorf(
+			"db: ensure embedding model table: dimension mismatch for %s: have %d want %d",
+			tableName, existingDims, dims,
+		)
+	}
 
 	createTableSQL := fmt.Sprintf(`
 CREATE TABLE IF NOT EXISTS %s (
@@ -49,17 +66,17 @@ CREATE TABLE IF NOT EXISTS %s (
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (object_type, object_id)
 );`, tableName, dims)
-	if _, err := pool.Exec(ctx, createTableSQL); err != nil {
+	if _, err := execer.Exec(ctx, createTableSQL); err != nil {
 		return "", fmt.Errorf("db: ensure embedding model table create: %w", err)
 	}
 
 	createScopeIndexSQL := fmt.Sprintf(`CREATE INDEX IF NOT EXISTS %s ON %s (scope_id);`, scopeIndex, tableName)
-	if _, err := pool.Exec(ctx, createScopeIndexSQL); err != nil {
+	if _, err := execer.Exec(ctx, createScopeIndexSQL); err != nil {
 		return "", fmt.Errorf("db: ensure embedding model table scope index: %w", err)
 	}
 
 	createHNSWIndexSQL := fmt.Sprintf(`CREATE INDEX IF NOT EXISTS %s ON %s USING hnsw (embedding vector_cosine_ops);`, hnswIndex, tableName)
-	if _, err := pool.Exec(ctx, createHNSWIndexSQL); err != nil {
+	if _, err := execer.Exec(ctx, createHNSWIndexSQL); err != nil {
 		return "", fmt.Errorf("db: ensure embedding model table hnsw index: %w", err)
 	}
 
@@ -79,11 +96,36 @@ END$$;`,
 		quoteLiteral(fmt.Sprintf("CREATE TRIGGER %s BEFORE UPDATE ON %s FOR EACH ROW EXECUTE FUNCTION touch_updated_at()",
 			tableName+"_updated_at", tableName)),
 	)
-	if _, err := pool.Exec(ctx, createTriggerSQL); err != nil {
+	if _, err := execer.Exec(ctx, createTriggerSQL); err != nil {
 		return "", fmt.Errorf("db: ensure embedding model table trigger: %w", err)
 	}
 
 	return tableName, nil
+}
+
+func readEmbeddingTableDimensions(ctx context.Context, execer DBTX, tableName string) (int, bool, error) {
+	var typ *string
+	err := execer.QueryRow(ctx, `
+		SELECT format_type(a.atttypid, a.atttypmod)
+		FROM pg_attribute a
+		JOIN pg_class c ON c.oid = a.attrelid
+		WHERE c.relname = $1 AND a.attname = 'embedding' AND a.attnum > 0 AND NOT a.attisdropped
+	`, tableName).Scan(&typ)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+	if typ == nil || *typ == "" {
+		return 0, false, nil
+	}
+
+	var dims int
+	if _, scanErr := fmt.Sscanf(*typ, "vector(%d)", &dims); scanErr != nil {
+		return 0, false, fmt.Errorf("parse embedding type %q: %w", *typ, scanErr)
+	}
+	return dims, true, nil
 }
 
 func quoteLiteral(s string) string {
