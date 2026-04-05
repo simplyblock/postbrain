@@ -342,16 +342,17 @@ func (h *Handler) handleMemories(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.pool != nil {
-		scopes, err := db.ListScopes(r.Context(), h.pool, 100, 0)
-		if err == nil {
-			data.Scopes = scopes
-		}
+		scopes, scopeSet := h.authorizedScopesForRequest(r.Context(), r)
+		data.Scopes = scopes
 		if scopeID == "" && len(data.Scopes) > 0 {
 			scopeID = data.Scopes[0].ID.String()
 			data.ScopeID = scopeID
 		}
 		if scopeID != "" {
 			if sid, err := uuid.Parse(scopeID); err == nil {
+				if _, ok := scopeSet[sid]; !ok {
+					goto doneMemories
+				}
 				mems, err := db.ListMemoriesByScope(r.Context(), h.pool, sid, memoriesPageSize+1, offset)
 				if err == nil {
 					if len(mems) > memoriesPageSize {
@@ -364,6 +365,7 @@ func (h *Handler) handleMemories(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+doneMemories:
 
 	tmpl := "memories"
 	if r.Header.Get("HX-Request") == "true" {
@@ -435,27 +437,37 @@ func (h *Handler) handleKnowledge(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.pool != nil {
+		scopes, scopeSet := h.authorizedScopesForRequest(r.Context(), r)
+		data.Scopes = scopes
+		scopeAllowed := scopeID == uuid.Nil
+		if scopeID != uuid.Nil {
+			_, scopeAllowed = scopeSet[scopeID]
+		}
 		var arts []*db.KnowledgeArtifact
 		var err error
-		if q != "" {
-			arts, err = db.SearchArtifacts(r.Context(), h.pool, q, status, scopeID, knowledgePageSize+1, cursor)
-		} else if status != "" {
-			arts, err = db.ListArtifactsByStatus(r.Context(), h.pool, status, scopeID, knowledgePageSize+1, cursor)
-		} else {
-			arts, err = db.ListAllArtifacts(r.Context(), h.pool, scopeID, knowledgePageSize+1, cursor)
-		}
-		if err == nil {
-			if len(arts) > knowledgePageSize {
-				data.Artifacts = arts[:knowledgePageSize]
-				data.HasNext = true
-				data.NextCursor = cursor + knowledgePageSize
+		if scopeAllowed {
+			if q != "" {
+				arts, err = db.SearchArtifacts(r.Context(), h.pool, q, status, scopeID, knowledgePageSize+1, cursor)
+			} else if status != "" {
+				arts, err = db.ListArtifactsByStatus(r.Context(), h.pool, status, scopeID, knowledgePageSize+1, cursor)
 			} else {
-				data.Artifacts = arts
+				arts, err = db.ListAllArtifacts(r.Context(), h.pool, scopeID, knowledgePageSize+1, cursor)
 			}
-		}
-		scopes, err := db.ListScopes(r.Context(), h.pool, 200, 0)
-		if err == nil {
-			data.Scopes = scopes
+			if err == nil {
+				filtered := make([]*db.KnowledgeArtifact, 0, len(arts))
+				for _, art := range arts {
+					if _, ok := scopeSet[art.OwnerScopeID]; ok {
+						filtered = append(filtered, art)
+					}
+				}
+				if len(filtered) > knowledgePageSize {
+					data.Artifacts = filtered[:knowledgePageSize]
+					data.HasNext = true
+					data.NextCursor = cursor + knowledgePageSize
+				} else {
+					data.Artifacts = filtered
+				}
+			}
 		}
 	}
 
@@ -549,12 +561,18 @@ func (h *Handler) handleCollections(w http.ResponseWriter, r *http.Request) {
 	}{}
 
 	if h.pool != nil {
+		_, scopeSet := h.authorizedScopesForRequest(r.Context(), r)
 		var colls []*db.KnowledgeCollection
 		var err error
 		scopeStr := r.URL.Query().Get("scope_id")
 		if scopeStr != "" {
 			sid, parseErr := uuid.Parse(scopeStr)
 			if parseErr == nil {
+				if _, ok := scopeSet[sid]; !ok {
+					data.Collections = []*db.KnowledgeCollection{}
+					h.render(w, r, "collections", "Collections", data)
+					return
+				}
 				colls, err = db.ListCollections(r.Context(), h.pool, sid)
 			}
 		} else {
@@ -564,7 +582,13 @@ func (h *Handler) handleCollections(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to load collections", http.StatusInternalServerError)
 			return
 		}
-		data.Collections = colls
+		filtered := make([]*db.KnowledgeCollection, 0, len(colls))
+		for _, c := range colls {
+			if _, ok := scopeSet[c.ScopeID]; ok {
+				filtered = append(filtered, c)
+			}
+		}
+		data.Collections = filtered
 	}
 
 	h.render(w, r, "collections", "Collections", data)
@@ -637,12 +661,15 @@ func (h *Handler) handlePromotions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.pool != nil {
-		scopes, err := db.ListScopes(r.Context(), h.pool, 200, 0)
-		if err != nil {
-			http.Error(w, "failed to load scopes", http.StatusInternalServerError)
-			return
-		}
+		scopes, scopeSet := h.authorizedScopesForRequest(r.Context(), r)
 		data.Scopes = scopes
+		if targetScopeID != uuid.Nil {
+			if _, ok := scopeSet[targetScopeID]; !ok {
+				data.Promotions = []*db.PromotionRequest{}
+				h.render(w, r, "promotions", "Promotion Queue", data)
+				return
+			}
+		}
 
 		statusFilter := ""
 		if data.Status != "all" {
@@ -653,7 +680,13 @@ func (h *Handler) handlePromotions(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to load promotions", http.StatusInternalServerError)
 			return
 		}
-		data.Promotions = proms
+		filtered := make([]*db.PromotionRequest, 0, len(proms))
+		for _, p := range proms {
+			if _, ok := scopeSet[p.TargetScopeID]; ok {
+				filtered = append(filtered, p)
+			}
+		}
+		data.Promotions = filtered
 	}
 
 	h.render(w, r, "promotions", "Promotion Queue", data)
@@ -698,9 +731,20 @@ func (h *Handler) handleStaleness(w http.ResponseWriter, r *http.Request) {
 	}{}
 
 	if h.pool != nil {
+		_, scopeSet := h.authorizedScopesForRequest(r.Context(), r)
 		flags, err := db.ListStalenessFlags(r.Context(), h.pool, "open", 50, 0)
 		if err == nil {
-			data.Flags = flags
+			filtered := make([]*db.StalenessFlag, 0, len(flags))
+			for _, f := range flags {
+				art, getErr := db.GetArtifact(r.Context(), h.pool, f.ArtifactID)
+				if getErr != nil || art == nil {
+					continue
+				}
+				if _, ok := scopeSet[art.OwnerScopeID]; ok {
+					filtered = append(filtered, f)
+				}
+			}
+			data.Flags = filtered
 		}
 	}
 
@@ -753,15 +797,26 @@ func (h *Handler) graphViewData(r *http.Request, scopeStr string) struct {
 		return data
 	}
 
-	scopes, err := db.ListScopes(r.Context(), h.pool, 200, 0)
-	if err == nil {
-		data.Scopes = scopes
-	}
+	scopes, scopeSet := h.authorizedScopesForRequest(r.Context(), r)
+	data.Scopes = scopes
 
 	// Default to first scope when none is selected.
 	if scopeStr == "" && len(data.Scopes) > 0 {
 		scopeStr = data.Scopes[0].ID.String()
 		data.ScopeID = scopeStr
+	}
+	if scopeStr != "" {
+		if sid, err := uuid.Parse(scopeStr); err == nil {
+			if _, ok := scopeSet[sid]; !ok {
+				if len(data.Scopes) > 0 {
+					scopeStr = data.Scopes[0].ID.String()
+					data.ScopeID = scopeStr
+				} else {
+					scopeStr = ""
+					data.ScopeID = ""
+				}
+			}
+		}
 	}
 
 	if scopeStr != "" {
@@ -821,9 +876,20 @@ func (h *Handler) handleSkills(w http.ResponseWriter, r *http.Request) {
 	}{}
 
 	if h.pool != nil {
-		skills, err := db.ListPublishedSkillsForAgent(r.Context(), h.pool, nil, "")
+		scopes, scopeSet := h.authorizedScopesForRequest(r.Context(), r)
+		authorizedScopeIDs := make([]uuid.UUID, 0, len(scopes))
+		for _, s := range scopes {
+			authorizedScopeIDs = append(authorizedScopeIDs, s.ID)
+		}
+		skills, err := db.ListPublishedSkillsForAgent(r.Context(), h.pool, authorizedScopeIDs, "any")
 		if err == nil {
-			data.Skills = skills
+			filtered := make([]*db.Skill, 0, len(skills))
+			for _, s := range skills {
+				if _, ok := scopeSet[s.ScopeID]; ok {
+					filtered = append(filtered, s)
+				}
+			}
+			data.Skills = filtered
 		}
 	}
 
@@ -910,7 +976,7 @@ func (h *Handler) renderScopes(w http.ResponseWriter, r *http.Request, scopeErr 
 	}
 
 	if h.pool != nil {
-		writable := h.writableScopeIDSet(r.Context(), r)
+		scopes, writable := h.authorizedScopesForRequest(r.Context(), r)
 		principals, err := db.ListPrincipals(r.Context(), h.pool, 50, 0)
 		if err == nil {
 			data.Principals = principals
@@ -918,24 +984,21 @@ func (h *Handler) renderScopes(w http.ResponseWriter, r *http.Request, scopeErr 
 				data.OwnerNames[p.ID.String()] = p.DisplayName
 			}
 		}
-		scopes, err := db.ListScopes(r.Context(), h.pool, 50, 0)
-		if err == nil {
-			filtered := make([]*db.Scope, 0, len(scopes))
-			for _, s := range scopes {
-				if _, ok := writable[s.ID]; !ok {
-					continue
-				}
-				filtered = append(filtered, s)
-				st := h.syncer.Status(s.ID)
-				if st.State != codegraph.SyncIdle || st.CommitSHA != "" || st.Error != "" {
-					data.SyncStatus[s.ID.String()] = st
-				}
-				if n, err := db.CountChildScopes(r.Context(), h.pool, s.ID); err == nil && n > 0 {
-					data.ChildCount[s.ID.String()] = n
-				}
+		filtered := make([]*db.Scope, 0, len(scopes))
+		for _, s := range scopes {
+			if _, ok := writable[s.ID]; !ok {
+				continue
 			}
-			data.Scopes = filtered
+			filtered = append(filtered, s)
+			st := h.syncer.Status(s.ID)
+			if st.State != codegraph.SyncIdle || st.CommitSHA != "" || st.Error != "" {
+				data.SyncStatus[s.ID.String()] = st
+			}
+			if n, err := db.CountChildScopes(r.Context(), h.pool, s.ID); err == nil && n > 0 {
+				data.ChildCount[s.ID.String()] = n
+			}
 		}
+		data.Scopes = filtered
 	}
 
 	h.render(w, r, "scopes", "Scopes", data)
@@ -1309,36 +1372,65 @@ func (h *Handler) handleDeleteMembership(w http.ResponseWriter, r *http.Request)
 // principalFromCookie resolves the principal ID from the pb_session cookie.
 // Returns uuid.Nil if the cookie is missing or invalid.
 func (h *Handler) principalFromCookie(r *http.Request) uuid.UUID {
-	cookie, err := r.Cookie(cookieName)
-	if err != nil || cookie.Value == "" || h.pool == nil {
-		return uuid.Nil
-	}
-	hash := auth.HashToken(cookie.Value)
-	token, err := auth.NewTokenStore(h.pool).Lookup(r.Context(), hash)
-	if err != nil || token == nil {
+	token := h.tokenFromCookie(r)
+	if token == nil {
 		return uuid.Nil
 	}
 	return token.PrincipalID
 }
 
-func (h *Handler) writableScopeIDSet(ctx context.Context, r *http.Request) map[uuid.UUID]struct{} {
+// tokenFromCookie resolves the current session token from the pb_session cookie.
+// Returns nil if the cookie is missing or invalid.
+func (h *Handler) tokenFromCookie(r *http.Request) *db.Token {
+	cookie, err := r.Cookie(cookieName)
+	if err != nil || cookie.Value == "" || h.pool == nil {
+		return nil
+	}
+	hash := auth.HashToken(cookie.Value)
+	token, err := auth.NewTokenStore(h.pool).Lookup(r.Context(), hash)
+	if err != nil || token == nil {
+		return nil
+	}
+	return token
+}
+
+// authorizedScopesForRequest resolves scopes writable by the current principal,
+// intersected with token scope restrictions (when scope_ids is non-nil).
+func (h *Handler) authorizedScopesForRequest(ctx context.Context, r *http.Request) ([]*db.Scope, map[uuid.UUID]struct{}) {
 	out := map[uuid.UUID]struct{}{}
 	if h.pool == nil {
-		return out
+		return []*db.Scope{}, out
 	}
-	principalID := h.principalFromCookie(r)
-	if principalID == uuid.Nil {
-		return out
+	token := h.tokenFromCookie(r)
+	if token == nil || token.PrincipalID == uuid.Nil {
+		return []*db.Scope{}, out
 	}
 	ms := principals.NewMembershipStore(h.pool)
-	ids, err := ms.EffectiveScopeIDs(ctx, principalID)
+	ids, err := ms.EffectiveScopeIDs(ctx, token.PrincipalID)
 	if err != nil {
-		return out
+		return []*db.Scope{}, out
 	}
-	for _, id := range ids {
-		out[id] = struct{}{}
+	if token.ScopeIds != nil {
+		allowed := make(map[uuid.UUID]struct{}, len(token.ScopeIds))
+		for _, id := range token.ScopeIds {
+			allowed[id] = struct{}{}
+		}
+		intersected := make([]uuid.UUID, 0, len(ids))
+		for _, id := range ids {
+			if _, ok := allowed[id]; ok {
+				intersected = append(intersected, id)
+			}
+		}
+		ids = intersected
 	}
-	return out
+	scopes, err := db.GetScopesByIDs(ctx, h.pool, ids)
+	if err != nil {
+		return []*db.Scope{}, out
+	}
+	for _, s := range scopes {
+		out[s.ID] = struct{}{}
+	}
+	return scopes, out
 }
 
 func (h *Handler) reachablePrincipalIDSet(ctx context.Context, r *http.Request) map[uuid.UUID]struct{} {
@@ -1471,9 +1563,8 @@ func (h *Handler) renderKnowledgeNew(w http.ResponseWriter, r *http.Request, for
 		Scopes    []*db.Scope
 	}{FormError: formError}
 	if h.pool != nil {
-		if scopes, err := db.ListScopes(r.Context(), h.pool, 200, 0); err == nil {
-			data.Scopes = scopes
-		}
+		scopes, _ := h.authorizedScopesForRequest(r.Context(), r)
+		data.Scopes = scopes
 	}
 	h.render(w, r, "knowledge_new", "New Knowledge Article", data)
 }
@@ -1497,6 +1588,11 @@ func (h *Handler) handleCreateKnowledge(w http.ResponseWriter, r *http.Request) 
 	scopeID, err := uuid.Parse(scopeStr)
 	if err != nil {
 		h.renderKnowledgeNew(w, r, "invalid scope id")
+		return
+	}
+	_, authorizedScopeSet := h.authorizedScopesForRequest(r.Context(), r)
+	if _, ok := authorizedScopeSet[scopeID]; !ok {
+		h.renderKnowledgeNew(w, r, "scope access denied")
 		return
 	}
 	if h.knwStore == nil {
@@ -1555,9 +1651,8 @@ func (h *Handler) renderCollectionNew(w http.ResponseWriter, r *http.Request, fo
 		Scopes    []*db.Scope
 	}{FormError: formError}
 	if h.pool != nil {
-		if scopes, err := db.ListScopes(r.Context(), h.pool, 200, 0); err == nil {
-			data.Scopes = scopes
-		}
+		scopes, _ := h.authorizedScopesForRequest(r.Context(), r)
+		data.Scopes = scopes
 	}
 	h.render(w, r, "collections_new", "New Collection", data)
 }
@@ -1588,6 +1683,11 @@ func (h *Handler) handleCreateCollection(w http.ResponseWriter, r *http.Request)
 		h.renderCollectionNew(w, r, "invalid scope id")
 		return
 	}
+	_, authorizedScopeSet := h.authorizedScopesForRequest(r.Context(), r)
+	if _, ok := authorizedScopeSet[scopeID]; !ok {
+		h.renderCollectionNew(w, r, "scope access denied")
+		return
+	}
 	if h.pool == nil {
 		h.renderCollectionNew(w, r, "service unavailable")
 		return
@@ -1615,7 +1715,7 @@ func (h *Handler) handleCreateCollection(w http.ResponseWriter, r *http.Request)
 func (h *Handler) handleQuery(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	scopes, _ := db.ListScopes(ctx, h.pool, 200, 0)
+	scopes, scopeSet := h.authorizedScopesForRequest(ctx, r)
 
 	type queryResult struct {
 		Layer         string
@@ -1677,15 +1777,17 @@ func (h *Handler) handleQuery(w http.ResponseWriter, r *http.Request) {
 			scopeID = scopes[0].ID
 			data.ScopeID = scopeID.String()
 		}
+		if err == nil {
+			if _, ok := scopeSet[scopeID]; !ok && len(scopes) > 0 {
+				scopeID = scopes[0].ID
+				data.ScopeID = scopeID.String()
+			}
+		}
 
 		principalID := h.principalFromCookie(r)
-		var authorizedScopeIDs []uuid.UUID
-		if principalID != uuid.Nil && h.pool != nil {
-			ms := principals.NewMembershipStore(h.pool)
-			ids, authErr := ms.EffectiveScopeIDs(ctx, principalID)
-			if authErr == nil {
-				authorizedScopeIDs = ids
-			}
+		authorizedScopeIDs := make([]uuid.UUID, 0, len(scopeSet))
+		for id := range scopeSet {
+			authorizedScopeIDs = append(authorizedScopeIDs, id)
 		}
 
 		activeLayers := map[retrieval.Layer]bool{
