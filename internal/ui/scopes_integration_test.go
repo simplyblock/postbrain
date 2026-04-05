@@ -130,6 +130,46 @@ func TestScopesPage_MemberCannotAdminParentScope(t *testing.T) {
 		if strings.Contains(string(body), deleteAction) {
 			t.Fatalf("did not expect delete action %q for non-admin member", deleteAction)
 		}
+		ownerAction := "openOwnerDialog('" + parentScope.ID.String() + "'"
+		if strings.Contains(string(body), ownerAction) {
+			t.Fatalf("did not expect owner action %q for non-admin member", ownerAction)
+		}
+	})
+
+	t.Run("member cannot change owner of parent scope", func(t *testing.T) {
+		form := url.Values{}
+		form.Set("principal_id", childPrincipal.ID.String())
+		req, err := http.NewRequest(http.MethodPost, baseURL+"/ui/scopes/"+parentScope.ID.String()+"/owner", strings.NewReader(form.Encode()))
+		if err != nil {
+			t.Fatalf("build owner request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("owner request: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		if !strings.Contains(string(body), "scope admin required") {
+			t.Fatalf("expected scope admin required error, got body=%q", string(body))
+		}
+
+		scopeAfter, err := db.GetScopeByID(ctx, pool, parentScope.ID)
+		if err != nil {
+			t.Fatalf("get parent scope after owner change attempt: %v", err)
+		}
+		if scopeAfter == nil {
+			t.Fatal("expected parent scope to exist")
+		}
+		if scopeAfter.PrincipalID != parentPrincipal.ID {
+			t.Fatalf("owner changed unexpectedly: got %s want %s", scopeAfter.PrincipalID, parentPrincipal.ID)
+		}
 	})
 
 	t.Run("member cannot create child scope under parent scope", func(t *testing.T) {

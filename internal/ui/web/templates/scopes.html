@@ -102,6 +102,7 @@
     </td>
     <td class="scope-actions-cell">
       <div class="scope-actions">
+      {{if index $.CanManage (.ID.String)}}
       <button class="secondary"
               onclick="openOwnerDialog('{{.ID}}','{{.PrincipalID}}','{{.ExternalID}}')">Owner</button>
       {{if eq .Kind "project"}}
@@ -117,6 +118,7 @@
           {{if eq $st.State 1}}Syncing…{{else}}Sync{{end}}
         </button>
         {{end}}
+      {{end}}
       {{end}}
       {{if not (index $.CanDelete (.ID.String))}}
       {{else if index $.ChildCount (.ID.String)}}
