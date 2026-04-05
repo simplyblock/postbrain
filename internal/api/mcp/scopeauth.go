@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -16,6 +17,29 @@ import (
 
 func (s *Server) authorizeRequestedScope(ctx context.Context, requestedScopeID uuid.UUID) error {
 	return scopeauth.AuthorizeContextScope(ctx, s.membership, requestedScopeID)
+}
+
+// authorizeDeleteObjectScope enforces delete semantics: a caller may only delete
+// objects in scopes directly owned by the caller principal (never in ancestor scopes).
+func (s *Server) authorizeDeleteObjectScope(ctx context.Context, objectScopeID uuid.UUID) error {
+	if err := s.authorizeRequestedScope(ctx, objectScopeID); err != nil {
+		return err
+	}
+	scope, err := db.GetScopeByID(ctx, s.pool, objectScopeID)
+	if err != nil {
+		return err
+	}
+	if scope == nil {
+		return fmt.Errorf("%w: scope not found", scopeauth.ErrPrincipalScopeDenied)
+	}
+	principalID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
+	if principalID == uuid.Nil {
+		return fmt.Errorf("%w", scopeauth.ErrMissingPrincipal)
+	}
+	if scope.PrincipalID != principalID {
+		return fmt.Errorf("%w: delete not allowed in ancestor scope", scopeauth.ErrPrincipalScopeDenied)
+	}
+	return nil
 }
 
 func scopeAuthzToolError(ctx context.Context, tool string, requestedScopeID uuid.UUID, err error) *mcpgo.CallToolResult {

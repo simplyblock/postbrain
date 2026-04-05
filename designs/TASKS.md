@@ -27,6 +27,24 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Enforced scope-admin and delete semantics across WebUI, REST, and MCP (TDD-first):
+  - Added REST scope-admin authorization for scope mutations in `internal/api/rest/scopes.go`:
+    - create child scope requires admin on parent scope
+    - update scope, update owner, delete scope, set repo, and sync repo require scope admin.
+  - Added REST delete-specific authorization in `internal/api/rest/scopeauth.go` and applied to:
+    - `DELETE /v1/memories/{id}` (`internal/api/rest/memories.go`)
+    - `DELETE /v1/collections/{id}/items/{artifact_id}` (`internal/api/rest/collections.go`)
+    - rule: member can write parent scopes, but delete only in caller-owned scopes (not ancestor scopes).
+  - Added MCP delete-specific authorization:
+    - `forget` now resolves memory scope and enforces delete scope policy before soft/hard delete (`internal/api/mcp/forget.go`, `internal/api/mcp/scopeauth.go`).
+  - Added WebUI scope-admin enforcement in `internal/ui/handler.go`:
+    - delete scope, set scope owner, set repo, sync repo, and create child scope (with `parent_id`) now require scope admin.
+  - Added integration regression tests:
+    - `internal/api/rest/scope_authz_integration_test.go::TestREST_ScopeAuthz_WriteParentAllowed_DeleteParentDenied`
+    - `internal/api/rest/scope_admin_authz_integration_test.go::TestREST_ScopeAdminAuthz_MemberCannotAdminParentScope`
+    - `internal/api/mcp/scope_authz_integration_test.go::TestMCP_ScopeAuthz_ForgetWriteParentAllowedDeleteParentDenied`
+    - `internal/ui/scopes_integration_test.go::TestScopesPage_MemberCannotAdminParentScope`.
+
 - [x] 2026-04-05: Unified UI scope filtering through one shared authorization function:
   - Added `authorizedScopesForRequest` in `internal/ui/handler.go` as the single scope-filtering function (effective principal scopes intersected with token `scope_ids` restrictions).
   - Replaced per-page direct scope listing with this shared function for:

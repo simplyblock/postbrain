@@ -61,6 +61,16 @@ func (ro *Router) createScope(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "kind, external_id, name and principal_id are required")
 		return
 	}
+	callerID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
+	if body.ParentID != nil {
+		if err := ro.authorizeScopeAdmin(r.Context(), *body.ParentID); err != nil {
+			writeScopeAuthzError(w, r, *body.ParentID, err)
+			return
+		}
+	} else if callerID != body.PrincipalID {
+		writeError(w, http.StatusForbidden, "forbidden: scope admin required")
+		return
+	}
 	s, err := db.CreateScope(r.Context(), ro.pool, body.Kind, body.ExternalID, body.Name, body.ParentID, body.PrincipalID, body.Meta)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -98,6 +108,10 @@ func (ro *Router) updateScope(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	if err := ro.authorizeScopeAdmin(r.Context(), id); err != nil {
+		writeScopeAuthzError(w, r, id, err)
+		return
+	}
 	s, err := db.UpdateScope(r.Context(), ro.pool, id, body.Name, body.Meta)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -114,6 +128,10 @@ func (ro *Router) deleteScope(w http.ResponseWriter, r *http.Request) {
 	id, err := uuidParam(r, "id")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid scope id")
+		return
+	}
+	if err := ro.authorizeScopeAdmin(r.Context(), id); err != nil {
+		writeScopeAuthzError(w, r, id, err)
 		return
 	}
 	children, err := db.CountChildScopes(r.Context(), ro.pool, id)
@@ -148,6 +166,10 @@ func (ro *Router) updateScopeOwner(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "principal_id is required")
 		return
 	}
+	if err := ro.authorizeScopeAdmin(r.Context(), id); err != nil {
+		writeScopeAuthzError(w, r, id, err)
+		return
+	}
 	s, err := db.UpdateScopeOwner(r.Context(), ro.pool, id, body.PrincipalID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -180,6 +202,10 @@ func (ro *Router) setScopeRepo(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.RepoURL == "" {
 		writeError(w, http.StatusBadRequest, "repo_url is required")
+		return
+	}
+	if err := ro.authorizeScopeAdmin(r.Context(), id); err != nil {
+		writeScopeAuthzError(w, r, id, err)
 		return
 	}
 	if body.DefaultBranch == "" {
@@ -221,6 +247,10 @@ func (ro *Router) syncScopeRepo(w http.ResponseWriter, r *http.Request) {
 	}
 	if scope.RepoUrl == nil || *scope.RepoUrl == "" {
 		writeError(w, http.StatusBadRequest, "no repository attached to this scope")
+		return
+	}
+	if err := ro.authorizeScopeAdmin(r.Context(), id); err != nil {
+		writeScopeAuthzError(w, r, id, err)
 		return
 	}
 

@@ -682,6 +682,99 @@ func TestREST_ScopeAuthz_MultiHopPrincipalChain(t *testing.T) {
 	}
 }
 
+func TestREST_ScopeAuthz_WriteParentAllowed_DeleteParentDenied(t *testing.T) {
+	ctx := context.Background()
+	pool := testhelper.NewTestPool(t)
+	svc := testhelper.NewMockEmbeddingService()
+	cfg := &config.Config{}
+
+	parentPrincipal := testhelper.CreateTestPrincipal(t, pool, "team", "rest-delete-parent-team-"+uuid.NewString())
+	childPrincipal := testhelper.CreateTestPrincipal(t, pool, "user", "rest-delete-parent-user-"+uuid.NewString())
+
+	parentScope := testhelper.CreateTestScope(t, pool, "project", "rest-delete-parent-scope-"+uuid.NewString(), nil, parentPrincipal.ID)
+	childScope := testhelper.CreateTestScope(t, pool, "project", "rest-delete-child-scope-"+uuid.NewString(), nil, childPrincipal.ID)
+
+	ms := principals.NewMembershipStore(pool)
+	if err := ms.AddMembership(ctx, childPrincipal.ID, parentPrincipal.ID, "member", nil); err != nil {
+		t.Fatalf("add membership child->parent: %v", err)
+	}
+
+	parentMemory := testhelper.CreateTestMemory(t, pool, parentScope.ID, parentPrincipal.ID, "parent scope memory")
+	childMemory := testhelper.CreateTestMemory(t, pool, childScope.ID, childPrincipal.ID, "child scope memory")
+	testhelper.CreateTestEmbeddingModel(t, pool)
+
+	rawToken, hashToken, err := auth.GenerateToken()
+	if err != nil {
+		t.Fatalf("generate token: %v", err)
+	}
+	if _, err := db.CreateToken(ctx, pool, childPrincipal.ID, hashToken, "rest-delete-parent-check", nil, nil, nil); err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+
+	handler := rest.NewRouter(pool, svc, cfg).Handler()
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	t.Run("write to parent scope succeeds", func(t *testing.T) {
+		body := map[string]any{
+			"content":     "write into parent",
+			"scope":       "project:" + parentScope.ExternalID,
+			"memory_type": "semantic",
+			"importance":  0.5,
+		}
+		payload, _ := json.Marshal(body)
+		req, err := http.NewRequest(http.MethodPost, srv.URL+"/v1/memories", bytes.NewReader(payload))
+		if err != nil {
+			t.Fatalf("new request: %v", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+rawToken)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("do request: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+		}
+	})
+
+	t.Run("delete in own scope succeeds", func(t *testing.T) {
+		req, err := http.NewRequest(http.MethodDelete, srv.URL+"/v1/memories/"+childMemory.ID.String(), nil)
+		if err != nil {
+			t.Fatalf("new request: %v", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+rawToken)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("do request: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+		}
+	})
+
+	t.Run("delete in parent scope is forbidden", func(t *testing.T) {
+		req, err := http.NewRequest(http.MethodDelete, srv.URL+"/v1/memories/"+parentMemory.ID.String(), nil)
+		if err != nil {
+			t.Fatalf("new request: %v", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+rawToken)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("do request: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusForbidden {
+			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+		}
+	})
+}
+
 func TestREST_Recall_IntersectsFanOutWithPrincipalScopes(t *testing.T) {
 	ctx := context.Background()
 	pool := testhelper.NewTestPool(t)
