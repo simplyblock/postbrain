@@ -38,14 +38,13 @@ func TestModelEmbedderFactory_EmbedderForModel_OpenAI(t *testing.T) {
 
 	modelID := uuid.New()
 	factory := NewModelEmbedderFactory(&config.EmbeddingConfig{
-		OpenAIAPIKey:   "sk-test",
 		RequestTimeout: 5 * time.Second,
 		BatchSize:      16,
 		Providers: map[string]config.EmbeddingProviderConfig{
 			"openai-prod": {
-				Backend:      "openai",
-				ServiceURL:   "http://localhost:8080/v1",
-				OpenAIAPIKey: "sk-profile",
+				Backend:    "openai",
+				ServiceURL: "http://localhost:8080/v1",
+				APIKey:     "sk-profile",
 			},
 		},
 	}, &fakeModelStore{models: map[uuid.UUID]ModelConfig{
@@ -79,7 +78,6 @@ func TestModelEmbedderFactory_EmbedderForModel_UsesProfileOverride(t *testing.T)
 
 	modelID := uuid.New()
 	factory := NewModelEmbedderFactory(&config.EmbeddingConfig{
-		ServiceURL: "http://ignored-global:8080/v1",
 		Providers: map[string]config.EmbeddingProviderConfig{
 			"local-ollama": {
 				Backend:    "ollama",
@@ -104,7 +102,7 @@ func TestModelEmbedderFactory_EmbedderForModel_UsesProfileOverride(t *testing.T)
 	if !ok {
 		t.Fatalf("embedder type = %T, want *OllamaEmbedder", emb)
 	}
-	if got := serviceURLOrDefault(ool.cfg, defaultOllamaServiceURL); got != "http://localhost:11434" {
+	if got := serviceURLOrDefault(ool.serviceURL, defaultOllamaServiceURL); got != "http://localhost:11434" {
 		t.Fatalf("service URL = %q, want profile service URL", got)
 	}
 }
@@ -131,7 +129,7 @@ func TestModelEmbedderFactory_EmbedderForModel_Ollama(t *testing.T) {
 	if !ok {
 		t.Fatalf("embedder type = %T, want *OllamaEmbedder", emb)
 	}
-	if got := serviceURLOrDefault(ool.cfg, defaultOllamaServiceURL); got != "http://localhost:11434" {
+	if got := serviceURLOrDefault(ool.serviceURL, defaultOllamaServiceURL); got != "http://localhost:11434" {
 		t.Fatalf("service URL = %q, want model service URL", got)
 	}
 	if ool.modelSlug != "nomic-embed-text" {

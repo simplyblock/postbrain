@@ -46,6 +46,13 @@
     - CLI register profile flag tests (`cmd/postbrain-cli/main_test.go`)
     - integration test for default/override persistence (`internal/db/embedding_model_registration_integration_test.go`)
     - schema integration checks for `provider_config` column/index (`internal/db/embedding_schema_migration_integration_test.go`).
+- [x] 2026-04-05: Tightened embedding config semantics to provider-scoped models and generic API key:
+  - Removed config alias handling for `openai_api_key`; `api_key` is now the only supported key.
+  - Removed top-level `EmbeddingConfig` provider transport fields (`backend`, `service_url`, `api_key`); runtime selection is now exclusively profile-based under `embedding.providers`.
+  - Removed top-level embedding model fields from `EmbeddingConfig`; model slugs are now provider-profile scoped (`embedding.providers.<name>.text_model|code_model|summary_model`).
+  - Updated startup embedding service construction to resolve text/code/summary model names from `providers.default`.
+  - Updated OpenAI embed/summarize auth header wiring and related tests to use `api_key`.
+  - Updated `config.example.yaml` and `docs/configuration.md` to document provider-scoped model slugs.
 
 - [x] 2026-04-04: Integrated memory write-path dual-write to model tables (Step 7 partial, TDD-first):
   - Extended `internal/memory/store.go` to consume model-aware embedding results when available:

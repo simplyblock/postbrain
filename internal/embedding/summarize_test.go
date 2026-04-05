@@ -37,8 +37,8 @@ func TestOllamaSummarizer_Summarize(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cfg := &config.EmbeddingConfig{ServiceURL: srv.URL}
-	s := NewOllamaSummarizer(cfg, "llama3")
+	cfg := &config.EmbeddingConfig{}
+	s := NewOllamaSummarizer(cfg, "llama3", srv.URL)
 	got, err := s.Summarize(context.Background(), "This is the document content.")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -77,8 +77,8 @@ func TestOpenAISummarizer_Summarize(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cfg := &config.EmbeddingConfig{OpenAIAPIKey: "test-key"}
-	s := NewOpenAISummarizer(cfg, "gpt-4o-mini", srv.URL)
+	cfg := &config.EmbeddingConfig{}
+	s := NewOpenAISummarizer(cfg, "gpt-4o-mini", srv.URL, "test-key")
 	got, err := s.Summarize(context.Background(), "Document text here.")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -103,8 +103,8 @@ func TestOpenAISummarizer_CustomBaseURL_EmptyAPIKeyOmitsAuthorizationHeader(t *t
 	}))
 	defer srv.Close()
 
-	cfg := &config.EmbeddingConfig{ServiceURL: srv.URL}
-	s := NewOpenAISummarizer(cfg, "gpt-4o-mini", cfg.ServiceURL)
+	cfg := &config.EmbeddingConfig{}
+	s := NewOpenAISummarizer(cfg, "gpt-4o-mini", srv.URL, "")
 	got, err := s.Summarize(context.Background(), "Document text here.")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -138,9 +138,9 @@ func TestEmbeddingService_SummarizeDelegates(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cfg := &config.EmbeddingConfig{ServiceURL: srv.URL}
+	cfg := &config.EmbeddingConfig{}
 	svc := &EmbeddingService{
-		summarizer: NewOllamaSummarizer(cfg, "llama3"),
+		summarizer: NewOllamaSummarizer(cfg, "llama3", srv.URL),
 	}
 	got, err := svc.Summarize(context.Background(), "text")
 	if err != nil {
@@ -186,8 +186,8 @@ func TestOllamaSummarizer_Analyze(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cfg := &config.EmbeddingConfig{ServiceURL: srv.URL}
-	s := NewOllamaSummarizer(cfg, "llama3")
+	cfg := &config.EmbeddingConfig{}
+	s := NewOllamaSummarizer(cfg, "llama3", srv.URL)
 	got, err := s.Analyze(context.Background(), "Document about auth and PostgreSQL.")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -244,8 +244,8 @@ func TestOpenAISummarizer_Analyze(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cfg := &config.EmbeddingConfig{OpenAIAPIKey: "test-key"}
-	s := NewOpenAISummarizer(cfg, "gpt-4o-mini", srv.URL)
+	cfg := &config.EmbeddingConfig{}
+	s := NewOpenAISummarizer(cfg, "gpt-4o-mini", srv.URL, "test-key")
 	got, err := s.Analyze(context.Background(), "Article about distributed systems.")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -291,9 +291,9 @@ func TestEmbeddingService_AnalyzeDelegates(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cfg := &config.EmbeddingConfig{ServiceURL: srv.URL}
+	cfg := &config.EmbeddingConfig{}
 	svc := &EmbeddingService{
-		summarizer: NewOllamaSummarizer(cfg, "llama3"),
+		summarizer: NewOllamaSummarizer(cfg, "llama3", srv.URL),
 	}
 	got, err := svc.Analyze(context.Background(), "text")
 	if err != nil {

@@ -49,13 +49,14 @@ type Summarizer interface {
 
 // OllamaSummarizer calls the Ollama /api/generate endpoint to produce summaries.
 type OllamaSummarizer struct {
-	cfg       *config.EmbeddingConfig
-	modelSlug string
+	cfg        *config.EmbeddingConfig
+	modelSlug  string
+	serviceURL string
 }
 
 // NewOllamaSummarizer creates an OllamaSummarizer for the given model.
-func NewOllamaSummarizer(cfg *config.EmbeddingConfig, modelSlug string) *OllamaSummarizer {
-	return &OllamaSummarizer{cfg: cfg, modelSlug: modelSlug}
+func NewOllamaSummarizer(cfg *config.EmbeddingConfig, modelSlug string, serviceURL string) *OllamaSummarizer {
+	return &OllamaSummarizer{cfg: cfg, modelSlug: modelSlug, serviceURL: serviceURL}
 }
 
 // Summarize sends the document to Ollama and returns the generated summary.
@@ -76,7 +77,7 @@ func (s *OllamaSummarizer) Summarize(ctx context.Context, text string) (string, 
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		serviceURLOrDefault(s.cfg, defaultOllamaServiceURL)+"/api/generate", bytes.NewReader(body))
+		serviceURLOrDefault(s.serviceURL, defaultOllamaServiceURL)+"/api/generate", bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("ollama summarize: build request: %w", err)
 	}
@@ -121,7 +122,7 @@ func (s *OllamaSummarizer) Analyze(ctx context.Context, text string) (*DocumentA
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		serviceURLOrDefault(s.cfg, defaultOllamaServiceURL)+"/api/generate", bytes.NewReader(body))
+		serviceURLOrDefault(s.serviceURL, defaultOllamaServiceURL)+"/api/generate", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("ollama analyze: build request: %w", err)
 	}
@@ -156,15 +157,16 @@ type OpenAISummarizer struct {
 	cfg       *config.EmbeddingConfig
 	modelSlug string
 	baseURL   string
+	apiKey    string
 }
 
 // NewOpenAISummarizer creates an OpenAISummarizer for the given model.
 // If baseURL is empty the default OpenAI base URL is used.
-func NewOpenAISummarizer(cfg *config.EmbeddingConfig, modelSlug string, baseURL string) *OpenAISummarizer {
+func NewOpenAISummarizer(cfg *config.EmbeddingConfig, modelSlug string, baseURL string, apiKey string) *OpenAISummarizer {
 	if baseURL == "" {
 		baseURL = defaultOpenAIBaseURL
 	}
-	return &OpenAISummarizer{cfg: cfg, modelSlug: modelSlug, baseURL: baseURL}
+	return &OpenAISummarizer{cfg: cfg, modelSlug: modelSlug, baseURL: baseURL, apiKey: apiKey}
 }
 
 // Summarize sends the document to the OpenAI chat completions endpoint and returns the summary.
@@ -192,8 +194,8 @@ func (s *OpenAISummarizer) Summarize(ctx context.Context, text string) (string, 
 		return "", fmt.Errorf("openai summarize: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if s.cfg.OpenAIAPIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+s.cfg.OpenAIAPIKey)
+	if s.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+s.apiKey)
 	}
 
 	resp, err := http.DefaultClient.Do(req)
@@ -249,8 +251,8 @@ func (s *OpenAISummarizer) Analyze(ctx context.Context, text string) (*DocumentA
 		return nil, fmt.Errorf("openai analyze: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if s.cfg.OpenAIAPIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+s.cfg.OpenAIAPIKey)
+	if s.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+s.apiKey)
 	}
 
 	resp, err := http.DefaultClient.Do(req)

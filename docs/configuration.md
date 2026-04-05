@@ -28,34 +28,24 @@ environment variables.
 
 | Key                         | What it controls                                   |
 |-----------------------------|----------------------------------------------------|
-| `embedding.backend`         | Which embedding provider backend to use.           |
-| `embedding.service_url`     | Backend service URL (Ollama or OpenAI-compatible). |
-| `embedding.text_model`      | Text embedding model slug.                         |
-| `embedding.code_model`      | Code embedding model slug.                         |
-| `embedding.summary_model`   | Optional summarize/analyze model override.         |
-| `embedding.openai_api_key`  | API key for OpenAI-backed embedding/analyze paths. |
 | `embedding.providers`       | Named provider runtime profiles for model routing. |
+| `embedding.providers.<name>.backend` | Provider backend (`ollama` or `openai`). |
+| `embedding.providers.<name>.service_url` | Provider endpoint URL. |
+| `embedding.providers.<name>.api_key` | Provider API key (for OpenAI-compatible services). |
+| `embedding.providers.<name>.text_model` | Provider-specific text embedding model slug. |
+| `embedding.providers.<name>.code_model` | Provider-specific code embedding model slug. |
+| `embedding.providers.<name>.summary_model` | Provider-specific summarize/analyze model slug. |
 | `embedding.request_timeout` | Timeout for embedding/analyze requests.            |
 | `embedding.batch_size`      | Batch size for embedding jobs.                     |
 
 For how embeddings/chunks/entities are used during indexing and retrieval, see
 [Indexing Model](./indexing-model.md).
 
-When `embedding.backend` is `openai`:
-- `embedding.service_url` can point to any OpenAI-compatible endpoint.
-- If `embedding.service_url` is empty, Postbrain uses the default OpenAI API endpoint.
-- `embedding.openai_api_key` is required when `embedding.service_url` is empty; optional for custom/local endpoints.
-
-When `embedding.backend` is `ollama`:
-- `embedding.service_url` is the Ollama base URL.
-- If empty, Postbrain uses `http://localhost:11434`.
-
 `embedding.providers` lets you define multiple runtime profiles (for example
 `default`, `openai-prod`, `local-ollama`). Embedding models can then bind to a
 profile via `postbrain-cli embedding-model register --provider-config <name>`.
-If `embedding.providers` is omitted, Postbrain synthesizes `providers.default`
-from the top-level `embedding.backend`, `embedding.service_url`, and
-`embedding.openai_api_key` values.
+Startup embedding and summarize/analyze behavior uses `embedding.providers.default`.
+For `backend: openai`, `api_key` is required when `service_url` is empty (default OpenAI API URL).
 
 ## `server`
 
@@ -109,5 +99,5 @@ Config keys map to env vars by replacing dots with underscores and prefixing `PO
 Examples:
 
 - `database.url` -> `POSTBRAIN_DATABASE_URL`
-- `embedding.service_url` -> `POSTBRAIN_EMBEDDING_SERVICE_URL`
+- `embedding.providers.default.service_url` -> `POSTBRAIN_EMBEDDING_PROVIDERS_DEFAULT_SERVICE_URL`
 - `oauth.server.state_ttl` -> `POSTBRAIN_OAUTH_SERVER_STATE_TTL`

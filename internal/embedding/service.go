@@ -33,38 +33,60 @@ type EmbedResult struct {
 // NewService constructs an EmbeddingService from the given configuration.
 // It returns an error if the backend is not supported.
 func NewService(cfg *config.EmbeddingConfig) (*EmbeddingService, error) {
-	switch cfg.Backend {
+	provider := startupProvider(cfg)
+	switch provider.Backend {
 	case "ollama":
+		effective := *cfg
 		svc := &EmbeddingService{
-			text: NewOllamaEmbedder(cfg, cfg.TextModel),
+			text: NewOllamaEmbedder(&effective, provider.TextModel, provider.ServiceURL),
 		}
-		if cfg.CodeModel != "" {
-			svc.code = NewOllamaEmbedder(cfg, cfg.CodeModel)
+		if provider.CodeModel != "" {
+			svc.code = NewOllamaEmbedder(&effective, provider.CodeModel, provider.ServiceURL)
 		}
-		if cfg.SummaryModel != "" {
-			svc.summarizer = NewOllamaSummarizer(cfg, cfg.SummaryModel)
+		if provider.SummaryModel != "" {
+			svc.summarizer = NewOllamaSummarizer(&effective, provider.SummaryModel, provider.ServiceURL)
 		}
 		return svc, nil
 
 	case "openai":
-		if cfg.OpenAIAPIKey == "" && cfg.ServiceURL == "" {
-			return nil, fmt.Errorf("openai_api_key is required when embedding.service_url is not set")
+		effective := *cfg
+		if provider.APIKey == "" && provider.ServiceURL == "" {
+			return nil, fmt.Errorf("embedding.providers.default.api_key is required when service_url is not set")
 		}
-		baseURL := serviceURLOrDefault(cfg, defaultOpenAIBaseURL)
+		baseURL := serviceURLOrDefault(provider.ServiceURL, defaultOpenAIBaseURL)
 		svc := &EmbeddingService{
-			text: NewOpenAIEmbedder(cfg, cfg.TextModel, baseURL),
+			text: NewOpenAIEmbedder(&effective, provider.TextModel, baseURL, provider.APIKey),
 		}
-		if cfg.CodeModel != "" {
-			svc.code = NewOpenAIEmbedder(cfg, cfg.CodeModel, baseURL)
+		if provider.CodeModel != "" {
+			svc.code = NewOpenAIEmbedder(&effective, provider.CodeModel, baseURL, provider.APIKey)
 		}
-		if cfg.SummaryModel != "" {
-			svc.summarizer = NewOpenAISummarizer(cfg, cfg.SummaryModel, baseURL)
+		if provider.SummaryModel != "" {
+			svc.summarizer = NewOpenAISummarizer(&effective, provider.SummaryModel, baseURL, provider.APIKey)
 		}
 		return svc, nil
 
 	default:
-		return nil, fmt.Errorf("unsupported embedding backend: %s", cfg.Backend)
+		return nil, fmt.Errorf("unsupported embedding backend: %s", provider.Backend)
 	}
+}
+
+func startupProvider(cfg *config.EmbeddingConfig) config.EmbeddingProviderConfig {
+	if cfg == nil {
+		return config.EmbeddingProviderConfig{
+			Backend:      "ollama",
+			TextModel:    "nomic-embed-text",
+			CodeModel:    "nomic-embed-code",
+			SummaryModel: "",
+		}
+	}
+	p := cfg.Providers["default"]
+	if p.Backend == "" {
+		p.Backend = "ollama"
+	}
+	if p.TextModel == "" {
+		p.TextModel = "nomic-embed-text"
+	}
+	return p
 }
 
 // EmbedText embeds text using the text model.
