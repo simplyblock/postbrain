@@ -27,6 +27,11 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Restricted MCP `list_scopes` to authorized writable scopes:
+  - Updated `internal/api/mcp/list_scopes.go` to resolve scopes from the caller’s authorized scope set instead of returning global scope inventory.
+  - Added MCP scope-authorization helper in `internal/api/mcp/scopeauth.go` to intersect effective principal scopes with token scope restrictions.
+  - Added integration coverage in `internal/api/mcp/list_scopes_integration_test.go` to verify non-writable scopes are excluded from MCP list responses.
+
 - [x] 2026-04-05: Restricted REST `/v1/scopes` listing to authorized writable scopes:
   - Updated `internal/api/rest/scopes.go` to return only scopes in the caller’s authorized scope set (effective principal scopes intersected with token scope restrictions).
   - Added REST scope-authorization helper in `internal/api/rest/scopeauth.go` for reusable authorized scope resolution.

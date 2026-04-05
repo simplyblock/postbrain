@@ -60,3 +60,25 @@ func (s *Server) effectiveScopeIDsForRequest(ctx context.Context) ([]uuid.UUID, 
 	}
 	return s.membership.EffectiveScopeIDs(ctx, principalID)
 }
+
+func (s *Server) authorizedScopeIDsForRequest(ctx context.Context) ([]uuid.UUID, error) {
+	effectiveScopeIDs, err := s.effectiveScopeIDsForRequest(ctx)
+	if err != nil {
+		return nil, err
+	}
+	token, _ := ctx.Value(auth.ContextKeyToken).(*db.Token)
+	if token == nil || token.ScopeIds == nil {
+		return effectiveScopeIDs, nil
+	}
+	allowedByToken := make(map[uuid.UUID]struct{}, len(token.ScopeIds))
+	for _, id := range token.ScopeIds {
+		allowedByToken[id] = struct{}{}
+	}
+	authorized := make([]uuid.UUID, 0, len(effectiveScopeIDs))
+	for _, id := range effectiveScopeIDs {
+		if _, ok := allowedByToken[id]; ok {
+			authorized = append(authorized, id)
+		}
+	}
+	return authorized, nil
+}
