@@ -113,6 +113,25 @@ func TestScopesPage_MemberCannotAdminParentScope(t *testing.T) {
 		}
 	})
 
+	t.Run("member does not get delete action for parent scope", func(t *testing.T) {
+		resp, err := client.Get(baseURL + "/ui/scopes")
+		if err != nil {
+			t.Fatalf("GET /ui/scopes: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		deleteAction := "/ui/scopes/" + parentScope.ID.String() + "/delete"
+		if strings.Contains(string(body), deleteAction) {
+			t.Fatalf("did not expect delete action %q for non-admin member", deleteAction)
+		}
+	})
+
 	t.Run("member cannot create child scope under parent scope", func(t *testing.T) {
 		form := url.Values{}
 		form.Set("kind", "project")

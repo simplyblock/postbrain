@@ -118,7 +118,10 @@
         </button>
         {{end}}
       {{end}}
-      {{if index $.ChildCount (.ID.String)}}
+      {{if not (index $.CanDelete (.ID.String))}}
+      <button class="danger" disabled
+              title="Requires scope owner or admin role">Delete</button>
+      {{else if index $.ChildCount (.ID.String)}}
       <button class="danger" disabled
               title="Cannot delete: this scope has child scopes">Delete</button>
       {{else}}
