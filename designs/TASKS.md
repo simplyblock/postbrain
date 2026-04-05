@@ -27,6 +27,11 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Restricted UI principals page to reachable principals:
+  - Updated `internal/ui/handler.go` `renderPrincipals` to filter principals and membership rows to the authenticated principal’s reachable principal set (self + ancestor membership chain).
+  - Added helper `reachablePrincipalIDSet` using `db.GetAllParentIDs`.
+  - Added integration regression coverage in `internal/ui/principals_integration_test.go` to ensure unrelated principals are not visible.
+
 - [x] 2026-04-05: Added Web UI logout action and session invalidation flow:
   - Added `POST /ui/logout` handler in `internal/ui/auth.go` to clear `pb_session` cookie and redirect to `/ui/login`.
   - Wired logout route in `internal/ui/handler.go`.
