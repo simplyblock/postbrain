@@ -13,10 +13,8 @@ import (
 )
 
 func newOllamaCfg(url string) *config.EmbeddingConfig {
+	_ = url
 	return &config.EmbeddingConfig{
-		Backend:        "ollama",
-		ServiceURL:     url,
-		TextModel:      "nomic-embed-text",
 		RequestTimeout: 5 * time.Second,
 		BatchSize:      64,
 	}
@@ -45,7 +43,7 @@ func TestOllamaEmbedder_SuccessfulEmbed(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	e := NewOllamaEmbedder(newOllamaCfg(srv.URL), "nomic-embed-text")
+	e := NewOllamaEmbedder(newOllamaCfg(srv.URL), "nomic-embed-text", srv.URL)
 	got, err := e.Embed(context.Background(), "hello world")
 	if err != nil {
 		t.Fatalf("Embed: %v", err)
@@ -71,7 +69,7 @@ func TestOllamaEmbedder_EmptyEmbeddingReturnsError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	e := NewOllamaEmbedder(newOllamaCfg(srv.URL), "nomic-embed-text")
+	e := NewOllamaEmbedder(newOllamaCfg(srv.URL), "nomic-embed-text", srv.URL)
 	_, err := e.Embed(context.Background(), "hello")
 	if err == nil {
 		t.Fatal("expected error for empty embedding, got nil")
@@ -84,7 +82,7 @@ func TestOllamaEmbedder_HTTPErrorReturnsError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	e := NewOllamaEmbedder(newOllamaCfg(srv.URL), "nomic-embed-text")
+	e := NewOllamaEmbedder(newOllamaCfg(srv.URL), "nomic-embed-text", srv.URL)
 	_, err := e.Embed(context.Background(), "hello")
 	if err == nil {
 		t.Fatal("expected error for HTTP 500, got nil")
@@ -98,7 +96,7 @@ func TestOllamaEmbedder_ContextCancellationReturnsError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	e := NewOllamaEmbedder(newOllamaCfg(srv.URL), "nomic-embed-text")
+	e := NewOllamaEmbedder(newOllamaCfg(srv.URL), "nomic-embed-text", srv.URL)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately
 
@@ -121,7 +119,7 @@ func TestOllamaEmbedder_ModelSlugAndDimensions(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	e := NewOllamaEmbedder(newOllamaCfg(srv.URL), "nomic-embed-text")
+	e := NewOllamaEmbedder(newOllamaCfg(srv.URL), "nomic-embed-text", srv.URL)
 	if e.ModelSlug() != "nomic-embed-text" {
 		t.Errorf("ModelSlug() = %q; want %q", e.ModelSlug(), "nomic-embed-text")
 	}

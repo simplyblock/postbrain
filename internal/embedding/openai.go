@@ -21,6 +21,7 @@ type OpenAIEmbedder struct {
 	cfg       *config.EmbeddingConfig
 	modelSlug string
 	baseURL   string // overrideable for tests
+	apiKey    string
 
 	mu   sync.Mutex
 	dims int // -1 until first successful embed
@@ -29,7 +30,7 @@ type OpenAIEmbedder struct {
 // NewOpenAIEmbedder creates an OpenAIEmbedder for the given model.
 // If baseURL is non-empty it overrides the default OpenAI API base URL
 // (useful for httptest servers in tests).
-func NewOpenAIEmbedder(cfg *config.EmbeddingConfig, modelSlug string, baseURL string) *OpenAIEmbedder {
+func NewOpenAIEmbedder(cfg *config.EmbeddingConfig, modelSlug string, baseURL string, apiKey string) *OpenAIEmbedder {
 	if baseURL == "" {
 		baseURL = defaultOpenAIBaseURL
 	}
@@ -37,6 +38,7 @@ func NewOpenAIEmbedder(cfg *config.EmbeddingConfig, modelSlug string, baseURL st
 		cfg:       cfg,
 		modelSlug: modelSlug,
 		baseURL:   baseURL,
+		apiKey:    apiKey,
 		dims:      -1,
 	}
 }
@@ -136,8 +138,8 @@ func (e *OpenAIEmbedder) embedBatchOnce(ctx context.Context, texts []string) ([]
 		return nil, fmt.Errorf("openai: create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if e.cfg.OpenAIAPIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+e.cfg.OpenAIAPIKey)
+	if e.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+e.apiKey)
 	}
 
 	resp, err := http.DefaultClient.Do(req)

@@ -28,11 +28,13 @@ database:
   connect_timeout: 10s
 
 embedding:
-  backend:         ollama
-  service_url:     "http://localhost:11434"
-  text_model:      "nomic-embed-text"
-  code_model:      "nomic-embed-code"
-  openai_api_key:  "sk-test"
+  providers:
+    default:
+      backend: ollama
+      service_url: "http://localhost:11434"
+      api_key: "sk-test"
+      text_model: "nomic-embed-text"
+      code_model: "nomic-embed-code"
   request_timeout: 30s
   batch_size:      64
 
@@ -78,20 +80,20 @@ func TestLoad_AllFields(t *testing.T) {
 	}
 
 	// Embedding
-	if cfg.Embedding.Backend != "ollama" {
-		t.Errorf("Embedding.Backend = %q", cfg.Embedding.Backend)
+	if cfg.Embedding.Providers["default"].Backend != "ollama" {
+		t.Errorf("Embedding.Providers[default].Backend = %q", cfg.Embedding.Providers["default"].Backend)
 	}
-	if cfg.Embedding.ServiceURL != "http://localhost:11434" {
-		t.Errorf("Embedding.ServiceURL = %q", cfg.Embedding.ServiceURL)
+	if cfg.Embedding.Providers["default"].ServiceURL != "http://localhost:11434" {
+		t.Errorf("Embedding.Providers[default].ServiceURL = %q", cfg.Embedding.Providers["default"].ServiceURL)
 	}
-	if cfg.Embedding.TextModel != "nomic-embed-text" {
-		t.Errorf("Embedding.TextModel = %q", cfg.Embedding.TextModel)
+	if cfg.Embedding.Providers["default"].TextModel != "nomic-embed-text" {
+		t.Errorf("Embedding.Providers[default].TextModel = %q", cfg.Embedding.Providers["default"].TextModel)
 	}
-	if cfg.Embedding.CodeModel != "nomic-embed-code" {
-		t.Errorf("Embedding.CodeModel = %q", cfg.Embedding.CodeModel)
+	if cfg.Embedding.Providers["default"].CodeModel != "nomic-embed-code" {
+		t.Errorf("Embedding.Providers[default].CodeModel = %q", cfg.Embedding.Providers["default"].CodeModel)
 	}
-	if cfg.Embedding.OpenAIAPIKey != "sk-test" {
-		t.Errorf("Embedding.OpenAIAPIKey = %q", cfg.Embedding.OpenAIAPIKey)
+	if cfg.Embedding.Providers["default"].APIKey != "sk-test" {
+		t.Errorf("Embedding.Providers[default].APIKey = %q", cfg.Embedding.Providers["default"].APIKey)
 	}
 	if cfg.Embedding.RequestTimeout != 30*time.Second {
 		t.Errorf("Embedding.RequestTimeout = %v", cfg.Embedding.RequestTimeout)
@@ -179,11 +181,11 @@ database:
 	if cfg.Database.ConnectTimeout != 10*time.Second {
 		t.Errorf("default Database.ConnectTimeout = %v, want 10s", cfg.Database.ConnectTimeout)
 	}
-	if cfg.Embedding.Backend != "ollama" {
-		t.Errorf("default Embedding.Backend = %q, want ollama", cfg.Embedding.Backend)
+	if cfg.Embedding.Providers["default"].Backend != "ollama" {
+		t.Errorf("default Embedding.Providers[default].Backend = %q, want ollama", cfg.Embedding.Providers["default"].Backend)
 	}
-	if cfg.Embedding.ServiceURL != "" {
-		t.Errorf("default Embedding.ServiceURL = %q, want empty", cfg.Embedding.ServiceURL)
+	if cfg.Embedding.Providers["default"].ServiceURL != "" {
+		t.Errorf("default Embedding.Providers[default].ServiceURL = %q, want empty", cfg.Embedding.Providers["default"].ServiceURL)
 	}
 	if cfg.Embedding.BatchSize != 64 {
 		t.Errorf("default Embedding.BatchSize = %d, want 64", cfg.Embedding.BatchSize)
@@ -298,19 +300,77 @@ oauth:
 	}
 }
 
-func TestLoad_LegacyEmbeddingURLKeys_BackCompat(t *testing.T) {
+func TestLoad_EmbeddingProvidersExplicitServiceURL(t *testing.T) {
 	path := writeYAML(t, `
 database:
   url: "postgres://localhost/postbrain"
 embedding:
-  backend: openai
-  openai_base_url: "http://localhost:8080/v1"
+  providers:
+    default:
+      backend: openai
+      service_url: "http://localhost:8080/v1"
 `)
 	cfg, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.Embedding.ServiceURL != "http://localhost:8080/v1" {
-		t.Fatalf("Embedding.ServiceURL = %q", cfg.Embedding.ServiceURL)
+	if cfg.Embedding.Providers["default"].ServiceURL != "http://localhost:8080/v1" {
+		t.Fatalf("Embedding.Providers[default].ServiceURL = %q", cfg.Embedding.Providers["default"].ServiceURL)
+	}
+}
+
+func TestLoad_EmbeddingProviders_DefaultProfileSynthesized(t *testing.T) {
+	path := writeYAML(t, `
+database:
+  url: "postgres://localhost/postbrain"
+embedding:
+  providers:
+    default:
+      backend: openai
+      service_url: "http://localhost:8080/v1"
+      api_key: "sk-test"
+`)
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.Embedding.Providers) == 0 {
+		t.Fatal("expected default provider profile to be synthesized")
+	}
+	p, ok := cfg.Embedding.Providers["default"]
+	if !ok {
+		t.Fatal("expected providers.default")
+	}
+	if p.Backend != "openai" || p.ServiceURL != "http://localhost:8080/v1" || p.APIKey != "sk-test" {
+		t.Fatalf("unexpected providers.default: %+v", p)
+	}
+}
+
+func TestLoad_EmbeddingProviders_CustomProfiles(t *testing.T) {
+	path := writeYAML(t, `
+database:
+  url: "postgres://localhost/postbrain"
+embedding:
+  providers:
+    local:
+      backend: ollama
+      service_url: "http://localhost:11434"
+    openai-prod:
+      backend: openai
+      service_url: "https://api.openai.com/v1"
+      api_key: "sk-prod"
+`)
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.Embedding.Providers) != 2 {
+		t.Fatalf("providers len = %d, want 2", len(cfg.Embedding.Providers))
+	}
+	if cfg.Embedding.Providers["local"].Backend != "ollama" {
+		t.Fatalf("providers.local.backend = %q", cfg.Embedding.Providers["local"].Backend)
+	}
+	if cfg.Embedding.Providers["openai-prod"].APIKey != "sk-prod" {
+		t.Fatalf("providers.openai-prod.api_key = %q", cfg.Embedding.Providers["openai-prod"].APIKey)
 	}
 }

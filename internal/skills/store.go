@@ -5,6 +5,7 @@ package skills
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -14,6 +15,8 @@ import (
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/embedding"
 )
+
+var ErrEmptyEmbedding = errors.New("skills: empty embedding result")
 
 // skillCreator abstracts the db.CreateSkill call so the store can be unit-tested
 // without a real database connection.
@@ -35,6 +38,7 @@ type Store struct {
 	pool    *pgxpool.Pool
 	svc     *embedding.EmbeddingService
 	creator skillCreator // injectable for tests
+	repo    *db.EmbeddingRepository
 }
 
 // NewStore creates a new Store backed by the given pool and embedding service.
@@ -43,6 +47,7 @@ func NewStore(pool *pgxpool.Pool, svc *embedding.EmbeddingService) *Store {
 		pool:    pool,
 		svc:     svc,
 		creator: &poolCreator{pool: pool},
+		repo:    db.NewEmbeddingRepository(pool),
 	}
 }
 
@@ -78,7 +83,7 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.Skill, error
 	}
 
 	// Embed description + body using text model.
-	embeddingVec, err := s.embedText(ctx, input.Description+" "+input.Body)
+	embeddingVec, modelID, err := s.embedText(ctx, input.Description+" "+input.Body)
 	if err != nil {
 		return nil, fmt.Errorf("skills: embed: %w", err)
 	}
@@ -99,11 +104,15 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.Skill, error
 		ReviewRequired:   int32(input.ReviewRequired),
 		Version:          1,
 		Embedding:        &embVec,
+		EmbeddingModelID: modelID,
 	}
 
 	created, err := s.creator.createSkill(ctx, skill)
 	if err != nil {
 		return nil, fmt.Errorf("skills: create: %w", err)
+	}
+	if err := s.dualWriteSkillEmbedding(ctx, created.ID, created.ScopeID, embeddingVec, modelID); err != nil {
+		return nil, fmt.Errorf("skills: dual-write create: %w", err)
 	}
 	return created, nil
 }
@@ -134,14 +143,17 @@ func (s *Store) Update(ctx context.Context, id uuid.UUID, callerID uuid.UUID, bo
 		return nil, fmt.Errorf("skills: marshal parameters: %w", err)
 	}
 
-	embeddingVec, err := s.embedText(ctx, existing.Description+" "+body)
+	embeddingVec, modelID, err := s.embedText(ctx, existing.Description+" "+body)
 	if err != nil {
 		return nil, fmt.Errorf("skills: embed: %w", err)
 	}
 
-	updated, err := db.UpdateSkillContent(ctx, s.pool, id, body, paramsJSON, embeddingVec, existing.EmbeddingModelID)
+	updated, err := db.UpdateSkillContent(ctx, s.pool, id, body, paramsJSON, embeddingVec, modelID)
 	if err != nil {
 		return nil, fmt.Errorf("skills: update content: %w", err)
+	}
+	if err := s.dualWriteSkillEmbedding(ctx, updated.ID, updated.ScopeID, embeddingVec, modelID); err != nil {
+		return nil, fmt.Errorf("skills: dual-write update: %w", err)
 	}
 	return updated, nil
 }
@@ -165,9 +177,32 @@ func (s *Store) GetByID(ctx context.Context, id uuid.UUID) (*db.Skill, error) {
 }
 
 // embedText embeds text, tolerating a nil service (unit test path).
-func (s *Store) embedText(ctx context.Context, text string) ([]float32, error) {
+func (s *Store) embedText(ctx context.Context, text string) ([]float32, *uuid.UUID, error) {
 	if s.svc == nil {
-		return nil, nil
+		return nil, nil, fmt.Errorf("skills: embedding service is not configured")
 	}
-	return s.svc.EmbedText(ctx, text)
+	res, err := s.svc.EmbedTextResult(ctx, text)
+	if err != nil {
+		return nil, nil, err
+	}
+	if res == nil {
+		return nil, nil, ErrEmptyEmbedding
+	}
+	if len(res.Embedding) == 0 {
+		return nil, nil, ErrEmptyEmbedding
+	}
+	if res.ModelID != uuid.Nil {
+		modelID := res.ModelID
+		return res.Embedding, &modelID, nil
+	}
+	return res.Embedding, nil, nil
+}
+
+func (s *Store) dualWriteSkillEmbedding(
+	ctx context.Context,
+	skillID, scopeID uuid.UUID,
+	embeddingVec []float32,
+	modelID *uuid.UUID,
+) error {
+	return db.UpsertEmbeddingIfPresent(ctx, s.repo, "skill", skillID, scopeID, embeddingVec, modelID)
 }

@@ -3,6 +3,7 @@ package skills
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -26,6 +27,18 @@ func (f *fakeEmbedder) EmbedBatch(_ context.Context, texts []string) ([][]float3
 func (f *fakeEmbedder) ModelSlug() string { return "fake" }
 func (f *fakeEmbedder) Dimensions() int   { return 3 }
 
+type nilVectorEmbedder struct{}
+
+func (n *nilVectorEmbedder) Embed(_ context.Context, _ string) ([]float32, error) {
+	return nil, nil
+}
+func (n *nilVectorEmbedder) EmbedBatch(_ context.Context, texts []string) ([][]float32, error) {
+	out := make([][]float32, len(texts))
+	return out, nil
+}
+func (n *nilVectorEmbedder) ModelSlug() string { return "nil" }
+func (n *nilVectorEmbedder) Dimensions() int   { return 0 }
+
 // fakeDB stores the last CreateSkill call.
 type fakeDB struct {
 	created *db.Skill
@@ -40,6 +53,14 @@ func (f *fakeDB) createSkill(_ context.Context, s *db.Skill) (*db.Skill, error) 
 // newTestStore creates a Store with a fake creator and fake embedder for unit tests.
 func newTestStore(fdb skillCreator) *Store {
 	svc := embedding.NewServiceFromEmbedders(&fakeEmbedder{}, nil)
+	return &Store{
+		creator: fdb,
+		svc:     svc,
+	}
+}
+
+func newTestStoreWithEmbedder(fdb skillCreator, emb embedding.Embedder) *Store {
+	svc := embedding.NewServiceFromEmbedders(emb, nil)
 	return &Store{
 		creator: fdb,
 		svc:     svc,
@@ -114,5 +135,26 @@ func TestCreate_ParametersSerialized(t *testing.T) {
 	}
 	if len(params) != 1 || params[0].Name != "param" {
 		t.Errorf("unexpected params: %+v", params)
+	}
+}
+
+func TestCreate_EmptyEmbeddingReturnsError(t *testing.T) {
+	t.Parallel()
+	fdb := &fakeDB{}
+	s := newTestStoreWithEmbedder(fdb, &nilVectorEmbedder{})
+	input := CreateInput{
+		ScopeID:    uuid.New(),
+		AuthorID:   uuid.New(),
+		Slug:       "test-skill",
+		Name:       "Test Skill",
+		Body:       "Do the thing.",
+		Visibility: "team",
+	}
+	_, err := s.Create(context.Background(), input)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, ErrEmptyEmbedding) {
+		t.Fatalf("expected ErrEmptyEmbedding, got %v", err)
 	}
 }

@@ -14,19 +14,21 @@ import (
 
 // OllamaEmbedder calls the Ollama HTTP API to produce embeddings.
 type OllamaEmbedder struct {
-	cfg       *config.EmbeddingConfig
-	modelSlug string
+	cfg        *config.EmbeddingConfig
+	modelSlug  string
+	serviceURL string
 
 	mu   sync.Mutex
 	dims int // -1 until first successful embed
 }
 
 // NewOllamaEmbedder creates an OllamaEmbedder for the given model.
-func NewOllamaEmbedder(cfg *config.EmbeddingConfig, modelSlug string) *OllamaEmbedder {
+func NewOllamaEmbedder(cfg *config.EmbeddingConfig, modelSlug string, serviceURL string) *OllamaEmbedder {
 	return &OllamaEmbedder{
-		cfg:       cfg,
-		modelSlug: modelSlug,
-		dims:      -1,
+		cfg:        cfg,
+		modelSlug:  modelSlug,
+		serviceURL: serviceURL,
+		dims:       -1,
 	}
 }
 
@@ -64,7 +66,7 @@ func (e *OllamaEmbedder) Embed(ctx context.Context, text string) ([]float32, err
 		return nil, fmt.Errorf("ollama: marshal request: %w", err)
 	}
 
-	url := serviceURLOrDefault(e.cfg, defaultOllamaServiceURL) + "/api/embeddings"
+	url := serviceURLOrDefault(e.serviceURL, defaultOllamaServiceURL) + "/api/embeddings"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("ollama: create request: %w", err)

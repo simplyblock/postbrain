@@ -56,3 +56,26 @@ Check:
 - DNS solver credentials and zone permissions
 
 When DNS01 is pending, troubleshoot solver credentials and DNS zone access before changing gateway/listener config.
+
+## Re-embedding backlog grows or rows stay `failed`
+
+Check:
+
+- active embedding model per content type (`postbrain-cli embedding-model list`)
+- `embedding_index` distribution by status (`pending` / `ready` / `failed`)
+- recent `last_error` values for failed rows
+
+Typical causes:
+
+- model endpoint unavailable or wrong URL
+- provider auth/key issue
+- model dimensions mismatch
+
+Recovery flow:
+
+1. Fix provider/model connectivity.
+2. Reactivate a known-good model if needed.
+3. Reset failed rows to pending for that model and let jobs reprocess.
+
+See the full procedure in
+[Embedding Model Operations](./embedding-model-operations.md).

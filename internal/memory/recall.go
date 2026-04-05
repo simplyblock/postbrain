@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -135,12 +136,21 @@ func (s *Store) Recall(ctx context.Context, input RecallInput) ([]*MemoryResult,
 		if err != nil {
 			return nil, err
 		}
-		rows, err := rdb.RecallMemoriesByCodeVector(ctx, scopeIDs, codeVec, input.Limit*2)
-		if err != nil {
-			return nil, err
+		rows := make([]db.MemoryScore, 0)
+		if codeModelID, ok := s.getActiveEmbeddingModelID(ctx, "code"); ok {
+			rows, err = s.recallMemoriesByModelTable(ctx, codeModelID, codeVec, scopeIDs, input.Limit*2)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if len(rows) == 0 {
+			rows, err = rdb.RecallMemoriesByCodeVector(ctx, scopeIDs, codeVec, input.Limit*2)
+			if err != nil {
+				return nil, err
+			}
 		}
 		// Fallback: many existing code memories have no embedding_code yet.
-		// If code-vector recall yields nothing, use lexical code search (FTS).
+		// If vector recall yields nothing, use lexical code search (FTS).
 		if len(rows) == 0 {
 			rows, err = rdb.RecallMemoriesByFTS(ctx, scopeIDs, input.Query, input.Limit*2)
 			if err != nil {
@@ -152,18 +162,36 @@ func (s *Store) Recall(ctx context.Context, input RecallInput) ([]*MemoryResult,
 			merged[r.Memory.ID] = &r
 		}
 	case "text":
-		rows, err := rdb.RecallMemoriesByVector(ctx, scopeIDs, queryVec, input.Limit*2)
-		if err != nil {
-			return nil, err
+		rows := make([]db.MemoryScore, 0)
+		if textModelID, ok := s.getActiveEmbeddingModelID(ctx, "text"); ok {
+			rows, err = s.recallMemoriesByModelTable(ctx, textModelID, queryVec, scopeIDs, input.Limit*2)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if len(rows) == 0 {
+			rows, err = rdb.RecallMemoriesByVector(ctx, scopeIDs, queryVec, input.Limit*2)
+			if err != nil {
+				return nil, err
+			}
 		}
 		for i := range rows {
 			r := rows[i]
 			merged[r.Memory.ID] = &r
 		}
 	default: // "hybrid"
-		vecRows, err := rdb.RecallMemoriesByVector(ctx, scopeIDs, queryVec, input.Limit*2)
-		if err != nil {
-			return nil, err
+		vecRows := make([]db.MemoryScore, 0)
+		if textModelID, ok := s.getActiveEmbeddingModelID(ctx, "text"); ok {
+			vecRows, err = s.recallMemoriesByModelTable(ctx, textModelID, queryVec, scopeIDs, input.Limit*2)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if len(vecRows) == 0 {
+			vecRows, err = rdb.RecallMemoriesByVector(ctx, scopeIDs, queryVec, input.Limit*2)
+			if err != nil {
+				return nil, err
+			}
 		}
 		for i := range vecRows {
 			r := vecRows[i]
@@ -249,6 +277,98 @@ func (s *Store) Recall(ctx context.Context, input RecallInput) ([]*MemoryResult,
 	}
 
 	return results, nil
+}
+
+func (s *Store) getActiveEmbeddingModelID(ctx context.Context, contentType string) (uuid.UUID, bool) {
+	if s.pool == nil {
+		return uuid.Nil, false
+	}
+	q := db.New(s.pool)
+	switch contentType {
+	case "code":
+		model, err := q.GetActiveCodeModel(ctx)
+		if err != nil || model == nil {
+			return uuid.Nil, false
+		}
+		return model.ID, true
+	default:
+		model, err := q.GetActiveTextModel(ctx)
+		if err != nil || model == nil {
+			return uuid.Nil, false
+		}
+		return model.ID, true
+	}
+}
+
+func (s *Store) recallMemoriesByModelTable(ctx context.Context, modelID uuid.UUID, queryVec []float32, scopeIDs []uuid.UUID, limit int) ([]db.MemoryScore, error) {
+	if s.repo == nil || s.pool == nil || len(queryVec) == 0 || len(scopeIDs) == 0 {
+		return nil, nil
+	}
+	type row struct {
+		id    uuid.UUID
+		score float64
+	}
+	byID := make(map[uuid.UUID]row)
+	for _, scopeID := range scopeIDs {
+		scope, err := db.GetScopeByID(ctx, s.pool, scopeID)
+		if err != nil {
+			return nil, err
+		}
+		if scope == nil {
+			continue
+		}
+		hits, err := s.repo.QuerySimilar(ctx, db.EmbeddingQuery{
+			ModelID:    modelID,
+			ObjectType: "memory",
+			Embedding:  queryVec,
+			Limit:      limit,
+			Scope: &db.ScopeFilter{
+				ScopePath: scope.Path,
+			},
+		})
+		if err != nil {
+			// During migration the active model may exist but not be ready/populated yet.
+			// In that case we fallback to legacy inline-vector recall.
+			if isModelTableUnavailableErr(err) {
+				return nil, nil
+			}
+			return nil, err
+		}
+		for _, h := range hits {
+			if existing, ok := byID[h.ObjectID]; !ok || h.Score > existing.score {
+				byID[h.ObjectID] = row{id: h.ObjectID, score: h.Score}
+			}
+		}
+	}
+	rows := make([]db.MemoryScore, 0, len(byID))
+	for _, r := range byID {
+		mem, err := db.GetMemory(ctx, s.pool, r.id)
+		if err != nil {
+			return nil, err
+		}
+		if mem == nil || !mem.IsActive {
+			continue
+		}
+		rows = append(rows, db.MemoryScore{
+			Memory:   mem,
+			VecScore: r.score,
+		})
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		return rows[i].VecScore > rows[j].VecScore
+	})
+	if len(rows) > limit {
+		rows = rows[:limit]
+	}
+	return rows, nil
+}
+
+func isModelTableUnavailableErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "model") && (strings.Contains(msg, "not ready") || strings.Contains(msg, "not found"))
 }
 
 // containsString reports whether s is in the slice.
