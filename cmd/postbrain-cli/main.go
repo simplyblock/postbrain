@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/simplyblock/postbrain/internal/closeutil"
 	"github.com/simplyblock/postbrain/internal/config"
@@ -84,13 +85,17 @@ type embeddingModelRegisterOptions struct {
 	DatabaseURL    string
 	ConfigPath     string
 	Slug           string
-	Provider       string
-	ServiceURL     string
-	ProviderModel  string
 	ProviderConfig string
 	Dimensions     int
 	ContentType    string
 	Activate       bool
+}
+
+type resolvedEmbeddingRegistration struct {
+	Provider       string
+	ServiceURL     string
+	ProviderModel  string
+	ProviderConfig string
 }
 
 type embeddingModelActivateOptions struct {
@@ -565,17 +570,11 @@ func embeddingModelRegisterCmd() *cobra.Command {
 	cmd.Flags().StringVar(&opts.DatabaseURL, "database-url", "", "PostgreSQL URL (overrides config file and POSTBRAIN_DATABASE_URL)")
 	cmd.Flags().StringVar(&opts.ConfigPath, "config", "config.yaml", "path to config file")
 	cmd.Flags().StringVar(&opts.Slug, "slug", "", "model slug (required)")
-	cmd.Flags().StringVar(&opts.Provider, "provider", "", "embedding provider, e.g. openai or ollama (required)")
-	cmd.Flags().StringVar(&opts.ServiceURL, "service-url", "", "embedding service URL (required)")
-	cmd.Flags().StringVar(&opts.ProviderModel, "provider-model", "", "provider-side model name (required)")
 	cmd.Flags().StringVar(&opts.ProviderConfig, "provider-config", "default", "named embedding provider profile to use")
 	cmd.Flags().IntVar(&opts.Dimensions, "dimensions", 0, "embedding vector dimensions (required)")
 	cmd.Flags().StringVar(&opts.ContentType, "content-type", "", "content type: text or code (required)")
 	cmd.Flags().BoolVar(&opts.Activate, "activate", false, "set as active model for this content type")
 	_ = cmd.MarkFlagRequired("slug")
-	_ = cmd.MarkFlagRequired("provider")
-	_ = cmd.MarkFlagRequired("service-url")
-	_ = cmd.MarkFlagRequired("provider-model")
 	_ = cmd.MarkFlagRequired("dimensions")
 	_ = cmd.MarkFlagRequired("content-type")
 	return cmd
@@ -624,6 +623,15 @@ func embeddingModelListCmd() *cobra.Command {
 }
 
 func runRegisterEmbeddingModelCommand(ctx context.Context, opts embeddingModelRegisterOptions) (string, error) {
+	embCfg, err := loadCLIEmbeddingConfig(opts.ConfigPath)
+	if err != nil {
+		return "", err
+	}
+	resolved, err := resolveProviderRegistrationFields(opts, embCfg)
+	if err != nil {
+		return "", err
+	}
+
 	pool, err := openCLIPool(ctx, opts.DatabaseURL, opts.ConfigPath)
 	if err != nil {
 		return "", err
@@ -632,10 +640,10 @@ func runRegisterEmbeddingModelCommand(ctx context.Context, opts embeddingModelRe
 
 	model, err := db.RegisterEmbeddingModel(ctx, pool, db.RegisterEmbeddingModelParams{
 		Slug:           opts.Slug,
-		Provider:       opts.Provider,
-		ServiceURL:     opts.ServiceURL,
-		ProviderModel:  opts.ProviderModel,
-		ProviderConfig: opts.ProviderConfig,
+		Provider:       resolved.Provider,
+		ServiceURL:     resolved.ServiceURL,
+		ProviderModel:  resolved.ProviderModel,
+		ProviderConfig: resolved.ProviderConfig,
 		Dimensions:     opts.Dimensions,
 		ContentType:    opts.ContentType,
 		Activate:       opts.Activate,
@@ -644,6 +652,69 @@ func runRegisterEmbeddingModelCommand(ctx context.Context, opts embeddingModelRe
 		return "", err
 	}
 	return fmt.Sprintf("registered model %s", model.Slug), nil
+}
+
+func loadCLIEmbeddingConfig(path string) (*config.EmbeddingConfig, error) {
+	cfgPath := strings.TrimSpace(path)
+	if cfgPath == "" {
+		cfgPath = "config.yaml"
+	}
+	v := viper.New()
+	v.SetConfigFile(cfgPath)
+	v.SetEnvPrefix("POSTBRAIN")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AutomaticEnv()
+	if err := v.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("load config: %w", err)
+	}
+
+	var emb config.EmbeddingConfig
+	if err := v.UnmarshalKey("embedding", &emb); err != nil {
+		return nil, fmt.Errorf("load embedding config: %w", err)
+	}
+	if emb.Providers == nil {
+		emb.Providers = map[string]config.EmbeddingProviderConfig{}
+	}
+	return &emb, nil
+}
+
+func resolveProviderRegistrationFields(opts embeddingModelRegisterOptions, embCfg *config.EmbeddingConfig) (resolvedEmbeddingRegistration, error) {
+	out := resolvedEmbeddingRegistration{}
+	profileName := strings.TrimSpace(opts.ProviderConfig)
+	if profileName == "" {
+		profileName = "default"
+	}
+	out.ProviderConfig = profileName
+
+	if opts.ContentType != "text" && opts.ContentType != "code" {
+		return out, fmt.Errorf("invalid content type %q", opts.ContentType)
+	}
+	if embCfg == nil {
+		return out, fmt.Errorf("embedding config is not available")
+	}
+	profile, ok := embCfg.Providers[profileName]
+	if !ok {
+		return out, fmt.Errorf("embedding provider profile %q not found", profileName)
+	}
+
+	out.Provider = strings.TrimSpace(profile.Backend)
+	out.ServiceURL = strings.TrimSpace(profile.ServiceURL)
+	switch opts.ContentType {
+	case "text":
+		out.ProviderModel = strings.TrimSpace(profile.TextModel)
+	case "code":
+		out.ProviderModel = strings.TrimSpace(profile.CodeModel)
+	}
+	if out.Provider == "" {
+		return out, fmt.Errorf("embedding.providers.%s.backend is required", profileName)
+	}
+	if out.ServiceURL == "" {
+		return out, fmt.Errorf("embedding.providers.%s.service_url is required", profileName)
+	}
+	if out.ProviderModel == "" {
+		return out, fmt.Errorf("embedding.providers.%s.%s_model is required", profileName, opts.ContentType)
+	}
+	return out, nil
 }
 
 func runActivateEmbeddingModelCommand(ctx context.Context, opts embeddingModelActivateOptions) (string, error) {

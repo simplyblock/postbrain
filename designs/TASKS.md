@@ -27,6 +27,17 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Simplified embedding model registration CLI to provider-config-only resolution (TDD-first):
+  - Removed transient provider transport/model fields from CLI option flow in `cmd/postbrain-cli/main.go`.
+  - `postbrain-cli embedding-model register` now derives registration metadata strictly from `embedding.providers.<provider-config>`:
+    - `backend` -> DB `provider`
+    - `service_url` -> DB `service_url`
+    - `<content_type>_model` -> DB `provider_model`
+  - Added validation that selected provider profile includes required `service_url`.
+  - Updated CLI tests in `cmd/postbrain-cli/main_test.go`:
+    - resolver tests now assert resolved `provider_config` + profile-derived fields
+    - added regression test for missing profile `service_url`.
+
 - [x] 2026-04-05: Addressed embedding/re-embed edge cases identified in PR review (TDD-first):
   - `internal/skills/store.go`:
     - `embedText` now treats nil service, nil embed result, and empty embedding vectors as errors.

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/simplyblock/postbrain/internal/config"
 )
 
 // ── parseSkillID ──────────────────────────────────────────────────────────────
@@ -73,7 +74,7 @@ func TestRootVersionCommand_PrintsBuildVersion(t *testing.T) {
 
 func TestEmbeddingModelRegisterCommand_RequiresSlug(t *testing.T) {
 	root := newRootCmd()
-	root.SetArgs([]string{"embedding-model", "register", "--provider", "openai", "--service-url", "http://localhost:11434/v1", "--provider-model", "text-embedding-3-large", "--dimensions", "1536", "--content-type", "text"})
+	root.SetArgs([]string{"embedding-model", "register", "--dimensions", "1536", "--content-type", "text"})
 
 	var out bytes.Buffer
 	root.SetOut(&out)
@@ -102,7 +103,7 @@ func TestEmbeddingModelRegisterCommand_Success(t *testing.T) {
 	t.Cleanup(func() { registerEmbeddingModelCmdFn = old })
 
 	root := newRootCmd()
-	root.SetArgs([]string{"embedding-model", "register", "--slug", "text-1", "--provider", "openai", "--service-url", "http://localhost:11434/v1", "--provider-model", "text-embedding-3-large", "--dimensions", "1536", "--content-type", "text"})
+	root.SetArgs([]string{"embedding-model", "register", "--slug", "text-1", "--dimensions", "1536", "--content-type", "text"})
 
 	var out bytes.Buffer
 	root.SetOut(&out)
@@ -127,7 +128,7 @@ func TestEmbeddingModelRegisterCommand_ProviderConfigOverride(t *testing.T) {
 	t.Cleanup(func() { registerEmbeddingModelCmdFn = old })
 
 	root := newRootCmd()
-	root.SetArgs([]string{"embedding-model", "register", "--slug", "text-1", "--provider", "openai", "--service-url", "http://localhost:11434/v1", "--provider-model", "text-embedding-3-large", "--provider-config", "openai-prod", "--dimensions", "1536", "--content-type", "text"})
+	root.SetArgs([]string{"embedding-model", "register", "--slug", "text-1", "--provider-config", "openai-prod", "--dimensions", "1536", "--content-type", "text"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute register command: %v", err)
@@ -142,10 +143,91 @@ func TestEmbeddingModelRegisterCommand_BackendError(t *testing.T) {
 	t.Cleanup(func() { registerEmbeddingModelCmdFn = old })
 
 	root := newRootCmd()
-	root.SetArgs([]string{"embedding-model", "register", "--slug", "text-1", "--provider", "openai", "--service-url", "http://localhost:11434/v1", "--provider-model", "text-embedding-3-large", "--dimensions", "1536", "--content-type", "text"})
+	root.SetArgs([]string{"embedding-model", "register", "--slug", "text-1", "--dimensions", "1536", "--content-type", "text"})
 
 	if err := root.Execute(); err == nil {
 		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestResolveProviderRegistrationFields_UsesProfileTextModel(t *testing.T) {
+	opts := embeddingModelRegisterOptions{
+		Slug:           "text-1",
+		ProviderConfig: "openai-prod",
+		ContentType:    "text",
+		Dimensions:     1536,
+	}
+	emb := &config.EmbeddingConfig{
+		Providers: map[string]config.EmbeddingProviderConfig{
+			"openai-prod": {
+				Backend:    "openai",
+				ServiceURL: "https://api.openai.com/v1",
+				TextModel:  "text-embedding-3-small",
+			},
+		},
+	}
+	got, err := resolveProviderRegistrationFields(opts, emb)
+	if err != nil {
+		t.Fatalf("resolveProviderRegistrationFields: %v", err)
+	}
+	if got.Provider != "openai" || got.ServiceURL != "https://api.openai.com/v1" || got.ProviderModel != "text-embedding-3-small" || got.ProviderConfig != "openai-prod" {
+		t.Fatalf("unexpected resolved opts: %+v", got)
+	}
+}
+
+func TestResolveProviderRegistrationFields_UsesProfileCodeModel(t *testing.T) {
+	opts := embeddingModelRegisterOptions{
+		Slug:           "code-1",
+		ProviderConfig: "local",
+		ContentType:    "code",
+		Dimensions:     768,
+	}
+	emb := &config.EmbeddingConfig{
+		Providers: map[string]config.EmbeddingProviderConfig{
+			"local": {
+				Backend:    "ollama",
+				ServiceURL: "http://localhost:11434",
+				CodeModel:  "nomic-embed-code",
+			},
+		},
+	}
+	got, err := resolveProviderRegistrationFields(opts, emb)
+	if err != nil {
+		t.Fatalf("resolveProviderRegistrationFields: %v", err)
+	}
+	if got.Provider != "ollama" || got.ProviderModel != "nomic-embed-code" || got.ProviderConfig != "local" {
+		t.Fatalf("unexpected resolved opts: %+v", got)
+	}
+}
+
+func TestResolveProviderRegistrationFields_MissingProfileFails(t *testing.T) {
+	_, err := resolveProviderRegistrationFields(embeddingModelRegisterOptions{
+		ProviderConfig: "missing",
+		ContentType:    "text",
+	}, &config.EmbeddingConfig{Providers: map[string]config.EmbeddingProviderConfig{}})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestResolveProviderRegistrationFields_MissingServiceURLFails(t *testing.T) {
+	t.Parallel()
+	_, err := resolveProviderRegistrationFields(embeddingModelRegisterOptions{
+		ProviderConfig: "default",
+		ContentType:    "text",
+	}, &config.EmbeddingConfig{
+		Providers: map[string]config.EmbeddingProviderConfig{
+			"default": {
+				Backend:   "openai",
+				TextModel: "text-embedding-3-small",
+			},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "service_url is required") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
