@@ -99,7 +99,7 @@ func (j *ReembedJob) RunText(ctx context.Context) error {
 				return fmt.Errorf("reembed text: scan row: %w", err)
 			}
 			if strings.TrimSpace(r.content.String) == "" {
-				_ = j.markEmbeddingFailedAttempt(ctx, r.objectType, r.id, *modelID, r.retryCount, fmt.Errorf("empty content for %s %s", r.objectType, r.id))
+				_ = j.markEmbeddingFailedAttempt(ctx, r.objectType, r.id, *modelID, r.retryCount, fmt.Errorf("empty content for %s %v", r.objectType, r.id))
 				continue
 			}
 			batch = append(batch, r)
