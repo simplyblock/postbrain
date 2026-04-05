@@ -362,6 +362,7 @@ Every step follows strict Red → Green → Refactor before moving to the next s
 - [ ] RED: tests ensuring recall queries new model tables via repository and falls back per approved policy when `embedding_index` row is missing or not `ready`.
 - [ ] GREEN: route ANN retrieval through new repository with `ScopeFilter`.
 - [ ] REFACTOR: normalize scoring interfaces; keep scope auth semantics unchanged.
+  - Progress: memory text/code/hybrid vector recall now attempts active-model repository ANN first and falls back to legacy vector queries when model tables are unavailable or empty; integration coverage added for model-table-only recall path.
 
 ### Step 10: Re-Embed Pipeline Refactor
 

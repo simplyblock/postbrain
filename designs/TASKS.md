@@ -108,6 +108,13 @@
 - [x] 2026-04-05: Finalized carryover commits for completed embedding update steps:
   - committed previously completed Step 3/4/5 and dual-write integration code that was pending in the worktree
   - includes CLI model management commands/tests, model-driven embedding factory + runtime wiring, registration/integration tests, and entity/memory/knowledge/skills dual-write test coverage.
+- [x] 2026-04-05: Started Step 9 dual-read migration with memory recall model-table path (TDD-first):
+  - Added integration test:
+    - `internal/memory/memory_integration_test.go::TestMemoryRecall_TextSearch_UsesModelTableWhenLegacyEmbeddingMissing`
+    - verifies text recall succeeds when legacy inline embedding columns are unusable but model-table embeddings exist.
+  - Refactored `internal/memory/recall.go`:
+    - text/code/hybrid vector recall now tries active-model repository ANN (`EmbeddingRepository.QuerySimilar`) first with scope filtering
+    - falls back to legacy vector SQL recall when model-table results are unavailable (including model not ready/not found) or empty.
 - [x] 2026-04-04: Added model-aware multi-provider embedder factory primitives and runtime wiring (TDD-first):
   - Added model-driven factory in `internal/embedding/factory.go`:
     - `ModelConfig`, `ModelConfigStore`, `ModelEmbedderFactory`

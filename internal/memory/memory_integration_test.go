@@ -279,3 +279,84 @@ func TestMemoryCreate_DualWritesToEmbeddingRepository(t *testing.T) {
 		t.Fatal("expected dual-write row in model table")
 	}
 }
+
+func TestMemoryRecall_TextSearch_UsesModelTableWhenLegacyEmbeddingMissing(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+
+	model, err := db.RegisterEmbeddingModel(ctx, pool, db.RegisterEmbeddingModelParams{
+		Slug:          "mem-recall-modeltable-" + uuid.NewString(),
+		Provider:      "ollama",
+		ServiceURL:    "http://localhost:11434",
+		ProviderModel: "nomic-embed-text",
+		Dimensions:    4,
+		ContentType:   "text",
+		Activate:      true,
+	})
+	if err != nil {
+		t.Fatalf("register model: %v", err)
+	}
+
+	svc := testhelper.NewDeterministicEmbeddingService()
+	author := testhelper.CreateTestPrincipal(t, pool, "user", "recall-modeltable-user")
+	scope := testhelper.CreateTestScope(t, pool, "project", "recall/modeltable", nil, author.ID)
+	store := memory.NewStore(pool, svc)
+
+	created, err := store.Create(ctx, memory.CreateInput{
+		Content:    "model table recall content",
+		MemoryType: "semantic",
+		ScopeID:    scope.ID,
+		AuthorID:   author.ID,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	queryVec, err := svc.EmbedText(ctx, "model table recall content")
+	if err != nil {
+		t.Fatalf("EmbedText: %v", err)
+	}
+	repo := db.NewEmbeddingRepository(pool)
+	if err := repo.UpsertEmbedding(ctx, db.UpsertEmbeddingInput{
+		ObjectType: "memory",
+		ObjectID:   created.MemoryID,
+		ScopeID:    scope.ID,
+		ModelID:    model.ID,
+		Embedding:  queryVec,
+	}); err != nil {
+		t.Fatalf("seed model-table embedding: %v", err)
+	}
+
+	// Simulate post-migration state where legacy inline embedding columns are not
+	// usable, while model-table embeddings are present.
+	if _, err := pool.Exec(ctx, `
+		UPDATE memories
+		SET embedding = NULL, embedding_model_id = NULL
+		WHERE id = $1
+	`, created.MemoryID); err != nil {
+		t.Fatalf("clear legacy embedding columns: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		UPDATE embedding_index
+		SET status = 'ready'
+		WHERE object_type = 'memory' AND object_id = $1 AND model_id = $2
+	`, created.MemoryID, model.ID); err != nil {
+		t.Fatalf("mark embedding_index ready: %v", err)
+	}
+
+	results, err := store.Recall(ctx, memory.RecallInput{
+		Query:       "model table recall content",
+		ScopeID:     scope.ID,
+		PrincipalID: author.ID,
+		SearchMode:  "text",
+		Limit:       10,
+	})
+	if err != nil {
+		t.Fatalf("Recall: %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatal("expected recall result from model table, got none")
+	}
+	if results[0].Memory.ID != created.MemoryID {
+		t.Fatalf("first result memory id = %s, want %s", results[0].Memory.ID, created.MemoryID)
+	}
+}
