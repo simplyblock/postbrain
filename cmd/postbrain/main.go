@@ -109,6 +109,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("connect to database: %w", err)
 	}
 	defer pool.Close()
+	slog.Info("startup service initialized", "service", "db_pool")
 
 	if cfg.Database.AutoMigrate {
 		if err := db.CheckAndMigrate(ctx, pool, true); err != nil {
@@ -124,9 +125,11 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("embedding service: %w", err)
 	}
+	slog.Info("startup service initialized", "service", "embedding_service")
 	if err := svc.EnableModelDrivenFactory(ctx, pool, &cfg.Embedding); err != nil {
 		return fmt.Errorf("embedding model factory: %w", err)
 	}
+	slog.Info("startup service initialized", "service", "embedding_model_factory")
 	slog.Info("startup embedding services initialized",
 		"service", "embedding",
 		"model_driven_factory", true,
@@ -137,13 +140,21 @@ func runServe(cmd *cobra.Command, args []string) error {
 
 	// OAuth/social dependencies.
 	tokenStore := auth.NewTokenStore(pool)
+	slog.Info("startup service initialized", "service", "oauth_token_store")
 	stateStore := oauth.NewStateStore(pool)
+	slog.Info("startup service initialized", "service", "oauth_state_store")
 	clientStore := oauth.NewClientStore(pool)
+	slog.Info("startup service initialized", "service", "oauth_client_store")
 	codeStore := oauth.NewCodeStore(pool)
+	slog.Info("startup service initialized", "service", "oauth_code_store")
 	issuer := oauth.NewIssuer(tokenStore)
+	slog.Info("startup service initialized", "service", "oauth_issuer")
 	identityStore := social.NewIdentityStore(pool)
+	slog.Info("startup service initialized", "service", "social_identity_store")
 	providers := social.NewRegistry(cfg.OAuth)
+	slog.Info("startup service initialized", "service", "social_provider_registry")
 	oauthServer := oauth.NewServer(clientStore, codeStore, stateStore, issuer, tokenStore, cfg.OAuth)
+	slog.Info("startup service initialized", "service", "oauth_server")
 
 	// OAuth Authorization Server routes.
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server", oauthServer.HandleMetadata)
@@ -154,11 +165,13 @@ func runServe(cmd *cobra.Command, args []string) error {
 
 	// MCP server at /mcp.
 	mcpSrv := mcpapi.NewServer(pool, svc, cfg)
+	slog.Info("startup service initialized", "service", "mcp_server")
 	mux.Handle("/mcp", mcpSrv.Handler())
 	mux.Handle("/mcp/", mcpSrv.Handler())
 
 	// REST API.
 	restSrv := restapi.NewRouter(pool, svc, cfg)
+	slog.Info("startup service initialized", "service", "rest_router")
 	mux.Handle("/", restSrv.Handler())
 
 	// Web UI.
@@ -176,11 +189,13 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("ui handler: %w", err)
 	}
+	slog.Info("startup service initialized", "service", "ui_handler")
 	mux.Handle("/ui", uiHandler)
 	mux.Handle("/ui/", uiHandler)
 
 	// Prometheus metrics.
 	mux.Handle("/metrics", promhttp.Handler())
+	slog.Info("startup service initialized", "service", "metrics_handler")
 
 	// HTTP server with graceful shutdown.
 	httpSrv := &http.Server{
@@ -195,6 +210,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", cfg.Server.Addr, err)
 	}
+	slog.Info("startup service initialized", "service", "http_listener")
 
 	// Background jobs.
 	scheduler := jobs.NewScheduler(pool, svc, &cfg.Jobs)
@@ -203,6 +219,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	}
 	scheduler.Start()
 	defer scheduler.Stop(ctx)
+	slog.Info("startup service initialized", "service", "jobs_scheduler")
 	slog.Info("startup services initialized",
 		"services", []string{"oauth", "mcp", "rest", "ui", "metrics", "jobs_scheduler"},
 		"jobs_enabled", enabledJobNames(cfg.Jobs),
@@ -310,6 +327,28 @@ func enabledOAuthProviderNames(cfg config.OAuthConfig) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+func startupServiceStepNames() []string {
+	return []string{
+		"db_pool",
+		"embedding_service",
+		"embedding_model_factory",
+		"oauth_token_store",
+		"oauth_state_store",
+		"oauth_client_store",
+		"oauth_code_store",
+		"oauth_issuer",
+		"social_identity_store",
+		"social_provider_registry",
+		"oauth_server",
+		"mcp_server",
+		"rest_router",
+		"ui_handler",
+		"metrics_handler",
+		"http_listener",
+		"jobs_scheduler",
+	}
 }
 
 func migrateCmd() *cobra.Command {

@@ -34,10 +34,12 @@
     - enabled OAuth providers list
     - embedding provider profile details (`name`, `backend`, `service_url`, model slugs, `has_api_key` without exposing secrets)
     - explicit service initialization markers (embedding service/factory, API surface + scheduler).
+    - per-service startup confirmation logs for each created component (`db_pool`, embedding services, OAuth stores/server, MCP, REST, UI, metrics handler, listener, scheduler).
   - Added unit coverage in `cmd/postbrain/main_test.go` for:
     - `enabledJobNames`
     - `embeddingProviderInfos`
     - `enabledOAuthProviderNames`.
+    - `startupServiceStepNames`.
 
 - [x] 2026-04-05: Added high-dimension ANN support using halfvec expression indexing (TDD-first):
   - Kept per-model embedding table storage in full precision `vector(dims)` for all models.

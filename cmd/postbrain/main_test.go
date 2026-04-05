@@ -103,3 +103,30 @@ func TestEnabledOAuthProviderNames_ReturnsSortedEnabledProviders(t *testing.T) {
 		t.Fatalf("enabledOAuthProviderNames() = %#v, want %#v", got, want)
 	}
 }
+
+func TestStartupServiceStepNames_ContainsExpectedServices(t *testing.T) {
+	t.Parallel()
+	got := startupServiceStepNames()
+	want := []string{
+		"db_pool",
+		"embedding_service",
+		"embedding_model_factory",
+		"oauth_token_store",
+		"oauth_state_store",
+		"oauth_client_store",
+		"oauth_code_store",
+		"oauth_issuer",
+		"social_identity_store",
+		"social_provider_registry",
+		"oauth_server",
+		"mcp_server",
+		"rest_router",
+		"ui_handler",
+		"metrics_handler",
+		"http_listener",
+		"jobs_scheduler",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("startupServiceStepNames() = %#v, want %#v", got, want)
+	}
+}
