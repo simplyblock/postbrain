@@ -19,6 +19,7 @@ This documentation is also published via GitHub Pages for repository browsing.
 - [Using Postbrain with Coding Agents](./using-with-coding-agents.md)
 - [Using Postbrain with ChatGPT](./using-with-chatgpt.md)
 - [Common Usage Workflows](./common-workflows.md)
+- [Web UI Guide](./webui-guide.md)
 - [OAuth Logins and Configuration](./oauth-logins.md)
 
 ## Technical and operations

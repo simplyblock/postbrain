@@ -8,6 +8,9 @@ const projectRoot = path.resolve(__dirname, "..");
 const sourceDocsDir = path.resolve(projectRoot, "..", "docs");
 const targetDocsDir = path.resolve(projectRoot, "src", "pages", "docs");
 const githubRepoBase = "https://github.com/simplyblock/postbrain/blob/main";
+const repo = process.env.GITHUB_REPOSITORY?.split("/")[1] ?? "";
+const usePagesBase = process.env.GITHUB_ACTIONS === "true" && repo !== "";
+const docsAssetBasePrefix = usePagesBase ? `/${repo}` : "";
 
 if (!existsSync(sourceDocsDir)) {
   throw new Error(`docs source directory not found: ${sourceDocsDir}`);
@@ -44,7 +47,7 @@ for (const file of docsFiles) {
   // Rewrite markdown links for Astro directory-style routes:
   // docs pages are served as /docs/<slug>/, so sibling links from a docs page
   // need to use ../<slug>/.
-  const rewritten = sourceText.replace(/\]\(([^)\s]+?\.md)(#[^)]+)?\)/g, (m, href, anchor) => {
+  let rewritten = sourceText.replace(/\]\(([^)\s]+?\.md)(#[^)]+)?\)/g, (m, href, anchor) => {
     if (/^(?:[a-z]+:|\/|#)/i.test(href)) {
       return m;
     }
@@ -74,6 +77,12 @@ for (const file of docsFiles) {
 
     return `](${rel}${anchor ?? ""})`;
   });
+
+  // Rewrite docs image links to site public assets. Keep source markdown
+  // GitHub-friendly while generated docs pages reference /assets/... paths.
+  rewritten = rewritten.replace(/\]\(\.\.\/site\/public\/assets\//g, `](${docsAssetBasePrefix}/assets/`);
+  // Also support already-absolute /assets links.
+  rewritten = rewritten.replace(/\]\(\/assets\//g, `](${docsAssetBasePrefix}/assets/`);
 
   const frontmatter = [
     "---",
