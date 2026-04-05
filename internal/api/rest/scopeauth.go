@@ -37,6 +37,28 @@ func (ro *Router) effectiveScopeIDsForRequest(ctx context.Context) ([]uuid.UUID,
 	return ro.membership.EffectiveScopeIDs(ctx, principalID)
 }
 
+func (ro *Router) authorizedScopeIDsForRequest(ctx context.Context) ([]uuid.UUID, error) {
+	effectiveScopeIDs, err := ro.effectiveScopeIDsForRequest(ctx)
+	if err != nil {
+		return nil, err
+	}
+	token, _ := ctx.Value(auth.ContextKeyToken).(*db.Token)
+	if token == nil || token.ScopeIds == nil {
+		return effectiveScopeIDs, nil
+	}
+	allowedByToken := make(map[uuid.UUID]struct{}, len(token.ScopeIds))
+	for _, id := range token.ScopeIds {
+		allowedByToken[id] = struct{}{}
+	}
+	authorized := make([]uuid.UUID, 0, len(effectiveScopeIDs))
+	for _, id := range effectiveScopeIDs {
+		if _, ok := allowedByToken[id]; ok {
+			authorized = append(authorized, id)
+		}
+	}
+	return authorized, nil
+}
+
 func writeScopeAuthzError(w http.ResponseWriter, r *http.Request, requestedScopeID uuid.UUID, err error) {
 	switch {
 	case errors.Is(err, scopeauth.ErrTokenScopeDenied),

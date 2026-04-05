@@ -30,12 +30,25 @@ type updateScopeOwnerRequest struct {
 
 func (ro *Router) listScopes(w http.ResponseWriter, r *http.Request) {
 	pg := paginationFromRequest(r)
-	scopes, err := db.ListScopes(r.Context(), ro.pool, pg.Limit, pg.Offset)
+	authorizedScopeIDs, err := ro.authorizedScopeIDsForRequest(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to resolve authorized scopes")
+		return
+	}
+	allScopes, err := db.GetScopesByIDs(r.Context(), ro.pool, authorizedScopeIDs)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"scopes": scopes})
+	if pg.Offset >= len(allScopes) {
+		writeJSON(w, http.StatusOK, map[string]any{"scopes": []*db.Scope{}})
+		return
+	}
+	end := pg.Offset + pg.Limit
+	if end > len(allScopes) {
+		end = len(allScopes)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"scopes": allScopes[pg.Offset:end]})
 }
 
 func (ro *Router) createScope(w http.ResponseWriter, r *http.Request) {
