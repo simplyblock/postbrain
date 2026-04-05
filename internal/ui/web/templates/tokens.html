@@ -55,6 +55,24 @@
     </td>
     <td>
       {{if eq .RevokedAt nil}}
+      {{$tok := .}}
+      <details style="display:inline-block;margin-right:0.5rem">
+        <summary style="cursor:pointer">Edit scopes</summary>
+        <form method="POST" action="/ui/tokens/{{.ID}}/scopes" style="margin-top:0.5rem;min-width:18rem">
+          <fieldset>
+            <legend>Token scopes</legend>
+            {{range $.Scopes}}
+            <label>
+              <input type="checkbox" name="scope_ids" value="{{.ID}}"{{if tokenHasScope $tok .ID}} checked{{end}}>
+              <span class="mono">{{.Kind}}:{{.ExternalID}}</span>
+            </label>
+            {{else}}
+            <span class="muted">No scopes defined yet.</span>
+            {{end}}
+          </fieldset>
+          <button type="submit" class="secondary">Save scopes</button>
+        </form>
+      </details>
       <form method="POST" action="/ui/tokens/{{.ID}}/revoke" style="display:inline"
             onsubmit="return confirm('Revoke this token?')">
         <button type="submit" class="danger">Revoke</button>

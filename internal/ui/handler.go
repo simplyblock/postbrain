@@ -68,6 +68,17 @@ func NewHandler(pool *pgxpool.Pool, svc *embedding.EmbeddingService) (*Handler, 
 		"statusBadge": statusBadge,
 		"join":        strings.Join,
 		"add1":        func(i int) int { return i + 1 },
+		"tokenHasScope": func(tok *db.Token, scopeID uuid.UUID) bool {
+			if tok == nil {
+				return false
+			}
+			for _, id := range tok.ScopeIds {
+				if id == scopeID {
+					return true
+				}
+			}
+			return false
+		},
 		"slice": func(s string, i, j int) string {
 			if j > len(s) {
 				j = len(s)
@@ -246,6 +257,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleDeleteMembership(w, r)
 	case r.URL.Path == "/ui/tokens" && r.Method == http.MethodPost:
 		h.handleCreateToken(w, r)
+	case strings.HasSuffix(r.URL.Path, "/scopes") && strings.HasPrefix(r.URL.Path, "/ui/tokens/") && r.Method == http.MethodPost:
+		h.handleUpdateTokenScopes(w, r)
 	case strings.HasSuffix(r.URL.Path, "/revoke") && strings.HasPrefix(r.URL.Path, "/ui/tokens/") && r.Method == http.MethodPost:
 		h.handleRevokeToken(w, r)
 	case r.URL.Path == "/ui/tokens":
