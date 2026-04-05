@@ -39,6 +39,16 @@ func (ro *Router) createPrincipal(w http.ResponseWriter, r *http.Request) {
 	if body.Meta == nil {
 		body.Meta = []byte("{}")
 	}
+	callerID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
+	allowed, err := ro.membership.HasAnyAdminRole(r.Context(), callerID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !allowed {
+		writeError(w, http.StatusForbidden, "forbidden: principal admin required")
+		return
+	}
 	p, err := ro.principals.Create(r.Context(), body.Kind, body.Slug, body.DisplayName, body.Meta)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -81,6 +91,16 @@ func (ro *Router) updatePrincipal(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	callerID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
+	allowed, err := ro.membership.IsPrincipalAdmin(r.Context(), callerID, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !allowed {
+		writeError(w, http.StatusForbidden, "forbidden: principal admin required")
+		return
+	}
 	p, err := ro.principals.Update(r.Context(), id, body.DisplayName, body.Meta)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -93,6 +113,16 @@ func (ro *Router) deletePrincipal(w http.ResponseWriter, r *http.Request) {
 	id, err := uuidParam(r, "id")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid principal id")
+		return
+	}
+	callerID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
+	allowed, err := ro.membership.IsPrincipalAdmin(r.Context(), callerID, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !allowed {
+		writeError(w, http.StatusForbidden, "forbidden: principal admin required")
 		return
 	}
 	if err := ro.principals.Delete(r.Context(), id); err != nil {
@@ -140,6 +170,16 @@ func (ro *Router) addMember(w http.ResponseWriter, r *http.Request) {
 	if body.Role == "" {
 		body.Role = "member"
 	}
+	callerID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
+	allowed, err := ro.membership.IsPrincipalAdmin(r.Context(), callerID, parentID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !allowed {
+		writeError(w, http.StatusForbidden, "forbidden: principal admin required")
+		return
+	}
 	grantedBy, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 	if err := ro.membership.AddMembership(r.Context(), memberID, parentID, body.Role, &grantedBy); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -161,6 +201,16 @@ func (ro *Router) removeMember(w http.ResponseWriter, r *http.Request) {
 	memberID, err := uuidParam(r, "member_id")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid member_id")
+		return
+	}
+	callerID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
+	allowed, err := ro.membership.IsPrincipalAdmin(r.Context(), callerID, parentID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !allowed {
+		writeError(w, http.StatusForbidden, "forbidden: principal admin required")
 		return
 	}
 	if err := ro.membership.RemoveMembership(r.Context(), memberID, parentID); err != nil {

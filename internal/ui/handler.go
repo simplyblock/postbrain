@@ -1138,6 +1138,10 @@ func (h *Handler) handleCreatePrincipal(w http.ResponseWriter, r *http.Request) 
 		h.renderPrincipals(w, r, "service unavailable", "", "")
 		return
 	}
+	if !h.hasAnyPrincipalAdminRole(r.Context(), r) {
+		h.renderPrincipals(w, r, "principal admin required", "", "")
+		return
+	}
 	ps := principals.NewStore(h.pool)
 	if _, err := ps.Create(r.Context(), kind, slug, displayName, nil); err != nil {
 		h.renderPrincipals(w, r, err.Error(), "", "")
@@ -1166,6 +1170,10 @@ func (h *Handler) handleUpdatePrincipal(w http.ResponseWriter, r *http.Request) 
 	}
 	if h.pool == nil {
 		h.renderPrincipals(w, r, "", "service unavailable", "")
+		return
+	}
+	if !h.hasPrincipalAdminAccess(r.Context(), r, id) {
+		h.renderPrincipals(w, r, "", "principal admin required", "")
 		return
 	}
 	ps := principals.NewStore(h.pool)
@@ -1347,6 +1355,10 @@ func (h *Handler) handleAddMembership(w http.ResponseWriter, r *http.Request) {
 		h.renderPrincipals(w, r, "", "", "service unavailable")
 		return
 	}
+	if !h.hasPrincipalAdminAccess(r.Context(), r, parentID) {
+		h.renderPrincipals(w, r, "", "", "principal admin required")
+		return
+	}
 	grantedBy := h.principalFromCookie(r)
 	var grantedByPtr *uuid.UUID
 	if grantedBy != uuid.Nil {
@@ -1380,6 +1392,10 @@ func (h *Handler) handleDeleteMembership(w http.ResponseWriter, r *http.Request)
 	}
 	if h.pool == nil {
 		h.renderPrincipals(w, r, "", "", "service unavailable")
+		return
+	}
+	if !h.hasPrincipalAdminAccess(r.Context(), r, parentID) {
+		h.renderPrincipals(w, r, "", "", "principal admin required")
 		return
 	}
 	if err := db.DeleteMembership(r.Context(), h.pool, memberID, parentID); err != nil {
@@ -1436,6 +1452,32 @@ func (h *Handler) hasScopeAdminAccess(ctx context.Context, r *http.Request, scop
 	}
 	ms := principals.NewMembershipStore(h.pool)
 	ok, err := ms.IsScopeAdmin(ctx, token.PrincipalID, scopeID)
+	return err == nil && ok
+}
+
+func (h *Handler) hasPrincipalAdminAccess(ctx context.Context, r *http.Request, targetPrincipalID uuid.UUID) bool {
+	if h.pool == nil {
+		return false
+	}
+	token := h.tokenFromCookie(r)
+	if token == nil || token.PrincipalID == uuid.Nil {
+		return false
+	}
+	ms := principals.NewMembershipStore(h.pool)
+	ok, err := ms.IsPrincipalAdmin(ctx, token.PrincipalID, targetPrincipalID)
+	return err == nil && ok
+}
+
+func (h *Handler) hasAnyPrincipalAdminRole(ctx context.Context, r *http.Request) bool {
+	if h.pool == nil {
+		return false
+	}
+	token := h.tokenFromCookie(r)
+	if token == nil || token.PrincipalID == uuid.Nil {
+		return false
+	}
+	ms := principals.NewMembershipStore(h.pool)
+	ok, err := ms.HasAnyAdminRole(ctx, token.PrincipalID)
 	return err == nil && ok
 }
 

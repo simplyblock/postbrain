@@ -124,3 +124,46 @@ func (m *MembershipStore) IsScopeAdmin(ctx context.Context, principalID, scopeID
 	}
 	return exists, nil
 }
+
+// IsPrincipalAdmin returns true if principalID has role="admin" on targetPrincipalID
+// or any ancestor principal of targetPrincipalID.
+func (m *MembershipStore) IsPrincipalAdmin(ctx context.Context, principalID, targetPrincipalID uuid.UUID) (bool, error) {
+	ancestorPrincipalIDs, err := db.GetAllParentIDs(ctx, m.pool, targetPrincipalID)
+	if err != nil {
+		return false, fmt.Errorf("principals: is principal admin: %w", err)
+	}
+
+	var exists bool
+	err = m.pool.QueryRow(ctx,
+		`SELECT EXISTS(
+		     SELECT 1
+		     FROM principal_memberships pm
+		     WHERE pm.member_id = $1
+		     AND pm.parent_id = ANY($2)
+		     AND pm.role = 'admin'
+		 )`,
+		principalID, ancestorPrincipalIDs,
+	).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("principals: is principal admin query: %w", err)
+	}
+	return exists, nil
+}
+
+// HasAnyAdminRole returns true if principalID holds at least one admin membership.
+func (m *MembershipStore) HasAnyAdminRole(ctx context.Context, principalID uuid.UUID) (bool, error) {
+	var exists bool
+	err := m.pool.QueryRow(ctx,
+		`SELECT EXISTS(
+		     SELECT 1
+		     FROM principal_memberships pm
+		     WHERE pm.member_id = $1
+		     AND pm.role = 'admin'
+		 )`,
+		principalID,
+	).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("principals: has any admin role query: %w", err)
+	}
+	return exists, nil
+}
