@@ -956,13 +956,31 @@ func (h *Handler) renderPrincipals(w http.ResponseWriter, r *http.Request, princ
 	}
 
 	if h.pool != nil {
+		reachable := h.reachablePrincipalIDSet(r.Context(), r)
 		principals, err := db.ListPrincipals(r.Context(), h.pool, 50, 0)
 		if err == nil {
-			data.Principals = principals
+			filtered := make([]*db.Principal, 0, len(principals))
+			for _, p := range principals {
+				if _, ok := reachable[p.ID]; !ok {
+					continue
+				}
+				filtered = append(filtered, p)
+			}
+			data.Principals = filtered
 		}
 		memberships, err := db.ListAllMemberships(r.Context(), h.pool)
 		if err == nil {
-			data.Memberships = memberships
+			filtered := make([]*db.MembershipRow, 0, len(memberships))
+			for _, m := range memberships {
+				if _, ok := reachable[m.MemberID]; !ok {
+					continue
+				}
+				if _, ok := reachable[m.ParentID]; !ok {
+					continue
+				}
+				filtered = append(filtered, m)
+			}
+			data.Memberships = filtered
 		}
 	}
 
@@ -1314,6 +1332,25 @@ func (h *Handler) writableScopeIDSet(ctx context.Context, r *http.Request) map[u
 	}
 	ms := principals.NewMembershipStore(h.pool)
 	ids, err := ms.EffectiveScopeIDs(ctx, principalID)
+	if err != nil {
+		return out
+	}
+	for _, id := range ids {
+		out[id] = struct{}{}
+	}
+	return out
+}
+
+func (h *Handler) reachablePrincipalIDSet(ctx context.Context, r *http.Request) map[uuid.UUID]struct{} {
+	out := map[uuid.UUID]struct{}{}
+	if h.pool == nil {
+		return out
+	}
+	principalID := h.principalFromCookie(r)
+	if principalID == uuid.Nil {
+		return out
+	}
+	ids, err := db.GetAllParentIDs(ctx, h.pool, principalID)
 	if err != nil {
 		return out
 	}
