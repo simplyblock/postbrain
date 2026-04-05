@@ -22,6 +22,7 @@ postbrain-cli embedding-model register \
   --config config.yaml \
   --slug openai-text-3-small-v1 \
   --provider openai \
+  --provider-config openai-prod \
   --service-url https://api.openai.com/v1 \
   --provider-model text-embedding-3-small \
   --dimensions 1536 \
@@ -36,12 +37,15 @@ postbrain-cli embedding-model register \
   --config config.yaml \
   --slug local-code-nomic-v1 \
   --provider ollama \
+  --provider-config default \
   --service-url http://localhost:11434 \
   --provider-model nomic-embed-text \
   --dimensions 768 \
   --content-type code \
   --activate
 ```
+
+If `--provider-config` is omitted, Postbrain uses `default`.
 
 ## 2) List and validate model state
 

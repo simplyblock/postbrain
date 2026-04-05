@@ -166,7 +166,7 @@ func TestEmbeddingModelsNewColumns(t *testing.T) {
 	pool := testhelper.NewTestPool(t)
 	ctx := context.Background()
 
-	for _, col := range []string{"provider", "service_url", "provider_model", "table_name", "is_ready"} {
+	for _, col := range []string{"provider", "service_url", "provider_model", "provider_config", "table_name", "is_ready"} {
 		assertColumnExists(t, ctx, pool, "embedding_models", col, true)
 	}
 }
@@ -188,6 +188,7 @@ func TestEmbeddingModelsActiveIndexesPreserved(t *testing.T) {
 
 	assertIndexExists(t, ctx, pool, "embedding_models_active_text_idx", true)
 	assertIndexExists(t, ctx, pool, "embedding_models_active_code_idx", true)
+	assertIndexExists(t, ctx, pool, "embedding_models_provider_config_idx", true)
 }
 
 // TestEmbeddingModelIDColumnsRetained verifies that the legacy embedding_model_id

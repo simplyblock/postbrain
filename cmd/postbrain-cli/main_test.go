@@ -94,6 +94,9 @@ func TestEmbeddingModelRegisterCommand_Success(t *testing.T) {
 		if opts.Slug != "text-1" {
 			t.Fatalf("slug = %q, want text-1", opts.Slug)
 		}
+		if opts.ProviderConfig != "default" {
+			t.Fatalf("provider-config = %q, want default", opts.ProviderConfig)
+		}
 		return "registered model text-1", nil
 	}
 	t.Cleanup(func() { registerEmbeddingModelCmdFn = old })
@@ -110,6 +113,24 @@ func TestEmbeddingModelRegisterCommand_Success(t *testing.T) {
 	}
 	if got := strings.TrimSpace(out.String()); got != "registered model text-1" {
 		t.Fatalf("output = %q, want %q", got, "registered model text-1")
+	}
+}
+
+func TestEmbeddingModelRegisterCommand_ProviderConfigOverride(t *testing.T) {
+	old := registerEmbeddingModelCmdFn
+	registerEmbeddingModelCmdFn = func(ctx context.Context, opts embeddingModelRegisterOptions) (string, error) {
+		if opts.ProviderConfig != "openai-prod" {
+			t.Fatalf("provider-config = %q, want openai-prod", opts.ProviderConfig)
+		}
+		return "registered model text-1", nil
+	}
+	t.Cleanup(func() { registerEmbeddingModelCmdFn = old })
+
+	root := newRootCmd()
+	root.SetArgs([]string{"embedding-model", "register", "--slug", "text-1", "--provider", "openai", "--service-url", "http://localhost:11434/v1", "--provider-model", "text-embedding-3-large", "--provider-config", "openai-prod", "--dimensions", "1536", "--content-type", "text"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute register command: %v", err)
 	}
 }
 

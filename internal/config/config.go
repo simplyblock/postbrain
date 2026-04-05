@@ -31,14 +31,22 @@ type DatabaseConfig struct {
 
 // EmbeddingConfig holds embedding service parameters.
 type EmbeddingConfig struct {
-	Backend        string        `mapstructure:"backend"`
-	ServiceURL     string        `mapstructure:"service_url"`
-	TextModel      string        `mapstructure:"text_model"`
-	CodeModel      string        `mapstructure:"code_model"`
-	SummaryModel   string        `mapstructure:"summary_model"`
-	OpenAIAPIKey   string        `mapstructure:"openai_api_key"`
-	RequestTimeout time.Duration `mapstructure:"request_timeout"`
-	BatchSize      int           `mapstructure:"batch_size"`
+	Backend        string                             `mapstructure:"backend"`
+	ServiceURL     string                             `mapstructure:"service_url"`
+	TextModel      string                             `mapstructure:"text_model"`
+	CodeModel      string                             `mapstructure:"code_model"`
+	SummaryModel   string                             `mapstructure:"summary_model"`
+	OpenAIAPIKey   string                             `mapstructure:"openai_api_key"`
+	Providers      map[string]EmbeddingProviderConfig `mapstructure:"providers"`
+	RequestTimeout time.Duration                      `mapstructure:"request_timeout"`
+	BatchSize      int                                `mapstructure:"batch_size"`
+}
+
+// EmbeddingProviderConfig defines one named runtime profile for embedding models.
+type EmbeddingProviderConfig struct {
+	Backend      string `mapstructure:"backend"`
+	ServiceURL   string `mapstructure:"service_url"`
+	OpenAIAPIKey string `mapstructure:"openai_api_key"`
 }
 
 // ServerConfig holds HTTP/MCP server parameters.
@@ -185,6 +193,7 @@ func Load(path string) (*Config, error) {
 			cfg.Embedding.ServiceURL = v.GetString("embedding.openai_base_url")
 		}
 	}
+	normalizeEmbeddingProviderProfiles(&cfg.Embedding)
 
 	// Validate required fields
 	if cfg.Database.URL == "" {
@@ -192,4 +201,20 @@ func Load(path string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+func normalizeEmbeddingProviderProfiles(cfg *EmbeddingConfig) {
+	if cfg == nil {
+		return
+	}
+	if cfg.Providers == nil {
+		cfg.Providers = map[string]EmbeddingProviderConfig{}
+	}
+	if len(cfg.Providers) == 0 {
+		cfg.Providers["default"] = EmbeddingProviderConfig{
+			Backend:      cfg.Backend,
+			ServiceURL:   cfg.ServiceURL,
+			OpenAIAPIKey: cfg.OpenAIAPIKey,
+		}
+	}
 }

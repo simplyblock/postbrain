@@ -34,6 +34,7 @@ environment variables.
 | `embedding.code_model`      | Code embedding model slug.                         |
 | `embedding.summary_model`   | Optional summarize/analyze model override.         |
 | `embedding.openai_api_key`  | API key for OpenAI-backed embedding/analyze paths. |
+| `embedding.providers`       | Named provider runtime profiles for model routing. |
 | `embedding.request_timeout` | Timeout for embedding/analyze requests.            |
 | `embedding.batch_size`      | Batch size for embedding jobs.                     |
 
@@ -48,6 +49,13 @@ When `embedding.backend` is `openai`:
 When `embedding.backend` is `ollama`:
 - `embedding.service_url` is the Ollama base URL.
 - If empty, Postbrain uses `http://localhost:11434`.
+
+`embedding.providers` lets you define multiple runtime profiles (for example
+`default`, `openai-prod`, `local-ollama`). Embedding models can then bind to a
+profile via `postbrain-cli embedding-model register --provider-config <name>`.
+If `embedding.providers` is omitted, Postbrain synthesizes `providers.default`
+from the top-level `embedding.backend`, `embedding.service_url`, and
+`embedding.openai_api_key` values.
 
 ## `server`
 
