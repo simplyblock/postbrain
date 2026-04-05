@@ -87,7 +87,7 @@ func (f *ModelEmbedderFactory) newEmbedderForConfig(model *ModelConfig) (Embedde
 	}
 	resolvedProvider := strings.TrimSpace(model.Provider)
 	resolvedServiceURL := strings.TrimSpace(model.ServiceURL)
-	resolvedAPIKey := strings.TrimSpace(f.baseCfg.OpenAIAPIKey)
+	resolvedAPIKey := ""
 	if profile, ok := f.baseCfg.Providers[profileName]; ok {
 		if strings.TrimSpace(profile.Backend) != "" {
 			resolvedProvider = strings.TrimSpace(profile.Backend)
@@ -95,8 +95,8 @@ func (f *ModelEmbedderFactory) newEmbedderForConfig(model *ModelConfig) (Embedde
 		if strings.TrimSpace(profile.ServiceURL) != "" {
 			resolvedServiceURL = strings.TrimSpace(profile.ServiceURL)
 		}
-		if strings.TrimSpace(profile.OpenAIAPIKey) != "" {
-			resolvedAPIKey = strings.TrimSpace(profile.OpenAIAPIKey)
+		if strings.TrimSpace(profile.APIKey) != "" {
+			resolvedAPIKey = strings.TrimSpace(profile.APIKey)
 		}
 	} else if profileName != "default" {
 		return nil, fmt.Errorf("embedding factory: unknown provider profile %q for model %s", profileName, model.ID)
@@ -108,24 +108,19 @@ func (f *ModelEmbedderFactory) newEmbedderForConfig(model *ModelConfig) (Embedde
 	}
 
 	cfg := *f.baseCfg
-	cfg.ServiceURL = resolvedServiceURL
-	cfg.OpenAIAPIKey = resolvedAPIKey
 
 	switch provider {
 	case "ollama":
-		if cfg.ServiceURL == "" {
-			cfg.ServiceURL = defaultOllamaServiceURL
-		}
-		return NewOllamaEmbedder(&cfg, providerModel), nil
+		return NewOllamaEmbedder(&cfg, providerModel, resolvedServiceURL), nil
 	case "openai":
-		baseURL := cfg.ServiceURL
+		baseURL := resolvedServiceURL
 		if baseURL == "" {
 			baseURL = defaultOpenAIBaseURL
 		}
-		if cfg.OpenAIAPIKey == "" && baseURL == defaultOpenAIBaseURL {
-			return nil, fmt.Errorf("embedding factory: openai_api_key is required for default OpenAI URL")
+		if resolvedAPIKey == "" && baseURL == defaultOpenAIBaseURL {
+			return nil, fmt.Errorf("embedding factory: api_key is required for default OpenAI URL")
 		}
-		return NewOpenAIEmbedder(&cfg, providerModel, baseURL), nil
+		return NewOpenAIEmbedder(&cfg, providerModel, baseURL, resolvedAPIKey), nil
 	default:
 		return nil, fmt.Errorf("embedding factory: unsupported provider %q", provider)
 	}

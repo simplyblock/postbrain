@@ -1,18 +1,11 @@
 package embedding
 
-import (
-	"strings"
-
-	"github.com/simplyblock/postbrain/internal/config"
-)
+import "strings"
 
 const defaultOllamaServiceURL = "http://localhost:11434"
 
-func serviceURLOrDefault(cfg *config.EmbeddingConfig, fallback string) string {
-	if cfg == nil {
-		return fallback
-	}
-	if u := strings.TrimSpace(cfg.ServiceURL); u != "" {
+func serviceURLOrDefault(url, fallback string) string {
+	if u := strings.TrimSpace(url); u != "" {
 		return u
 	}
 	return fallback
