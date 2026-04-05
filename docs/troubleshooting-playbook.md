@@ -61,7 +61,7 @@ When DNS01 is pending, troubleshoot solver credentials and DNS zone access befor
 
 Check:
 
-- active embedding model per content type (`postbrain-cli embedding-model list`)
+- active embedding model per content type (`postbrain --config config.yaml embedding-model list`)
 - `embedding_index` distribution by status (`pending` / `ready` / `failed`)
 - recent `last_error` values for failed rows
 
