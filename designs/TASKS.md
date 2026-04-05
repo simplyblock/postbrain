@@ -45,6 +45,14 @@
   - Follow-up test hardening:
     - relaxed `indexdef` assertion in `internal/db/embedding_tables_integration_test.go` to tolerate PostgreSQL expression normalization (`(embedding)::halfvec(...)`) while still asserting halfvec expression indexing intent.
 
+- [x] 2026-04-05: Fixed re-embed text crash on NULL content rows (TDD-first):
+  - Added integration regression test:
+    - `internal/jobs/reembed_integration_test.go::TestReembedJob_RunText_NullContentMarksFailed`
+  - Updated `internal/jobs/reembed.go`:
+    - scan `content` as `sql.NullString` in `RunText` pending-row loop
+    - treat NULL/blank content uniformly as failed-attempt rows via existing retry/failure logic
+    - avoid hard job failure from `cannot scan NULL into *string`.
+
 - [x] 2026-04-05: Moved embedding model administration from `postbrain-cli` to `postbrain` (TDD-first):
   - Added server-side `embedding-model` command group in `cmd/postbrain/embedding_model_cmd.go`:
     - `register`, `activate`, `list`
