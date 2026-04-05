@@ -230,7 +230,7 @@ func (ro *Router) deleteMemory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "memory not found")
 		return
 	}
-	if err := ro.authorizeObjectScope(r.Context(), existing.ScopeID); err != nil {
+	if err := ro.authorizeDeleteObjectScope(r.Context(), existing.ScopeID); err != nil {
 		writeScopeAuthzError(w, r, existing.ScopeID, err)
 		return
 	}

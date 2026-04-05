@@ -1063,6 +1063,10 @@ func (h *Handler) handleDeleteScope(w http.ResponseWriter, r *http.Request) {
 		h.renderScopes(w, r, "service unavailable")
 		return
 	}
+	if !h.hasScopeAdminAccess(r.Context(), r, id) {
+		h.renderScopes(w, r, "scope admin required")
+		return
+	}
 	children, err := db.CountChildScopes(r.Context(), h.pool, id)
 	if err != nil {
 		h.renderScopes(w, r, "could not check for child scopes")
@@ -1104,6 +1108,10 @@ func (h *Handler) handleSetScopeOwner(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.pool == nil {
 		h.renderScopes(w, r, "service unavailable")
+		return
+	}
+	if !h.hasScopeAdminAccess(r.Context(), r, id) {
+		h.renderScopes(w, r, "scope admin required")
 		return
 	}
 	if _, err := db.UpdateScopeOwner(r.Context(), h.pool, id, principalID); err != nil {
@@ -1202,6 +1210,10 @@ func (h *Handler) handleCreateScope(w http.ResponseWriter, r *http.Request) {
 		h.renderScopes(w, r, "service unavailable")
 		return
 	}
+	if parentID != nil && !h.hasScopeAdminAccess(r.Context(), r, *parentID) {
+		h.renderScopes(w, r, "scope admin required")
+		return
+	}
 	if _, err := db.CreateScope(r.Context(), h.pool, kind, externalID, name, parentID, principalID, nil); err != nil {
 		h.renderScopes(w, r, err.Error())
 		return
@@ -1235,6 +1247,10 @@ func (h *Handler) handleSetScopeRepo(w http.ResponseWriter, r *http.Request) {
 		h.renderScopes(w, r, "service unavailable")
 		return
 	}
+	if !h.hasScopeAdminAccess(r.Context(), r, id) {
+		h.renderScopes(w, r, "scope admin required")
+		return
+	}
 	if _, err := db.SetScopeRepo(r.Context(), h.pool, id, repoURL, defaultBranch); err != nil {
 		h.renderScopes(w, r, err.Error())
 		return
@@ -1254,6 +1270,10 @@ func (h *Handler) handleSyncScopeRepo(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.pool == nil {
 		h.renderScopes(w, r, "service unavailable")
+		return
+	}
+	if !h.hasScopeAdminAccess(r.Context(), r, id) {
+		h.renderScopes(w, r, "scope admin required")
 		return
 	}
 	scope, err := db.GetScopeByID(r.Context(), h.pool, id)
@@ -1392,6 +1412,31 @@ func (h *Handler) tokenFromCookie(r *http.Request) *db.Token {
 		return nil
 	}
 	return token
+}
+
+func (h *Handler) hasScopeAdminAccess(ctx context.Context, r *http.Request, scopeID uuid.UUID) bool {
+	if h.pool == nil {
+		return false
+	}
+	token := h.tokenFromCookie(r)
+	if token == nil || token.PrincipalID == uuid.Nil {
+		return false
+	}
+	if token.ScopeIds != nil {
+		allowed := false
+		for _, id := range token.ScopeIds {
+			if id == scopeID {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return false
+		}
+	}
+	ms := principals.NewMembershipStore(h.pool)
+	ok, err := ms.IsScopeAdmin(ctx, token.PrincipalID, scopeID)
+	return err == nil && ok
 }
 
 // authorizedScopesForRequest resolves scopes writable by the current principal,

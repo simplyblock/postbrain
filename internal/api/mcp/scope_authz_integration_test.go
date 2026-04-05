@@ -17,6 +17,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/principals"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
@@ -472,4 +473,88 @@ func withAuthContextUnrestricted(ctx context.Context, principalID uuid.UUID) con
 		ScopeIds:    nil,
 	}
 	return context.WithValue(ctx, auth.ContextKeyToken, token)
+}
+
+func TestMCP_ScopeAuthz_ForgetWriteParentAllowedDeleteParentDenied(t *testing.T) {
+	ctx := context.Background()
+	pool := testhelper.NewTestPool(t)
+	svc := testhelper.NewMockEmbeddingService()
+	cfg := &config.Config{}
+
+	parentPrincipal := testhelper.CreateTestPrincipal(t, pool, "team", "mcp-delete-parent-team-"+uuid.NewString())
+	childPrincipal := testhelper.CreateTestPrincipal(t, pool, "user", "mcp-delete-parent-user-"+uuid.NewString())
+
+	parentScope := testhelper.CreateTestScope(t, pool, "project", "mcp-delete-parent-scope-"+uuid.NewString(), nil, parentPrincipal.ID)
+	childScope := testhelper.CreateTestScope(t, pool, "project", "mcp-delete-child-scope-"+uuid.NewString(), nil, childPrincipal.ID)
+
+	ms := principals.NewMembershipStore(pool)
+	if err := ms.AddMembership(ctx, childPrincipal.ID, parentPrincipal.ID, "member", nil); err != nil {
+		t.Fatalf("add membership child->parent: %v", err)
+	}
+
+	parentMemory := testhelper.CreateTestMemory(t, pool, parentScope.ID, parentPrincipal.ID, "parent memory for mcp forget")
+	childMemory := testhelper.CreateTestMemory(t, pool, childScope.ID, childPrincipal.ID, "child memory for mcp forget")
+	testhelper.CreateTestEmbeddingModel(t, pool)
+
+	srv := mcpapi.NewServer(pool, svc, cfg).MCPServer()
+	ctxAuth := withAuthContextUnrestricted(ctx, childPrincipal.ID)
+
+	rememberTool := srv.GetTool("remember")
+	if rememberTool == nil {
+		t.Fatal("remember tool not registered")
+	}
+	t.Run("write to parent scope succeeds", func(t *testing.T) {
+		req := mcpgo.CallToolRequest{}
+		req.Params.Name = "remember"
+		req.Params.Arguments = map[string]any{
+			"content":     "write into parent via mcp",
+			"scope":       "project:" + parentScope.ExternalID,
+			"memory_type": "semantic",
+		}
+		result, err := rememberTool.Handler(ctxAuth, req)
+		if err != nil {
+			t.Fatalf("remember handler error: %v", err)
+		}
+		if result == nil || result.IsError {
+			t.Fatalf("remember expected success, got %+v", result)
+		}
+	})
+
+	forgetTool := srv.GetTool("forget")
+	if forgetTool == nil {
+		t.Fatal("forget tool not registered")
+	}
+	t.Run("delete in own scope succeeds", func(t *testing.T) {
+		req := mcpgo.CallToolRequest{}
+		req.Params.Name = "forget"
+		req.Params.Arguments = map[string]any{
+			"memory_id": childMemory.ID.String(),
+		}
+		result, err := forgetTool.Handler(ctxAuth, req)
+		if err != nil {
+			t.Fatalf("forget handler error: %v", err)
+		}
+		if result == nil || result.IsError {
+			t.Fatalf("forget expected success, got %+v", result)
+		}
+	})
+
+	t.Run("delete in parent scope is forbidden", func(t *testing.T) {
+		req := mcpgo.CallToolRequest{}
+		req.Params.Name = "forget"
+		req.Params.Arguments = map[string]any{
+			"memory_id": parentMemory.ID.String(),
+		}
+		result, err := forgetTool.Handler(ctxAuth, req)
+		if err != nil {
+			t.Fatalf("forget handler error: %v", err)
+		}
+		if result == nil || !result.IsError {
+			t.Fatalf("forget expected error result, got %+v", result)
+		}
+		msg := firstToolText(result)
+		if !strings.Contains(msg, "forbidden: scope access denied") {
+			t.Fatalf("forget error text = %q, want forbidden scope access denied", msg)
+		}
+	})
 }

@@ -168,7 +168,7 @@ func (ro *Router) addCollectionItem(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "collection not found")
 		return
 	}
-	if err := ro.authorizeObjectScope(r.Context(), coll.ScopeID); err != nil {
+	if err := ro.authorizeDeleteObjectScope(r.Context(), coll.ScopeID); err != nil {
 		writeScopeAuthzError(w, r, coll.ScopeID, err)
 		return
 	}

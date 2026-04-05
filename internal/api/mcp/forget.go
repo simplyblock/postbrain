@@ -7,6 +7,8 @@ import (
 
 	"github.com/google/uuid"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
+
+	"github.com/simplyblock/postbrain/internal/db"
 )
 
 // handleForget deactivates or permanently deletes a memory.
@@ -30,6 +32,16 @@ func (s *Server) handleForget(ctx context.Context, req mcpgo.CallToolRequest) (*
 
 	if s.memStore == nil {
 		return mcpgo.NewToolResultError("forget: server not configured (no memory store)"), nil
+	}
+	mem, err := db.GetMemory(ctx, s.pool, memID)
+	if err != nil {
+		return mcpgo.NewToolResultError(fmt.Sprintf("forget: lookup memory failed: %v", err)), nil
+	}
+	if mem == nil {
+		return mcpgo.NewToolResultError("forget: memory not found"), nil
+	}
+	if err := s.authorizeDeleteObjectScope(ctx, mem.ScopeID); err != nil {
+		return scopeAuthzToolError(ctx, "forget", mem.ScopeID, err), nil
 	}
 
 	action := "deactivated"

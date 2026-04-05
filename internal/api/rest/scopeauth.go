@@ -23,6 +23,52 @@ func (ro *Router) authorizeObjectScope(ctx context.Context, objectScopeID uuid.U
 	return ro.authorizeRequestedScope(ctx, objectScopeID)
 }
 
+// authorizeDeleteObjectScope enforces delete semantics: a caller may only delete
+// objects in scopes directly owned by the caller principal (never in ancestor scopes).
+func (ro *Router) authorizeDeleteObjectScope(ctx context.Context, objectScopeID uuid.UUID) error {
+	if err := ro.authorizeRequestedScope(ctx, objectScopeID); err != nil {
+		return err
+	}
+
+	scope, err := db.GetScopeByID(ctx, ro.pool, objectScopeID)
+	if err != nil {
+		return err
+	}
+	if scope == nil {
+		return fmt.Errorf("%w: scope not found", scopeauth.ErrPrincipalScopeDenied)
+	}
+
+	principalID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
+	if principalID == uuid.Nil {
+		return fmt.Errorf("%w", scopeauth.ErrMissingPrincipal)
+	}
+	if scope.PrincipalID != principalID {
+		return fmt.Errorf("%w: delete not allowed in ancestor scope", scopeauth.ErrPrincipalScopeDenied)
+	}
+	return nil
+}
+
+func (ro *Router) authorizeScopeAdmin(ctx context.Context, scopeID uuid.UUID) error {
+	if err := ro.authorizeRequestedScope(ctx, scopeID); err != nil {
+		return err
+	}
+	if ro.membership == nil {
+		return fmt.Errorf("%w", scopeauth.ErrScopeResolverUnavailable)
+	}
+	principalID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
+	if principalID == uuid.Nil {
+		return fmt.Errorf("%w", scopeauth.ErrMissingPrincipal)
+	}
+	ok, err := ro.membership.IsScopeAdmin(ctx, principalID, scopeID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("%w: scope admin required", scopeauth.ErrPrincipalScopeDenied)
+	}
+	return nil
+}
+
 func (ro *Router) effectiveScopeIDsForRequest(ctx context.Context) ([]uuid.UUID, error) {
 	if ids, ok := scopeauth.EffectiveScopeIDsFromContext(ctx); ok {
 		return ids, nil
