@@ -189,3 +189,71 @@ func TestRecall_DigestSuppression(t *testing.T) {
 		t.Error("source artifact should be suppressed from results when its published digest is present")
 	}
 }
+
+func TestRecall_UsesModelTableWhenLegacyEmbeddingMissing(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	svc := testhelper.NewMockEmbeddingService()
+	ctx := context.Background()
+
+	principal := testhelper.CreateTestPrincipal(t, pool, "user", "recall-modeltable-"+uuid.New().String())
+	scope := testhelper.CreateTestScope(t, pool, "project", "recall-modeltable-"+uuid.New().String(), nil, principal.ID)
+	store := knowledge.NewStore(pool, svc)
+
+	model, err := db.RegisterEmbeddingModel(ctx, pool, db.RegisterEmbeddingModelParams{
+		Slug:          "knw-recall-modeltable-" + uuid.NewString(),
+		Provider:      "ollama",
+		ServiceURL:    "http://localhost:11434",
+		ProviderModel: "nomic-embed-text",
+		Dimensions:    4,
+		ContentType:   "text",
+		Activate:      true,
+	})
+	if err != nil {
+		t.Fatalf("register model: %v", err)
+	}
+
+	artifact := makePublished(t, ctx, store, scope.ID, principal.ID, "semantic", recallText)
+	queryVec, err := svc.EmbedText(ctx, recallText)
+	if err != nil {
+		t.Fatalf("EmbedText: %v", err)
+	}
+	repo := db.NewEmbeddingRepository(pool)
+	if err := repo.UpsertEmbedding(ctx, db.UpsertEmbeddingInput{
+		ObjectType: "knowledge_artifact",
+		ObjectID:   artifact.ID,
+		ScopeID:    scope.ID,
+		ModelID:    model.ID,
+		Embedding:  queryVec,
+	}); err != nil {
+		t.Fatalf("seed model-table embedding: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		UPDATE knowledge_artifacts
+		SET embedding = NULL, embedding_model_id = NULL
+		WHERE id = $1
+	`, artifact.ID); err != nil {
+		t.Fatalf("clear legacy embedding columns: %v", err)
+	}
+
+	results, err := store.Recall(ctx, pool, knowledge.RecallInput{
+		Query:   recallText,
+		ScopeID: scope.ID,
+		Limit:   10,
+	})
+	if err != nil {
+		t.Fatalf("Recall: %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatal("expected recall result from model table, got none")
+	}
+	found := false
+	for _, r := range results {
+		if r.Artifact.ID == artifact.ID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected artifact %s in results", artifact.ID)
+	}
+}
