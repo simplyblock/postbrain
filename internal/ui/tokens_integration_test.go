@@ -211,6 +211,48 @@ func TestUpdateTokenScopes_OtherPrincipalToken_ReturnsForbidden(t *testing.T) {
 	}
 }
 
+func TestTokensPage_UsesDialogForScopeEditing(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+
+	user := testhelper.CreateTestPrincipal(t, pool, "user", "ui-token-dialog-user")
+	scope := testhelper.CreateTestScope(t, pool, "project", "ui-token-dialog-scope", nil, user.ID)
+	rawSession, hashSession, err := auth.GenerateToken()
+	if err != nil {
+		t.Fatalf("generate session token: %v", err)
+	}
+	if _, err := db.CreateToken(ctx, pool, user.ID, hashSession, "session", nil, nil, nil); err != nil {
+		t.Fatalf("create session token: %v", err)
+	}
+	if _, err := db.CreateToken(ctx, pool, user.ID, auth.HashToken("pb_dialog_scope"), "editable", []uuid.UUID{scope.ID}, nil, nil); err != nil {
+		t.Fatalf("create editable token: %v", err)
+	}
+
+	client, baseURL := loginUITestClient(t, pool, rawSession)
+	resp, err := client.Get(baseURL + "/ui/tokens")
+	if err != nil {
+		t.Fatalf("GET /ui/tokens: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	bodyText := string(body)
+	if !strings.Contains(bodyText, "id=\"dlg-token-scopes\"") {
+		t.Fatalf("expected token scope dialog markup")
+	}
+	if !strings.Contains(bodyText, "openTokenScopesDialog(") {
+		t.Fatalf("expected openTokenScopesDialog JS hook")
+	}
+	if strings.Contains(bodyText, "<details") {
+		t.Fatalf("did not expect inline <details> UI for scope editing")
+	}
+}
+
 func loginUITestClient(t *testing.T, pool *pgxpool.Pool, rawSessionToken string) (*http.Client, string) {
 	t.Helper()
 
