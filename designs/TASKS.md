@@ -27,6 +27,14 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Fixed scoped UI dropdown hierarchy to include parent scopes (TDD-first):
+  - Updated `internal/ui/handler.go` `authorizedScopesForRequest` token filtering:
+    - expands token `scope_ids` to include each scope’s ancestor scopes via `db.GetAncestorScopeIDs`
+    - keeps principal-effective-scope intersection intact.
+  - This restores parent-scope visibility for scoped session tokens across shared UI selectors (`/ui/memories`, `/ui/query`, `/ui/graph`, `/ui/graph3d`, and other pages using the shared resolver).
+  - Added integration regression coverage:
+    - `internal/ui/scopes_integration_test.go::TestScopedSessionToken_IncludesParentScopesInDropdowns`.
+
 - [x] 2026-04-05: Restricted principal mutations to admin-only across REST and WebUI (TDD-first):
   - Added principal-admin resolution helpers in `internal/principals/membership.go`:
     - `IsPrincipalAdmin` (admin on target principal or any ancestor principal)
