@@ -27,6 +27,9 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Fixed docs layout image overflow in Web UI documentation pages:
+  - Updated `site/src/layouts/DocsLayout.astro` markdown image styling to enforce responsive sizing (`max-width: 100%`, `height: auto`) and prevent oversized screenshots from overflowing the content column.
+
 - [x] 2026-04-05: Added screenshot-based Web UI documentation and pages-safe image rewriting:
   - Added `docs/webui-guide.md` with detailed, user-oriented walkthroughs for:
     - principals/memberships
