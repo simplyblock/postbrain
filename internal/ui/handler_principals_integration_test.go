@@ -8,6 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
+	"github.com/simplyblock/postbrain/internal/auth"
+	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/principals"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
@@ -25,10 +29,34 @@ func TestHandleUpdatePrincipal_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create principal: %v", err)
 	}
+	adminHub, err := ps.Create(t.Context(), "team", "principal-edit-admin-hub-"+uuid.NewString(), "Admin Hub", nil)
+	if err != nil {
+		t.Fatalf("Create admin hub principal: %v", err)
+	}
+	actor, err := ps.Create(t.Context(), "user", "principal-edit-actor-"+uuid.NewString(), "Actor", nil)
+	if err != nil {
+		t.Fatalf("Create actor principal: %v", err)
+	}
+	ms := principals.NewMembershipStore(pool)
+	if err := ms.AddMembership(t.Context(), actor.ID, adminHub.ID, "admin", nil); err != nil {
+		t.Fatalf("AddMembership actor admin: %v", err)
+	}
+	if err := ms.AddMembership(t.Context(), created.ID, adminHub.ID, "member", nil); err != nil {
+		t.Fatalf("AddMembership target member: %v", err)
+	}
+
+	rawSession, hashSession, err := auth.GenerateToken()
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+	if _, err := db.CreateToken(t.Context(), pool, actor.ID, hashSession, "ui-principal-edit-session", nil, nil, nil); err != nil {
+		t.Fatalf("CreateToken: %v", err)
+	}
 
 	req := httptest.NewRequest(http.MethodPost, "/ui/principals/"+created.ID.String(),
 		strings.NewReader("slug=principal-edit-after&display_name=After+Name"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: cookieName, Value: rawSession})
 	w := httptest.NewRecorder()
 
 	h.handleUpdatePrincipal(w, req)

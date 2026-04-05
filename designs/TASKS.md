@@ -27,6 +27,27 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Restricted principal mutations to admin-only across REST and WebUI (TDD-first):
+  - Added principal-admin resolution helpers in `internal/principals/membership.go`:
+    - `IsPrincipalAdmin` (admin on target principal or any ancestor principal)
+    - `HasAnyAdminRole` (for admin-gated principal creation).
+  - Enforced admin checks for REST principal mutation endpoints in `internal/api/rest/orgs.go`:
+    - `POST /v1/principals`
+    - `PUT /v1/principals/{id}`
+    - `DELETE /v1/principals/{id}`
+    - `POST /v1/principals/{id}/members`
+    - `DELETE /v1/principals/{id}/members/{member_id}`.
+  - Enforced admin checks for WebUI principal mutation handlers in `internal/ui/handler.go`:
+    - `handleCreatePrincipal`
+    - `handleUpdatePrincipal` (slug/display_name changes)
+    - `handleAddMembership`
+    - `handleDeleteMembership`.
+  - Added integration regression coverage:
+    - `internal/api/rest/principal_admin_authz_integration_test.go`
+    - `internal/ui/principals_integration_test.go::TestPrincipalsPage_PrincipalSlugChangeRequiresAdmin`.
+  - Updated existing WebUI principal update integration test to run with authenticated admin context:
+    - `internal/ui/handler_principals_integration_test.go::TestHandleUpdatePrincipal_Success`.
+
 - [x] 2026-04-05: Enforced scope-admin and delete semantics across WebUI, REST, and MCP (TDD-first):
   - Added REST scope-admin authorization for scope mutations in `internal/api/rest/scopes.go`:
     - create child scope requires admin on parent scope
