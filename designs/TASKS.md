@@ -27,6 +27,18 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Added startup configuration/service visibility logging:
+  - Extended `cmd/postbrain/main.go` startup logs to include:
+    - config summary (`config_path`, server/db sizing, embedding batch/timeout)
+    - enabled background jobs list
+    - enabled OAuth providers list
+    - embedding provider profile details (`name`, `backend`, `service_url`, model slugs, `has_api_key` without exposing secrets)
+    - explicit service initialization markers (embedding service/factory, API surface + scheduler).
+  - Added unit coverage in `cmd/postbrain/main_test.go` for:
+    - `enabledJobNames`
+    - `embeddingProviderInfos`
+    - `enabledOAuthProviderNames`.
+
 - [x] 2026-04-05: Added high-dimension ANN support using halfvec expression indexing (TDD-first):
   - Kept per-model embedding table storage in full precision `vector(dims)` for all models.
   - Updated `internal/db/embedding_tables.go` provisioning logic:

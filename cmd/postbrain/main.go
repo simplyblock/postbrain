@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -88,6 +89,20 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+	slog.Info("startup configuration loaded",
+		"config_path", cfgPath,
+		"server_addr", cfg.Server.Addr,
+		"auto_migrate", cfg.Database.AutoMigrate,
+		"db_max_open", cfg.Database.MaxOpen,
+		"db_max_idle", cfg.Database.MaxIdle,
+		"embedding_batch_size", cfg.Embedding.BatchSize,
+		"embedding_request_timeout", cfg.Embedding.RequestTimeout.String(),
+		"jobs_enabled", enabledJobNames(cfg.Jobs),
+		"oauth_providers_enabled", enabledOAuthProviderNames(cfg.OAuth),
+	)
+	slog.Info("startup embedding providers configured",
+		"providers", embeddingProviderInfos(cfg.Embedding),
+	)
 
 	pool, err := db.NewPool(ctx, &cfg.Database)
 	if err != nil {
@@ -112,6 +127,10 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if err := svc.EnableModelDrivenFactory(ctx, pool, &cfg.Embedding); err != nil {
 		return fmt.Errorf("embedding model factory: %w", err)
 	}
+	slog.Info("startup embedding services initialized",
+		"service", "embedding",
+		"model_driven_factory", true,
+	)
 
 	// Build HTTP mux.
 	mux := http.NewServeMux()
@@ -184,6 +203,10 @@ func runServe(cmd *cobra.Command, args []string) error {
 	}
 	scheduler.Start()
 	defer scheduler.Stop(ctx)
+	slog.Info("startup services initialized",
+		"services", []string{"oauth", "mcp", "rest", "ui", "metrics", "jobs_scheduler"},
+		"jobs_enabled", enabledJobNames(cfg.Jobs),
+	)
 
 	slog.Info("postbrain server starting", "addr", cfg.Server.Addr)
 
@@ -220,6 +243,73 @@ func runServe(cmd *cobra.Command, args []string) error {
 	case err := <-errCh:
 		return err
 	}
+}
+
+type embeddingProviderStartupInfo struct {
+	Name         string `json:"name"`
+	Backend      string `json:"backend"`
+	ServiceURL   string `json:"service_url"`
+	TextModel    string `json:"text_model"`
+	CodeModel    string `json:"code_model"`
+	SummaryModel string `json:"summary_model"`
+	HasAPIKey    bool   `json:"has_api_key"`
+}
+
+func enabledJobNames(cfg config.JobsConfig) []string {
+	names := make([]string, 0, 6)
+	if cfg.ConsolidationEnabled {
+		names = append(names, "consolidation")
+	}
+	if cfg.ContradictionEnabled {
+		names = append(names, "contradiction")
+	}
+	if cfg.ReembedEnabled {
+		names = append(names, "reembed")
+	}
+	if cfg.AgeCheckEnabled {
+		names = append(names, "age_check")
+	}
+	if cfg.BackfillSummariesEnabled {
+		names = append(names, "backfill_summaries")
+	}
+	if cfg.ChunkBackfillEnabled {
+		names = append(names, "backfill_chunks")
+	}
+	return names
+}
+
+func embeddingProviderInfos(cfg config.EmbeddingConfig) []embeddingProviderStartupInfo {
+	names := make([]string, 0, len(cfg.Providers))
+	for name := range cfg.Providers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	infos := make([]embeddingProviderStartupInfo, 0, len(names))
+	for _, name := range names {
+		p := cfg.Providers[name]
+		infos = append(infos, embeddingProviderStartupInfo{
+			Name:         name,
+			Backend:      strings.TrimSpace(p.Backend),
+			ServiceURL:   strings.TrimSpace(p.ServiceURL),
+			TextModel:    strings.TrimSpace(p.TextModel),
+			CodeModel:    strings.TrimSpace(p.CodeModel),
+			SummaryModel: strings.TrimSpace(p.SummaryModel),
+			HasAPIKey:    strings.TrimSpace(p.APIKey) != "",
+		})
+	}
+	return infos
+}
+
+func enabledOAuthProviderNames(cfg config.OAuthConfig) []string {
+	names := make([]string, 0, len(cfg.Providers))
+	for name, provider := range cfg.Providers {
+		if provider.Enabled {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 func migrateCmd() *cobra.Command {
