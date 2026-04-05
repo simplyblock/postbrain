@@ -27,6 +27,18 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Addressed embedding/re-embed edge cases identified in PR review (TDD-first):
+  - `internal/skills/store.go`:
+    - `embedText` now treats nil service, nil embed result, and empty embedding vectors as errors.
+    - added `ErrEmptyEmbedding` sentinel and unit test coverage in `internal/skills/store_test.go::TestCreate_EmptyEmbeddingReturnsError`.
+    - prevents runtime vector insert failures caused by `pgvector.NewVector(nil)` on fixed-dimension columns.
+  - `internal/jobs/reembed.go`:
+    - `RunText` now re-embeds skills from the same text shape as write-path (`description + body`) using trimmed `concat_ws(...)`.
+    - pending rows with empty/whitespace-only content are now moved through retry logic (`markEmbeddingFailedAttempt`) instead of being skipped forever.
+  - Added integration coverage in `internal/jobs/reembed_integration_test.go`:
+    - `TestReembedJob_RunText_SkillUsesDescriptionAndBody`
+    - `TestReembedJob_RunText_EmptyContentMarksFailed`.
+
 - [x] 2026-04-05: Added multi-provider embedding profile selection for model-driven embedding (TDD-first):
   - Extended runtime embedding config (`internal/config/config.go`) with:
     - `embedding.providers` map (`backend`, `service_url`, `openai_api_key`)
