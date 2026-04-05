@@ -122,6 +122,16 @@
   - Refactored vector recall paths:
     - `internal/knowledge/recall.go` now uses repository ANN first for active text model, with legacy vector fallback.
     - `internal/skills/recall.go` now uses repository ANN first for active text model, with legacy vector fallback.
+- [x] 2026-04-05: Started Step 10 re-embed pipeline migration to embedding_index pending flow (TDD-first):
+  - Added integration coverage in `internal/jobs/reembed_integration_test.go`:
+    - `TestReembedJob_RunText_UsesEmbeddingIndexPendingAndMarksReady`
+    - `TestReembedJob_RunText_FailureIncrementsRetryAndEventuallyFailed`
+  - Refactored `internal/jobs/reembed.go` (`RunText`):
+    - now reads pending units from `embedding_index` by active model ID
+    - supports object types `memory`, `knowledge_artifact`, `skill`
+    - updates legacy embedding columns + model tables
+    - marks `embedding_index` rows `ready` on success
+    - increments `retry_count`, records `last_error`, and marks `failed` on retry exhaustion.
 - [x] 2026-04-04: Added model-aware multi-provider embedder factory primitives and runtime wiring (TDD-first):
   - Added model-driven factory in `internal/embedding/factory.go`:
     - `ModelConfig`, `ModelConfigStore`, `ModelEmbedderFactory`
