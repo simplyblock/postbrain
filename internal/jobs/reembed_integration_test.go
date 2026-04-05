@@ -420,6 +420,69 @@ func TestReembedJob_RunText_EmptyContentMarksFailed(t *testing.T) {
 	}
 }
 
+func TestReembedJob_RunText_NullContentMarksFailed(t *testing.T) {
+	t.Parallel()
+	pool := testhelper.NewTestPool(t)
+	svc := testhelper.NewMockEmbeddingService()
+	ctx := context.Background()
+
+	model, err := db.RegisterEmbeddingModel(ctx, pool, db.RegisterEmbeddingModelParams{
+		Slug:          "reembed-null-content-" + uuid.NewString(),
+		Provider:      "ollama",
+		ServiceURL:    "http://localhost:11434",
+		ProviderModel: "nomic-embed-text",
+		Dimensions:    4,
+		ContentType:   "text",
+		Activate:      true,
+	})
+	if err != nil {
+		t.Fatalf("register model: %v", err)
+	}
+	modelID := model.ID
+
+	principal := testhelper.CreateTestPrincipal(t, pool, "user", "reembed-null-content-user")
+	scope := testhelper.CreateTestScope(t, pool, "project", "reembed-null-content-scope", nil, principal.ID)
+	mem := testhelper.CreateTestMemory(t, pool, scope.ID, principal.ID, "null-source")
+	if _, err := pool.Exec(ctx, `UPDATE memories SET is_active=false WHERE id=$1`, mem.ID); err != nil {
+		t.Fatalf("deactivate memory: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO embedding_index (object_type, object_id, model_id, status, retry_count)
+		VALUES ('memory', $1, $2, 'pending', 2)
+		ON CONFLICT (object_type, object_id, model_id)
+		DO UPDATE SET status='pending', retry_count=2, last_error=NULL
+	`, mem.ID, modelID); err != nil {
+		t.Fatalf("seed embedding_index pending row: %v", err)
+	}
+
+	j := NewReembedJob(pool, svc, 64)
+	if err := j.RunText(ctx); err != nil {
+		t.Fatalf("RunText: %v", err)
+	}
+
+	var (
+		status     string
+		retryCount int
+		lastError  *string
+	)
+	if err := pool.QueryRow(ctx, `
+		SELECT status, retry_count, last_error
+		FROM embedding_index
+		WHERE object_type='memory' AND object_id=$1 AND model_id=$2
+	`, mem.ID, modelID).Scan(&status, &retryCount, &lastError); err != nil {
+		t.Fatalf("scan embedding_index after RunText: %v", err)
+	}
+	if status != "failed" {
+		t.Fatalf("status = %q, want failed", status)
+	}
+	if retryCount != 3 {
+		t.Fatalf("retry_count = %d, want 3", retryCount)
+	}
+	if lastError == nil || *lastError == "" {
+		t.Fatal("last_error should be populated on null-content failure")
+	}
+}
+
 func TestReembedJob_RunCode_UsesEmbeddingIndexPendingAndMarksReady(t *testing.T) {
 	t.Parallel()
 	pool := testhelper.NewTestPool(t)
