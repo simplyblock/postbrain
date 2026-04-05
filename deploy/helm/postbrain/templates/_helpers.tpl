@@ -68,12 +68,16 @@ database:
   connect_timeout: {{ .Values.config.database.connect_timeout | quote }}
 
 embedding:
-  backend: {{ .Values.config.embedding.backend | quote }}
-  ollama_url: {{ .Values.config.embedding.ollama_url | quote }}
-  text_model: {{ .Values.config.embedding.text_model | quote }}
-  code_model: {{ .Values.config.embedding.code_model | quote }}
-  summary_model: {{ .Values.config.embedding.summary_model | quote }}
-  openai_api_key: {{ .Values.config.embedding.openai_api_key | quote }}
+  providers:
+{{- range $name, $provider := .Values.config.embedding.providers }}
+    {{ $name }}:
+      backend: {{ default "ollama" $provider.backend | quote }}
+      service_url: {{ default "" $provider.service_url | quote }}
+      api_key: {{ default "" $provider.api_key | quote }}
+      text_model: {{ default "nomic-embed-text" $provider.text_model | quote }}
+      code_model: {{ default "" $provider.code_model | quote }}
+      summary_model: {{ default "" $provider.summary_model | quote }}
+{{- end }}
   request_timeout: {{ .Values.config.embedding.request_timeout | quote }}
   batch_size: {{ .Values.config.embedding.batch_size }}
 

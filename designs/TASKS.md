@@ -27,6 +27,11 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Updated Helm chart embedding config to provider profiles:
+  - Replaced legacy single-provider keys (`backend`, `ollama_url`, `openai_api_key`, model fields) in chart values/template with `config.embedding.providers`.
+  - Updated `deploy/helm/postbrain/templates/_helpers.tpl` to render runtime `config.yaml` using `embedding.providers.<name>` entries.
+  - Updated default chart values to define `embedding.providers.default` with the previous Ollama defaults.
+
 - [x] 2026-04-05: Fixed docs layout image overflow in Web UI documentation pages:
   - Updated `site/src/layouts/DocsLayout.astro` markdown image styling to enforce responsive sizing (`max-width: 100%`, `height: auto`) and prevent oversized screenshots from overflowing the content column.
 
