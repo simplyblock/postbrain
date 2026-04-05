@@ -27,6 +27,19 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Added high-dimension ANN support using halfvec expression indexing (TDD-first):
+  - Kept per-model embedding table storage in full precision `vector(dims)` for all models.
+  - Updated `internal/db/embedding_tables.go` provisioning logic:
+    - for `dims <= 2000`: regular HNSW index on `embedding vector_cosine_ops`
+    - for `dims > 2000`: HNSW expression index on `(embedding::halfvec(dims)) halfvec_cosine_ops`.
+  - Updated `internal/db/embedding_repository.go` ANN query path:
+    - for high-dimension models, similarity/order-by uses `embedding::halfvec(dims) <=> $1::halfvec` to match index expression.
+  - Added unit coverage:
+    - `internal/db/embedding_tables_test.go` (`embeddingStorageForDimensions`)
+    - `internal/db/embedding_repository_test.go` (`similarityDistanceExpr`).
+  - Added integration coverage:
+    - `internal/db/embedding_tables_integration_test.go::TestEnsureEmbeddingModelTable_UsesHalfvecForHighDimensions` (column remains `vector(2560)`, index uses `halfvec_cosine_ops` expression).
+
 - [x] 2026-04-05: Moved embedding model administration from `postbrain-cli` to `postbrain` (TDD-first):
   - Added server-side `embedding-model` command group in `cmd/postbrain/embedding_model_cmd.go`:
     - `register`, `activate`, `list`
