@@ -253,6 +253,93 @@ func TestTokensPage_UsesDialogForScopeEditing(t *testing.T) {
 	}
 }
 
+func TestCreateToken_UsesSelectedPermissions(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+
+	user := testhelper.CreateTestPrincipal(t, pool, "user", "ui-token-create-perms-user")
+	rawSession, hashSession, err := auth.GenerateToken()
+	if err != nil {
+		t.Fatalf("generate session token: %v", err)
+	}
+	if _, err := db.CreateToken(ctx, pool, user.ID, hashSession, "session", nil, []string{"write"}, nil); err != nil {
+		t.Fatalf("create session token: %v", err)
+	}
+
+	client, baseURL := loginUITestClient(t, pool, rawSession)
+
+	form := url.Values{}
+	form.Set("name", "read-only-created")
+	form.Add("permissions", "read")
+	req, err := http.NewRequest(http.MethodPost, baseURL+"/ui/tokens", strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("POST /ui/tokens: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	tokens, err := db.ListTokens(ctx, pool, &user.ID)
+	if err != nil {
+		t.Fatalf("list tokens: %v", err)
+	}
+	for _, tok := range tokens {
+		if tok.Name != "read-only-created" {
+			continue
+		}
+		if len(tok.Permissions) != 1 || tok.Permissions[0] != "read" {
+			t.Fatalf("permissions = %v, want [read]", tok.Permissions)
+		}
+		return
+	}
+	t.Fatalf("created token not found")
+}
+
+func TestTokensPage_ShowsTokenPermissions(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+
+	user := testhelper.CreateTestPrincipal(t, pool, "user", "ui-token-perms-visible-user")
+	rawSession, hashSession, err := auth.GenerateToken()
+	if err != nil {
+		t.Fatalf("generate session token: %v", err)
+	}
+	if _, err := db.CreateToken(ctx, pool, user.ID, hashSession, "session", nil, []string{"read"}, nil); err != nil {
+		t.Fatalf("create session token: %v", err)
+	}
+	if _, err := db.CreateToken(ctx, pool, user.ID, auth.HashToken("pb_token_perms_visible"), "permissions-visible", nil, []string{"admin"}, nil); err != nil {
+		t.Fatalf("create visible token: %v", err)
+	}
+
+	client, baseURL := loginUITestClient(t, pool, rawSession)
+	resp, err := client.Get(baseURL + "/ui/tokens")
+	if err != nil {
+		t.Fatalf("GET /ui/tokens: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	bodyText := string(body)
+	if !strings.Contains(bodyText, "permissions-visible") {
+		t.Fatalf("expected created token in page output")
+	}
+	if !strings.Contains(bodyText, "admin") {
+		t.Fatalf("expected permissions column to include admin value")
+	}
+}
+
 func loginUITestClient(t *testing.T, pool *pgxpool.Pool, rawSessionToken string) (*http.Client, string) {
 	t.Helper()
 
