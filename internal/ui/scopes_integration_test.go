@@ -151,3 +151,53 @@ func TestScopesPage_MemberCannotAdminParentScope(t *testing.T) {
 		}
 	})
 }
+
+func TestScopedSessionToken_IncludesParentScopesInDropdowns(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+
+	user := testhelper.CreateTestPrincipal(t, pool, "user", "ui-scoped-parent-user-"+uuid.NewString())
+	parentScope := testhelper.CreateTestScope(t, pool, "project", "ui-scoped-parent-"+uuid.NewString(), nil, user.ID)
+	childScope := testhelper.CreateTestScope(t, pool, "project", "ui-scoped-child-"+uuid.NewString(), &parentScope.ID, user.ID)
+
+	rawSession, hashSession, err := auth.GenerateToken()
+	if err != nil {
+		t.Fatalf("generate scoped session token: %v", err)
+	}
+	if _, err := db.CreateToken(ctx, pool, user.ID, hashSession, "ui-scoped-parent-session", []uuid.UUID{childScope.ID}, nil, nil); err != nil {
+		t.Fatalf("create scoped session token: %v", err)
+	}
+
+	client, baseURL := loginUITestClient(t, pool, rawSession)
+
+	pages := []string{
+		"/ui/memories",
+		"/ui/query",
+		"/ui/graph",
+		"/ui/graph3d",
+	}
+	for _, path := range pages {
+		path := path
+		t.Run(path, func(t *testing.T) {
+			resp, err := client.Get(baseURL + path)
+			if err != nil {
+				t.Fatalf("GET %s: %v", path, err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+			}
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("read body: %v", err)
+			}
+			text := string(body)
+			if !strings.Contains(text, parentScope.ExternalID) {
+				t.Fatalf("expected parent scope %q in %s", parentScope.ExternalID, path)
+			}
+			if !strings.Contains(text, childScope.ExternalID) {
+				t.Fatalf("expected child scope %q in %s", childScope.ExternalID, path)
+			}
+		})
+	}
+}

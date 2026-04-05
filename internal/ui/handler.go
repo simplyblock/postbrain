@@ -1483,6 +1483,8 @@ func (h *Handler) hasAnyPrincipalAdminRole(ctx context.Context, r *http.Request)
 
 // authorizedScopesForRequest resolves scopes writable by the current principal,
 // intersected with token scope restrictions (when scope_ids is non-nil).
+// Token scope restrictions are expanded to include ancestor scopes so a token
+// scoped to a child scope can still access its parent scopes.
 func (h *Handler) authorizedScopesForRequest(ctx context.Context, r *http.Request) ([]*db.Scope, map[uuid.UUID]struct{}) {
 	out := map[uuid.UUID]struct{}{}
 	if h.pool == nil {
@@ -1501,6 +1503,12 @@ func (h *Handler) authorizedScopesForRequest(ctx context.Context, r *http.Reques
 		allowed := make(map[uuid.UUID]struct{}, len(token.ScopeIds))
 		for _, id := range token.ScopeIds {
 			allowed[id] = struct{}{}
+			ancestorIDs, err := db.GetAncestorScopeIDs(ctx, h.pool, id)
+			if err == nil {
+				for _, ancestorID := range ancestorIDs {
+					allowed[ancestorID] = struct{}{}
+				}
+			}
 		}
 		intersected := make([]uuid.UUID, 0, len(ids))
 		for _, id := range ids {
@@ -1511,7 +1519,9 @@ func (h *Handler) authorizedScopesForRequest(ctx context.Context, r *http.Reques
 		// If no effective scopes are resolved for the principal, fall back to
 		// explicit token scope restrictions so scoped session tokens still work.
 		if len(ids) == 0 {
-			intersected = append(intersected, token.ScopeIds...)
+			for id := range allowed {
+				intersected = append(intersected, id)
+			}
 		}
 		ids = intersected
 	}
