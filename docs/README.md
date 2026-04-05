@@ -27,6 +27,7 @@ This documentation is also published via GitHub Pages for repository browsing.
 - [Indexing Model](./indexing-model.md)
 - [Security and Access Model](./security.md)
 - [Operations and Troubleshooting](./operations.md)
+- [Embedding Model Operations](./embedding-model-operations.md)
 - [Upgrade Guide](./upgrade-guide.md)
 - [Compatibility Matrix](./compatibility.md)
 - [Release and Versioning Policy](./release-policy.md)

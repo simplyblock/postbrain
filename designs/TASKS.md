@@ -140,6 +140,16 @@
     - now reads pending code-memory units from `embedding_index`
     - updates legacy code embedding + model-table embedding
     - updates status/retry/last_error consistently with text path.
+- [x] 2026-04-05: Completed Step 12 documentation/runbook baseline for embedding model operations:
+  - Added `docs/embedding-model-operations.md` with:
+    - model registration, listing, activation
+    - re-embed status monitoring
+    - failed-row manual reset SQL
+    - rollback procedure and acceptance checks.
+  - Linked the runbook from:
+    - `docs/README.md`
+    - `docs/operations.md`
+    - `docs/troubleshooting-playbook.md`.
 - [x] 2026-04-04: Added model-aware multi-provider embedder factory primitives and runtime wiring (TDD-first):
   - Added model-driven factory in `internal/embedding/factory.go`:
     - `ModelConfig`, `ModelConfigStore`, `ModelEmbedderFactory`

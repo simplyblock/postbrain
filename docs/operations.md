@@ -15,6 +15,9 @@
 - background jobs enabled as intended
 - logs show no repeated authz or embedding failures
 
+For model lifecycle and re-embedding procedures, use
+[Embedding Model Operations](./embedding-model-operations.md).
+
 ## Common issues
 
 ### 1. "scope access denied"
