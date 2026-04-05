@@ -51,11 +51,15 @@ func TestSkillsCreate_DualWritesToEmbeddingRepository(t *testing.T) {
 	}
 
 	cfg := &config.EmbeddingConfig{
-		Backend:        "openai",
-		ServiceURL:     server.URL + "/v1",
 		RequestTimeout: 5 * time.Second,
 		BatchSize:      8,
-		TextModel:      "unused-static-model",
+		Providers: map[string]config.EmbeddingProviderConfig{
+			"default": {
+				Backend:    "openai",
+				ServiceURL: server.URL + "/v1",
+				TextModel:  "unused-static-model",
+			},
+		},
 	}
 	svc, err := embedding.NewService(cfg)
 	if err != nil {
