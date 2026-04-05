@@ -471,6 +471,7 @@ func withAuthContextUnrestricted(ctx context.Context, principalID uuid.UUID) con
 	token := &db.Token{
 		PrincipalID: principalID,
 		ScopeIds:    nil,
+		Permissions: []string{"read", "write"},
 	}
 	return context.WithValue(ctx, auth.ContextKeyToken, token)
 }

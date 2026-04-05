@@ -27,6 +27,22 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Enforced token permissions for MCP tools (TDD-first):
+  - Added MCP permission middleware helpers in `internal/api/mcp/permissionauth.go`:
+    - `withToolPermission` tool wrapper with `read`/`write` permission modes
+    - standardized permission denial response (`forbidden: insufficient permissions`).
+  - Wrapped MCP tool registrations in `internal/api/mcp/server.go` with permission requirements:
+    - read tools require read permission (`recall`, `context`, `graph_query`, `skill_search`, `knowledge_detail`, `list_scopes`, `collect`)
+    - mutating tools require write permission (`remember`, `forget`, `summarize`, `publish`, `endorse`, `promote`, `skill_install`, `skill_invoke`, `session_begin`, `session_end`, `synthesize_topic`).
+  - Added mixed-action enforcement for `collect` in `internal/api/mcp/collect.go`:
+    - `create_collection` and `add_to_collection` require write permission.
+  - Added integration regression coverage:
+    - `internal/api/mcp/permission_authz_integration_test.go::TestMCP_PermissionAuthz_ReadVsWrite`.
+  - Updated MCP integration test auth contexts to include explicit token permissions for compatibility with permission enforcement:
+    - `internal/api/mcp/mcp_integration_test.go`
+    - `internal/api/mcp/scope_authz_integration_test.go`
+    - `internal/api/mcp/list_scopes_integration_test.go`.
+
 - [x] 2026-04-05: Enforced token permissions for REST API requests (TDD-first):
   - Added shared permission evaluation helpers in `internal/auth/permissions.go`:
     - `HasReadPermission`

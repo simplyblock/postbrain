@@ -40,6 +40,9 @@ func (s *Server) handleCollect(ctx context.Context, req mcpgo.CallToolRequest) (
 }
 
 func (s *Server) collectAddToCollection(ctx context.Context, args map[string]any, callerID uuid.UUID) (*mcpgo.CallToolResult, error) {
+	if !authorizeToolPermission(ctx, permissionWrite) {
+		return permissionToolError(), nil
+	}
 	artifactIDStr, ok := args["artifact_id"].(string)
 	if !ok || artifactIDStr == "" {
 		return mcpgo.NewToolResultError("collect: 'artifact_id' is required for add_to_collection"), nil
@@ -93,6 +96,9 @@ func (s *Server) collectAddToCollection(ctx context.Context, args map[string]any
 }
 
 func (s *Server) collectCreate(ctx context.Context, args map[string]any, callerID uuid.UUID) (*mcpgo.CallToolResult, error) {
+	if !authorizeToolPermission(ctx, permissionWrite) {
+		return permissionToolError(), nil
+	}
 	scopeStr, ok := args["scope"].(string)
 	if !ok || scopeStr == "" {
 		return mcpgo.NewToolResultError("collect: 'scope' is required for create_collection"), nil

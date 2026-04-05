@@ -189,6 +189,7 @@ func withAuthContext(ctx context.Context, principalID, scopeID uuid.UUID) contex
 	token := &db.Token{
 		PrincipalID: principalID,
 		ScopeIds:    []uuid.UUID{scopeID},
+		Permissions: []string{"read", "write"},
 	}
 	return context.WithValue(ctx, auth.ContextKeyToken, token)
 }
