@@ -29,6 +29,22 @@ func (f *failingEmbedder) ModelSlug() string {
 	return "failing"
 }
 
+type recordingEmbedder struct {
+	lastInput string
+}
+
+func (r *recordingEmbedder) Embed(_ context.Context, text string) ([]float32, error) {
+	r.lastInput = text
+	return []float32{0.1, 0.2, 0.3, 0.4}, nil
+}
+func (r *recordingEmbedder) EmbedBatch(_ context.Context, _ []string) ([][]float32, error) {
+	return nil, errors.New("not implemented")
+}
+func (r *recordingEmbedder) Dimensions() int { return 4 }
+func (r *recordingEmbedder) ModelSlug() string {
+	return "recording"
+}
+
 func TestReembedJob_RunText_NoActiveModel(t *testing.T) {
 	t.Parallel()
 	pool := testhelper.NewTestPool(t)
@@ -284,6 +300,123 @@ func TestReembedJob_RunText_FailureIncrementsRetryAndEventuallyFailed(t *testing
 	}
 	if lastError == nil || *lastError == "" {
 		t.Fatal("last_error should be populated on failed embedding row")
+	}
+}
+
+func TestReembedJob_RunText_SkillUsesDescriptionAndBody(t *testing.T) {
+	t.Parallel()
+	pool := testhelper.NewTestPool(t)
+	rec := &recordingEmbedder{}
+	svc := embedding.NewServiceFromEmbedders(rec, nil)
+	ctx := context.Background()
+
+	model, err := db.RegisterEmbeddingModel(ctx, pool, db.RegisterEmbeddingModelParams{
+		Slug:          "reembed-text-skill-content-" + uuid.NewString(),
+		Provider:      "ollama",
+		ServiceURL:    "http://localhost:11434",
+		ProviderModel: "nomic-embed-text",
+		Dimensions:    4,
+		ContentType:   "text",
+		Activate:      true,
+	})
+	if err != nil {
+		t.Fatalf("register model: %v", err)
+	}
+	modelID := model.ID
+
+	principal := testhelper.CreateTestPrincipal(t, pool, "user", "reembed-skill-content-user")
+	scope := testhelper.CreateTestScope(t, pool, "project", "reembed-skill-content-scope", nil, principal.ID)
+	var skillID uuid.UUID
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO skills (scope_id, author_id, slug, name, description, body)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id
+	`, scope.ID, principal.ID, "reembed-skill-content-"+uuid.NewString(), "Skill", "desc-text", "body-text").Scan(&skillID); err != nil {
+		t.Fatalf("insert skill: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO embedding_index (object_type, object_id, model_id, status, retry_count)
+		VALUES ('skill', $1, $2, 'pending', 0)
+		ON CONFLICT (object_type, object_id, model_id)
+		DO UPDATE SET status='pending', retry_count=0, last_error=NULL
+	`, skillID, modelID); err != nil {
+		t.Fatalf("seed embedding_index pending row: %v", err)
+	}
+
+	j := NewReembedJob(pool, svc, 64)
+	if err := j.RunText(ctx); err != nil {
+		t.Fatalf("RunText: %v", err)
+	}
+
+	if rec.lastInput != "desc-text body-text" {
+		t.Fatalf("embedded content = %q, want %q", rec.lastInput, "desc-text body-text")
+	}
+}
+
+func TestReembedJob_RunText_EmptyContentMarksFailed(t *testing.T) {
+	t.Parallel()
+	pool := testhelper.NewTestPool(t)
+	svc := testhelper.NewMockEmbeddingService()
+	ctx := context.Background()
+
+	model, err := db.RegisterEmbeddingModel(ctx, pool, db.RegisterEmbeddingModelParams{
+		Slug:          "reembed-empty-content-" + uuid.NewString(),
+		Provider:      "ollama",
+		ServiceURL:    "http://localhost:11434",
+		ProviderModel: "nomic-embed-text",
+		Dimensions:    4,
+		ContentType:   "text",
+		Activate:      true,
+	})
+	if err != nil {
+		t.Fatalf("register model: %v", err)
+	}
+	modelID := model.ID
+
+	principal := testhelper.CreateTestPrincipal(t, pool, "user", "reembed-empty-content-user")
+	scope := testhelper.CreateTestScope(t, pool, "project", "reembed-empty-content-scope", nil, principal.ID)
+	var skillID uuid.UUID
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO skills (scope_id, author_id, slug, name, description, body)
+		VALUES ($1, $2, $3, $4, '', '')
+		RETURNING id
+	`, scope.ID, principal.ID, "reembed-empty-content-"+uuid.NewString(), "Skill").Scan(&skillID); err != nil {
+		t.Fatalf("insert skill: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO embedding_index (object_type, object_id, model_id, status, retry_count)
+		VALUES ('skill', $1, $2, 'pending', 2)
+		ON CONFLICT (object_type, object_id, model_id)
+		DO UPDATE SET status='pending', retry_count=2, last_error=NULL
+	`, skillID, modelID); err != nil {
+		t.Fatalf("seed embedding_index pending row: %v", err)
+	}
+
+	j := NewReembedJob(pool, svc, 64)
+	if err := j.RunText(ctx); err != nil {
+		t.Fatalf("RunText: %v", err)
+	}
+
+	var (
+		status     string
+		retryCount int
+		lastError  *string
+	)
+	if err := pool.QueryRow(ctx, `
+		SELECT status, retry_count, last_error
+		FROM embedding_index
+		WHERE object_type='skill' AND object_id=$1 AND model_id=$2
+	`, skillID, modelID).Scan(&status, &retryCount, &lastError); err != nil {
+		t.Fatalf("scan embedding_index after RunText: %v", err)
+	}
+	if status != "failed" {
+		t.Fatalf("status = %q, want failed", status)
+	}
+	if retryCount != 3 {
+		t.Fatalf("retry_count = %d, want 3", retryCount)
+	}
+	if lastError == nil || *lastError == "" {
+		t.Fatal("last_error should be populated on empty-content failure")
 	}
 }
 

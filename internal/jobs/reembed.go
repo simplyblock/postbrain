@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -65,7 +66,10 @@ func (j *ReembedJob) RunText(ctx context.Context) error {
 	for {
 		rows, err := j.pool.Query(ctx, `
 			SELECT ei.object_type, ei.object_id, ei.retry_count,
-			       COALESCE(m.content, ka.content, s.body) AS content
+			       CASE
+			           WHEN ei.object_type='skill' THEN btrim(concat_ws(' ', NULLIF(s.description, ''), NULLIF(s.body, '')))
+			           ELSE COALESCE(m.content, ka.content, s.body)
+			       END AS content
 			FROM embedding_index ei
 			LEFT JOIN memories m ON ei.object_type='memory' AND m.id=ei.object_id AND m.is_active=true
 			LEFT JOIN knowledge_artifacts ka ON ei.object_type='knowledge_artifact' AND ka.id=ei.object_id
@@ -93,7 +97,8 @@ func (j *ReembedJob) RunText(ctx context.Context) error {
 				rows.Close()
 				return fmt.Errorf("reembed text: scan row: %w", err)
 			}
-			if r.content == "" {
+			if strings.TrimSpace(r.content) == "" {
+				_ = j.markEmbeddingFailedAttempt(ctx, r.objectType, r.id, *modelID, r.retryCount, fmt.Errorf("empty content for %s %s", r.objectType, r.id))
 				continue
 			}
 			batch = append(batch, r)

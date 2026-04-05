@@ -5,6 +5,7 @@ package skills
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -14,6 +15,8 @@ import (
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/embedding"
 )
+
+var ErrEmptyEmbedding = errors.New("skills: empty embedding result")
 
 // skillCreator abstracts the db.CreateSkill call so the store can be unit-tested
 // without a real database connection.
@@ -176,14 +179,17 @@ func (s *Store) GetByID(ctx context.Context, id uuid.UUID) (*db.Skill, error) {
 // embedText embeds text, tolerating a nil service (unit test path).
 func (s *Store) embedText(ctx context.Context, text string) ([]float32, *uuid.UUID, error) {
 	if s.svc == nil {
-		return nil, nil, nil
+		return nil, nil, fmt.Errorf("skills: embedding service is not configured")
 	}
 	res, err := s.svc.EmbedTextResult(ctx, text)
 	if err != nil {
 		return nil, nil, err
 	}
 	if res == nil {
-		return nil, nil, nil
+		return nil, nil, ErrEmptyEmbedding
+	}
+	if len(res.Embedding) == 0 {
+		return nil, nil, ErrEmptyEmbedding
 	}
 	if res.ModelID != uuid.Nil {
 		modelID := res.ModelID
