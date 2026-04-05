@@ -25,9 +25,12 @@ func (h *Handler) renderTokens(w http.ResponseWriter, r *http.Request, formErr, 
 	}{FormError: formErr, NewToken: newRawToken}
 
 	if h.pool != nil {
-		tokens, err := db.ListTokens(r.Context(), h.pool, nil)
-		if err == nil {
-			data.Tokens = tokens
+		principalID := h.principalFromCookie(r)
+		if principalID != uuid.Nil {
+			tokens, err := db.ListTokens(r.Context(), h.pool, &principalID)
+			if err == nil {
+				data.Tokens = tokens
+			}
 		}
 		scopes, err := db.ListScopes(r.Context(), h.pool, 200, 0)
 		if err == nil {
@@ -106,6 +109,27 @@ func (h *Handler) handleRevokeToken(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.pool == nil {
 		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	principalID := h.principalFromCookie(r)
+	if principalID == uuid.Nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	tokens, err := db.ListTokens(r.Context(), h.pool, &principalID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	owned := false
+	for _, tok := range tokens {
+		if tok.ID == id {
+			owned = true
+			break
+		}
+	}
+	if !owned {
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 	store := auth.NewTokenStore(h.pool)

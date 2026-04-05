@@ -27,6 +27,13 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Restricted UI token management to token owners:
+  - Updated `internal/ui/tokens.go` so `/ui/tokens` lists only tokens for the currently authenticated principal.
+  - Added ownership enforcement in `handleRevokeToken` to deny revoking tokens owned by other principals (`403 forbidden`).
+  - Added integration regression coverage in `internal/ui/tokens_integration_test.go` for:
+    - per-principal token list visibility
+    - cross-principal revoke denial.
+
 - [x] 2026-04-05: Updated Helm chart embedding config to provider profiles:
   - Replaced legacy single-provider keys (`backend`, `ollama_url`, `openai_api_key`, model fields) in chart values/template with `config.embedding.providers`.
   - Updated `deploy/helm/postbrain/templates/_helpers.tpl` to render runtime `config.yaml` using `embedding.providers.<name>` entries.
