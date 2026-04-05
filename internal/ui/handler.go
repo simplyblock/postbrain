@@ -1421,6 +1421,11 @@ func (h *Handler) authorizedScopesForRequest(ctx context.Context, r *http.Reques
 				intersected = append(intersected, id)
 			}
 		}
+		// If no effective scopes are resolved for the principal, fall back to
+		// explicit token scope restrictions so scoped session tokens still work.
+		if len(ids) == 0 {
+			intersected = append(intersected, token.ScopeIds...)
+		}
 		ids = intersected
 	}
 	scopes, err := db.GetScopesByIDs(ctx, h.pool, ids)
