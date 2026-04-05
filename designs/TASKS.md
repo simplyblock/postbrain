@@ -27,6 +27,12 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Updated integration test expectations for tightened authz behavior:
+  - Updated `internal/ui/principals_integration_test.go`:
+    - non-admin principal mutation attempt now expects direct `403` (route-level admin gating) instead of `200` with rendered form error.
+  - Updated `internal/api/rest/rest_integration_test.go` scope CRUD expectation:
+    - after transferring scope ownership, delete by the original owner now expects `403` (owner/admin requirement) instead of `204`.
+
 - [x] 2026-04-05: Hid principal-management UI sections for non-admin users (TDD-first):
   - Added principal-admin gating in `internal/ui/handler.go` for principal-management routes:
     - `/ui/principals`

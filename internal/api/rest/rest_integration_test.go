@@ -358,7 +358,7 @@ func TestScopes_CRUD(t *testing.T) {
 		}
 	})
 
-	t.Run("delete scope returns 204", func(t *testing.T) {
+	t.Run("delete scope returns 403 after ownership transfer", func(t *testing.T) {
 		if createdScopeID == "" {
 			t.Skip("scope not created")
 		}
@@ -370,8 +370,8 @@ func TestScopes_CRUD(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusNoContent {
-			t.Errorf("expected 204, got %d", resp.StatusCode)
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("expected 403, got %d", resp.StatusCode)
 		}
 	})
 
