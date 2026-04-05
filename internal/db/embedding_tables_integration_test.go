@@ -98,7 +98,7 @@ func TestEnsureEmbeddingModelTable_UsesHalfvecForHighDimensions(t *testing.T) {
 	if !strings.Contains(indexDef, "halfvec_cosine_ops") {
 		t.Fatalf("hnsw index definition = %q, want halfvec_cosine_ops", indexDef)
 	}
-	if !strings.Contains(indexDef, "embedding::halfvec(2560)") {
-		t.Fatalf("hnsw index definition = %q, want embedding::halfvec(2560)", indexDef)
+	if !strings.Contains(indexDef, "embedding") || !strings.Contains(indexDef, "halfvec(2560)") {
+		t.Fatalf("hnsw index definition = %q, want embedding cast to halfvec(2560)", indexDef)
 	}
 }

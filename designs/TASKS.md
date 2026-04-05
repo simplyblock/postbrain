@@ -42,6 +42,8 @@
   - Extended repository integration coverage:
     - `internal/db/embedding_repository_integration_test.go::TestEmbeddingRepository_QuerySimilar_HighDimensionHalfvecPath`
     - verifies high-dimension (`dims > 2000`) QuerySimilar succeeds end-to-end and returns expected nearest hits.
+  - Follow-up test hardening:
+    - relaxed `indexdef` assertion in `internal/db/embedding_tables_integration_test.go` to tolerate PostgreSQL expression normalization (`(embedding)::halfvec(...)`) while still asserting halfvec expression indexing intent.
 
 - [x] 2026-04-05: Moved embedding model administration from `postbrain-cli` to `postbrain` (TDD-first):
   - Added server-side `embedding-model` command group in `cmd/postbrain/embedding_model_cmd.go`:
