@@ -967,12 +967,14 @@ func (h *Handler) renderScopes(w http.ResponseWriter, r *http.Request, scopeErr 
 		ScopeFormError string
 		SyncStatus     map[string]codegraph.SyncStatus
 		ChildCount     map[string]int64
+		CanManage      map[string]bool
 		CanDelete      map[string]bool
 		OwnerNames     map[string]string
 	}{
 		ScopeFormError: scopeErr,
 		SyncStatus:     make(map[string]codegraph.SyncStatus),
 		ChildCount:     make(map[string]int64),
+		CanManage:      make(map[string]bool),
 		CanDelete:      make(map[string]bool),
 		OwnerNames:     make(map[string]string),
 	}
@@ -999,7 +1001,9 @@ func (h *Handler) renderScopes(w http.ResponseWriter, r *http.Request, scopeErr 
 			if n, err := db.CountChildScopes(r.Context(), h.pool, s.ID); err == nil && n > 0 {
 				data.ChildCount[s.ID.String()] = n
 			}
-			data.CanDelete[s.ID.String()] = h.hasScopeAdminAccess(r.Context(), r, s.ID)
+			canManage := h.hasScopeAdminAccess(r.Context(), r, s.ID)
+			data.CanManage[s.ID.String()] = canManage
+			data.CanDelete[s.ID.String()] = canManage
 		}
 		data.Scopes = filtered
 	}

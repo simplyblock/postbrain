@@ -29,9 +29,12 @@
 
 - [x] 2026-04-05: Restricted scope delete actions in WebUI to scope owners/admins:
   - Kept server-side delete authorization as owner/admin-only (`handleDeleteScope` + `hasScopeAdminAccess`).
-  - Updated scopes page rendering in `internal/ui/handler.go` to compute per-scope delete capability (`CanDelete`) and pass it to the template.
-  - Updated `internal/ui/web/templates/scopes.html` to fully hide delete controls/actions for non-owner/non-admin users.
-  - Added integration regression in `internal/ui/scopes_integration_test.go` to assert non-admin members do not receive delete action links for parent scopes.
+  - Updated scopes page rendering in `internal/ui/handler.go` to compute per-scope management capability (`CanManage`/`CanDelete`) and pass it to the template.
+  - Updated `internal/ui/web/templates/scopes.html` to fully hide owner/repo/sync/delete controls/actions for non-owner/non-admin users.
+  - Added integration regressions in `internal/ui/scopes_integration_test.go` to assert non-admin members:
+    - do not receive delete action links for parent scopes
+    - do not receive owner change action controls
+    - cannot change owner of parent scopes via direct POST.
 
 - [x] 2026-04-05: Fixed scoped UI dropdown hierarchy to include parent scopes (TDD-first):
   - Updated `internal/ui/handler.go` `authorizedScopesForRequest` token filtering:
