@@ -40,6 +40,9 @@
   - Added integration coverage:
     - `internal/ui/tokens_integration_test.go::TestUpdateTokenScopes_OwnToken_UpdatesScopeIDs`
     - `internal/ui/tokens_integration_test.go::TestUpdateTokenScopes_OtherPrincipalToken_ReturnsForbidden`.
+  - Updated token scope editing UX to use modal dialog pattern (consistent with other WebUI admin flows) instead of inline `<details>`.
+  - Added integration regression:
+    - `internal/ui/tokens_integration_test.go::TestTokensPage_UsesDialogForScopeEditing`.
 
 - [x] 2026-04-05: Restricted scope delete actions in WebUI to scope owners/admins:
   - Kept server-side delete authorization as owner/admin-only (`handleDeleteScope` + `hasScopeAdminAccess`).

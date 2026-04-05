@@ -56,23 +56,11 @@
     <td>
       {{if eq .RevokedAt nil}}
       {{$tok := .}}
-      <details style="display:inline-block;margin-right:0.5rem">
-        <summary style="cursor:pointer">Edit scopes</summary>
-        <form method="POST" action="/ui/tokens/{{.ID}}/scopes" style="margin-top:0.5rem;min-width:18rem">
-          <fieldset>
-            <legend>Token scopes</legend>
-            {{range $.Scopes}}
-            <label>
-              <input type="checkbox" name="scope_ids" value="{{.ID}}"{{if tokenHasScope $tok .ID}} checked{{end}}>
-              <span class="mono">{{.Kind}}:{{.ExternalID}}</span>
-            </label>
-            {{else}}
-            <span class="muted">No scopes defined yet.</span>
-            {{end}}
-          </fieldset>
-          <button type="submit" class="secondary">Save scopes</button>
-        </form>
-      </details>
+      <button type="button" class="secondary"
+              onclick="openTokenScopesDialog('{{.ID}}', '{{.Name}}')">Edit scopes</button>
+      <div id="token-scope-ids-{{.ID}}" style="display:none">
+        {{range $idx, $scope := .ScopeIds}}{{if $idx}},{{end}}{{$scope}}{{end}}
+      </div>
       <form method="POST" action="/ui/tokens/{{.ID}}/revoke" style="display:inline"
             onsubmit="return confirm('Revoke this token?')">
         <button type="submit" class="danger">Revoke</button>
@@ -85,4 +73,50 @@
   {{end}}
   </tbody>
 </table>
+
+<dialog id="dlg-token-scopes">
+  <h2>Edit Token Scopes</h2>
+  <p id="dlg-token-scopes-name" class="muted" style="margin-top:-0.5rem"></p>
+  <form id="dlg-token-scopes-form" method="POST">
+    <fieldset>
+      <legend>Scopes — leave all unchecked for unrestricted access</legend>
+      {{range .Scopes}}
+      <label>
+        <input type="checkbox" name="scope_ids" value="{{.ID}}" data-token-scope-option>
+        <span class="mono">{{.Kind}}:{{.ExternalID}}</span> — {{.Name}}
+      </label>
+      {{else}}
+      <span class="muted">No scopes defined yet.</span>
+      {{end}}
+    </fieldset>
+    <div class="dialog-footer">
+      <button type="button" class="secondary" onclick="document.getElementById('dlg-token-scopes').close()">Cancel</button>
+      <button type="submit">Save scopes</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+function openTokenScopesDialog(tokenID, tokenName) {
+  var form = document.getElementById('dlg-token-scopes-form');
+  form.action = '/ui/tokens/' + tokenID + '/scopes';
+  document.getElementById('dlg-token-scopes-name').textContent = 'token: ' + tokenName;
+
+  var selected = {};
+  var raw = document.getElementById('token-scope-ids-' + tokenID);
+  if (raw && raw.textContent) {
+    raw.textContent.split(',').forEach(function(v) {
+      var id = v.trim();
+      if (id) selected[id] = true;
+    });
+  }
+
+  var options = form.querySelectorAll('input[data-token-scope-option]');
+  options.forEach(function(opt) {
+    opt.checked = !!selected[opt.value];
+  });
+
+  document.getElementById('dlg-token-scopes').showModal();
+}
+</script>
 {{end}}
