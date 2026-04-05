@@ -4,8 +4,10 @@ import (
 	"context"
 	"math"
 	"sort"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/embedding"
@@ -58,9 +60,18 @@ func (s *Store) Recall(ctx context.Context, svc *embedding.EmbeddingService, inp
 	}
 
 	// Vector recall.
-	vecResults, err := db.RecallSkillsByVector(ctx, s.pool, input.ScopeIDs, queryVec, input.AgentType, input.Limit*2)
-	if err != nil {
-		return nil, err
+	vecResults := make([]db.SkillScore, 0)
+	if modelID, ok := activeTextModelID(ctx, s.pool); ok {
+		vecResults, err = s.recallSkillsByModelTable(ctx, modelID, input.ScopeIDs, queryVec, input.AgentType, input.Limit*2)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(vecResults) == 0 {
+		vecResults, err = db.RecallSkillsByVector(ctx, s.pool, input.ScopeIDs, queryVec, input.AgentType, input.Limit*2)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// FTS recall.
@@ -156,4 +167,95 @@ func (s *Store) Recall(ctx context.Context, svc *embedding.EmbeddingService, inp
 	}
 
 	return results, nil
+}
+
+func (s *Store) recallSkillsByModelTable(
+	ctx context.Context,
+	modelID uuid.UUID,
+	scopeIDs []uuid.UUID,
+	queryVec []float32,
+	agentType string,
+	limit int,
+) ([]db.SkillScore, error) {
+	if s.repo == nil || s.pool == nil || len(queryVec) == 0 || len(scopeIDs) == 0 {
+		return nil, nil
+	}
+	type row struct {
+		id    uuid.UUID
+		score float64
+	}
+	byID := make(map[uuid.UUID]row)
+	for _, scopeID := range scopeIDs {
+		scope, err := db.GetScopeByID(ctx, s.pool, scopeID)
+		if err != nil {
+			return nil, err
+		}
+		if scope == nil {
+			continue
+		}
+		hits, err := s.repo.QuerySimilar(ctx, db.EmbeddingQuery{
+			ModelID:    modelID,
+			ObjectType: "skill",
+			Embedding:  queryVec,
+			Limit:      limit,
+			Scope: &db.ScopeFilter{
+				ScopePath: scope.Path,
+			},
+		})
+		if err != nil {
+			if isModelTableUnavailableErr(err) {
+				return nil, nil
+			}
+			return nil, err
+		}
+		for _, h := range hits {
+			if existing, ok := byID[h.ObjectID]; !ok || h.Score > existing.score {
+				byID[h.ObjectID] = row{id: h.ObjectID, score: h.Score}
+			}
+		}
+	}
+	rows := make([]db.SkillScore, 0, len(byID))
+	for _, r := range byID {
+		skill, err := db.GetSkill(ctx, s.pool, r.id)
+		if err != nil {
+			return nil, err
+		}
+		if skill == nil || skill.Status != "published" || !skillMatchesAgentType(skill.AgentTypes, agentType) {
+			continue
+		}
+		// db.SkillScore expects distance score from SQL query; convert back.
+		rows = append(rows, db.SkillScore{Skill: skill, Score: 1.0 - r.score})
+	}
+	return rows, nil
+}
+
+func skillMatchesAgentType(agentTypes []string, agentType string) bool {
+	if agentType == "any" {
+		return true
+	}
+	for _, t := range agentTypes {
+		if t == "any" || t == agentType {
+			return true
+		}
+	}
+	return false
+}
+
+func activeTextModelID(ctx context.Context, pool *pgxpool.Pool) (uuid.UUID, bool) {
+	if pool == nil {
+		return uuid.Nil, false
+	}
+	model, err := db.New(pool).GetActiveTextModel(ctx)
+	if err != nil || model == nil {
+		return uuid.Nil, false
+	}
+	return model.ID, true
+}
+
+func isModelTableUnavailableErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "model") && (strings.Contains(msg, "not ready") || strings.Contains(msg, "not found"))
 }

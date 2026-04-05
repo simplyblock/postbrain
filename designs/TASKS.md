@@ -115,6 +115,13 @@
   - Refactored `internal/memory/recall.go`:
     - text/code/hybrid vector recall now tries active-model repository ANN (`EmbeddingRepository.QuerySimilar`) first with scope filtering
     - falls back to legacy vector SQL recall when model-table results are unavailable (including model not ready/not found) or empty.
+- [x] 2026-04-05: Extended Step 9 dual-read migration to knowledge + skills recall (TDD-first):
+  - Added integration tests:
+    - `internal/knowledge/recall_integration_test.go::TestRecall_UsesModelTableWhenLegacyEmbeddingMissing`
+    - `internal/skills/skills_integration_test.go::TestRecall_UsesModelTableWhenLegacyEmbeddingMissing`
+  - Refactored vector recall paths:
+    - `internal/knowledge/recall.go` now uses repository ANN first for active text model, with legacy vector fallback.
+    - `internal/skills/recall.go` now uses repository ANN first for active text model, with legacy vector fallback.
 - [x] 2026-04-04: Added model-aware multi-provider embedder factory primitives and runtime wiring (TDD-first):
   - Added model-driven factory in `internal/embedding/factory.go`:
     - `ModelConfig`, `ModelConfigStore`, `ModelEmbedderFactory`

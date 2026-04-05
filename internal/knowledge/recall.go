@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -61,9 +62,18 @@ func (s *Store) Recall(ctx context.Context, pool *pgxpool.Pool, input RecallInpu
 
 	// Vector recall.
 	if len(embeddingVec) > 0 {
-		vecRows, err := db.RecallArtifactsByVector(ctx, pool, input.ScopeID, embeddingVec, input.Limit*2)
-		if err != nil {
-			return nil, fmt.Errorf("knowledge: recall by vector: %w", err)
+		vecRows := make([]db.ArtifactScore, 0)
+		if modelID, ok := activeTextModelID(ctx, pool); ok {
+			vecRows, err = s.recallArtifactsByModelTable(ctx, pool, modelID, input.ScopeID, embeddingVec, input.Limit*2)
+			if err != nil {
+				return nil, fmt.Errorf("knowledge: recall by model table: %w", err)
+			}
+		}
+		if len(vecRows) == 0 {
+			vecRows, err = db.RecallArtifactsByVector(ctx, pool, input.ScopeID, embeddingVec, input.Limit*2)
+			if err != nil {
+				return nil, fmt.Errorf("knowledge: recall by vector: %w", err)
+			}
 		}
 		for _, row := range vecRows {
 			merged[row.Artifact.ID] = &ArtifactResult{
@@ -161,4 +171,73 @@ func suppressDigestSources(ctx context.Context, pool *pgxpool.Pool, results []*A
 		}
 	}
 	return filtered, nil
+}
+
+func (s *Store) recallArtifactsByModelTable(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	modelID uuid.UUID,
+	scopeID uuid.UUID,
+	queryVec []float32,
+	limit int,
+) ([]db.ArtifactScore, error) {
+	if s.repo == nil || pool == nil || len(queryVec) == 0 {
+		return nil, nil
+	}
+	scope, err := db.GetScopeByID(ctx, pool, scopeID)
+	if err != nil {
+		return nil, err
+	}
+	if scope == nil {
+		return nil, nil
+	}
+	hits, err := s.repo.QuerySimilar(ctx, db.EmbeddingQuery{
+		ModelID:    modelID,
+		ObjectType: "knowledge_artifact",
+		Embedding:  queryVec,
+		Limit:      limit,
+		Scope: &db.ScopeFilter{
+			ScopePath: scope.Path,
+		},
+	})
+	if err != nil {
+		if isModelTableUnavailableErr(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	rows := make([]db.ArtifactScore, 0, len(hits))
+	for _, h := range hits {
+		art, err := db.GetArtifact(ctx, pool, h.ObjectID)
+		if err != nil {
+			return nil, err
+		}
+		if art == nil || art.Status != "published" {
+			continue
+		}
+		rows = append(rows, db.ArtifactScore{
+			Artifact: art,
+			VecScore: h.Score,
+		})
+	}
+	return rows, nil
+}
+
+func activeTextModelID(ctx context.Context, pool *pgxpool.Pool) (uuid.UUID, bool) {
+	if pool == nil {
+		return uuid.Nil, false
+	}
+	model, err := db.New(pool).GetActiveTextModel(ctx)
+	if err != nil || model == nil {
+		return uuid.Nil, false
+	}
+	return model.ID, true
+}
+
+func isModelTableUnavailableErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "model") && (strings.Contains(msg, "not ready") || strings.Contains(msg, "not found"))
 }
