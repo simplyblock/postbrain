@@ -314,3 +314,58 @@ embedding:
 		t.Fatalf("Embedding.ServiceURL = %q", cfg.Embedding.ServiceURL)
 	}
 }
+
+func TestLoad_EmbeddingProviders_DefaultProfileSynthesized(t *testing.T) {
+	path := writeYAML(t, `
+database:
+  url: "postgres://localhost/postbrain"
+embedding:
+  backend: openai
+  service_url: "http://localhost:8080/v1"
+  openai_api_key: "sk-test"
+`)
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.Embedding.Providers) == 0 {
+		t.Fatal("expected default provider profile to be synthesized")
+	}
+	p, ok := cfg.Embedding.Providers["default"]
+	if !ok {
+		t.Fatal("expected providers.default")
+	}
+	if p.Backend != "openai" || p.ServiceURL != "http://localhost:8080/v1" || p.OpenAIAPIKey != "sk-test" {
+		t.Fatalf("unexpected providers.default: %+v", p)
+	}
+}
+
+func TestLoad_EmbeddingProviders_CustomProfiles(t *testing.T) {
+	path := writeYAML(t, `
+database:
+  url: "postgres://localhost/postbrain"
+embedding:
+  backend: ollama
+  providers:
+    local:
+      backend: ollama
+      service_url: "http://localhost:11434"
+    openai-prod:
+      backend: openai
+      service_url: "https://api.openai.com/v1"
+      openai_api_key: "sk-prod"
+`)
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.Embedding.Providers) != 2 {
+		t.Fatalf("providers len = %d, want 2", len(cfg.Embedding.Providers))
+	}
+	if cfg.Embedding.Providers["local"].Backend != "ollama" {
+		t.Fatalf("providers.local.backend = %q", cfg.Embedding.Providers["local"].Backend)
+	}
+	if cfg.Embedding.Providers["openai-prod"].OpenAIAPIKey != "sk-prod" {
+		t.Fatalf("providers.openai-prod.openai_api_key = %q", cfg.Embedding.Providers["openai-prod"].OpenAIAPIKey)
+	}
+}

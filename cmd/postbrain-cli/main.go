@@ -81,15 +81,16 @@ var buildGitRef = "unknown"
 var buildTimestamp = "unknown"
 
 type embeddingModelRegisterOptions struct {
-	DatabaseURL   string
-	ConfigPath    string
-	Slug          string
-	Provider      string
-	ServiceURL    string
-	ProviderModel string
-	Dimensions    int
-	ContentType   string
-	Activate      bool
+	DatabaseURL    string
+	ConfigPath     string
+	Slug           string
+	Provider       string
+	ServiceURL     string
+	ProviderModel  string
+	ProviderConfig string
+	Dimensions     int
+	ContentType    string
+	Activate       bool
 }
 
 type embeddingModelActivateOptions struct {
@@ -567,6 +568,7 @@ func embeddingModelRegisterCmd() *cobra.Command {
 	cmd.Flags().StringVar(&opts.Provider, "provider", "", "embedding provider, e.g. openai or ollama (required)")
 	cmd.Flags().StringVar(&opts.ServiceURL, "service-url", "", "embedding service URL (required)")
 	cmd.Flags().StringVar(&opts.ProviderModel, "provider-model", "", "provider-side model name (required)")
+	cmd.Flags().StringVar(&opts.ProviderConfig, "provider-config", "default", "named embedding provider profile to use")
 	cmd.Flags().IntVar(&opts.Dimensions, "dimensions", 0, "embedding vector dimensions (required)")
 	cmd.Flags().StringVar(&opts.ContentType, "content-type", "", "content type: text or code (required)")
 	cmd.Flags().BoolVar(&opts.Activate, "activate", false, "set as active model for this content type")
@@ -629,13 +631,14 @@ func runRegisterEmbeddingModelCommand(ctx context.Context, opts embeddingModelRe
 	defer pool.Close()
 
 	model, err := db.RegisterEmbeddingModel(ctx, pool, db.RegisterEmbeddingModelParams{
-		Slug:          opts.Slug,
-		Provider:      opts.Provider,
-		ServiceURL:    opts.ServiceURL,
-		ProviderModel: opts.ProviderModel,
-		Dimensions:    opts.Dimensions,
-		ContentType:   opts.ContentType,
-		Activate:      opts.Activate,
+		Slug:           opts.Slug,
+		Provider:       opts.Provider,
+		ServiceURL:     opts.ServiceURL,
+		ProviderModel:  opts.ProviderModel,
+		ProviderConfig: opts.ProviderConfig,
+		Dimensions:     opts.Dimensions,
+		ContentType:    opts.ContentType,
+		Activate:       opts.Activate,
 	})
 	if err != nil {
 		return "", err

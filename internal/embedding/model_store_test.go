@@ -60,7 +60,7 @@ func TestDBModelStore_GetModelConfig(t *testing.T) {
 	t.Parallel()
 
 	modelID := uuid.New()
-	store := NewDBModelStore(&fakeQueryer{rows: []fakeRow{{vals: []any{"openai", "http://localhost:8080/v1", "text-embedding-3-small", 1536}}}})
+	store := NewDBModelStore(&fakeQueryer{rows: []fakeRow{{vals: []any{"openai", "http://localhost:8080/v1", "text-embedding-3-small", 1536, "openai-prod"}}}})
 
 	cfg, err := store.GetModelConfig(context.Background(), modelID)
 	if err != nil {
@@ -71,6 +71,9 @@ func TestDBModelStore_GetModelConfig(t *testing.T) {
 	}
 	if cfg.ID != modelID || cfg.Provider != "openai" || cfg.ProviderModel != "text-embedding-3-small" {
 		t.Fatalf("unexpected config: %+v", cfg)
+	}
+	if cfg.ProviderConfig != "openai-prod" {
+		t.Fatalf("ProviderConfig = %q, want openai-prod", cfg.ProviderConfig)
 	}
 }
 

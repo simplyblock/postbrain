@@ -101,6 +101,53 @@ func TestRegisterEmbeddingModel_CreatesTableAndPendingRows(t *testing.T) {
 	}
 }
 
+func TestRegisterEmbeddingModel_ProviderConfig_DefaultAndOverride(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+
+	defaultModel, err := db.RegisterEmbeddingModel(ctx, pool, db.RegisterEmbeddingModelParams{
+		Slug:          "text-model-default-" + uuid.NewString(),
+		Provider:      "openai",
+		ServiceURL:    "http://localhost:11434/v1",
+		ProviderModel: "text-embedding-3-large",
+		Dimensions:    1536,
+		ContentType:   "text",
+		Activate:      false,
+	})
+	if err != nil {
+		t.Fatalf("RegisterEmbeddingModel default provider_config: %v", err)
+	}
+
+	var providerConfig string
+	if err := pool.QueryRow(ctx, `SELECT provider_config FROM embedding_models WHERE id = $1`, defaultModel.ID).Scan(&providerConfig); err != nil {
+		t.Fatalf("load default provider_config: %v", err)
+	}
+	if providerConfig != "default" {
+		t.Fatalf("default provider_config = %q, want default", providerConfig)
+	}
+
+	customModel, err := db.RegisterEmbeddingModel(ctx, pool, db.RegisterEmbeddingModelParams{
+		Slug:           "text-model-custom-" + uuid.NewString(),
+		Provider:       "openai",
+		ServiceURL:     "https://api.openai.com/v1",
+		ProviderModel:  "text-embedding-3-large",
+		ProviderConfig: "openai-prod",
+		Dimensions:     1536,
+		ContentType:    "text",
+		Activate:       false,
+	})
+	if err != nil {
+		t.Fatalf("RegisterEmbeddingModel custom provider_config: %v", err)
+	}
+
+	if err := pool.QueryRow(ctx, `SELECT provider_config FROM embedding_models WHERE id = $1`, customModel.ID).Scan(&providerConfig); err != nil {
+		t.Fatalf("load custom provider_config: %v", err)
+	}
+	if providerConfig != "openai-prod" {
+		t.Fatalf("custom provider_config = %q, want openai-prod", providerConfig)
+	}
+}
+
 func TestRegisterEmbeddingModel_IdempotentOnSlug(t *testing.T) {
 	pool := testhelper.NewTestPool(t)
 	ctx := context.Background()

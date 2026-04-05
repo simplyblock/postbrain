@@ -30,16 +30,17 @@ func (s *DBModelStore) GetModelConfig(ctx context.Context, modelID uuid.UUID) (*
 	}
 
 	var (
-		provider      string
-		serviceURL    *string
-		providerModel string
-		dimensions    int
+		provider       string
+		serviceURL     *string
+		providerModel  string
+		dimensions     int
+		providerConfig string
 	)
 	err := s.q.QueryRow(ctx, `
-		SELECT provider, service_url, provider_model, dimensions
+		SELECT provider, service_url, provider_model, dimensions, COALESCE(provider_config, 'default')
 		FROM embedding_models
 		WHERE id = $1
-	`, modelID).Scan(&provider, &serviceURL, &providerModel, &dimensions)
+	`, modelID).Scan(&provider, &serviceURL, &providerModel, &dimensions, &providerConfig)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -48,10 +49,11 @@ func (s *DBModelStore) GetModelConfig(ctx context.Context, modelID uuid.UUID) (*
 	}
 
 	cfg := &ModelConfig{
-		ID:            modelID,
-		Provider:      provider,
-		ProviderModel: providerModel,
-		Dimensions:    dimensions,
+		ID:             modelID,
+		Provider:       provider,
+		ProviderConfig: providerConfig,
+		ProviderModel:  providerModel,
+		Dimensions:     dimensions,
 	}
 	if serviceURL != nil {
 		cfg.ServiceURL = *serviceURL

@@ -41,13 +41,20 @@ func TestModelEmbedderFactory_EmbedderForModel_OpenAI(t *testing.T) {
 		OpenAIAPIKey:   "sk-test",
 		RequestTimeout: 5 * time.Second,
 		BatchSize:      16,
+		Providers: map[string]config.EmbeddingProviderConfig{
+			"openai-prod": {
+				Backend:      "openai",
+				ServiceURL:   "http://localhost:8080/v1",
+				OpenAIAPIKey: "sk-profile",
+			},
+		},
 	}, &fakeModelStore{models: map[uuid.UUID]ModelConfig{
 		modelID: {
-			ID:            modelID,
-			Provider:      "openai",
-			ProviderModel: "text-embedding-3-small",
-			ServiceURL:    "http://localhost:8080/v1",
-			Dimensions:    1536,
+			ID:             modelID,
+			Provider:       "openai",
+			ProviderModel:  "text-embedding-3-small",
+			ProviderConfig: "openai-prod",
+			Dimensions:     1536,
 		},
 	}})
 
@@ -64,6 +71,41 @@ func TestModelEmbedderFactory_EmbedderForModel_OpenAI(t *testing.T) {
 	}
 	if oa.modelSlug != "text-embedding-3-small" {
 		t.Fatalf("modelSlug = %q, want provider model", oa.modelSlug)
+	}
+}
+
+func TestModelEmbedderFactory_EmbedderForModel_UsesProfileOverride(t *testing.T) {
+	t.Parallel()
+
+	modelID := uuid.New()
+	factory := NewModelEmbedderFactory(&config.EmbeddingConfig{
+		ServiceURL: "http://ignored-global:8080/v1",
+		Providers: map[string]config.EmbeddingProviderConfig{
+			"local-ollama": {
+				Backend:    "ollama",
+				ServiceURL: "http://localhost:11434",
+			},
+		},
+	}, &fakeModelStore{models: map[uuid.UUID]ModelConfig{
+		modelID: {
+			ID:             modelID,
+			Provider:       "openai",
+			ProviderConfig: "local-ollama",
+			ProviderModel:  "nomic-embed-text",
+			Dimensions:     768,
+		},
+	}})
+
+	emb, err := factory.EmbedderForModel(context.Background(), modelID)
+	if err != nil {
+		t.Fatalf("EmbedderForModel: %v", err)
+	}
+	ool, ok := emb.(*OllamaEmbedder)
+	if !ok {
+		t.Fatalf("embedder type = %T, want *OllamaEmbedder", emb)
+	}
+	if got := serviceURLOrDefault(ool.cfg, defaultOllamaServiceURL); got != "http://localhost:11434" {
+		t.Fatalf("service URL = %q, want profile service URL", got)
 	}
 }
 

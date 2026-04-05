@@ -27,6 +27,26 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Added multi-provider embedding profile selection for model-driven embedding (TDD-first):
+  - Extended runtime embedding config (`internal/config/config.go`) with:
+    - `embedding.providers` map (`backend`, `service_url`, `openai_api_key`)
+    - backward-compatible default profile synthesis only when no explicit provider map is configured.
+  - Extended embedding model metadata resolution:
+    - `internal/embedding/model_store.go` now reads `provider_config` from `embedding_models` (default fallback `default`).
+    - `internal/embedding/factory.go` now resolves backend/service/auth via model `provider_config` profile override.
+  - Added schema migration `000014_embedding_model_provider_config`:
+    - adds `embedding_models.provider_config` (`TEXT NOT NULL DEFAULT 'default'`)
+    - adds `embedding_models_provider_config_idx`.
+  - Extended model registration and CLI:
+    - `internal/db/RegisterEmbeddingModel` upsert now writes `provider_config`.
+    - `postbrain-cli embedding-model register` now supports `--provider-config` (default `default`).
+  - Added/updated tests:
+    - config profile normalization tests (`internal/config/config_test.go`)
+    - factory/store profile routing tests (`internal/embedding/factory_test.go`, `internal/embedding/model_store_test.go`)
+    - CLI register profile flag tests (`cmd/postbrain-cli/main_test.go`)
+    - integration test for default/override persistence (`internal/db/embedding_model_registration_integration_test.go`)
+    - schema integration checks for `provider_config` column/index (`internal/db/embedding_schema_migration_integration_test.go`).
+
 - [x] 2026-04-04: Integrated memory write-path dual-write to model tables (Step 7 partial, TDD-first):
   - Extended `internal/memory/store.go` to consume model-aware embedding results when available:
     - added result-aware embed helpers (`embedText`, `embedCode`) using `EmbedTextResult` / `EmbedCodeResult`.

@@ -10,13 +10,14 @@ import (
 
 // RegisterEmbeddingModelParams defines the registration contract for one model.
 type RegisterEmbeddingModelParams struct {
-	Slug          string
-	Provider      string
-	ServiceURL    string
-	ProviderModel string
-	Dimensions    int
-	ContentType   string
-	Activate      bool
+	Slug           string
+	Provider       string
+	ServiceURL     string
+	ProviderModel  string
+	ProviderConfig string
+	Dimensions     int
+	ContentType    string
+	Activate       bool
 }
 
 // RegisterEmbeddingModel registers or updates an embedding model in one transaction.
@@ -97,18 +98,22 @@ func deactivateEmbeddingModelsByType(ctx context.Context, tx DBTX, contentType s
 }
 
 func upsertEmbeddingModelTx(ctx context.Context, tx DBTX, params RegisterEmbeddingModelParams) (*EmbeddingModel, error) {
+	if params.ProviderConfig == "" {
+		params.ProviderConfig = "default"
+	}
 	row := tx.QueryRow(ctx, `
-		INSERT INTO embedding_models (slug, provider, service_url, provider_model, dimensions, content_type, is_active, is_ready)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, false)
+		INSERT INTO embedding_models (slug, provider, service_url, provider_model, provider_config, dimensions, content_type, is_active, is_ready)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false)
 		ON CONFLICT (slug) DO UPDATE SET
 			provider = EXCLUDED.provider,
 			service_url = EXCLUDED.service_url,
 			provider_model = EXCLUDED.provider_model,
+			provider_config = EXCLUDED.provider_config,
 			dimensions = EXCLUDED.dimensions,
 			content_type = EXCLUDED.content_type,
 			is_active = EXCLUDED.is_active
 		RETURNING id, slug, dimensions, content_type, is_active, description, created_at
-	`, params.Slug, params.Provider, params.ServiceURL, params.ProviderModel, params.Dimensions, params.ContentType, params.Activate)
+	`, params.Slug, params.Provider, params.ServiceURL, params.ProviderModel, params.ProviderConfig, params.Dimensions, params.ContentType, params.Activate)
 
 	model := &EmbeddingModel{}
 	if err := row.Scan(

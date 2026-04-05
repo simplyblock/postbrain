@@ -12,11 +12,12 @@ import (
 
 // ModelConfig contains the provider/runtime settings for one embedding model.
 type ModelConfig struct {
-	ID            uuid.UUID
-	Provider      string
-	ServiceURL    string
-	ProviderModel string
-	Dimensions    int
+	ID             uuid.UUID
+	Provider       string
+	ProviderConfig string
+	ServiceURL     string
+	ProviderModel  string
+	Dimensions     int
 }
 
 // ModelConfigStore loads model configuration for a model ID.
@@ -80,14 +81,35 @@ func (f *ModelEmbedderFactory) EmbedderForModel(ctx context.Context, modelID uui
 }
 
 func (f *ModelEmbedderFactory) newEmbedderForConfig(model *ModelConfig) (Embedder, error) {
-	provider := strings.ToLower(strings.TrimSpace(model.Provider))
+	profileName := strings.TrimSpace(model.ProviderConfig)
+	if profileName == "" {
+		profileName = "default"
+	}
+	resolvedProvider := strings.TrimSpace(model.Provider)
+	resolvedServiceURL := strings.TrimSpace(model.ServiceURL)
+	resolvedAPIKey := strings.TrimSpace(f.baseCfg.OpenAIAPIKey)
+	if profile, ok := f.baseCfg.Providers[profileName]; ok {
+		if strings.TrimSpace(profile.Backend) != "" {
+			resolvedProvider = strings.TrimSpace(profile.Backend)
+		}
+		if strings.TrimSpace(profile.ServiceURL) != "" {
+			resolvedServiceURL = strings.TrimSpace(profile.ServiceURL)
+		}
+		if strings.TrimSpace(profile.OpenAIAPIKey) != "" {
+			resolvedAPIKey = strings.TrimSpace(profile.OpenAIAPIKey)
+		}
+	} else if profileName != "default" {
+		return nil, fmt.Errorf("embedding factory: unknown provider profile %q for model %s", profileName, model.ID)
+	}
+	provider := strings.ToLower(strings.TrimSpace(resolvedProvider))
 	providerModel := strings.TrimSpace(model.ProviderModel)
 	if providerModel == "" {
 		return nil, fmt.Errorf("embedding factory: model %s has empty provider_model", model.ID)
 	}
 
 	cfg := *f.baseCfg
-	cfg.ServiceURL = strings.TrimSpace(model.ServiceURL)
+	cfg.ServiceURL = resolvedServiceURL
+	cfg.OpenAIAPIKey = resolvedAPIKey
 
 	switch provider {
 	case "ollama":
