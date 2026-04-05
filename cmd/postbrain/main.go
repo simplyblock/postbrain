@@ -290,7 +290,7 @@ func enabledJobNames(cfg config.JobsConfig) []string {
 		names = append(names, "backfill_summaries")
 	}
 	if cfg.ChunkBackfillEnabled {
-		names = append(names, "backfill_chunks")
+		names = append(names, "chunk_backfill")
 	}
 	return names
 }
