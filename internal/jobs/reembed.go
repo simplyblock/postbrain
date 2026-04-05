@@ -164,28 +164,33 @@ func (j *ReembedJob) RunCode(ctx context.Context) error {
 		return nil
 	}
 
-	offset := 0
 	total := 0
 	for {
-		rows, err := j.pool.Query(ctx,
-			`SELECT id, content FROM memories
-			 WHERE is_active=true AND content_kind='code'
-			   AND (embedding_code_model_id IS NULL OR embedding_code_model_id != $1)
-			 LIMIT $2 OFFSET $3`,
-			modelID, j.batchSize, offset,
-		)
+		rows, err := j.pool.Query(ctx, `
+			SELECT ei.object_id, ei.retry_count, m.content, m.scope_id
+			FROM embedding_index ei
+			JOIN memories m ON ei.object_type='memory' AND m.id=ei.object_id
+			WHERE ei.model_id = $1
+			  AND ei.status = 'pending'
+			  AND m.is_active = true
+			  AND m.content_kind = 'code'
+			ORDER BY ei.updated_at, ei.object_id
+			LIMIT $2
+		`, modelID, j.batchSize)
 		if err != nil {
-			return fmt.Errorf("reembed code: fetch batch at offset %d: %w", offset, err)
+			return fmt.Errorf("reembed code: fetch pending batch: %w", err)
 		}
 
 		type row struct {
-			id      uuid.UUID
-			content string
+			id         uuid.UUID
+			retryCount int
+			content    string
+			scopeID    uuid.UUID
 		}
 		var batch []row
 		for rows.Next() {
 			var r row
-			if err := rows.Scan(&r.id, &r.content); err != nil {
+			if err := rows.Scan(&r.id, &r.retryCount, &r.content, &r.scopeID); err != nil {
 				rows.Close()
 				return fmt.Errorf("reembed code: scan row: %w", err)
 			}
@@ -193,7 +198,7 @@ func (j *ReembedJob) RunCode(ctx context.Context) error {
 		}
 		rows.Close()
 		if err := rows.Err(); err != nil {
-			return fmt.Errorf("reembed code: rows error at offset %d: %w", offset, err)
+			return fmt.Errorf("reembed code: rows error: %w", err)
 		}
 
 		if len(batch) == 0 {
@@ -203,22 +208,38 @@ func (j *ReembedJob) RunCode(ctx context.Context) error {
 		for _, r := range batch {
 			vec, err := j.svc.EmbedCode(ctx, r.content)
 			if err != nil {
+				_ = j.markEmbeddingFailedAttempt(ctx, "memory", r.id, *modelID, r.retryCount, err)
 				slog.Error("reembed code: embed failed", "memory_id", r.id, "error", err)
 				continue
 			}
 			if err := j.updateMemoryCodeEmbedding(ctx, r.id, vec, modelID); err != nil {
+				_ = j.markEmbeddingFailedAttempt(ctx, "memory", r.id, *modelID, r.retryCount, err)
 				slog.Error("reembed code: update failed", "memory_id", r.id, "error", err)
+				continue
+			}
+			if err := db.NewEmbeddingRepository(j.pool).UpsertEmbedding(ctx, db.UpsertEmbeddingInput{
+				ObjectType: "memory",
+				ObjectID:   r.id,
+				ScopeID:    r.scopeID,
+				ModelID:    *modelID,
+				Embedding:  vec,
+			}); err != nil {
+				_ = j.markEmbeddingFailedAttempt(ctx, "memory", r.id, *modelID, r.retryCount, err)
+				slog.Error("reembed code: repository upsert failed", "memory_id", r.id, "error", err)
+				continue
+			}
+			if err := j.markEmbeddingReady(ctx, "memory", r.id, *modelID); err != nil {
+				slog.Error("reembed code: mark ready failed", "memory_id", r.id, "error", err)
 			}
 		}
 
 		total += len(batch)
 		slog.Info("reembed code: batch processed",
-			"offset", offset, "count", len(batch), "total_so_far", total)
+			"count", len(batch), "total_so_far", total)
 
 		if len(batch) < j.batchSize {
 			break
 		}
-		offset += j.batchSize
 	}
 
 	slog.Info("reembed code: complete", "total_reembedded", total, "model_id", modelID)

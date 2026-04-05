@@ -123,6 +123,14 @@ func TestReembedJob_RunCode_ReembedsMismatchedCodeMemory(t *testing.T) {
 	).Scan(&memID); err != nil {
 		t.Fatalf("insert code memory: %v", err)
 	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO embedding_index (object_type, object_id, model_id, status, retry_count)
+		VALUES ('memory', $1, $2, 'pending', 0)
+		ON CONFLICT (object_type, object_id, model_id)
+		DO UPDATE SET status='pending', retry_count=0, last_error=NULL
+	`, memID, codeModelID); err != nil {
+		t.Fatalf("seed embedding_index pending row: %v", err)
+	}
 
 	j := NewReembedJob(pool, svc, 64)
 	if err := j.RunCode(ctx); err != nil {
@@ -267,6 +275,151 @@ func TestReembedJob_RunText_FailureIncrementsRetryAndEventuallyFailed(t *testing
 		WHERE object_type='memory' AND object_id=$1 AND model_id=$2
 	`, mem.ID, modelID).Scan(&status, &retryCount, &lastError); err != nil {
 		t.Fatalf("scan embedding_index after RunText: %v", err)
+	}
+	if status != "failed" {
+		t.Fatalf("status = %q, want failed", status)
+	}
+	if retryCount != 3 {
+		t.Fatalf("retry_count = %d, want 3", retryCount)
+	}
+	if lastError == nil || *lastError == "" {
+		t.Fatal("last_error should be populated on failed embedding row")
+	}
+}
+
+func TestReembedJob_RunCode_UsesEmbeddingIndexPendingAndMarksReady(t *testing.T) {
+	t.Parallel()
+	pool := testhelper.NewTestPool(t)
+	svc := testhelper.NewMockEmbeddingService()
+	ctx := context.Background()
+
+	codeModel, err := db.RegisterEmbeddingModel(ctx, pool, db.RegisterEmbeddingModelParams{
+		Slug:          "reembed-code-ready-" + uuid.NewString(),
+		Provider:      "ollama",
+		ServiceURL:    "http://localhost:11434",
+		ProviderModel: "nomic-embed-text",
+		Dimensions:    4,
+		ContentType:   "code",
+		Activate:      true,
+	})
+	if err != nil {
+		t.Fatalf("register code model: %v", err)
+	}
+	codeModelID := codeModel.ID
+
+	principal := testhelper.CreateTestPrincipal(t, pool, "user", "reembed-code-index-user")
+	scope := testhelper.CreateTestScope(t, pool, "project", "reembed-code-index-scope", nil, principal.ID)
+
+	var memID uuid.UUID
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO memories (memory_type, scope_id, author_id, content, content_kind, is_active)
+		VALUES ('semantic', $1, $2, 'fn main() {}', 'code', true)
+		RETURNING id
+	`, scope.ID, principal.ID).Scan(&memID); err != nil {
+		t.Fatalf("insert code memory: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO embedding_index (object_type, object_id, model_id, status, retry_count)
+		VALUES ('memory', $1, $2, 'pending', 0)
+		ON CONFLICT (object_type, object_id, model_id)
+		DO UPDATE SET status='pending', retry_count=0, last_error=NULL
+	`, memID, codeModelID); err != nil {
+		t.Fatalf("seed embedding_index pending row: %v", err)
+	}
+
+	j := NewReembedJob(pool, svc, 64)
+	if err := j.RunCode(ctx); err != nil {
+		t.Fatalf("RunCode: %v", err)
+	}
+
+	var (
+		afterModelID *uuid.UUID
+		status       string
+		retryCount   int
+		lastError    *string
+	)
+	if err := pool.QueryRow(ctx, `
+		SELECT embedding_code_model_id FROM memories WHERE id = $1
+	`, memID).Scan(&afterModelID); err != nil {
+		t.Fatalf("scan memory after RunCode: %v", err)
+	}
+	if afterModelID == nil || *afterModelID != codeModelID {
+		t.Fatalf("embedding_code_model_id = %v, want %v", afterModelID, codeModelID)
+	}
+	if err := pool.QueryRow(ctx, `
+		SELECT status, retry_count, last_error
+		FROM embedding_index
+		WHERE object_type='memory' AND object_id=$1 AND model_id=$2
+	`, memID, codeModelID).Scan(&status, &retryCount, &lastError); err != nil {
+		t.Fatalf("scan embedding_index after RunCode: %v", err)
+	}
+	if status != "ready" {
+		t.Fatalf("status = %q, want ready", status)
+	}
+	if retryCount != 0 {
+		t.Fatalf("retry_count = %d, want 0", retryCount)
+	}
+	if lastError != nil {
+		t.Fatalf("last_error = %v, want NULL", *lastError)
+	}
+}
+
+func TestReembedJob_RunCode_FailureIncrementsRetryAndEventuallyFailed(t *testing.T) {
+	t.Parallel()
+	pool := testhelper.NewTestPool(t)
+	svc := embedding.NewServiceFromEmbedders(embedding.NewFakeEmbedder(4), &failingEmbedder{})
+	ctx := context.Background()
+
+	codeModel, err := db.RegisterEmbeddingModel(ctx, pool, db.RegisterEmbeddingModelParams{
+		Slug:          "reembed-code-fail-" + uuid.NewString(),
+		Provider:      "ollama",
+		ServiceURL:    "http://localhost:11434",
+		ProviderModel: "nomic-embed-text",
+		Dimensions:    4,
+		ContentType:   "code",
+		Activate:      true,
+	})
+	if err != nil {
+		t.Fatalf("register code model: %v", err)
+	}
+	codeModelID := codeModel.ID
+
+	principal := testhelper.CreateTestPrincipal(t, pool, "user", "reembed-code-fail-user")
+	scope := testhelper.CreateTestScope(t, pool, "project", "reembed-code-fail-scope", nil, principal.ID)
+
+	var memID uuid.UUID
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO memories (memory_type, scope_id, author_id, content, content_kind, is_active)
+		VALUES ('semantic', $1, $2, 'fn main() {}', 'code', true)
+		RETURNING id
+	`, scope.ID, principal.ID).Scan(&memID); err != nil {
+		t.Fatalf("insert code memory: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO embedding_index (object_type, object_id, model_id, status, retry_count)
+		VALUES ('memory', $1, $2, 'pending', 2)
+		ON CONFLICT (object_type, object_id, model_id)
+		DO UPDATE SET status='pending', retry_count=2, last_error=NULL
+	`, memID, codeModelID); err != nil {
+		t.Fatalf("seed embedding_index pending row: %v", err)
+	}
+
+	j := NewReembedJob(pool, svc, 64)
+	if err := j.RunCode(ctx); err != nil {
+		t.Fatalf("RunCode: %v", err)
+	}
+
+	var (
+		status     string
+		retryCount int
+		lastError  *string
+	)
+	if err := pool.QueryRow(ctx, `
+		SELECT status, retry_count, last_error
+		FROM embedding_index
+		WHERE object_type='memory' AND object_id=$1 AND model_id=$2
+	`, memID, codeModelID).Scan(&status, &retryCount, &lastError); err != nil {
+		t.Fatalf("scan embedding_index after RunCode: %v", err)
 	}
 	if status != "failed" {
 		t.Fatalf("status = %q, want failed", status)
