@@ -27,6 +27,23 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Enforced token permissions in WebUI and surfaced token permissions in UI flows (TDD-first):
+  - Added centralized WebUI permission gating in `internal/ui/handler.go`:
+    - authenticated UI GET/HEAD/OPTIONS routes require token read permission
+    - authenticated mutating routes require token write permission
+    - returns `403 forbidden: insufficient permissions` for denied operations.
+  - Updated WebUI token creation in `internal/ui/tokens.go`:
+    - parses and validates selected permissions from the create form (`read`, `write`, `admin`)
+    - persists selected permissions on token creation instead of always relying on DB defaults
+    - defaults to `read,write` when no permission values are supplied.
+  - Updated token management template in `internal/ui/web/templates/tokens.html`:
+    - added permissions selection to the token creation form
+    - added permissions column in token list to reflect stored `tokens.permissions`.
+  - Added integration coverage:
+    - `internal/ui/permission_authz_integration_test.go::TestUI_PermissionAuthz_ReadVsWrite`
+    - `internal/ui/tokens_integration_test.go::TestCreateToken_UsesSelectedPermissions`
+    - `internal/ui/tokens_integration_test.go::TestTokensPage_ShowsTokenPermissions`.
+
 - [x] 2026-04-05: Enforced token permissions for MCP tools (TDD-first):
   - Added MCP permission middleware helpers in `internal/api/mcp/permissionauth.go`:
     - `withToolPermission` tool wrapper with `read`/`write` permission modes

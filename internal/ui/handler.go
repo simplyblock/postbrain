@@ -170,6 +170,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !h.authenticated(w, r) {
 		return
 	}
+	if required := requiredUIPermission(r); required != permissionNone && !h.hasUIPermission(r, required) {
+		http.Error(w, "forbidden: insufficient permissions", http.StatusForbidden)
+		return
+	}
 	switch {
 	case r.URL.Path == "/ui" || r.URL.Path == "/ui/":
 		h.handleOverview(w, r)
@@ -271,6 +275,41 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleQuery(w, r)
 	default:
 		http.NotFound(w, r)
+	}
+}
+
+type uiPermission string
+
+const (
+	permissionNone  uiPermission = "none"
+	permissionRead  uiPermission = "read"
+	permissionWrite uiPermission = "write"
+)
+
+func requiredUIPermission(r *http.Request) uiPermission {
+	if r.URL.Path == "/ui/logout" && r.Method == http.MethodPost {
+		return permissionNone
+	}
+	switch r.Method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return permissionRead
+	default:
+		return permissionWrite
+	}
+}
+
+func (h *Handler) hasUIPermission(r *http.Request, required uiPermission) bool {
+	token := h.tokenFromCookie(r)
+	if token == nil {
+		return false
+	}
+	switch required {
+	case permissionRead:
+		return auth.HasReadPermission(token.Permissions)
+	case permissionWrite:
+		return auth.HasWritePermission(token.Permissions)
+	default:
+		return false
 	}
 }
 
