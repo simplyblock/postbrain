@@ -50,7 +50,7 @@ func TestEnabledJobNames_ReturnsEnabledOnly(t *testing.T) {
 		BackfillSummariesEnabled: false,
 		ChunkBackfillEnabled:     true,
 	})
-	want := []string{"consolidation", "reembed", "age_check", "backfill_chunks"}
+	want := []string{"consolidation", "reembed", "age_check", "chunk_backfill"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("enabledJobNames() = %#v, want %#v", got, want)
 	}
