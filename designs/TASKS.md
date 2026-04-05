@@ -27,6 +27,14 @@
 
 ### Maintenance
 
+- [x] 2026-04-05: Added Web UI logout action and session invalidation flow:
+  - Added `POST /ui/logout` handler in `internal/ui/auth.go` to clear `pb_session` cookie and redirect to `/ui/login`.
+  - Wired logout route in `internal/ui/handler.go`.
+  - Added logout button to the application sidebar in `internal/ui/web/templates/base.html`.
+  - Added coverage:
+    - unit: `internal/ui/handler_auth_test.go::TestLogoutPOST_ClearsCookieAndRedirects`
+    - integration: `internal/ui/auth_integration_test.go::TestLogoutPOST_ClearsSessionAndRequiresLoginAgain`.
+
 - [x] 2026-04-05: Restricted MCP `list_scopes` to authorized writable scopes:
   - Updated `internal/api/mcp/list_scopes.go` to resolve scopes from the caller’s authorized scope set instead of returning global scope inventory.
   - Added MCP scope-authorization helper in `internal/api/mcp/scopeauth.go` to intersect effective principal scopes with token scope restrictions.

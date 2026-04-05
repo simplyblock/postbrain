@@ -250,6 +250,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleRevokeToken(w, r)
 	case r.URL.Path == "/ui/tokens":
 		h.handleTokens(w, r)
+	case r.URL.Path == "/ui/logout" && r.Method == http.MethodPost:
+		h.handleLogout(w, r)
 	case r.URL.Path == "/ui/metrics":
 		h.handleMetrics(w, r)
 	case r.URL.Path == "/ui/query":
