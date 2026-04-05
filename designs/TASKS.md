@@ -43,6 +43,10 @@
     - skills.
   - Added integration regression coverage in `internal/ui/page_scope_filtering_integration_test.go` to verify hidden scopes/data do not leak across all listed pages.
 
+- [x] 2026-04-05: Fixed scoped-session fallback in shared UI scope filter:
+  - Updated `authorizedScopesForRequest` in `internal/ui/handler.go` to fall back to explicit token `scope_ids` when principal effective-scope resolution is empty.
+  - This restores visibility for scoped session tokens while keeping filtering centralized in a single function.
+
 - [x] 2026-04-05: Restricted UI principals page to reachable principals:
   - Updated `internal/ui/handler.go` `renderPrincipals` to filter principals and membership rows to the authenticated principal’s reachable principal set (self + ancestor membership chain).
   - Added helper `reachablePrincipalIDSet` using `db.GetAllParentIDs`.
