@@ -59,22 +59,36 @@ func (r *DBResolver) EffectivePermissions(ctx context.Context, principalID, scop
 		return newAllPermissions(), nil
 	}
 
-	// 2. Direct ownership: scope.principal_id == principalID
-	var ownerPrincipalID uuid.UUID
+	// Ensure scope exists.
+	var scopeExists bool
 	err = r.pool.QueryRow(ctx,
-		`SELECT principal_id FROM scopes WHERE id = $1`,
+		`SELECT EXISTS(SELECT 1 FROM scopes WHERE id = $1)`,
 		scopeID,
-	).Scan(&ownerPrincipalID)
+	).Scan(&scopeExists)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return EmptyPermissionSet(), nil
-		}
 		return EmptyPermissionSet(), fmt.Errorf("authz: resolver: scope lookup: %w", err)
+	}
+	if !scopeExists {
+		return EmptyPermissionSet(), nil
 	}
 
 	result := EmptyPermissionSet()
 
-	if ownerPrincipalID == principalID {
+	// 2. Direct ownership on scopeID or any ancestor scope.
+	var ownsTargetOrAncestor bool
+	err = r.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM scopes owner_scope
+			JOIN scopes target ON owner_scope.path @> target.path
+			WHERE target.id = $2
+			  AND owner_scope.principal_id = $1
+		)
+	`, principalID, scopeID).Scan(&ownsTargetOrAncestor)
+	if err != nil {
+		return EmptyPermissionSet(), fmt.Errorf("authz: resolver: ownership lookup: %w", err)
+	}
+	if ownsTargetOrAncestor {
 		result = Union(result, RolePermissions(RoleOwner))
 	}
 
@@ -104,9 +118,11 @@ func (r *DBResolver) EffectivePermissions(ctx context.Context, principalID, scop
 		return EmptyPermissionSet(), fmt.Errorf("authz: resolver: membership lookup: %w", err)
 	}
 	if roleStr != nil {
-		if role, err := ParseRole(*roleStr); err == nil {
-			result = Union(result, RolePermissions(role))
+		role, err := ParseRole(*roleStr)
+		if err != nil {
+			return EmptyPermissionSet(), fmt.Errorf("authz: resolver: invalid membership role %q: %w", *roleStr, err)
 		}
+		result = Union(result, RolePermissions(role))
 	}
 
 	// 4. Direct scope grants on scopeID and all ancestor scopes (downward inheritance).
@@ -131,7 +147,7 @@ func (r *DBResolver) EffectivePermissions(ctx context.Context, principalID, scop
 		}
 		ps, err := NewPermissionSet(rawPerms)
 		if err != nil {
-			continue // skip malformed grants silently
+			return EmptyPermissionSet(), fmt.Errorf("authz: resolver: invalid scope grant permissions: %w", err)
 		}
 		result = Union(result, ps)
 	}
@@ -139,8 +155,56 @@ func (r *DBResolver) EffectivePermissions(ctx context.Context, principalID, scop
 		return EmptyPermissionSet(), fmt.Errorf("authz: resolver: scope grants rows: %w", err)
 	}
 
-	// 5. Upward read: grants on descendant scopes propagate matching :read
-	// permissions upward to scopeID.
+	// 5. Upward read from all grant sources:
+	// ownership, membership-derived permissions, and direct scope grants.
+	upwardRead := EmptyPermissionSet()
+
+	var ownsDescendant bool
+	err = r.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM scopes target
+			JOIN scopes owned ON target.path @> owned.path
+			WHERE target.id = $1
+			  AND owned.id != target.id
+			  AND owned.principal_id = $2
+		)
+	`, scopeID, principalID).Scan(&ownsDescendant)
+	if err != nil {
+		return EmptyPermissionSet(), fmt.Errorf("authz: resolver: descendant ownership lookup: %w", err)
+	}
+	if ownsDescendant {
+		upwardRead = Union(upwardRead, allReadPermissions())
+	}
+
+	memberRows, err := r.pool.Query(ctx, `
+		SELECT pm.role
+		FROM principal_memberships pm
+		JOIN scopes owned  ON pm.parent_id = owned.principal_id
+		JOIN scopes target ON target.path @> owned.path
+		WHERE pm.member_id = $1
+		  AND target.id = $2
+		  AND owned.id != target.id
+	`, principalID, scopeID)
+	if err != nil {
+		return EmptyPermissionSet(), fmt.Errorf("authz: resolver: descendant membership lookup: %w", err)
+	}
+	defer memberRows.Close()
+	for memberRows.Next() {
+		var rawRole string
+		if err := memberRows.Scan(&rawRole); err != nil {
+			return EmptyPermissionSet(), fmt.Errorf("authz: resolver: scan descendant membership role: %w", err)
+		}
+		role, err := ParseRole(rawRole)
+		if err != nil {
+			return EmptyPermissionSet(), fmt.Errorf("authz: resolver: invalid descendant membership role %q: %w", rawRole, err)
+		}
+		upwardRead = Union(upwardRead, readOnlyPermissionSet(RolePermissions(role)))
+	}
+	if err := memberRows.Err(); err != nil {
+		return EmptyPermissionSet(), fmt.Errorf("authz: resolver: descendant membership rows: %w", err)
+	}
+
 	descRows, err := r.pool.Query(ctx, `
 		SELECT sg.permissions
 		FROM scope_grants sg
@@ -162,19 +226,15 @@ func (r *DBResolver) EffectivePermissions(ctx context.Context, principalID, scop
 		}
 		ps, err := NewPermissionSet(rawPerms)
 		if err != nil {
-			continue
+			return EmptyPermissionSet(), fmt.Errorf("authz: resolver: invalid descendant scope grant permissions: %w", err)
 		}
-		// Only propagate :read operations
-		for _, p := range ps.Permissions() {
-			_, op, err := p.Parse()
-			if err == nil && op == OperationRead {
-				result = Union(result, newSinglePermission(p))
-			}
-		}
+		upwardRead = Union(upwardRead, readOnlyPermissionSet(ps))
 	}
 	if err := descRows.Err(); err != nil {
 		return EmptyPermissionSet(), fmt.Errorf("authz: resolver: upward read rows: %w", err)
 	}
+
+	result = Union(result, upwardRead)
 
 	return result, nil
 }
@@ -203,4 +263,22 @@ func newAllPermissions() PermissionSet {
 func newSinglePermission(p Permission) PermissionSet {
 	ps, _ := NewPermissionSet([]string{string(p)})
 	return ps
+}
+
+func readOnlyPermissionSet(ps PermissionSet) PermissionSet {
+	out := EmptyPermissionSet()
+	for _, p := range ps.Permissions() {
+		_, op, err := p.Parse()
+		if err != nil {
+			continue
+		}
+		if op == OperationRead {
+			out = Union(out, newSinglePermission(p))
+		}
+	}
+	return out
+}
+
+func allReadPermissions() PermissionSet {
+	return readOnlyPermissionSet(newAllPermissions())
 }

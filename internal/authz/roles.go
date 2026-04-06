@@ -37,6 +37,7 @@ var rolePerms = map[Role][]Permission{
 		NewPermission(ResourceGraph, OperationRead),
 		NewPermission(ResourceScopes, OperationRead),
 		NewPermission(ResourcePrincipals, OperationRead),
+		NewPermission(ResourceTokens, OperationRead),
 		NewPermission(ResourceSharing, OperationRead),
 		NewPermission(ResourcePromotions, OperationRead),
 		NewPermission(ResourcePromotions, OperationWrite),
