@@ -27,9 +27,10 @@
 
 ### Permissions Redesign
 
-- [x] 2026-04-06: `internal/authz` package bootstrapped — Phase 1.1 complete (see `designs/TASKS_PERMISSIONS.md`):
-  - `internal/authz/permissions.go`: `Resource`, `Operation`, `Permission` types; `ValidOperations`, `AllResources`, `AllPermissions`, `Expand`
-  - `internal/authz/permissions_test.go`: full unit test coverage for constants, valid operations per resource, shorthand expansion, resource-scoped expansion, error cases
+- [x] 2026-04-06: `internal/authz` package Phase 1.1–1.3 complete (see `designs/TASKS_PERMISSIONS.md`):
+  - `permissions.go/test`: `Resource`, `Operation`, `Permission` types; `ValidOperations`, `AllResources`, `AllPermissions`, `Expand`
+  - `permset.go/test`: `PermissionSet` with `NewPermissionSet`, `Contains`, `Satisfies`, `Union`, `Intersect`, `IsEmpty`, `Len`, `Permissions`, `ToSlice`
+  - `roles.go/test`: `Role` constants; `ParseRole`; `RolePermissions` with exact member/admin/owner sets and strict superset hierarchy verified
 
 ### Maintenance
 

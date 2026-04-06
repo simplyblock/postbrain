@@ -23,13 +23,13 @@ All tasks follow strict TDD: failing test written first, then implementation to 
 
 ### 1.2 — Membership role definitions
 
-- [ ] `internal/authz/roles_test.go` — test that `RolePermissions(RoleMember)` returns exactly the set defined in the design (no more, no less); same for `RoleAdmin` and `RoleOwner`; test that `RoleAdmin` is a strict superset of `RoleMember`; test that `RoleOwner` is a strict superset of `RoleAdmin`; test that `ParseRole("member")` / `"admin"` / `"owner"` parses correctly; test that unknown role returns error
-- [ ] `internal/authz/roles.go` — `Role` typed string; `RoleMember`, `RoleAdmin`, `RoleOwner` constants; `ParseRole(string) (Role, error)`; `RolePermissions(Role) PermissionSet` — returns the canonical permission set for each membership role as specified in the design
+- [x] `internal/authz/roles_test.go` — test that `RolePermissions(RoleMember)` returns exactly the set defined in the design (no more, no less); same for `RoleAdmin` and `RoleOwner`; test that `RoleAdmin` is a strict superset of `RoleMember`; test that `RoleOwner` is a strict superset of `RoleAdmin`; test that `ParseRole("member")` / `"admin"` / `"owner"` parses correctly; test that unknown role returns error
+- [x] `internal/authz/roles.go` — `Role` typed string; `RoleMember`, `RoleAdmin`, `RoleOwner` constants; `ParseRole(string) (Role, error)`; `RolePermissions(Role) PermissionSet` — returns the canonical permission set for each membership role as specified in the design
 
 ### 1.3 — PermissionSet operations
 
-- [ ] `internal/authz/permset_test.go` — test `NewPermissionSet` from a slice of raw strings (with shorthand expansion); test `Satisfies(Permission)` for exact match; test `Satisfies` for shorthand set satisfying specific resource:operation; test `Union` of two disjoint sets; test `Union` is idempotent on overlapping sets; test `Intersect` of two sets; test `Intersect` of disjoint sets yields empty; test `IsEmpty`; test `Contains`; test round-trip serialisation to `[]string`
-- [ ] `internal/authz/permset.go` — `PermissionSet` type (backed by a set of `Permission`); `NewPermissionSet(raw []string) (PermissionSet, error)` (expands shorthand, validates each entry); `(PermissionSet) Satisfies(required Permission) bool`; `Union(sets ...PermissionSet) PermissionSet`; `Intersect(a, b PermissionSet) PermissionSet`; `(PermissionSet) IsEmpty() bool`; `(PermissionSet) Contains(Permission) bool`; `(PermissionSet) ToSlice() []string` (sorted, canonical)
+- [x] `internal/authz/permset_test.go` — test `NewPermissionSet` from a slice of raw strings (with shorthand expansion); test `Satisfies(Permission)` for exact match; test `Satisfies` for shorthand set satisfying specific resource:operation; test `Union` of two disjoint sets; test `Union` is idempotent on overlapping sets; test `Intersect` of two sets; test `Intersect` of disjoint sets yields empty; test `IsEmpty`; test `Contains`; test round-trip serialisation to `[]string`
+- [x] `internal/authz/permset.go` — `PermissionSet` type (backed by a set of `Permission`); `NewPermissionSet(raw []string) (PermissionSet, error)` (expands shorthand, validates each entry); `(PermissionSet) Satisfies(required Permission) bool`; `Union(sets ...PermissionSet) PermissionSet`; `Intersect(a, b PermissionSet) PermissionSet`; `(PermissionSet) IsEmpty() bool`; `(PermissionSet) Contains(Permission) bool`; `(PermissionSet) ToSlice() []string` (sorted, canonical)
 
 ### 1.4 — Token permission parsing and validation
 
