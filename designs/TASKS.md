@@ -25,6 +25,12 @@
 
 ## Implementation Tasks
 
+### Permissions Redesign
+
+- [x] 2026-04-06: `internal/authz` package bootstrapped — Phase 1.1 complete (see `designs/TASKS_PERMISSIONS.md`):
+  - `internal/authz/permissions.go`: `Resource`, `Operation`, `Permission` types; `ValidOperations`, `AllResources`, `AllPermissions`, `Expand`
+  - `internal/authz/permissions_test.go`: full unit test coverage for constants, valid operations per resource, shorthand expansion, resource-scoped expansion, error cases
+
 ### Maintenance
 
 - [x] 2026-04-06: Fixed token scope editor options being incorrectly limited by current session token scope filter (TDD-first):
