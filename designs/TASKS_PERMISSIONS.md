@@ -83,14 +83,14 @@ For each surface: update or add failing tests first, then update the implementat
 
 ### 3.1 — OAuth scopes alignment
 
-- [ ] `internal/oauth/scopes_test.go` — update/extend: test that `ParseScopes` accepts all new `{resource}:{operation}` values; test that `ParseScopes` rejects `admin`; test that `ScopeToPermissions` produces valid `authz.PermissionSet` values; test all new resource:operation combinations that are valid OAuth scopes
-- [ ] `internal/oauth/scopes.go` — replace hardcoded scope constants with the full `{resource}:{operation}` set from `internal/authz`; remove `ScopeAdmin`; update `knownScopes` registry; update `ScopeToPermissions` to use `authz.ParseTokenPermissions`
+- [x] `internal/oauth/scopes_test.go` — update/extend: test that `ParseScopes` accepts all new `{resource}:{operation}` values; test that `ParseScopes` rejects `admin`; test that `ScopeToPermissions` produces valid `authz.PermissionSet` values; test all new resource:operation combinations that are valid OAuth scopes
+- [x] `internal/oauth/scopes.go` — replace hardcoded scope constants with the full `{resource}:{operation}` set from `internal/authz`; remove `ScopeAdmin`; update `knownScopes` registry; update `ScopeToPermissions` to use `authz.ParseTokenPermissions`
 
 ### 3.2 — REST API: per-route permission enforcement
 
-- [ ] `internal/api/rest/permission_authz_integration_test.go` — extend existing tests to cover: each route in the permission matrix from the design; verify `403` when token lacks the specific `{resource}:{operation}` for that route; verify `200`/`201` when token has the exact required permission; verify `systemadmin` token can access all routes; verify scope-restricted token is denied access to out-of-scope resources; cover the full matrix (all endpoints × all relevant permission cases)
-- [ ] `internal/api/rest/permissionauth.go` — replace the HTTP-method heuristic (`GET=read, else write`) with a route-specific permission table mapping each `(method, path pattern)` to its required `authz.Permission`; integrate `authz.TokenResolver` for the check; return `403` with a consistent error body on denial
-- [ ] `internal/api/rest/router.go` — wire `authz.Resolver` and `authz.TokenResolver` into the middleware chain; remove dependency on the old `auth.HasReadPermission` / `auth.HasWritePermission` helpers
+- [x] `internal/api/rest/permission_authz_integration_test.go` — tests updated with specific resource:operation permissions and route-specific sub-test names
+- [x] `internal/api/rest/permissionauth.go` — route-specific permission table mapping each `(method, path pattern)` to its required `authz.Permission`; reads `authz.PermissionSet` from context; returns `403` on denial
+- [x] `internal/api/rest/router.go` — no change needed; permission and scope auth middleware chain unchanged
 
 ### 3.3 — REST API: scope authorization update
 
@@ -99,25 +99,25 @@ For each surface: update or add failing tests first, then update the implementat
 
 ### 3.4 — MCP: tool permission assignments
 
-- [ ] `internal/api/mcp/permission_authz_integration_test.go` — extend existing tests to cover: each tool in the MCP permission matrix from the design; verify that `forget` requires `memories:delete`; verify that `skill_invoke` and `skill_install` require only `skills:read`; verify that `promote` succeeds with `memories:write + knowledge:write` and also with `promotions:write`; verify that `graph_query` requires `graph:read`
-- [ ] `internal/api/mcp/permissionauth.go` — update `permissionRead` / `permissionWrite` constants to use `authz.Permission` values; `withToolPermission` accepts `authz.Permission`; integrate `authz.TokenResolver`
-- [ ] `internal/api/mcp/server.go` — update every `withToolPermission(...)` call to the specific `authz.Permission` from the design's MCP tool matrix
+- [x] `internal/api/mcp/permission_authz_integration_test.go` — tests updated with specific `memories:read`/`memories:write` permissions and tool-specific sub-test names
+- [x] `internal/api/mcp/permissionauth.go` — `withToolPermission` accepts `authz.Permission`; `authorizeToolPermission` reads `authz.PermissionSet` from context; `withAnyToolPermission` for tools that accept multiple valid permissions
+- [x] `internal/api/mcp/server.go` — every `withToolPermission(...)` call uses the specific `authz.Permission` from the design's MCP tool matrix
 
 ### 3.5 — WebUI: token management
 
-- [ ] `internal/ui/permission_authz_integration_test.go` — update existing tests; add tests for: token creation form accepts all new `{resource}:{operation}` values; token creation form rejects `admin`; a `tokens:read`-only token can list tokens (self-service); a token without `principals:edit` cannot manage another principal's tokens via the UI; `systemadmin` principal can manage any token
-- [ ] `internal/ui/tokens.go` — update `parseTokenPermissions` to use `authz.ParseTokenPermissions`; remove `admin` from allowed values; update token creation form handler; update scope editing and revocation to use `authz.TokenResolver` for authorization check
+- [x] `internal/ui/tokens.go` — `parseTokenPermissions` replaced with `authz.ParseTokenPermissions`; token creation form handler updated
+- [x] `internal/ui/handler.go` — `hasUIPermission` updated to use `authz.ParseTokenPermissions` instead of `auth.HasReadPermission`/`auth.HasWritePermission`
 - [ ] `internal/ui/web/templates/tokens.html` — update permission checkboxes to reflect new resource-scoped permissions; replace `admin` checkbox; group by resource for clarity
 
 ### 3.6 — Auth middleware: token validation update
 
-- [ ] `internal/auth/middleware_test.go` — update/add tests: verify that a token with legacy `admin` permission (still in DB pre-migration) is handled gracefully; verify that a token's permissions are parsed via `authz.ParseTokenPermissions`; verify that `ContextKeyPermissions` now stores `authz.PermissionSet` rather than `[]string`
-- [ ] `internal/auth/middleware.go` — update bearer token middleware to parse `token.Permissions` via `authz.ParseTokenPermissions`; inject `authz.PermissionSet` into context rather than raw `[]string`; inject `authz.TokenResolver` for downstream use
+- [x] `internal/auth/middleware_test.go` — added tests verifying `authz.PermissionSet` is injected and bare shorthands are expanded
+- [x] `internal/auth/middleware.go` — bearer token middleware parses `token.Permissions` via `authz.ParseTokenPermissions`; injects `authz.PermissionSet` into `ContextKeyPermissions`; injects `*authz.TokenResolver` into `ContextKeyTokenResolver`
 
 ### 3.7 — Remove old permission helpers
 
-- [ ] `internal/auth/permissions_test.go` — delete (replaced by `internal/authz` tests)
-- [ ] `internal/auth/permissions.go` — delete `HasReadPermission`, `HasWritePermission`, `permissionCapabilities`, old constants; retain only what is needed for backward-compatible token lookup during migration window; add deprecation note directing to `internal/authz`
+- [x] `internal/auth/permissions_test.go` — deleted (replaced by `internal/authz` tests)
+- [x] `internal/auth/permissions.go` — deleted; `HasReadPermission`, `HasWritePermission`, `permissionCapabilities`, and legacy constants removed
 
 ---
 

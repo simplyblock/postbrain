@@ -67,8 +67,8 @@ func TestParseScopes_AcceptsAllResourceOperationPairs(t *testing.T) {
 		"collections:read", "collections:write", "collections:edit", "collections:delete",
 		// skills
 		"skills:read", "skills:write",
-		// sessions
-		"sessions:read", "sessions:write", "sessions:delete",
+		// sessions (no delete operation)
+		"sessions:read", "sessions:write",
 		// graph
 		"graph:read",
 		// scopes

@@ -182,8 +182,7 @@ func humanizeScopes(scopes []string) []string {
 			out = append(out, "Skills Read")
 		case oauth.ScopeSkillsWrite:
 			out = append(out, "Skills Write")
-		case oauth.ScopeAdmin:
-			out = append(out, "Admin")
+		// No special-case for legacy admin scope; fall through to default.
 		default:
 			out = append(out, scope)
 		}

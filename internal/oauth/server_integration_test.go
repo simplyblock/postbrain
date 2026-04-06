@@ -53,7 +53,8 @@ func TestOAuthServer_AuthorizationCodePKCERoundTrip(t *testing.T) {
 	_, err = db.CreateToken(ctx, pool, user.ID, hashSession, "ui-session", nil, []string{
 		oauth.ScopeMemoriesRead, oauth.ScopeMemoriesWrite,
 		oauth.ScopeKnowledgeRead, oauth.ScopeKnowledgeWrite,
-		oauth.ScopeSkillsRead, oauth.ScopeSkillsWrite, oauth.ScopeAdmin,
+		oauth.ScopeSkillsRead, oauth.ScopeSkillsWrite,
+		oauth.ScopePrincipalsRead, oauth.ScopeTokensRead, oauth.ScopeTokensWrite,
 	}, nil)
 	if err != nil {
 		t.Fatalf("create session token: %v", err)
