@@ -14,7 +14,7 @@ import (
 const createPrincipal = `-- name: CreatePrincipal :one
 INSERT INTO principals (kind, slug, display_name, meta)
 VALUES ($1, $2, $3, $4)
-RETURNING id, kind, slug, display_name, meta, created_at, updated_at
+RETURNING id, kind, slug, display_name, meta, created_at, updated_at, is_system_admin
 `
 
 type CreatePrincipalParams struct {
@@ -40,6 +40,7 @@ func (q *Queries) CreatePrincipal(ctx context.Context, arg CreatePrincipalParams
 		&i.Meta,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsSystemAdmin,
 	)
 	return &i, err
 }
@@ -54,7 +55,7 @@ func (q *Queries) DeletePrincipal(ctx context.Context, id uuid.UUID) error {
 }
 
 const getPrincipalByID = `-- name: GetPrincipalByID :one
-SELECT id, kind, slug, display_name, meta, created_at, updated_at
+SELECT id, kind, slug, display_name, meta, created_at, updated_at, is_system_admin
 FROM principals WHERE id = $1
 `
 
@@ -69,12 +70,13 @@ func (q *Queries) GetPrincipalByID(ctx context.Context, id uuid.UUID) (*Principa
 		&i.Meta,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsSystemAdmin,
 	)
 	return &i, err
 }
 
 const getPrincipalBySlug = `-- name: GetPrincipalBySlug :one
-SELECT id, kind, slug, display_name, meta, created_at, updated_at
+SELECT id, kind, slug, display_name, meta, created_at, updated_at, is_system_admin
 FROM principals WHERE slug = $1
 `
 
@@ -89,12 +91,13 @@ func (q *Queries) GetPrincipalBySlug(ctx context.Context, slug string) (*Princip
 		&i.Meta,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsSystemAdmin,
 	)
 	return &i, err
 }
 
 const listPrincipals = `-- name: ListPrincipals :many
-SELECT id, kind, slug, display_name, meta, created_at, updated_at
+SELECT id, kind, slug, display_name, meta, created_at, updated_at, is_system_admin
 FROM principals
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
@@ -122,6 +125,7 @@ func (q *Queries) ListPrincipals(ctx context.Context, arg ListPrincipalsParams) 
 			&i.Meta,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.IsSystemAdmin,
 		); err != nil {
 			return nil, err
 		}
@@ -133,10 +137,25 @@ func (q *Queries) ListPrincipals(ctx context.Context, arg ListPrincipalsParams) 
 	return items, nil
 }
 
+const setSystemAdmin = `-- name: SetSystemAdmin :exec
+UPDATE principals SET is_system_admin = $2, updated_at = now()
+WHERE id = $1
+`
+
+type SetSystemAdminParams struct {
+	ID            uuid.UUID
+	IsSystemAdmin bool
+}
+
+func (q *Queries) SetSystemAdmin(ctx context.Context, arg SetSystemAdminParams) error {
+	_, err := q.db.Exec(ctx, setSystemAdmin, arg.ID, arg.IsSystemAdmin)
+	return err
+}
+
 const updatePrincipal = `-- name: UpdatePrincipal :one
 UPDATE principals SET display_name=$2, meta=$3, updated_at=now()
 WHERE id=$1
-RETURNING id, kind, slug, display_name, meta, created_at, updated_at
+RETURNING id, kind, slug, display_name, meta, created_at, updated_at, is_system_admin
 `
 
 type UpdatePrincipalParams struct {
@@ -156,6 +175,7 @@ func (q *Queries) UpdatePrincipal(ctx context.Context, arg UpdatePrincipalParams
 		&i.Meta,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsSystemAdmin,
 	)
 	return &i, err
 }
