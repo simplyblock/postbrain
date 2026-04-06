@@ -74,6 +74,13 @@ func (tr *TokenResolver) HasTokenPermission(ctx context.Context, tok *db.Token, 
 	return perms.Contains(perm), nil
 }
 
+// DBResolver returns the underlying *DBResolver if one is present, or nil.
+// This allows callers to access bulk operations like ReachableScopeIDs.
+func (tr *TokenResolver) DBResolver() *DBResolver {
+	dbr, _ := unwrapDBResolver(tr.resolver)
+	return dbr
+}
+
 // isScopeAllowed returns true if scopeID equals or is a descendant of any
 // scope in allowedIDs. Uses the ltree ancestry relationship stored in scopes.path.
 func (tr *TokenResolver) isScopeAllowed(ctx context.Context, scopeID uuid.UUID, allowedIDs []uuid.UUID) (bool, error) {

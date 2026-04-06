@@ -248,6 +248,93 @@ func (r *DBResolver) HasPermission(ctx context.Context, principalID, scopeID uui
 	return perms.Contains(perm), nil
 }
 
+// ReachableScopeIDs returns all scope IDs where principalID has any permissions.
+// This includes:
+//   - Scopes owned by the principal or any principal it is a member of.
+//   - Scopes with a direct scope_grant for the principal.
+//   - Ancestor scopes of any directly-accessible scope (upward-read inheritance).
+//
+// The result is suitable for filtering list queries.
+func (r *DBResolver) ReachableScopeIDs(ctx context.Context, principalID uuid.UUID) ([]uuid.UUID, error) {
+	// systemadmin: all scopes are accessible.
+	var isSystemAdmin bool
+	if err := r.pool.QueryRow(ctx,
+		`SELECT is_system_admin FROM principals WHERE id = $1`, principalID,
+	).Scan(&isSystemAdmin); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("authz: reachable scopes: principal lookup: %w", err)
+	}
+	if isSystemAdmin {
+		rows, err := r.pool.Query(ctx, `SELECT id FROM scopes`)
+		if err != nil {
+			return nil, fmt.Errorf("authz: reachable scopes: all scopes: %w", err)
+		}
+		defer rows.Close()
+		var ids []uuid.UUID
+		for rows.Next() {
+			var id uuid.UUID
+			if err := rows.Scan(&id); err != nil {
+				return nil, err
+			}
+			ids = append(ids, id)
+		}
+		return ids, rows.Err()
+	}
+
+	rows, err := r.pool.Query(ctx, `
+		WITH
+		-- All principals the caller belongs to (self + all ancestor principals via membership).
+		principal_ancestry AS (
+			SELECT $1::uuid AS id
+			UNION
+			SELECT parent_id FROM principal_memberships WHERE member_id = $1
+		),
+		-- Scopes accessible via ownership or membership (downward inheritance implied).
+		membership_scopes AS (
+			SELECT id FROM scopes WHERE principal_id IN (SELECT id FROM principal_ancestry)
+		),
+		-- Scopes with a direct non-expired grant for the principal.
+		grant_scopes AS (
+			SELECT DISTINCT scope_id AS id
+			FROM scope_grants
+			WHERE principal_id = $1
+			  AND (expires_at IS NULL OR expires_at > now())
+		),
+		-- Union of directly accessible scopes.
+		direct_scopes AS (
+			SELECT id FROM membership_scopes
+			UNION
+			SELECT id FROM grant_scopes
+		),
+		-- Ancestors of directly accessible scopes (upward-read: seeing a child implies reading the parent).
+		upward_scopes AS (
+			SELECT DISTINCT ancestor.id
+			FROM scopes ancestor
+			JOIN scopes direct ON ancestor.path @> direct.path AND ancestor.id != direct.id
+			WHERE direct.id IN (SELECT id FROM grant_scopes)
+		)
+		SELECT id FROM direct_scopes
+		UNION
+		SELECT id FROM upward_scopes
+	`, principalID)
+	if err != nil {
+		return nil, fmt.Errorf("authz: reachable scopes: query: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("authz: reachable scopes: scan: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // newAllPermissions builds a PermissionSet containing every valid permission.
 func newAllPermissions() PermissionSet {
 	all := AllPermissions()

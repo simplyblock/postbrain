@@ -11,12 +11,17 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/api/scopeauth"
 	"github.com/simplyblock/postbrain/internal/auth"
+	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/metrics"
 )
 
 func (s *Server) authorizeRequestedScope(ctx context.Context, requestedScopeID uuid.UUID) error {
-	return scopeauth.AuthorizeContextScope(ctx, s.membership, requestedScopeID)
+	perm, _ := ctx.Value(contextKeyToolPermission{}).(authz.Permission)
+	if perm == "" {
+		perm = "scopes:read"
+	}
+	return scopeauth.AuthorizeContextScope(ctx, requestedScopeID, perm)
 }
 
 // authorizeDeleteObjectScope enforces delete semantics: a caller may only delete
@@ -72,14 +77,21 @@ func logMCPScopeAuthzDenied(ctx context.Context, tool string, requestedScopeID u
 }
 
 func (s *Server) effectiveScopeIDsForRequest(ctx context.Context) ([]uuid.UUID, error) {
-	if ids, ok := scopeauth.EffectiveScopeIDsFromContext(ctx); ok {
-		return ids, nil
-	}
-	if s.membership == nil {
-		return nil, nil
-	}
 	principalID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 	if principalID == uuid.Nil {
+		return nil, nil
+	}
+
+	// Use the DB resolver's ReachableScopeIDs when available.
+	tokenResolver, _ := ctx.Value(auth.ContextKeyTokenResolver).(*authz.TokenResolver)
+	if tokenResolver != nil {
+		if dbr := tokenResolver.DBResolver(); dbr != nil {
+			return dbr.ReachableScopeIDs(ctx, principalID)
+		}
+	}
+
+	// Fallback: membership-only scope resolution.
+	if s.membership == nil {
 		return nil, nil
 	}
 	return s.membership.EffectiveScopeIDs(ctx, principalID)
@@ -91,7 +103,7 @@ func (s *Server) authorizedScopeIDsForRequest(ctx context.Context) ([]uuid.UUID,
 		return nil, err
 	}
 	token, _ := ctx.Value(auth.ContextKeyToken).(*db.Token)
-	if token == nil || token.ScopeIds == nil {
+	if token == nil || len(token.ScopeIds) == 0 {
 		return effectiveScopeIDs, nil
 	}
 	allowedByToken := make(map[uuid.UUID]struct{}, len(token.ScopeIds))

@@ -94,8 +94,8 @@ For each surface: update or add failing tests first, then update the implementat
 
 ### 3.3 — REST API: scope authorization update
 
-- [ ] `internal/api/rest/scopeauth_integration_test.go` — extend/add tests: verify that a principal with only a direct scope grant on scope S can access scope S; verify that a principal with membership in an ancestor-owning principal can access child scopes; verify that a token with `scope_ids` restricted to S cannot access sibling scope T even if the principal can; verify upward-read: a principal with access to child scope sees parent scope in `GET /v1/scopes`
-- [ ] `internal/api/scopeauth/scopeauth.go` — replace `EffectiveScopeIDs` (which only computed reachable scope IDs) with `authz.Resolver`-backed checks; `AuthorizeContextScope(ctx, scopeID, permission)` now calls `HasTokenPermission`; remove the old two-stage scope check
+- [x] `internal/api/rest/scopeauth_integration_test.go` — extend/add tests: verify that a principal with only a direct scope grant on scope S can access scope S; verify that a principal with membership in an ancestor-owning principal can access child scopes; verify that a token with `scope_ids` restricted to S cannot access sibling scope T even if the principal can; verify upward-read: a principal with access to child scope sees parent scope in `GET /v1/scopes`
+- [x] `internal/api/scopeauth/scopeauth.go` — replace `EffectiveScopeIDs` (which only computed reachable scope IDs) with `authz.Resolver`-backed checks; `AuthorizeContextScope(ctx, scopeID, permission)` now calls `HasTokenPermission`; remove the old two-stage scope check
 
 ### 3.4 — MCP: tool permission assignments
 
@@ -107,7 +107,7 @@ For each surface: update or add failing tests first, then update the implementat
 
 - [x] `internal/ui/tokens.go` — `parseTokenPermissions` replaced with `authz.ParseTokenPermissions`; token creation form handler updated
 - [x] `internal/ui/handler.go` — `hasUIPermission` updated to use `authz.ParseTokenPermissions` instead of `auth.HasReadPermission`/`auth.HasWritePermission`
-- [ ] `internal/ui/web/templates/tokens.html` — update permission checkboxes to reflect new resource-scoped permissions; replace `admin` checkbox; group by resource for clarity
+- [x] `internal/ui/web/templates/tokens.html` — update permission checkboxes to reflect new resource-scoped permissions; replace `admin` checkbox; group by resource for clarity
 
 ### 3.6 — Auth middleware: token validation update
 

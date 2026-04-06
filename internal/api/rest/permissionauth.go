@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -121,6 +122,10 @@ func init() {
 	}
 }
 
+// contextKeyRoutePermission is the context key used to propagate the route's
+// required permission to scope authorization checks performed inside handlers.
+type contextKeyRoutePermission struct{}
+
 func (ro *Router) permissionAuthzMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token, _ := r.Context().Value(auth.ContextKeyToken).(*db.Token)
@@ -146,7 +151,10 @@ func (ro *Router) permissionAuthzMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		next.ServeHTTP(w, r)
+		// Store the required permission in context so scope authorization checks
+		// inside handlers can use HasTokenPermission with the correct permission.
+		ctx := context.WithValue(r.Context(), contextKeyRoutePermission{}, required)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
