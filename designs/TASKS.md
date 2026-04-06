@@ -27,6 +27,17 @@
 
 ### Permissions Redesign
 
+- [x] 2026-04-06: Added security regression tests in `internal/authz` to capture current design/implementation gaps (intentionally red):
+  - Added panic regression test for `TokenResolver` non-`*DBResolver` usage:
+    - `internal/authz/token_resolver_panic_test.go::TestTokenResolver_ScopeRestriction_DoesNotPanicWithNonDBResolver`
+  - Added design-aligned role expectation for member token visibility:
+    - `internal/authz/roles_test.go::TestRolePermissions_Member` now requires `tokens:read`
+  - Added integration regression tests for resolver behavior:
+    - `internal/authz/resolver_test.go::TestDBResolver_OwnershipOnAncestorScope_GrantsDescendantPermissions`
+    - `internal/authz/resolver_test.go::TestDBResolver_UpwardRead_FromMembershipDerivedDescendantAccess`
+    - `internal/authz/resolver_test.go::TestDBResolver_InvalidMembershipRole_ReturnsError`
+    - `internal/authz/resolver_test.go::TestDBResolver_InvalidScopeGrantPermissions_ReturnsError`
+
 - [x] 2026-04-06: `internal/authz` package Phase 1 complete (see `designs/TASKS_PERMISSIONS.md`):
   - `permissions.go/test`: `Resource`, `Operation`, `Permission` types; `ValidOperations`, `AllResources`, `AllPermissions`, `Expand`
   - `permset.go/test`: `PermissionSet` with `NewPermissionSet`, `Contains`, `Satisfies`, `Union`, `Intersect`, `IsEmpty`, `Len`, `Permissions`, `ToSlice`

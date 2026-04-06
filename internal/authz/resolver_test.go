@@ -372,3 +372,110 @@ func TestDBResolver_UnrelatedPrincipal(t *testing.T) {
 		t.Errorf("unrelated principal should have empty permissions, got %v", perms.ToSlice())
 	}
 }
+
+// TestDBResolver_OwnershipOnAncestorScope_GrantsDescendantPermissions verifies
+// design rule 2: owning an ancestor scope grants full permissions on descendants.
+func TestDBResolver_OwnershipOnAncestorScope_GrantsDescendantPermissions(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+	r := newResolver(pool)
+
+	ancestorOwner := testhelper.CreateTestPrincipal(t, pool, "user", "resolver-anc-owner-"+uuid.New().String())
+	parent := testhelper.CreateTestScope(t, pool, "project", "resolver-anc-parent-"+uuid.New().String(), nil, ancestorOwner.ID)
+
+	// Child deliberately owned by a different principal to ensure access comes from
+	// ancestor ownership, not direct scope ownership.
+	childOwner := testhelper.CreateTestPrincipal(t, pool, "user", "resolver-anc-child-owner-"+uuid.New().String())
+	child := testhelper.CreateTestScope(t, pool, "project", "resolver-anc-child-"+uuid.New().String(), &parent.ID, childOwner.ID)
+
+	perms, err := r.EffectivePermissions(ctx, ancestorOwner.ID, child.ID)
+	if err != nil {
+		t.Fatalf("EffectivePermissions: %v", err)
+	}
+
+	assertHasPerm(t, "ancestor ownership", perms, authz.NewPermission(authz.ResourceMemories, authz.OperationDelete))
+	assertHasPerm(t, "ancestor ownership", perms, authz.NewPermission(authz.ResourceScopes, authz.OperationDelete))
+}
+
+// TestDBResolver_UpwardRead_FromMembershipDerivedDescendantAccess verifies that
+// upward-read also applies when descendant read is derived from membership (not only direct grants).
+func TestDBResolver_UpwardRead_FromMembershipDerivedDescendantAccess(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+	r := newResolver(pool)
+
+	parentOwner := testhelper.CreateTestPrincipal(t, pool, "team", "resolver-upmem-parent-owner-"+uuid.New().String())
+	childOwner := testhelper.CreateTestPrincipal(t, pool, "team", "resolver-upmem-child-owner-"+uuid.New().String())
+
+	parent := testhelper.CreateTestScope(t, pool, "project", "resolver-upmem-parent-"+uuid.New().String(), nil, parentOwner.ID)
+	child := testhelper.CreateTestScope(t, pool, "project", "resolver-upmem-child-"+uuid.New().String(), &parent.ID, childOwner.ID)
+
+	member := testhelper.CreateTestPrincipal(t, pool, "user", "resolver-upmem-member-"+uuid.New().String())
+	ms := principals.NewMembershipStore(pool)
+	if err := ms.AddMembership(ctx, member.ID, childOwner.ID, "member", nil); err != nil {
+		t.Fatalf("AddMembership: %v", err)
+	}
+
+	perms, err := r.EffectivePermissions(ctx, member.ID, parent.ID)
+	if err != nil {
+		t.Fatalf("EffectivePermissions: %v", err)
+	}
+
+	assertHasPerm(t, "upward read from membership-derived child access", perms, authz.NewPermission(authz.ResourceMemories, authz.OperationRead))
+	assertLacksPerm(t, "upward read from membership-derived child access", perms, authz.NewPermission(authz.ResourceMemories, authz.OperationWrite))
+
+	// ensure hierarchy was constructed as expected and child access is indeed present
+	childPerms, err := r.EffectivePermissions(ctx, member.ID, child.ID)
+	if err != nil {
+		t.Fatalf("EffectivePermissions(child): %v", err)
+	}
+	assertHasPerm(t, "membership-derived child access", childPerms, authz.NewPermission(authz.ResourceMemories, authz.OperationRead))
+}
+
+// TestDBResolver_InvalidMembershipRole_ReturnsError verifies malformed membership
+// role values from DB are surfaced as resolver errors, not silently ignored.
+func TestDBResolver_InvalidMembershipRole_ReturnsError(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+	r := newResolver(pool)
+
+	parentPrincipal := testhelper.CreateTestPrincipal(t, pool, "team", "resolver-badrole-parent-"+uuid.New().String())
+	scope := testhelper.CreateTestScope(t, pool, "project", "resolver-badrole-scope-"+uuid.New().String(), nil, parentPrincipal.ID)
+	member := testhelper.CreateTestPrincipal(t, pool, "user", "resolver-badrole-member-"+uuid.New().String())
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO principal_memberships (member_id, parent_id, role)
+		VALUES ($1, $2, 'bogus-role')
+	`, member.ID, parentPrincipal.ID); err != nil {
+		t.Fatalf("insert malformed membership role: %v", err)
+	}
+
+	_, err := r.EffectivePermissions(ctx, member.ID, scope.ID)
+	if err == nil {
+		t.Fatal("expected error for malformed membership role, got nil")
+	}
+}
+
+// TestDBResolver_InvalidScopeGrantPermissions_ReturnsError verifies malformed
+// scope grant permission entries are surfaced as resolver errors.
+func TestDBResolver_InvalidScopeGrantPermissions_ReturnsError(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+	r := newResolver(pool)
+
+	scopeOwner := testhelper.CreateTestPrincipal(t, pool, "user", "resolver-badgrant-owner-"+uuid.New().String())
+	scope := testhelper.CreateTestScope(t, pool, "project", "resolver-badgrant-scope-"+uuid.New().String(), nil, scopeOwner.ID)
+	grantee := testhelper.CreateTestPrincipal(t, pool, "user", "resolver-badgrant-grantee-"+uuid.New().String())
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO scope_grants (principal_id, scope_id, permissions, granted_by)
+		VALUES ($1, $2, $3, $4)
+	`, grantee.ID, scope.ID, []string{"totally-invalid-permission"}, scopeOwner.ID); err != nil {
+		t.Fatalf("insert malformed scope grant: %v", err)
+	}
+
+	_, err := r.EffectivePermissions(ctx, grantee.ID, scope.ID)
+	if err == nil {
+		t.Fatal("expected error for malformed scope grant permissions, got nil")
+	}
+}
