@@ -33,13 +33,13 @@ func TestMCP_PermissionAuthz_ReadVsWrite(t *testing.T) {
 	ctxRead = context.WithValue(ctxRead, auth.ContextKeyToken, &db.Token{
 		PrincipalID: principal.ID,
 		ScopeIds:    []uuid.UUID{scope.ID},
-		Permissions: []string{"read"},
+		Permissions: []string{"memories:read"},
 	})
 	ctxWrite := context.WithValue(ctx, auth.ContextKeyPrincipalID, principal.ID)
 	ctxWrite = context.WithValue(ctxWrite, auth.ContextKeyToken, &db.Token{
 		PrincipalID: principal.ID,
 		ScopeIds:    []uuid.UUID{scope.ID},
-		Permissions: []string{"write"},
+		Permissions: []string{"memories:write"},
 	})
 
 	recallTool := srv.GetTool("recall")
@@ -51,7 +51,7 @@ func TestMCP_PermissionAuthz_ReadVsWrite(t *testing.T) {
 		t.Fatal("remember tool not registered")
 	}
 
-	t.Run("read permission can use read tool", func(t *testing.T) {
+	t.Run("memories:read permission can use recall tool", func(t *testing.T) {
 		req := mcpgo.CallToolRequest{}
 		req.Params.Name = "recall"
 		req.Params.Arguments = map[string]any{
@@ -67,7 +67,7 @@ func TestMCP_PermissionAuthz_ReadVsWrite(t *testing.T) {
 		}
 	})
 
-	t.Run("read permission cannot use write tool", func(t *testing.T) {
+	t.Run("memories:read permission cannot use remember tool", func(t *testing.T) {
 		req := mcpgo.CallToolRequest{}
 		req.Params.Name = "remember"
 		req.Params.Arguments = map[string]any{
@@ -88,7 +88,7 @@ func TestMCP_PermissionAuthz_ReadVsWrite(t *testing.T) {
 		}
 	})
 
-	t.Run("write permission can use write tool", func(t *testing.T) {
+	t.Run("memories:write permission can use remember tool", func(t *testing.T) {
 		req := mcpgo.CallToolRequest{}
 		req.Params.Name = "remember"
 		req.Params.Arguments = map[string]any{

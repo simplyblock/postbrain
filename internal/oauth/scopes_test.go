@@ -46,3 +46,50 @@ func TestScopeToPermissions_MapsCorrectly(t *testing.T) {
 		t.Fatalf("ScopeToPermissions = %v, want %v", got, input)
 	}
 }
+
+// TestParseScopes_RejectsAdmin verifies that the legacy "admin" scope is no longer accepted.
+func TestParseScopes_RejectsAdmin(t *testing.T) {
+	if _, err := ParseScopes("admin"); err == nil {
+		t.Fatal("ParseScopes: expected error for legacy admin scope, got nil")
+	}
+}
+
+// TestParseScopes_AcceptsAllResourceOperationPairs verifies that every valid
+// resource:operation combination from the full authz permission model is
+// accepted as an OAuth scope.
+func TestParseScopes_AcceptsAllResourceOperationPairs(t *testing.T) {
+	validScopes := []string{
+		// memories
+		"memories:read", "memories:write", "memories:edit", "memories:delete",
+		// knowledge
+		"knowledge:read", "knowledge:write", "knowledge:edit", "knowledge:delete",
+		// collections
+		"collections:read", "collections:write", "collections:edit", "collections:delete",
+		// skills
+		"skills:read", "skills:write",
+		// sessions
+		"sessions:read", "sessions:write", "sessions:delete",
+		// graph
+		"graph:read",
+		// scopes
+		"scopes:read", "scopes:write", "scopes:edit", "scopes:delete",
+		// principals
+		"principals:read", "principals:write", "principals:edit", "principals:delete",
+		// tokens
+		"tokens:read", "tokens:write", "tokens:edit", "tokens:delete",
+		// sharing
+		"sharing:read", "sharing:write", "sharing:delete",
+		// promotions
+		"promotions:read", "promotions:write",
+	}
+	for _, scope := range validScopes {
+		scopes, err := ParseScopes(scope)
+		if err != nil {
+			t.Errorf("ParseScopes(%q): unexpected error: %v", scope, err)
+			continue
+		}
+		if len(scopes) != 1 || scopes[0] != scope {
+			t.Errorf("ParseScopes(%q) = %v, want [%s]", scope, scopes, scope)
+		}
+	}
+}

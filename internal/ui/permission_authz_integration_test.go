@@ -23,7 +23,7 @@ func TestUI_PermissionAuthz_ReadVsWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate read token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, user.ID, hashRead, "ui-read-session", nil, []string{"read"}, nil); err != nil {
+	if _, err := db.CreateToken(ctx, pool, user.ID, hashRead, "ui-read-session", nil, []string{"tokens:read"}, nil); err != nil {
 		t.Fatalf("create read token: %v", err)
 	}
 
@@ -31,7 +31,7 @@ func TestUI_PermissionAuthz_ReadVsWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate write token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, user.ID, hashWrite, "ui-write-session", nil, []string{"write"}, nil); err != nil {
+	if _, err := db.CreateToken(ctx, pool, user.ID, hashWrite, "ui-write-session", nil, []string{"tokens:write", "memories:read", "memories:write"}, nil); err != nil {
 		t.Fatalf("create write token: %v", err)
 	}
 
@@ -70,8 +70,7 @@ func TestUI_PermissionAuthz_ReadVsWrite(t *testing.T) {
 		client, baseURL := loginUITestClient(t, pool, rawWrite)
 		form := url.Values{}
 		form.Set("name", "write-created")
-		form.Add("permissions", "read")
-		form.Add("permissions", "write")
+		form.Add("permissions", "memories:read")
 		req, err := http.NewRequest(http.MethodPost, baseURL+"/ui/tokens", strings.NewReader(form.Encode()))
 		if err != nil {
 			t.Fatalf("build request: %v", err)
