@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/db"
 )
 
@@ -15,9 +16,10 @@ import (
 type contextKey string
 
 const (
-	ContextKeyToken       contextKey = "pb_token"
-	ContextKeyPrincipalID contextKey = "pb_principal_id"
-	ContextKeyPermissions contextKey = "pb_permissions"
+	ContextKeyToken          contextKey = "pb_token"
+	ContextKeyPrincipalID    contextKey = "pb_principal_id"
+	ContextKeyPermissions    contextKey = "pb_permissions"
+	ContextKeyTokenResolver  contextKey = "pb_token_resolver"
 )
 
 // tokenLookup is the interface used by the middleware, allowing test doubles.
@@ -36,8 +38,9 @@ func unauthorized(w http.ResponseWriter) {
 // BearerTokenMiddleware returns an http.Handler middleware that authenticates
 // requests via a Bearer token in the Authorization header.
 //
-// On success it injects the token, principal ID, and permissions into the
-// request context. On failure it responds with 401 JSON {"error":"unauthorized"}.
+// On success it injects the token, principal ID, parsed authz.PermissionSet,
+// and an authz.TokenResolver into the request context. On failure it responds
+// with 401 JSON {"error":"unauthorized"}.
 // UpdateLastUsed is called asynchronously (fire-and-forget) using pool.
 // If pool is nil, UpdateLastUsed is still called but is a no-op (useful in tests).
 func BearerTokenMiddleware(store *TokenStore, pool *pgxpool.Pool) func(http.Handler) http.Handler {
@@ -47,6 +50,11 @@ func BearerTokenMiddleware(store *TokenStore, pool *pgxpool.Pool) func(http.Hand
 // bearerTokenMiddlewareWithStore is the testable inner implementation that
 // accepts the tokenLookup interface instead of *TokenStore directly.
 func bearerTokenMiddlewareWithStore(store tokenLookup, pool *pgxpool.Pool) func(http.Handler) http.Handler {
+	var tokenResolver *authz.TokenResolver
+	if pool != nil {
+		tokenResolver = authz.NewTokenResolver(authz.NewDBResolver(pool))
+	}
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -77,11 +85,19 @@ func bearerTokenMiddlewareWithStore(store tokenLookup, pool *pgxpool.Pool) func(
 			// Fire-and-forget last-used update.
 			store.UpdateLastUsed(pool, token.ID)
 
+			// Parse token permissions via authz — expands shorthands and validates.
+			// On parse error, fall back to an empty set (token is still authenticated
+			// but will fail any permission check).
+			perms, _ := authz.ParseTokenPermissions(token.Permissions)
+
 			// Inject token metadata into context.
 			ctx := r.Context()
 			ctx = context.WithValue(ctx, ContextKeyToken, token)
 			ctx = context.WithValue(ctx, ContextKeyPrincipalID, token.PrincipalID)
-			ctx = context.WithValue(ctx, ContextKeyPermissions, token.Permissions)
+			ctx = context.WithValue(ctx, ContextKeyPermissions, perms)
+			if tokenResolver != nil {
+				ctx = context.WithValue(ctx, ContextKeyTokenResolver, tokenResolver)
+			}
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

@@ -46,6 +46,7 @@ func TestServerMetadata_ScopesListed(t *testing.T) {
 	if len(scopes) == 0 {
 		t.Fatal("scopes_supported is empty")
 	}
+	// Verify the full resource:operation set is advertised and admin is absent.
 	want := map[string]bool{
 		ScopeMemoriesRead:   true,
 		ScopeMemoriesWrite:  true,
@@ -53,12 +54,21 @@ func TestServerMetadata_ScopesListed(t *testing.T) {
 		ScopeKnowledgeWrite: true,
 		ScopeSkillsRead:     true,
 		ScopeSkillsWrite:    true,
-		ScopeAdmin:          true,
+		ScopeScopesRead:     true,
+		ScopeTokensRead:     true,
+		ScopeTokensWrite:    true,
+		ScopeGraphRead:      true,
 	}
+	got := make(map[string]bool, len(scopes))
 	for _, s := range scopes {
-		delete(want, s)
+		got[s] = true
 	}
-	if len(want) != 0 {
-		t.Fatalf("missing advertised scopes: %v", want)
+	for s := range want {
+		if !got[s] {
+			t.Errorf("missing advertised scope %q", s)
+		}
+	}
+	if got["admin"] {
+		t.Error("legacy admin scope must not appear in scopes_supported")
 	}
 }

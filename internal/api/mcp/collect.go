@@ -40,7 +40,7 @@ func (s *Server) handleCollect(ctx context.Context, req mcpgo.CallToolRequest) (
 }
 
 func (s *Server) collectAddToCollection(ctx context.Context, args map[string]any, callerID uuid.UUID) (*mcpgo.CallToolResult, error) {
-	if !authorizeToolPermission(ctx, permissionWrite) {
+	if !authorizeToolPermission(ctx, "collections:write") {
 		return permissionToolError(), nil
 	}
 	artifactIDStr, ok := args["artifact_id"].(string)
@@ -96,7 +96,7 @@ func (s *Server) collectAddToCollection(ctx context.Context, args map[string]any
 }
 
 func (s *Server) collectCreate(ctx context.Context, args map[string]any, callerID uuid.UUID) (*mcpgo.CallToolResult, error) {
-	if !authorizeToolPermission(ctx, permissionWrite) {
+	if !authorizeToolPermission(ctx, "collections:write") {
 		return permissionToolError(), nil
 	}
 	scopeStr, ok := args["scope"].(string)

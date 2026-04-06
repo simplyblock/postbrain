@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/auth"
+	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/closeutil"
 	"github.com/simplyblock/postbrain/internal/codegraph"
 	"github.com/simplyblock/postbrain/internal/config"
@@ -307,11 +308,32 @@ func (h *Handler) hasUIPermission(r *http.Request, required uiPermission) bool {
 	if token == nil {
 		return false
 	}
+	if required == permissionNone {
+		return true
+	}
+	perms, err := authz.ParseTokenPermissions(token.Permissions)
+	if err != nil {
+		return false
+	}
 	switch required {
 	case permissionRead:
-		return auth.HasReadPermission(token.Permissions)
+		// Allow if the token holds any :read permission.
+		for _, p := range perms.Permissions() {
+			_, op, err := p.Parse()
+			if err == nil && op == authz.OperationRead {
+				return true
+			}
+		}
+		return false
 	case permissionWrite:
-		return auth.HasWritePermission(token.Permissions)
+		// Allow if the token holds any :write permission.
+		for _, p := range perms.Permissions() {
+			_, op, err := p.Parse()
+			if err == nil && op == authz.OperationWrite {
+				return true
+			}
+		}
+		return false
 	default:
 		return false
 	}
