@@ -12,6 +12,7 @@ import (
 
 	mcpapi "github.com/simplyblock/postbrain/internal/api/mcp"
 	"github.com/simplyblock/postbrain/internal/auth"
+	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/testhelper"
@@ -29,18 +30,29 @@ func TestMCP_PermissionAuthz_ReadVsWrite(t *testing.T) {
 
 	srv := mcpapi.NewServer(pool, svc, cfg).MCPServer()
 
+	resolver := authz.NewTokenResolver(authz.NewDBResolver(pool))
+
+	readPerms := []string{"memories:read"}
+	readPermSet, _ := authz.ParseTokenPermissions(readPerms)
 	ctxRead := context.WithValue(ctx, auth.ContextKeyPrincipalID, principal.ID)
 	ctxRead = context.WithValue(ctxRead, auth.ContextKeyToken, &db.Token{
 		PrincipalID: principal.ID,
 		ScopeIds:    []uuid.UUID{scope.ID},
-		Permissions: []string{"memories:read"},
+		Permissions: readPerms,
 	})
+	ctxRead = context.WithValue(ctxRead, auth.ContextKeyPermissions, readPermSet)
+	ctxRead = context.WithValue(ctxRead, auth.ContextKeyTokenResolver, resolver)
+
+	writePerms := []string{"memories:write"}
+	writePermSet, _ := authz.ParseTokenPermissions(writePerms)
 	ctxWrite := context.WithValue(ctx, auth.ContextKeyPrincipalID, principal.ID)
 	ctxWrite = context.WithValue(ctxWrite, auth.ContextKeyToken, &db.Token{
 		PrincipalID: principal.ID,
 		ScopeIds:    []uuid.UUID{scope.ID},
-		Permissions: []string{"memories:write"},
+		Permissions: writePerms,
 	})
+	ctxWrite = context.WithValue(ctxWrite, auth.ContextKeyPermissions, writePermSet)
+	ctxWrite = context.WithValue(ctxWrite, auth.ContextKeyTokenResolver, resolver)
 
 	recallTool := srv.GetTool("recall")
 	if recallTool == nil {

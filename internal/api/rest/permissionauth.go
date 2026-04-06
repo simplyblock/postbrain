@@ -119,11 +119,21 @@ var routePermissions = []routePermission{
 // routePermTable is a compiled lookup: "METHOD /pattern" → required permission.
 var routePermTable map[string]authz.Permission
 
+// permLookupMux is a dedicated chi mux used only for resolving the full route
+// pattern from an actual URL path. Chi's RoutePattern() inside a group middleware
+// only returns the group prefix (e.g. "/v1/*"), not the full matched pattern. By
+// calling permLookupMux.Find() with the real URL path we recover the canonical
+// pattern (e.g. "/v1/memories/{id}") so the permission table lookup works.
+var permLookupMux *chi.Mux
+
 func init() {
 	routePermTable = make(map[string]authz.Permission, len(routePermissions))
+	permLookupMux = chi.NewMux()
 	for _, rp := range routePermissions {
 		key := rp.method + " " + rp.pattern
 		routePermTable[key] = rp.perm
+		// Register with a no-op handler so Find() can resolve the pattern.
+		permLookupMux.Method(rp.method, rp.pattern, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	}
 }
 
@@ -163,9 +173,17 @@ func (ro *Router) permissionAuthzMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// routePattern returns the chi route pattern for the current request, or the
-// raw URL path if no pattern is set.
+// routePattern returns the canonical chi route pattern for the current request.
+// It uses a dedicated lookup mux (permLookupMux) to resolve the full pattern
+// from the actual URL path, because chi's RoutePattern() inside a group
+// middleware only returns the group prefix (e.g. "/v1/*"), not the full matched
+// pattern (e.g. "/v1/memories/{id}").
 func routePattern(r *http.Request) string {
+	rctx := chi.NewRouteContext()
+	if pattern := permLookupMux.Find(rctx, r.Method, r.URL.Path); pattern != "" {
+		return pattern
+	}
+	// Fallback for handler-level calls (e.g. logScopeAuthzDenied): use chi context.
 	if rc := chi.RouteContext(r.Context()); rc != nil {
 		if p := rc.RoutePattern(); p != "" {
 			return p

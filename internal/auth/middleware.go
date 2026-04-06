@@ -16,10 +16,10 @@ import (
 type contextKey string
 
 const (
-	ContextKeyToken          contextKey = "pb_token"
-	ContextKeyPrincipalID    contextKey = "pb_principal_id"
-	ContextKeyPermissions    contextKey = "pb_permissions"
-	ContextKeyTokenResolver  contextKey = "pb_token_resolver"
+	ContextKeyToken         contextKey = "pb_token"
+	ContextKeyPrincipalID   contextKey = "pb_principal_id"
+	ContextKeyPermissions   contextKey = "pb_permissions"
+	ContextKeyTokenResolver contextKey = "pb_token_resolver"
 )
 
 // tokenLookup is the interface used by the middleware, allowing test doubles.

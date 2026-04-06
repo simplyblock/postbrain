@@ -109,7 +109,6 @@ func (h *Handler) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 	h.renderTokens(w, r, "", raw)
 }
 
-
 func parseScopeIDs(values []string) ([]uuid.UUID, error) {
 	scopeIDs := make([]uuid.UUID, 0, len(values))
 	seen := make(map[uuid.UUID]struct{}, len(values))

@@ -92,11 +92,19 @@ func (r *DBResolver) EffectivePermissions(ctx context.Context, principalID, scop
 		result = Union(result, RolePermissions(RoleOwner))
 	}
 
-	// 3. Direct membership in the owning principal of scopeID (or any ancestor scope's owner).
-	// We query for the best role the caller holds as a direct member of any scope-owning
-	// principal in the ancestor chain (scope + its ancestors).
+	// 3. Membership derivation (full transitive chain via recursive CTE).
+	// Builds the complete principal ancestry (self + all transitive parents) and
+	// checks whether any ancestor is a direct member of a scope-owning principal
+	// in the ancestor chain of scopeID.
 	var roleStr *string
 	err = r.pool.QueryRow(ctx, `
+		WITH RECURSIVE principal_ancestry(id) AS (
+			SELECT $1::uuid
+			UNION
+			SELECT pm2.parent_id
+			FROM principal_memberships pm2
+			JOIN principal_ancestry pa ON pm2.member_id = pa.id
+		)
 		SELECT pm.role
 		FROM principal_memberships pm
 		JOIN (
@@ -105,7 +113,7 @@ func (r *DBResolver) EffectivePermissions(ctx context.Context, principalID, scop
 			JOIN scopes t ON s.path @> t.path
 			WHERE t.id = $2
 		) owners ON pm.parent_id = owners.principal_id
-		WHERE pm.member_id = $1
+		WHERE pm.member_id IN (SELECT id FROM principal_ancestry)
 		ORDER BY CASE pm.role
 			WHEN 'owner'  THEN 1
 			WHEN 'admin'  THEN 2
@@ -178,11 +186,18 @@ func (r *DBResolver) EffectivePermissions(ctx context.Context, principalID, scop
 	}
 
 	memberRows, err := r.pool.Query(ctx, `
+		WITH RECURSIVE principal_ancestry(id) AS (
+			SELECT $1::uuid
+			UNION
+			SELECT pm2.parent_id
+			FROM principal_memberships pm2
+			JOIN principal_ancestry pa ON pm2.member_id = pa.id
+		)
 		SELECT pm.role
 		FROM principal_memberships pm
 		JOIN scopes owned  ON pm.parent_id = owned.principal_id
 		JOIN scopes target ON target.path @> owned.path
-		WHERE pm.member_id = $1
+		WHERE pm.member_id IN (SELECT id FROM principal_ancestry)
 		  AND target.id = $2
 		  AND owned.id != target.id
 	`, principalID, scopeID)
@@ -284,12 +299,14 @@ func (r *DBResolver) ReachableScopeIDs(ctx context.Context, principalID uuid.UUI
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		WITH
-		-- All principals the caller belongs to (self + all ancestor principals via membership).
+		WITH RECURSIVE
+		-- All principals the caller belongs to (self + all transitive ancestor principals).
 		principal_ancestry AS (
 			SELECT $1::uuid AS id
 			UNION
-			SELECT parent_id FROM principal_memberships WHERE member_id = $1
+			SELECT pm.parent_id
+			FROM principal_memberships pm
+			JOIN principal_ancestry pa ON pm.member_id = pa.id
 		),
 		-- Scopes accessible via ownership or membership (downward inheritance implied).
 		membership_scopes AS (

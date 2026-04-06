@@ -81,18 +81,32 @@ func (ro *Router) handleCreateScopeGrant(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Anti-escalation: caller must hold every permission they are trying to grant.
+	// System admins bypass this check because they hold all permissions by definition.
+	// For all other callers we enforce token-level effective permissions (intersection of
+	// the principal's permissions on this scope and the token's declared permissions).
 	callerToken, _ := r.Context().Value(auth.ContextKeyToken).(*db.Token)
 	tokenResolver, _ := r.Context().Value(auth.ContextKeyTokenResolver).(*authz.TokenResolver)
 	if tokenResolver != nil && callerToken != nil {
-		callerEffective, err := tokenResolver.EffectiveTokenPermissions(r.Context(), callerToken, scopeID)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to resolve caller permissions")
-			return
+		dbr := tokenResolver.DBResolver()
+		isSystemAdmin := false
+		if dbr != nil {
+			principalPerms, pErr := dbr.EffectivePermissions(r.Context(), callerToken.PrincipalID, scopeID)
+			if pErr == nil {
+				// System admins receive all permissions; use that as the signal.
+				isSystemAdmin = principalPerms.Len() == len(authz.AllPermissions())
+			}
 		}
-		for _, p := range requestedPerms.Permissions() {
-			if !callerEffective.Contains(p) {
-				writeError(w, http.StatusForbidden, "forbidden: cannot grant permission "+string(p)+" that caller does not hold")
+		if !isSystemAdmin {
+			callerEffective, err := tokenResolver.EffectiveTokenPermissions(r.Context(), callerToken, scopeID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to resolve caller permissions")
 				return
+			}
+			for _, p := range requestedPerms.Permissions() {
+				if !callerEffective.Contains(p) {
+					writeError(w, http.StatusForbidden, "forbidden: cannot grant permission "+string(p)+" that caller does not hold")
+					return
+				}
 			}
 		}
 	}

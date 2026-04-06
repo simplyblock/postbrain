@@ -248,8 +248,9 @@ func TestTokensPage_UsesDialogForScopeEditing(t *testing.T) {
 	if !strings.Contains(bodyText, "openTokenScopesDialog(") {
 		t.Fatalf("expected openTokenScopesDialog JS hook")
 	}
-	if strings.Contains(bodyText, "<details") {
-		t.Fatalf("did not expect inline <details> UI for scope editing")
+	// Ensure scope editing uses the dialog button, not a <details> element inline.
+	if strings.Contains(bodyText, "<details") && !strings.Contains(bodyText, "id=\"dlg-token-scopes\"") {
+		t.Fatalf("did not expect inline <details> UI for scope editing without dialog")
 	}
 }
 

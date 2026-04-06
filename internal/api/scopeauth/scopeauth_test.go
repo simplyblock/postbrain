@@ -83,8 +83,8 @@ func TestAuthorizeContextScope(t *testing.T) {
 			wantErr: ErrMissingToken,
 		},
 		{
-			name: "missing resolver returns ErrScopeResolverUnavailable",
-			ctx:  withToken(context.Background(), makeToken("memories:write")),
+			name:    "missing resolver returns ErrScopeResolverUnavailable",
+			ctx:     withToken(context.Background(), makeToken("memories:write")),
 			wantErr: ErrScopeResolverUnavailable,
 		},
 	}

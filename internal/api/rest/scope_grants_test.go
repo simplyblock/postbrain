@@ -36,7 +36,7 @@ func TestREST_ScopeGrants_CRUD(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := db.CreateToken(ctx, pool, owner.ID, hashToken, "sg-crud-token",
-		nil, []string{"sharing:write", "sharing:read", "sharing:delete", "memories:write"}, nil); err != nil {
+		nil, []string{"sharing:write", "sharing:read", "sharing:delete", "memories:write", "memories:read"}, nil); err != nil {
 		t.Fatal(err)
 	}
 
