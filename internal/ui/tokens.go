@@ -34,7 +34,7 @@ func (h *Handler) renderTokens(w http.ResponseWriter, r *http.Request, formErr, 
 				data.Tokens = tokens
 			}
 		}
-		scopes, _ := h.authorizedScopesForRequest(r.Context(), r)
+		scopes, _ := h.effectivePrincipalScopesForRequest(r.Context(), r)
 		data.Scopes = scopes
 	}
 
