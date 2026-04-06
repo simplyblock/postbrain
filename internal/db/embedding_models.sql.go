@@ -18,9 +18,19 @@ SELECT id, slug, dimensions, content_type, is_active, description, created_at
 FROM embedding_models WHERE content_type = 'code' AND is_active = true LIMIT 1
 `
 
-func (q *Queries) GetActiveCodeModel(ctx context.Context) (*EmbeddingModel, error) {
+type GetActiveCodeModelRow struct {
+	ID          uuid.UUID
+	Slug        string
+	Dimensions  int32
+	ContentType string
+	IsActive    bool
+	Description *string
+	CreatedAt   time.Time
+}
+
+func (q *Queries) GetActiveCodeModel(ctx context.Context) (*GetActiveCodeModelRow, error) {
 	row := q.db.QueryRow(ctx, getActiveCodeModel)
-	var i EmbeddingModel
+	var i GetActiveCodeModelRow
 	err := row.Scan(
 		&i.ID,
 		&i.Slug,
@@ -38,9 +48,19 @@ SELECT id, slug, dimensions, content_type, is_active, description, created_at
 FROM embedding_models WHERE content_type = 'text' AND is_active = true LIMIT 1
 `
 
-func (q *Queries) GetActiveTextModel(ctx context.Context) (*EmbeddingModel, error) {
+type GetActiveTextModelRow struct {
+	ID          uuid.UUID
+	Slug        string
+	Dimensions  int32
+	ContentType string
+	IsActive    bool
+	Description *string
+	CreatedAt   time.Time
+}
+
+func (q *Queries) GetActiveTextModel(ctx context.Context) (*GetActiveTextModelRow, error) {
 	row := q.db.QueryRow(ctx, getActiveTextModel)
-	var i EmbeddingModel
+	var i GetActiveTextModelRow
 	err := row.Scan(
 		&i.ID,
 		&i.Slug,
@@ -286,14 +306,24 @@ type UpsertEmbeddingModelParams struct {
 	IsActive    bool
 }
 
-func (q *Queries) UpsertEmbeddingModel(ctx context.Context, arg UpsertEmbeddingModelParams) (*EmbeddingModel, error) {
+type UpsertEmbeddingModelRow struct {
+	ID          uuid.UUID
+	Slug        string
+	Dimensions  int32
+	ContentType string
+	IsActive    bool
+	Description *string
+	CreatedAt   time.Time
+}
+
+func (q *Queries) UpsertEmbeddingModel(ctx context.Context, arg UpsertEmbeddingModelParams) (*UpsertEmbeddingModelRow, error) {
 	row := q.db.QueryRow(ctx, upsertEmbeddingModel,
 		arg.Slug,
 		arg.Dimensions,
 		arg.ContentType,
 		arg.IsActive,
 	)
-	var i EmbeddingModel
+	var i UpsertEmbeddingModelRow
 	err := row.Scan(
 		&i.ID,
 		&i.Slug,

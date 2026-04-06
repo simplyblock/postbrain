@@ -33,14 +33,31 @@ type Consolidation struct {
 	CreatedAt time.Time
 }
 
+type EmbeddingIndex struct {
+	ObjectType string
+	ObjectID   uuid.UUID
+	ModelID    uuid.UUID
+	Status     string
+	RetryCount int32
+	LastError  *string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
 type EmbeddingModel struct {
-	ID          uuid.UUID
-	Slug        string
-	Dimensions  int32
-	ContentType string
-	IsActive    bool
-	Description *string
-	CreatedAt   time.Time
+	ID             uuid.UUID
+	Slug           string
+	Dimensions     int32
+	ContentType    string
+	IsActive       bool
+	Description    *string
+	CreatedAt      time.Time
+	Provider       *string
+	ServiceUrl     *string
+	ProviderModel  *string
+	TableName      *string
+	IsReady        bool
+	ProviderConfig string
 }
 
 type Entity struct {
@@ -214,13 +231,14 @@ type OauthState struct {
 }
 
 type Principal struct {
-	ID          uuid.UUID
-	Kind        string
-	Slug        string
-	DisplayName string
-	Meta        []byte
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID            uuid.UUID
+	Kind          string
+	Slug          string
+	DisplayName   string
+	Meta          []byte
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	IsSystemAdmin bool
 }
 
 type PrincipalMembership struct {
@@ -273,6 +291,16 @@ type Scope struct {
 	RepoUrl           *string
 	RepoDefaultBranch string
 	LastIndexedCommit *string
+}
+
+type ScopeGrant struct {
+	ID          uuid.UUID
+	PrincipalID uuid.UUID
+	ScopeID     uuid.UUID
+	Permissions []string
+	GrantedBy   *uuid.UUID
+	ExpiresAt   *time.Time
+	CreatedAt   time.Time
 }
 
 type Session struct {
