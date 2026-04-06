@@ -8,15 +8,13 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
+	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/db"
 )
 
-type contextKey string
-
-const contextKeyEffectiveScopeIDs contextKey = "scopeauth_effective_scope_ids"
-
 var (
-	// ErrTokenScopeDenied indicates the requested scope is outside token scope_ids.
+	// ErrTokenScopeDenied indicates the requested scope is outside token scope_ids or
+	// the token lacks the required permission on the scope.
 	ErrTokenScopeDenied = errors.New("scopeauth: token scope denied")
 	// ErrPrincipalScopeDenied indicates the requested scope is outside principal effective scopes.
 	ErrPrincipalScopeDenied = errors.New("scopeauth: principal scope denied")
@@ -28,68 +26,31 @@ var (
 	ErrScopeResolverUnavailable = errors.New("scopeauth: effective scope resolver unavailable")
 )
 
-// EffectiveScopeResolver resolves scopes accessible to a principal (including multi-hop ancestry).
-type EffectiveScopeResolver interface {
-	EffectiveScopeIDs(ctx context.Context, principalID uuid.UUID) ([]uuid.UUID, error)
-}
-
-// AuthorizeRequestedScope enforces both scope gates:
-// 1) token scope_ids restrictions (if present), and
-// 2) principal effective-scope restrictions (must include requested scope).
-func AuthorizeRequestedScope(token *db.Token, requestedScopeID uuid.UUID, effectiveScopeIDs []uuid.UUID) error {
-	if token == nil {
-		return fmt.Errorf("%w: missing token in context", ErrTokenScopeDenied)
-	}
-	if err := auth.EnforceScopeAccess(token, requestedScopeID); err != nil {
-		return fmt.Errorf("%w: %v", ErrTokenScopeDenied, err)
-	}
-	for _, sid := range effectiveScopeIDs {
-		if sid == requestedScopeID {
-			return nil
-		}
-	}
-	return fmt.Errorf("%w: requested scope %s not in principal effective scope set", ErrPrincipalScopeDenied, requestedScopeID)
-}
-
-// AuthorizeContextScope enforces scope access by reading auth values from context
-// and resolving principal effective scope IDs via resolver.
-func AuthorizeContextScope(ctx context.Context, resolver EffectiveScopeResolver, requestedScopeID uuid.UUID) error {
-	if resolver == nil {
-		return fmt.Errorf("%w", ErrScopeResolverUnavailable)
-	}
-
+// AuthorizeContextScope enforces scope access using the authz.TokenResolver injected
+// into the request context by the auth middleware. It verifies that the authenticated
+// token holds the specified permission on the given scope, enforcing both:
+//   - token scope_ids restrictions (if declared), and
+//   - the principal's effective permissions on that scope (ownership, membership,
+//     direct grants, and inheritance).
+//
+// perm must be the specific permission the caller needs (e.g. "memories:write").
+func AuthorizeContextScope(ctx context.Context, requestedScopeID uuid.UUID, perm authz.Permission) error {
 	token, _ := ctx.Value(auth.ContextKeyToken).(*db.Token)
 	if token == nil {
 		return fmt.Errorf("%w", ErrMissingToken)
 	}
 
-	principalID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
-	if principalID == uuid.Nil {
-		return fmt.Errorf("%w", ErrMissingPrincipal)
+	tokenResolver, _ := ctx.Value(auth.ContextKeyTokenResolver).(*authz.TokenResolver)
+	if tokenResolver == nil {
+		return fmt.Errorf("%w", ErrScopeResolverUnavailable)
 	}
 
-	effectiveScopeIDs, ok := EffectiveScopeIDsFromContext(ctx)
+	ok, err := tokenResolver.HasTokenPermission(ctx, token, requestedScopeID, perm)
+	if err != nil {
+		return fmt.Errorf("scopeauth: check permission: %w", err)
+	}
 	if !ok {
-		var err error
-		effectiveScopeIDs, err = resolver.EffectiveScopeIDs(ctx, principalID)
-		if err != nil {
-			return fmt.Errorf("scopeauth: resolve effective scopes: %w", err)
-		}
+		return fmt.Errorf("%w: token lacks %s on scope %s", ErrTokenScopeDenied, perm, requestedScopeID)
 	}
-	return AuthorizeRequestedScope(token, requestedScopeID, effectiveScopeIDs)
-}
-
-// WithEffectiveScopeIDs stores resolved effective scope IDs in context.
-func WithEffectiveScopeIDs(ctx context.Context, ids []uuid.UUID) context.Context {
-	copied := append([]uuid.UUID(nil), ids...)
-	return context.WithValue(ctx, contextKeyEffectiveScopeIDs, copied)
-}
-
-// EffectiveScopeIDsFromContext returns cached effective scope IDs when present.
-func EffectiveScopeIDsFromContext(ctx context.Context) ([]uuid.UUID, bool) {
-	ids, ok := ctx.Value(contextKeyEffectiveScopeIDs).([]uuid.UUID)
-	if !ok {
-		return nil, false
-	}
-	return append([]uuid.UUID(nil), ids...), true
+	return nil
 }

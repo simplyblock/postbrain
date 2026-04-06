@@ -21,19 +21,107 @@
     <input type="date" name="expires_at">
   </label>
   <fieldset>
-    <legend>Permissions</legend>
-    <label>
-      <input type="checkbox" name="permissions" value="read" checked>
-      <span class="mono">read</span>
-    </label>
-    <label>
-      <input type="checkbox" name="permissions" value="write" checked>
-      <span class="mono">write</span>
-    </label>
-    <label>
-      <input type="checkbox" name="permissions" value="admin">
-      <span class="mono">admin</span>
-    </label>
+    <legend>Permissions — select one or more resource:operation pairs</legend>
+    <p class="muted" style="margin:0 0 0.5rem">Shorthand values expand to all matching operations across resources.</p>
+
+    <details open>
+      <summary style="cursor:pointer;font-weight:600">Shorthands (expand across all resources)</summary>
+      <div style="margin:0.5rem 0 0 1rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(10rem,1fr));gap:0.25rem">
+        <label><input type="checkbox" name="permissions" value="read" checked> <span class="mono">read</span></label>
+        <label><input type="checkbox" name="permissions" value="write" checked> <span class="mono">write</span></label>
+        <label><input type="checkbox" name="permissions" value="edit"> <span class="mono">edit</span></label>
+        <label><input type="checkbox" name="permissions" value="delete"> <span class="mono">delete</span></label>
+      </div>
+    </details>
+
+    <details style="margin-top:0.5rem">
+      <summary style="cursor:pointer;font-weight:600">Fine-grained resource:operation permissions</summary>
+      <div style="margin:0.5rem 0 0 1rem">
+
+        <p style="margin:0.25rem 0;font-weight:600">Memories</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(14rem,1fr));gap:0.2rem;margin-left:1rem">
+          <label><input type="checkbox" name="permissions" value="memories:read"> <span class="mono">memories:read</span></label>
+          <label><input type="checkbox" name="permissions" value="memories:write"> <span class="mono">memories:write</span></label>
+          <label><input type="checkbox" name="permissions" value="memories:edit"> <span class="mono">memories:edit</span></label>
+          <label><input type="checkbox" name="permissions" value="memories:delete"> <span class="mono">memories:delete</span></label>
+        </div>
+
+        <p style="margin:0.5rem 0 0.25rem;font-weight:600">Knowledge</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(14rem,1fr));gap:0.2rem;margin-left:1rem">
+          <label><input type="checkbox" name="permissions" value="knowledge:read"> <span class="mono">knowledge:read</span></label>
+          <label><input type="checkbox" name="permissions" value="knowledge:write"> <span class="mono">knowledge:write</span></label>
+          <label><input type="checkbox" name="permissions" value="knowledge:edit"> <span class="mono">knowledge:edit</span></label>
+          <label><input type="checkbox" name="permissions" value="knowledge:delete"> <span class="mono">knowledge:delete</span></label>
+        </div>
+
+        <p style="margin:0.5rem 0 0.25rem;font-weight:600">Collections</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(14rem,1fr));gap:0.2rem;margin-left:1rem">
+          <label><input type="checkbox" name="permissions" value="collections:read"> <span class="mono">collections:read</span></label>
+          <label><input type="checkbox" name="permissions" value="collections:write"> <span class="mono">collections:write</span></label>
+          <label><input type="checkbox" name="permissions" value="collections:edit"> <span class="mono">collections:edit</span></label>
+          <label><input type="checkbox" name="permissions" value="collections:delete"> <span class="mono">collections:delete</span></label>
+        </div>
+
+        <p style="margin:0.5rem 0 0.25rem;font-weight:600">Skills</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(14rem,1fr));gap:0.2rem;margin-left:1rem">
+          <label><input type="checkbox" name="permissions" value="skills:read"> <span class="mono">skills:read</span></label>
+          <label><input type="checkbox" name="permissions" value="skills:write"> <span class="mono">skills:write</span></label>
+          <label><input type="checkbox" name="permissions" value="skills:edit"> <span class="mono">skills:edit</span></label>
+          <label><input type="checkbox" name="permissions" value="skills:delete"> <span class="mono">skills:delete</span></label>
+        </div>
+
+        <p style="margin:0.5rem 0 0.25rem;font-weight:600">Sessions</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(14rem,1fr));gap:0.2rem;margin-left:1rem">
+          <label><input type="checkbox" name="permissions" value="sessions:read"> <span class="mono">sessions:read</span></label>
+          <label><input type="checkbox" name="permissions" value="sessions:write"> <span class="mono">sessions:write</span></label>
+        </div>
+
+        <p style="margin:0.5rem 0 0.25rem;font-weight:600">Graph</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(14rem,1fr));gap:0.2rem;margin-left:1rem">
+          <label><input type="checkbox" name="permissions" value="graph:read"> <span class="mono">graph:read</span></label>
+        </div>
+
+        <p style="margin:0.5rem 0 0.25rem;font-weight:600">Scopes</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(14rem,1fr));gap:0.2rem;margin-left:1rem">
+          <label><input type="checkbox" name="permissions" value="scopes:read"> <span class="mono">scopes:read</span></label>
+          <label><input type="checkbox" name="permissions" value="scopes:write"> <span class="mono">scopes:write</span></label>
+          <label><input type="checkbox" name="permissions" value="scopes:edit"> <span class="mono">scopes:edit</span></label>
+          <label><input type="checkbox" name="permissions" value="scopes:delete"> <span class="mono">scopes:delete</span></label>
+        </div>
+
+        <p style="margin:0.5rem 0 0.25rem;font-weight:600">Principals</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(14rem,1fr));gap:0.2rem;margin-left:1rem">
+          <label><input type="checkbox" name="permissions" value="principals:read"> <span class="mono">principals:read</span></label>
+          <label><input type="checkbox" name="permissions" value="principals:write"> <span class="mono">principals:write</span></label>
+          <label><input type="checkbox" name="permissions" value="principals:edit"> <span class="mono">principals:edit</span></label>
+          <label><input type="checkbox" name="permissions" value="principals:delete"> <span class="mono">principals:delete</span></label>
+        </div>
+
+        <p style="margin:0.5rem 0 0.25rem;font-weight:600">Tokens</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(14rem,1fr));gap:0.2rem;margin-left:1rem">
+          <label><input type="checkbox" name="permissions" value="tokens:read"> <span class="mono">tokens:read</span></label>
+          <label><input type="checkbox" name="permissions" value="tokens:write"> <span class="mono">tokens:write</span></label>
+          <label><input type="checkbox" name="permissions" value="tokens:edit"> <span class="mono">tokens:edit</span></label>
+          <label><input type="checkbox" name="permissions" value="tokens:delete"> <span class="mono">tokens:delete</span></label>
+        </div>
+
+        <p style="margin:0.5rem 0 0.25rem;font-weight:600">Sharing</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(14rem,1fr));gap:0.2rem;margin-left:1rem">
+          <label><input type="checkbox" name="permissions" value="sharing:read"> <span class="mono">sharing:read</span></label>
+          <label><input type="checkbox" name="permissions" value="sharing:write"> <span class="mono">sharing:write</span></label>
+          <label><input type="checkbox" name="permissions" value="sharing:delete"> <span class="mono">sharing:delete</span></label>
+        </div>
+
+        <p style="margin:0.5rem 0 0.25rem;font-weight:600">Promotions</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(14rem,1fr));gap:0.2rem;margin-left:1rem">
+          <label><input type="checkbox" name="permissions" value="promotions:read"> <span class="mono">promotions:read</span></label>
+          <label><input type="checkbox" name="permissions" value="promotions:write"> <span class="mono">promotions:write</span></label>
+          <label><input type="checkbox" name="permissions" value="promotions:edit"> <span class="mono">promotions:edit</span></label>
+          <label><input type="checkbox" name="permissions" value="promotions:delete"> <span class="mono">promotions:delete</span></label>
+        </div>
+
+      </div>
+    </details>
   </fieldset>
   <fieldset>
     <legend>Scopes — leave all unchecked for unrestricted access</legend>
