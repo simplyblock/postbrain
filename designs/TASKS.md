@@ -27,6 +27,18 @@
 
 ### Permissions Redesign
 
+- [x] 2026-04-06: Fixed `internal/authz` security and design-alignment gaps raised by regression tests:
+  - Fixed `TokenResolver` scope restriction path to avoid unsafe resolver type assertion panic:
+    - `internal/authz/token_resolver.go` now safely unwraps DB-backed resolvers and returns an explicit error when scope checks cannot be evaluated, instead of panicking.
+  - Fixed role matrix mismatch:
+    - `internal/authz/roles.go` now grants `tokens:read` to `RoleMember` per `designs/DESIGN_PERMISSIONS.md`.
+  - Fixed resolver ownership semantics:
+    - `internal/authz/resolver.go` now treats ownership on target scope *or any ancestor* as `RoleOwner` access for the requested scope.
+  - Fixed upward-read semantics to include all grant sources:
+    - resolver now computes upward-read from descendant ownership-derived, membership-derived, and direct-grant-derived read permissions.
+  - Fixed malformed authz DB data handling:
+    - resolver now returns explicit errors for invalid membership roles and malformed scope grant permission payloads (no silent skip).
+
 - [x] 2026-04-06: Added security regression tests in `internal/authz` to capture current design/implementation gaps (intentionally red):
   - Added panic regression test for `TokenResolver` non-`*DBResolver` usage:
     - `internal/authz/token_resolver_panic_test.go::TestTokenResolver_ScopeRestriction_DoesNotPanicWithNonDBResolver`

@@ -2,6 +2,7 @@ package authz
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -76,11 +77,16 @@ func (tr *TokenResolver) HasTokenPermission(ctx context.Context, tok *db.Token, 
 // isScopeAllowed returns true if scopeID equals or is a descendant of any
 // scope in allowedIDs. Uses the ltree ancestry relationship stored in scopes.path.
 func (tr *TokenResolver) isScopeAllowed(ctx context.Context, scopeID uuid.UUID, allowedIDs []uuid.UUID) (bool, error) {
+	dbResolver, ok := unwrapDBResolver(tr.resolver)
+	if !ok {
+		return false, fmt.Errorf("authz: token resolver requires DB-backed resolver for scope restrictions")
+	}
+
 	// The requested scope is allowed if any of the token's declared scope_ids
 	// is an ancestor of (or equal to) the requested scope.
 	// Using ltree: allowed.path @> target.path means allowed is ancestor of target.
 	var allowed bool
-	err := tr.resolver.(*DBResolver).pool.QueryRow(ctx, `
+	err := dbResolver.pool.QueryRow(ctx, `
 		SELECT EXISTS (
 			SELECT 1
 			FROM scopes target
@@ -93,4 +99,15 @@ func (tr *TokenResolver) isScopeAllowed(ctx context.Context, scopeID uuid.UUID, 
 		return false, err
 	}
 	return allowed, nil
+}
+
+func unwrapDBResolver(r Resolver) (*DBResolver, bool) {
+	switch v := r.(type) {
+	case *DBResolver:
+		return v, true
+	case *CachedResolver:
+		return unwrapDBResolver(v.inner)
+	default:
+		return nil, false
+	}
 }
