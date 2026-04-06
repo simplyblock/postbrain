@@ -27,6 +27,14 @@
 
 ### Maintenance
 
+- [x] 2026-04-06: Fixed token scope editor options being incorrectly limited by current session token scope filter (TDD-first):
+  - Added `internal/ui/tokens_integration_test.go::TestTokensPage_EditScopes_ShowsPrincipalEffectiveScopes`:
+    - reproduces scoped-session scenario where edited token has broader scope assignments.
+  - Updated token page scope option source in `internal/ui/tokens.go`:
+    - token create/edit scope options now use principal-effective writable scopes, not current session token-restricted scope set.
+  - Added helper in `internal/ui/handler.go`:
+    - `effectivePrincipalScopesForRequest` to resolve principal writable scopes without applying current token `scope_ids` restrictions.
+
 - [x] 2026-04-05: Updated integration test expectations for tightened authz behavior:
   - Updated `internal/ui/principals_integration_test.go`:
     - non-admin principal mutation attempt now expects direct `403` (route-level admin gating) instead of `200` with rendered form error.

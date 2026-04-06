@@ -340,6 +340,48 @@ func TestTokensPage_ShowsTokenPermissions(t *testing.T) {
 	}
 }
 
+func TestTokensPage_EditScopes_ShowsPrincipalEffectiveScopes(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+
+	user := testhelper.CreateTestPrincipal(t, pool, "user", "ui-token-edit-scope-effective-user")
+	scopeA := testhelper.CreateTestScope(t, pool, "department", "ui-token-edit-scope-effective-a", nil, user.ID)
+	scopeB := testhelper.CreateTestScope(t, pool, "department", "ui-token-edit-scope-effective-b", nil, user.ID)
+
+	rawSession, hashSession, err := auth.GenerateToken()
+	if err != nil {
+		t.Fatalf("generate session token: %v", err)
+	}
+	if _, err := db.CreateToken(ctx, pool, user.ID, hashSession, "session-scoped-a", []uuid.UUID{scopeA.ID}, []string{"read", "write"}, nil); err != nil {
+		t.Fatalf("create scoped session token: %v", err)
+	}
+	if _, err := db.CreateToken(ctx, pool, user.ID, auth.HashToken("pb_edit_scope_multi"), "editable-multi", []uuid.UUID{scopeA.ID, scopeB.ID}, []string{"read", "write"}, nil); err != nil {
+		t.Fatalf("create editable token: %v", err)
+	}
+
+	client, baseURL := loginUITestClient(t, pool, rawSession)
+	resp, err := client.Get(baseURL + "/ui/tokens")
+	if err != nil {
+		t.Fatalf("GET /ui/tokens: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	bodyText := string(body)
+	if !strings.Contains(bodyText, "department:"+scopeA.ExternalID) {
+		t.Fatalf("expected scope A in edit-scope options")
+	}
+	if !strings.Contains(bodyText, "department:"+scopeB.ExternalID) {
+		t.Fatalf("expected scope B in edit-scope options")
+	}
+}
+
 func loginUITestClient(t *testing.T, pool *pgxpool.Pool, rawSessionToken string) (*http.Client, string) {
 	t.Helper()
 

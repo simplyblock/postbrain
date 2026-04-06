@@ -1607,6 +1607,32 @@ func (h *Handler) authorizedScopesForRequest(ctx context.Context, r *http.Reques
 	return scopes, out
 }
 
+// effectivePrincipalScopesForRequest resolves writable scopes for the current principal
+// without applying current token scope restrictions.
+func (h *Handler) effectivePrincipalScopesForRequest(ctx context.Context, r *http.Request) ([]*db.Scope, map[uuid.UUID]struct{}) {
+	out := map[uuid.UUID]struct{}{}
+	if h.pool == nil {
+		return []*db.Scope{}, out
+	}
+	token := h.tokenFromCookie(r)
+	if token == nil || token.PrincipalID == uuid.Nil {
+		return []*db.Scope{}, out
+	}
+	ms := principals.NewMembershipStore(h.pool)
+	ids, err := ms.EffectiveScopeIDs(ctx, token.PrincipalID)
+	if err != nil {
+		return []*db.Scope{}, out
+	}
+	scopes, err := db.GetScopesByIDs(ctx, h.pool, ids)
+	if err != nil {
+		return []*db.Scope{}, out
+	}
+	for _, s := range scopes {
+		out[s.ID] = struct{}{}
+	}
+	return scopes, out
+}
+
 func (h *Handler) reachablePrincipalIDSet(ctx context.Context, r *http.Request) map[uuid.UUID]struct{} {
 	out := map[uuid.UUID]struct{}{}
 	if h.pool == nil {
