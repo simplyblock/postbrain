@@ -125,6 +125,6 @@ For each surface: update or add failing tests first, then update the implementat
 
 ### 4.1 — REST endpoints for `scope_grants`
 
-- [ ] `internal/api/rest/scope_grants_test.go` — test `POST /v1/scopes/{id}/grants`: creates grant, requires `sharing:write` on the scope, rejects escalation beyond caller's own permissions; test `GET /v1/scopes/{id}/grants`: lists grants, requires `sharing:read`; test `DELETE /v1/scopes/{id}/grants/{grant_id}`: revokes, requires `sharing:delete`; test that an expired grant is excluded from list; test that a grant from a `systemadmin` caller is accepted
-- [ ] `internal/api/rest/scope_grants.go` — `handleCreateScopeGrant`, `handleListScopeGrants`, `handleDeleteScopeGrant`; uses `authz.Resolver` to verify caller permissions before mutating; enforces anti-escalation: caller cannot grant permissions they do not hold
-- [ ] `internal/api/rest/router.go` — add `POST /v1/scopes/{id}/grants`, `GET /v1/scopes/{id}/grants`, `DELETE /v1/scopes/{id}/grants/{grant_id}` routes
+- [x] `internal/api/rest/scope_grants_test.go` — test `POST /v1/scopes/{id}/grants`: creates grant, requires `sharing:write` on the scope, rejects escalation beyond caller's own permissions; test `GET /v1/scopes/{id}/grants`: lists grants, requires `sharing:read`; test `DELETE /v1/scopes/{id}/grants/{grant_id}`: revokes, requires `sharing:delete`; test that an expired grant is excluded from list; test that a grant from a `systemadmin` caller is accepted
+- [x] `internal/api/rest/scope_grants.go` — `handleCreateScopeGrant`, `handleListScopeGrants`, `handleDeleteScopeGrant`; uses `authz.Resolver` to verify caller permissions before mutating; enforces anti-escalation: caller cannot grant permissions they do not hold
+- [x] `internal/api/rest/router.go` — add `POST /v1/scopes/{id}/grants`, `GET /v1/scopes/{id}/grants`, `DELETE /v1/scopes/{id}/grants/{grant_id}` routes

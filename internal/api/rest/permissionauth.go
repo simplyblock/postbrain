@@ -97,6 +97,11 @@ var routePermissions = []routePermission{
 	{http.MethodPost, "/v1/scopes/{id}/repo/sync", "scopes:edit"},
 	{http.MethodGet, "/v1/scopes/{id}/repo/sync", "scopes:read"},
 
+	// Scope grants (authz delegation)
+	{http.MethodPost, "/v1/scopes/{id}/grants", "sharing:write"},
+	{http.MethodGet, "/v1/scopes/{id}/grants", "sharing:read"},
+	{http.MethodDelete, "/v1/scopes/{id}/grants/{grant_id}", "sharing:delete"},
+
 	// Principals & membership
 	{http.MethodGet, "/v1/principals", "principals:read"},
 	{http.MethodPost, "/v1/principals", "principals:write"},
