@@ -169,24 +169,17 @@ func (ro *Router) handleListScopeGrants(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Filter out expired grants.
-	now := time.Now()
-	var active []scopeGrantResponse
+	resp := make([]scopeGrantResponse, 0, len(grants))
 	for _, g := range grants {
-		if g.ExpiresAt != nil && g.ExpiresAt.Before(now) {
-			continue
-		}
-		active = append(active, scopeGrantToResponse(g))
-	}
-	if active == nil {
-		active = []scopeGrantResponse{}
+		resp = append(resp, scopeGrantToResponse(g))
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"grants": active})
+	writeJSON(w, http.StatusOK, map[string]any{"grants": resp})
 }
 
 // handleDeleteScopeGrant serves DELETE /v1/scopes/{id}/grants/{grant_id}.
-// Requires sharing:delete on the scope.
+// Requires sharing:delete on the scope. Only deletes the grant if it belongs
+// to the specified scope, preventing cross-scope grant deletion.
 func (ro *Router) handleDeleteScopeGrant(w http.ResponseWriter, r *http.Request) {
 	scopeID, err := uuidParam(r, "id")
 	if err != nil {
@@ -205,7 +198,10 @@ func (ro *Router) handleDeleteScopeGrant(w http.ResponseWriter, r *http.Request)
 	}
 
 	q := db.New(ro.pool)
-	if err := q.DeleteScopeGrant(r.Context(), grantID); err != nil {
+	if err := q.DeleteScopeGrantByIDAndScope(r.Context(), db.DeleteScopeGrantByIDAndScopeParams{
+		ID:      grantID,
+		ScopeID: scopeID,
+	}); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

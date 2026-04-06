@@ -65,6 +65,20 @@ func (q *Queries) DeleteScopeGrant(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const deleteScopeGrantByIDAndScope = `-- name: DeleteScopeGrantByIDAndScope :exec
+DELETE FROM scope_grants WHERE id = $1 AND scope_id = $2
+`
+
+type DeleteScopeGrantByIDAndScopeParams struct {
+	ID      uuid.UUID
+	ScopeID uuid.UUID
+}
+
+func (q *Queries) DeleteScopeGrantByIDAndScope(ctx context.Context, arg DeleteScopeGrantByIDAndScopeParams) error {
+	_, err := q.db.Exec(ctx, deleteScopeGrantByIDAndScope, arg.ID, arg.ScopeID)
+	return err
+}
+
 const getScopeGrant = `-- name: GetScopeGrant :one
 SELECT id, principal_id, scope_id, permissions, granted_by, expires_at, created_at
 FROM scope_grants

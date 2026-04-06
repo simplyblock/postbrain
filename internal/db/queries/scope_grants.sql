@@ -31,5 +31,8 @@ RETURNING id, principal_id, scope_id, permissions, granted_by, expires_at, creat
 -- name: DeleteScopeGrant :exec
 DELETE FROM scope_grants WHERE id = $1;
 
+-- name: DeleteScopeGrantByIDAndScope :exec
+DELETE FROM scope_grants WHERE id = $1 AND scope_id = $2;
+
 -- name: DeleteExpiredScopeGrants :exec
 DELETE FROM scope_grants WHERE expires_at IS NOT NULL AND expires_at <= now();
