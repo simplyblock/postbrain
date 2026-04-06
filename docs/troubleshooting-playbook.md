@@ -22,7 +22,8 @@ Check:
 
 - token validity
 - `Authorization: Bearer ...` header
-- requested scope vs token scope
+- requested scope vs token scope restrictions (`scope_ids`)
+- required `{resource}:{operation}` vs token permissions
 
 A common cause is valid token + invalid scope. Confirm both principal and token are authorized for the target scope.
 

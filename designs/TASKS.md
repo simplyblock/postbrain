@@ -60,6 +60,11 @@
 
 ### Maintenance
 
+- [x] 2026-04-06: Updated `docs/*` to align with `designs/DESIGN_PERMISSIONS.md`:
+  - Replaced legacy "admin/read-write" wording with the `{resource}:{operation}` permission model.
+  - Documented token downscoping semantics (principal permissions ∩ token permissions ∩ token scope restrictions).
+  - Updated operator playbooks (`security`, `operations`, `troubleshooting`, `upgrade`, `monitoring`) and usage docs (`getting-started`, `webui-guide`, `api-auth-examples`, `architecture-overview`, `introduction`).
+
 - [x] 2026-04-06: Fixed token scope editor options being incorrectly limited by current session token scope filter (TDD-first):
   - Added `internal/ui/tokens_integration_test.go::TestTokensPage_EditScopes_ShowsPrincipalEffectiveScopes`:
     - reproduces scoped-session scenario where edited token has broader scope assignments.

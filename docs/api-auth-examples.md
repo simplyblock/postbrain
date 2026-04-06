@@ -5,6 +5,12 @@ All protected API calls require a bearer token.
 These examples show the minimum flow: set environment variables, send token-authenticated requests, and keep scope
 boundaries explicit.
 
+Permission model recap:
+
+- permissions are `{resource}:{operation}` (for example `memories:read`, `knowledge:write`)
+- shorthand `read`/`write`/`edit`/`delete` expands across all resources
+- token access is downscoped by both declared permissions and token scope restrictions
+
 ## Environment variables
 
 ```bash

@@ -25,7 +25,7 @@ Avoid alert noise. Start with alerts that indicate real service impact:
 Use both passive metrics and active checks:
 
 - HTTP endpoint availability (`/metrics`, API paths)
-- token-authenticated read/write smoke checks in automation
+- token-authenticated permission smoke checks in automation (for example `memories:read`, `memories:write`)
 
 ## Kubernetes signals
 

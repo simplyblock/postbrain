@@ -5,6 +5,7 @@
 - verify DB connectivity and migrations
 - confirm embedding backend connectivity
 - validate token auth from at least one client
+- validate at least one resource-scoped permission path (for example `memories:write` + `memories:read`)
 - run scope discovery (`list_scopes`) from agent tooling
 - test `remember` + `recall` end to end
 
@@ -20,19 +21,19 @@ For model lifecycle and re-embedding procedures, use
 
 ## Common issues
 
-### 1. "scope access denied"
+### 1. "scope access denied" or "insufficient permissions"
 
 Likely causes:
 
-- token does not include requested scope
-- principal effective scopes do not include requested scope
+- token `scope_ids` do not include the requested scope (or ancestor)
+- principal effective permissions do not include the requested `{resource}:{operation}` on that scope
 - endpoint/tool has stricter object-scope checks than caller expects
 
 Actions:
 
 - verify requested scope string
-- verify token scope claims
-- verify principal membership chain
+- verify token permissions and scope restrictions
+- verify principal membership/ownership/grants chain
 
 ### 2. Embedding errors or empty recall
 

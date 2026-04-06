@@ -97,14 +97,16 @@ This page is where operational access is granted. In production environments, to
 Token workflow:
 
 1. Enter token name and optional expiration date.
-2. Select scope restrictions (leave unchecked for unrestricted).
-3. Create token and record it in your secret manager.
-4. Revoke tokens from the existing token list when no longer needed.
+2. Select permission restrictions (`{resource}:{operation}` entries or shorthand `read`/`write`/`edit`/`delete`).
+3. Select scope restrictions (leave unchecked for unrestricted across principal-authorized scopes).
+4. Create token and record it in your secret manager.
+5. Revoke tokens from the existing token list when no longer needed.
 
 Practical guidance:
 
 - Prefer short-lived tokens where possible.
 - Name tokens by owner + purpose (`codex-ci`, `chatgpt-research-bot`, etc.).
+- Use least-privilege permissions by default (`read` or resource-specific keys where possible).
 - Use restricted scopes by default; unrestricted should be exceptional.
 
 ## Memory Workflows

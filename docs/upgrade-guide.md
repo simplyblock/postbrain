@@ -26,7 +26,7 @@ This flow works for binary, container, and Helm-based deployments:
 1. Stop old server process (or roll a new deployment revision).
 2. Deploy new binary/image/chart version.
 3. Start server with `database.auto_migrate=true` (or run migration step explicitly).
-4. Verify health endpoints and basic read/write behavior.
+4. Verify health endpoints and basic permission behavior for at least one read and one write path.
 
 ## Kubernetes/Helm upgrade
 

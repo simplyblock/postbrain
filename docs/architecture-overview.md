@@ -30,7 +30,7 @@ Postbrain has three core runtime parts:
 ## Retrieval path (simplified)
 
 1. client sends a query (`recall` or `context`)
-2. Postbrain resolves authorized scopes
+2. Postbrain resolves authorized `{resource}:{operation}` permissions across scopes
 3. retrieval combines:
     - semantic vector similarity
     - text ranking (FTS)

@@ -42,7 +42,8 @@ usage.
 ## Access and scope boundaries
 
 All content is tied to scopes and principals. This means memory and knowledge are not only searchable, but also
-constrained by authorization rules. A caller can only retrieve what its token and effective principal scope chain allow.
+constrained by authorization rules. A caller can only retrieve what its token and effective principal permissions allow
+for the requested scope and resource operation.
 
 This is essential in real organizations, where project, team, and company context must be shared intentionally rather
 than globally.

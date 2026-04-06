@@ -10,11 +10,37 @@ Postbrain endpoints require bearer tokens.
 
 ## Authorization
 
-Authorization is scope-based and principal-aware.
+Authorization is scope-based and principal-aware. Effective permissions are evaluated as:
 
-- Every write/read path is expected to enforce scope checks.
-- Effective scopes can include multi-hop principal relationships (for example user -> team -> company).
-- Out-of-scope object access should fail with explicit authorization errors.
+- `(principal, resource:operation, scope)`
+- Example permission keys: `memories:read`, `knowledge:write`, `scopes:edit`, `tokens:delete`.
+- Shorthand permissions `read`, `write`, `edit`, and `delete` expand across all resources.
+
+Permissions are derived additively from:
+
+- principal `is_system_admin` flag (full bypass)
+- direct scope ownership (full access on owned scopes and descendants)
+- membership role inheritance (`member`, `admin`, `owner`)
+- explicit `scope_grants` on specific scopes
+
+Inheritance rules:
+
+- downward inheritance always applies (parent scope grants apply to descendants)
+- upward inheritance is read-only (read on a child implies read on ancestors)
+- no upward `write`, `edit`, or `delete`
+
+Out-of-scope or out-of-permission object access should fail with explicit authorization errors.
+
+## Token downscoping and self-service
+
+Tokens are never stronger than their principal. At request time, access is the intersection of:
+
+- principal effective permissions on the target scope
+- token declared permissions
+- token scope restrictions (`scope_ids`, if present)
+
+Token self-service is always allowed for a principal's own tokens (create/list/update scopes/revoke). Managing tokens
+for other principals requires elevated authority (`principals:edit` on the relevant authority scope, or system admin).
 
 ## Scope design recommendations
 

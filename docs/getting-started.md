@@ -2,10 +2,10 @@
 
 This guide helps you run Postbrain for the first time.
 
-## 0. Bootstrap the first admin principal + token
+## 0. Bootstrap the first system admin principal + token
 
-For a fresh installation, use the built-in onboarding command. It runs migrations, creates (or reuses) an admin
-principal, creates an initial scope, and prints a new API token.
+For a fresh installation, use the built-in onboarding command. It runs migrations, creates (or reuses) a bootstrap
+principal with system-wide admin privileges, creates an initial scope, and prints a new API token.
 
 ```bash
 postbrain onboard \
@@ -67,7 +67,8 @@ postbrain-cli version
 
 Postbrain APIs require bearer tokens.
 
-Create/manage tokens with server CLI commands.
+Create/manage tokens with server CLI commands. Tokens are downscoped credentials: each token can only exercise
+permissions and scope access that the owning principal already has.
 
 Note: `token create` requires both a token name and the owning principal slug.
 
@@ -80,6 +81,12 @@ Then set client-side environment variables:
 - `POSTBRAIN_URL` (for example `http://localhost:7433`)
 - `POSTBRAIN_TOKEN` (issued bearer token)
 - optional `POSTBRAIN_SCOPE` for default scope selection
+
+Permission model reference for token design:
+
+- permission format: `{resource}:{operation}` (for example `memories:read`, `knowledge:write`)
+- shorthand permissions: `read`, `write`, `edit`, `delete` (expanded across all resources)
+- scope restrictions: token `scope_ids` restrict access to selected scopes and descendants
 
 ## 4. Install initial skills
 
