@@ -1,5 +1,8 @@
 # Security and Access Model
 
+For full permission matrices and detailed access semantics, see
+[Access Control Reference](./access-control-reference.md).
+
 ## Authentication
 
 Postbrain endpoints require bearer tokens.

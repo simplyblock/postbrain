@@ -60,6 +60,11 @@
 
 ### Maintenance
 
+- [x] 2026-04-06: Added dedicated docs reference for scopes/permissions/tokens:
+  - Added `docs/access-control-reference.md` as the canonical text reference for principal/scope/resource:operation authorization.
+  - Included permission sources, inheritance rules, role summary, token downscoping, self-service semantics, promotions paths, and troubleshooting checks.
+  - Linked the new page from `docs/README.md`, `docs/security.md`, and `docs/getting-started.md`.
+
 - [x] 2026-04-06: Updated `docs/*` to align with `designs/DESIGN_PERMISSIONS.md`:
   - Replaced legacy "admin/read-write" wording with the `{resource}:{operation}` permission model.
   - Documented token downscoping semantics (principal permissions ∩ token permissions ∩ token scope restrictions).

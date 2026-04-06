@@ -88,6 +88,8 @@ Permission model reference for token design:
 - shorthand permissions: `read`, `write`, `edit`, `delete` (expanded across all resources)
 - scope restrictions: token `scope_ids` restrict access to selected scopes and descendants
 
+See [Access Control Reference](./access-control-reference.md) for full details and troubleshooting guidance.
+
 ## 4. Install initial skills
 
 Use the CLI to install Postbrain skill files into your project.

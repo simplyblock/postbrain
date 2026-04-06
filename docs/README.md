@@ -27,6 +27,7 @@ This documentation is also published via GitHub Pages for repository browsing.
 - [Architecture Overview](./architecture-overview.md)
 - [Indexing Model](./indexing-model.md)
 - [Security and Access Model](./security.md)
+- [Access Control Reference](./access-control-reference.md)
 - [Operations and Troubleshooting](./operations.md)
 - [Embedding Model Operations](./embedding-model-operations.md)
 - [Upgrade Guide](./upgrade-guide.md)
