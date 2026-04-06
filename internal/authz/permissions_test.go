@@ -70,11 +70,7 @@ func TestValidOperations(t *testing.T) {
 		{authz.ResourceTokens, rwed},
 		{authz.ResourceSharing, rwd},
 		{authz.ResourcePromotions, rwed},
-		// suppress unused variable warning
-		{authz.ResourceMemories, rwe[:0]}, // placeholder to use rwe; actual check below
 	}
-	// remove placeholder
-	cases = cases[:len(cases)-1]
 
 	for _, tc := range cases {
 		got := authz.ValidOperations(tc.resource)
