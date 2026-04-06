@@ -33,7 +33,7 @@ func TestREST_PermissionAuthz_ReadVsWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate read token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, principal.ID, hashReadToken, "read-only", nil, []string{"read"}, nil); err != nil {
+	if _, err := db.CreateToken(ctx, pool, principal.ID, hashReadToken, "read-only", nil, []string{"scopes:read", "memories:read"}, nil); err != nil {
 		t.Fatalf("create read token: %v", err)
 	}
 
@@ -41,7 +41,7 @@ func TestREST_PermissionAuthz_ReadVsWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate write token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, principal.ID, hashWriteToken, "write-token", nil, []string{"write"}, nil); err != nil {
+	if _, err := db.CreateToken(ctx, pool, principal.ID, hashWriteToken, "write-token", nil, []string{"memories:write"}, nil); err != nil {
 		t.Fatalf("create write token: %v", err)
 	}
 
@@ -49,7 +49,7 @@ func TestREST_PermissionAuthz_ReadVsWrite(t *testing.T) {
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
 
-	t.Run("read token can GET", func(t *testing.T) {
+	t.Run("scopes:read token can GET /v1/scopes", func(t *testing.T) {
 		req, err := http.NewRequest(http.MethodGet, srv.URL+"/v1/scopes", nil)
 		if err != nil {
 			t.Fatalf("new request: %v", err)
@@ -66,7 +66,7 @@ func TestREST_PermissionAuthz_ReadVsWrite(t *testing.T) {
 		}
 	})
 
-	t.Run("read token cannot POST", func(t *testing.T) {
+	t.Run("memories:read token cannot POST /v1/memories", func(t *testing.T) {
 		body := map[string]any{
 			"content":     "permission gate",
 			"scope":       "project:" + scope.ExternalID,
@@ -91,7 +91,7 @@ func TestREST_PermissionAuthz_ReadVsWrite(t *testing.T) {
 		}
 	})
 
-	t.Run("write token can POST", func(t *testing.T) {
+	t.Run("memories:write token can POST /v1/memories", func(t *testing.T) {
 		body := map[string]any{
 			"content":     "permission gate write",
 			"scope":       "project:" + scope.ExternalID,
