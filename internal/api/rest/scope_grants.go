@@ -169,12 +169,12 @@ func (ro *Router) handleListScopeGrants(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	resp := make([]scopeGrantResponse, 0, len(grants))
+	grantResponses := make([]scopeGrantResponse, 0, len(grants))
 	for _, g := range grants {
-		resp = append(resp, scopeGrantToResponse(g))
+		grantResponses = append(grantResponses, scopeGrantToResponse(g))
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"grants": resp})
+	writeJSON(w, http.StatusOK, map[string]any{"grants": grantResponses})
 }
 
 // handleDeleteScopeGrant serves DELETE /v1/scopes/{id}/grants/{grant_id}.
