@@ -27,10 +27,13 @@
 
 ### Permissions Redesign
 
-- [x] 2026-04-06: `internal/authz` package Phase 1.1–1.3 complete (see `designs/TASKS_PERMISSIONS.md`):
+- [x] 2026-04-06: `internal/authz` package Phase 1 complete (see `designs/TASKS_PERMISSIONS.md`):
   - `permissions.go/test`: `Resource`, `Operation`, `Permission` types; `ValidOperations`, `AllResources`, `AllPermissions`, `Expand`
   - `permset.go/test`: `PermissionSet` with `NewPermissionSet`, `Contains`, `Satisfies`, `Union`, `Intersect`, `IsEmpty`, `Len`, `Permissions`, `ToSlice`
-  - `roles.go/test`: `Role` constants; `ParseRole`; `RolePermissions` with exact member/admin/owner sets and strict superset hierarchy verified
+  - `roles.go/test`: `Role` constants; `ParseRole`; `RolePermissions` with exact member/admin/owner sets and strict superset hierarchy
+  - `token.go/test`: `ParseTokenPermissions` (rejects legacy `admin`, validates all resource:operation pairs); `EffectiveTokenPermissions` (intersection, no-escalation invariant)
+  - `promotions.go/test`: `PromotionAccess` with PathDirect/PathReview paths and StandardReviewRequired/ElevatedReviewRequired constants
+  - `inheritance.go/test`: `ApplyUpwardRead` (read-only upward propagation); `MergeGrants` (additive union per scope); `ScopeID` type alias
 
 ### Maintenance
 
