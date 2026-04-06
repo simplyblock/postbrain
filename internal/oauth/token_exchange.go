@@ -12,6 +12,7 @@ import (
 
 type tokenCreator interface {
 	Create(ctx context.Context, principalID uuid.UUID, hash, name string, scopeIDs []uuid.UUID, permissions []string, expiresAt *time.Time) (*db.Token, error)
+	RevokeByPrincipalAndName(ctx context.Context, principalID uuid.UUID, name string) error
 }
 
 // Issuer exchanges an authorization code into a Postbrain bearer token.
@@ -31,7 +32,13 @@ func NewIssuer(tokenStore *auth.TokenStore) *Issuer {
 }
 
 // Issue creates a token for the principal with permissions derived from scopes.
+// Any existing "oauth" tokens for the principal are revoked first so that
+// repeated logins do not accumulate stale tokens.
 func (i *Issuer) Issue(ctx context.Context, principalID uuid.UUID, scopes []string, ttl time.Duration) (string, error) {
+	if err := i.tokenStore.RevokeByPrincipalAndName(ctx, principalID, "oauth"); err != nil {
+		return "", err
+	}
+
 	raw, hash, err := i.generateToken()
 	if err != nil {
 		return "", err

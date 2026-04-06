@@ -308,7 +308,7 @@ func (r *DBResolver) ReachableScopeIDs(ctx context.Context, principalID uuid.UUI
 			FROM principal_memberships pm
 			JOIN principal_ancestry pa ON pm.member_id = pa.id
 		),
-		-- Scopes accessible via ownership or membership (downward inheritance implied).
+		-- Scopes accessible via ownership or membership.
 		membership_scopes AS (
 			SELECT id FROM scopes WHERE principal_id IN (SELECT id FROM principal_ancestry)
 		),
@@ -325,12 +325,13 @@ func (r *DBResolver) ReachableScopeIDs(ctx context.Context, principalID uuid.UUI
 			UNION
 			SELECT id FROM grant_scopes
 		),
-		-- Ancestors of directly accessible scopes (upward-read: seeing a child implies reading the parent).
+		-- Ancestor scopes of any directly accessible scope (upward read: if you have
+		-- access to a scope you should be able to see its parents for navigation).
 		upward_scopes AS (
 			SELECT DISTINCT ancestor.id
 			FROM scopes ancestor
 			JOIN scopes direct ON ancestor.path @> direct.path AND ancestor.id != direct.id
-			WHERE direct.id IN (SELECT id FROM grant_scopes)
+			WHERE direct.id IN (SELECT id FROM direct_scopes)
 		)
 		SELECT id FROM direct_scopes
 		UNION

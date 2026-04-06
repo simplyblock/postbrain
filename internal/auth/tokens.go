@@ -99,6 +99,24 @@ func (ts *TokenStore) UpdateLastUsed(pool *pgxpool.Pool, tokenID uuid.UUID) {
 	}()
 }
 
+// RevokeByPrincipalAndName revokes all non-revoked tokens that belong to
+// principalID and have the given name.
+func (ts *TokenStore) RevokeByPrincipalAndName(ctx context.Context, principalID uuid.UUID, name string) error {
+	tokens, err := db.ListTokens(ctx, ts.pool, &principalID)
+	if err != nil {
+		return fmt.Errorf("auth: list tokens for revoke: %w", err)
+	}
+	for _, t := range tokens {
+		if t.Name != name || t.RevokedAt != nil {
+			continue
+		}
+		if err := db.RevokeToken(ctx, ts.pool, t.ID); err != nil {
+			return fmt.Errorf("auth: revoke token %s: %w", t.ID, err)
+		}
+	}
+	return nil
+}
+
 // EnforceScopeAccess returns an error if the token's ScopeIDs is non-nil and
 // does not contain requestedScopeID. A nil ScopeIDs list grants access to all scopes.
 func EnforceScopeAccess(token *db.Token, requestedScopeID uuid.UUID) error {

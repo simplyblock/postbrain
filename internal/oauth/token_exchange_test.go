@@ -18,6 +18,10 @@ type fakeTokenStore struct {
 	lastExpiresAt   *time.Time
 }
 
+func (f *fakeTokenStore) RevokeByPrincipalAndName(_ context.Context, _ uuid.UUID, _ string) error {
+	return nil
+}
+
 func (f *fakeTokenStore) Create(_ context.Context, principalID uuid.UUID, hash, name string, _ []uuid.UUID, permissions []string, expiresAt *time.Time) (*db.Token, error) {
 	f.lastPrincipalID = principalID
 	f.lastHash = hash

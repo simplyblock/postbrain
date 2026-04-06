@@ -1116,28 +1116,37 @@ func (h *Handler) renderPrincipals(w http.ResponseWriter, r *http.Request, princ
 		reachable := h.reachablePrincipalIDSet(r.Context(), r)
 		principals, err := db.ListPrincipals(r.Context(), h.pool, 50, 0)
 		if err == nil {
-			filtered := make([]*db.Principal, 0, len(principals))
-			for _, p := range principals {
-				if _, ok := reachable[p.ID]; !ok {
-					continue
+			if reachable == nil {
+				// nil means show all (system admin).
+				data.Principals = principals
+			} else {
+				filtered := make([]*db.Principal, 0, len(principals))
+				for _, p := range principals {
+					if _, ok := reachable[p.ID]; !ok {
+						continue
+					}
+					filtered = append(filtered, p)
 				}
-				filtered = append(filtered, p)
+				data.Principals = filtered
 			}
-			data.Principals = filtered
 		}
 		memberships, err := db.ListAllMemberships(r.Context(), h.pool)
 		if err == nil {
-			filtered := make([]*db.MembershipRow, 0, len(memberships))
-			for _, m := range memberships {
-				if _, ok := reachable[m.MemberID]; !ok {
-					continue
+			if reachable == nil {
+				data.Memberships = memberships
+			} else {
+				filtered := make([]*db.MembershipRow, 0, len(memberships))
+				for _, m := range memberships {
+					if _, ok := reachable[m.MemberID]; !ok {
+						continue
+					}
+					if _, ok := reachable[m.ParentID]; !ok {
+						continue
+					}
+					filtered = append(filtered, m)
 				}
-				if _, ok := reachable[m.ParentID]; !ok {
-					continue
-				}
-				filtered = append(filtered, m)
+				data.Memberships = filtered
 			}
-			data.Memberships = filtered
 		}
 	}
 
@@ -1544,8 +1553,8 @@ func (h *Handler) hasScopeAdminAccess(ctx context.Context, r *http.Request, scop
 			return false
 		}
 	}
-	ms := principals.NewMembershipStore(h.pool)
-	ok, err := ms.IsScopeAdmin(ctx, token.PrincipalID, scopeID)
+	ok, err := authz.NewDBResolver(h.pool).HasPermission(ctx, token.PrincipalID, scopeID,
+		authz.NewPermission(authz.ResourceScopes, authz.OperationEdit))
 	return err == nil && ok
 }
 
@@ -1570,15 +1579,19 @@ func (h *Handler) hasAnyPrincipalAdminRole(ctx context.Context, r *http.Request)
 	if token == nil || token.PrincipalID == uuid.Nil {
 		return false
 	}
+	// System admins always have full access.
+	if p, err := db.GetPrincipalByID(ctx, h.pool, token.PrincipalID); err == nil && p != nil && p.IsSystemAdmin {
+		return true
+	}
 	ms := principals.NewMembershipStore(h.pool)
 	ok, err := ms.HasAnyAdminRole(ctx, token.PrincipalID)
 	return err == nil && ok
 }
 
-// authorizedScopesForRequest resolves scopes writable by the current principal,
-// intersected with token scope restrictions (when scope_ids is non-nil).
-// Token scope restrictions are expanded to include ancestor scopes so a token
-// scoped to a child scope can still access its parent scopes.
+// authorizedScopesForRequest resolves scopes reachable by the current principal
+// (via the authz resolver), intersected with token scope restrictions when
+// scope_ids is non-nil.  Token restrictions are expanded to include ancestor
+// scopes so a token scoped to a child scope can still read its parents.
 func (h *Handler) authorizedScopesForRequest(ctx context.Context, r *http.Request) ([]*db.Scope, map[uuid.UUID]struct{}) {
 	out := map[uuid.UUID]struct{}{}
 	if h.pool == nil {
@@ -1588,8 +1601,7 @@ func (h *Handler) authorizedScopesForRequest(ctx context.Context, r *http.Reques
 	if token == nil || token.PrincipalID == uuid.Nil {
 		return []*db.Scope{}, out
 	}
-	ms := principals.NewMembershipStore(h.pool)
-	ids, err := ms.EffectiveScopeIDs(ctx, token.PrincipalID)
+	ids, err := authz.NewDBResolver(h.pool).ReachableScopeIDs(ctx, token.PrincipalID)
 	if err != nil {
 		return []*db.Scope{}, out
 	}
@@ -1629,8 +1641,10 @@ func (h *Handler) authorizedScopesForRequest(ctx context.Context, r *http.Reques
 	return scopes, out
 }
 
-// effectivePrincipalScopesForRequest resolves the current principal's effective scopes
-// via ownership/memberships, without applying current token scope restrictions.
+// effectivePrincipalScopesForRequest resolves all scopes reachable by the
+// current principal via the authz resolver, without applying token scope
+// restrictions.  Used for the token-creation form where you pick which scopes
+// a new token should be limited to.
 func (h *Handler) effectivePrincipalScopesForRequest(ctx context.Context, r *http.Request) ([]*db.Scope, map[uuid.UUID]struct{}) {
 	out := map[uuid.UUID]struct{}{}
 	if h.pool == nil {
@@ -1640,8 +1654,7 @@ func (h *Handler) effectivePrincipalScopesForRequest(ctx context.Context, r *htt
 	if token == nil || token.PrincipalID == uuid.Nil {
 		return []*db.Scope{}, out
 	}
-	ms := principals.NewMembershipStore(h.pool)
-	ids, err := ms.EffectiveScopeIDs(ctx, token.PrincipalID)
+	ids, err := authz.NewDBResolver(h.pool).ReachableScopeIDs(ctx, token.PrincipalID)
 	if err != nil {
 		return []*db.Scope{}, out
 	}
@@ -1655,6 +1668,10 @@ func (h *Handler) effectivePrincipalScopesForRequest(ctx context.Context, r *htt
 	return scopes, out
 }
 
+// reachablePrincipalIDSet returns the set of principal IDs visible on the
+// principals page for the current user. Returns nil to indicate "show all"
+// (used for system admins). For non-sysadmin users it returns self + all
+// ancestor principals + all direct members of groups the user admins.
 func (h *Handler) reachablePrincipalIDSet(ctx context.Context, r *http.Request) map[uuid.UUID]struct{} {
 	out := map[uuid.UUID]struct{}{}
 	if h.pool == nil {
@@ -1664,12 +1681,33 @@ func (h *Handler) reachablePrincipalIDSet(ctx context.Context, r *http.Request) 
 	if principalID == uuid.Nil {
 		return out
 	}
+	// System admins see everything.
+	if p, err := db.GetPrincipalByID(ctx, h.pool, principalID); err == nil && p != nil && p.IsSystemAdmin {
+		return nil
+	}
+	// Self + all ancestor principals.
 	ids, err := db.GetAllParentIDs(ctx, h.pool, principalID)
 	if err != nil {
 		return out
 	}
 	for _, id := range ids {
 		out[id] = struct{}{}
+	}
+	// Also include direct members of any group this principal admins.
+	rows, err := h.pool.Query(ctx,
+		`SELECT DISTINCT pm2.member_id
+		 FROM principal_memberships pm
+		 JOIN principal_memberships pm2 ON pm2.parent_id = pm.parent_id
+		 WHERE pm.member_id = $1 AND pm.role = 'admin'`,
+		principalID)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var id uuid.UUID
+			if rows.Scan(&id) == nil {
+				out[id] = struct{}{}
+			}
+		}
 	}
 	return out
 }
