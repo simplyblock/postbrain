@@ -55,6 +55,7 @@ func TestRolePermissions_Member(t *testing.T) {
 		authz.NewPermission(authz.ResourceGraph, authz.OperationRead),
 		authz.NewPermission(authz.ResourceScopes, authz.OperationRead),
 		authz.NewPermission(authz.ResourcePrincipals, authz.OperationRead),
+		authz.NewPermission(authz.ResourceTokens, authz.OperationRead),
 		authz.NewPermission(authz.ResourceSharing, authz.OperationRead),
 		authz.NewPermission(authz.ResourcePromotions, authz.OperationRead),
 		authz.NewPermission(authz.ResourcePromotions, authz.OperationWrite),
@@ -200,8 +201,7 @@ func TestRolePermissions_UnknownRole(t *testing.T) {
 func TestRolePermissions_Member_CompleteAbsences(t *testing.T) {
 	perms := authz.RolePermissions(authz.RoleMember)
 	mustNotHave := []authz.Permission{
-		// tokens: member has no token management rights (self-service is implicit, not a permission)
-		authz.NewPermission(authz.ResourceTokens, authz.OperationRead),
+		// tokens: member has read-only visibility but no token creation rights.
 		authz.NewPermission(authz.ResourceTokens, authz.OperationWrite),
 		// sessions: member can create sessions (write) but not query history (read)
 		authz.NewPermission(authz.ResourceSessions, authz.OperationRead),
