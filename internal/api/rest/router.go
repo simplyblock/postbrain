@@ -157,6 +157,11 @@ func (ro *Router) Handler() http.Handler {
 		r.Post("/scopes/{id}/repo/sync", ro.syncScopeRepo)
 		r.Get("/scopes/{id}/repo/sync", ro.getSyncStatus)
 
+		// Scope grants (authz delegation).
+		r.Post("/scopes/{id}/grants", ro.handleCreateScopeGrant)
+		r.Get("/scopes/{id}/grants", ro.handleListScopeGrants)
+		r.Delete("/scopes/{id}/grants/{grant_id}", ro.handleDeleteScopeGrant)
+
 		// Principals & membership.
 		r.Get("/principals", ro.listPrincipals)
 		r.Post("/principals", ro.createPrincipal)
