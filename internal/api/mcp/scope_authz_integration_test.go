@@ -10,11 +10,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
 	mcpapi "github.com/simplyblock/postbrain/internal/api/mcp"
 	"github.com/simplyblock/postbrain/internal/auth"
+	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/principals"
@@ -74,7 +76,7 @@ func TestMCP_ScopeAuthz_ScopeTakingTools(t *testing.T) {
 
 	scopeAllowed := "project:" + allowed.ExternalID
 	scopeBlocked := "project:" + blocked.ExternalID
-	ctxAuth := withAuthContext(ctx, principal.ID, allowed.ID)
+	ctxAuth := withAuthContext(ctx, pool, principal.ID, allowed.ID)
 	promoteMemoryID := createMemoryViaRemember(t, mcpSrv, ctxAuth, scopeAllowed, "scope authz promotion memory")
 
 	type toolCase struct {
@@ -343,7 +345,7 @@ func TestMCP_ScopeAuthz_MultiHopChainMatrix(t *testing.T) {
 
 	srv := mcpapi.NewServer(pool, svc, cfg)
 	mcpSrv := srv.MCPServer()
-	ctxAuth := withAuthContextUnrestricted(ctx, graph.UserPrincipal.ID)
+	ctxAuth := withAuthContextUnrestricted(ctx, pool, graph.UserPrincipal.ID)
 
 	allowedScopes := []string{
 		"project:" + graph.UserScope.ExternalID,
@@ -466,14 +468,22 @@ func TestMCP_ScopeAuthz_MultiHopChainMatrix(t *testing.T) {
 	}
 }
 
-func withAuthContextUnrestricted(ctx context.Context, principalID uuid.UUID) context.Context {
+func withAuthContextUnrestricted(ctx context.Context, pool *pgxpool.Pool, principalID uuid.UUID) context.Context {
+	rawPerms := []string{"read", "write", "edit", "delete"}
+	perms, _ := authz.ParseTokenPermissions(rawPerms)
 	ctx = context.WithValue(ctx, auth.ContextKeyPrincipalID, principalID)
 	token := &db.Token{
 		PrincipalID: principalID,
 		ScopeIds:    nil,
-		Permissions: []string{"read", "write"},
+		Permissions: rawPerms,
 	}
-	return context.WithValue(ctx, auth.ContextKeyToken, token)
+	ctx = context.WithValue(ctx, auth.ContextKeyToken, token)
+	ctx = context.WithValue(ctx, auth.ContextKeyPermissions, perms)
+	if pool != nil {
+		resolver := authz.NewTokenResolver(authz.NewDBResolver(pool))
+		ctx = context.WithValue(ctx, auth.ContextKeyTokenResolver, resolver)
+	}
+	return ctx
 }
 
 func TestMCP_ScopeAuthz_ForgetWriteParentAllowedDeleteParentDenied(t *testing.T) {
@@ -498,7 +508,7 @@ func TestMCP_ScopeAuthz_ForgetWriteParentAllowedDeleteParentDenied(t *testing.T)
 	testhelper.CreateTestEmbeddingModel(t, pool)
 
 	srv := mcpapi.NewServer(pool, svc, cfg).MCPServer()
-	ctxAuth := withAuthContextUnrestricted(ctx, childPrincipal.ID)
+	ctxAuth := withAuthContextUnrestricted(ctx, pool, childPrincipal.ID)
 
 	rememberTool := srv.GetTool("remember")
 	if rememberTool == nil {

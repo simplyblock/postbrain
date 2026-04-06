@@ -12,6 +12,7 @@ import (
 
 	mcpapi "github.com/simplyblock/postbrain/internal/api/mcp"
 	"github.com/simplyblock/postbrain/internal/auth"
+	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/testhelper"
@@ -39,12 +40,17 @@ func TestMCP_ListScopes_RestrictedToEffectiveWritableScopes(t *testing.T) {
 	req.Params.Name = "list_scopes"
 	req.Params.Arguments = map[string]any{}
 
+	rawPerms := []string{"scopes:read"}
+	perms, _ := authz.ParseTokenPermissions(rawPerms)
+	resolver := authz.NewTokenResolver(authz.NewDBResolver(pool))
 	ctx = context.WithValue(ctx, auth.ContextKeyPrincipalID, principalA.ID)
 	ctx = context.WithValue(ctx, auth.ContextKeyToken, &db.Token{
 		PrincipalID: principalA.ID,
 		ScopeIds:    nil,
-		Permissions: []string{"read"},
+		Permissions: rawPerms,
 	})
+	ctx = context.WithValue(ctx, auth.ContextKeyPermissions, perms)
+	ctx = context.WithValue(ctx, auth.ContextKeyTokenResolver, resolver)
 
 	result, err := tool.Handler(ctx, req)
 	if err != nil {

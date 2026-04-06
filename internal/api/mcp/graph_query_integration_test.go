@@ -24,7 +24,7 @@ func TestMCP_GraphQuery_AGEAwareBehavior(t *testing.T) {
 
 	principal := testhelper.CreateTestPrincipal(t, pool, "user", "mcp-graph-query-user")
 	scope := testhelper.CreateTestScope(t, pool, "project", "mcp-graph-query-scope", nil, principal.ID)
-	ctx = withAuthContext(ctx, principal.ID, scope.ID)
+	ctx = withAuthContext(ctx, pool, principal.ID, scope.ID)
 
 	if err := db.EnsureAGEOverlay(ctx, pool); err != nil {
 		t.Fatalf("EnsureAGEOverlay: %v", err)

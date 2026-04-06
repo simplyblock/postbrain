@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -10,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
+	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/db"
 )
 
@@ -34,7 +34,7 @@ func (h *Handler) renderTokens(w http.ResponseWriter, r *http.Request, formErr, 
 				data.Tokens = tokens
 			}
 		}
-		scopes, _ := h.authorizedScopesForRequest(r.Context(), r)
+		scopes, _ := h.effectivePrincipalScopesForRequest(r.Context(), r)
 		data.Scopes = scopes
 	}
 
@@ -76,10 +76,15 @@ func (h *Handler) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 		t = t.UTC().Add(24*time.Hour - time.Second) // end of day
 		expiresAt = &t
 	}
-	permissions, err := parseTokenPermissions(r.Form["permissions"])
+	permissions, err := authz.ParseTokenPermissions(r.Form["permissions"])
 	if err != nil {
 		h.renderTokens(w, r, err.Error(), "")
 		return
+	}
+	permStrings := permissions.Permissions()
+	rawPerms := make([]string, len(permStrings))
+	for i, p := range permStrings {
+		rawPerms[i] = string(p)
 	}
 
 	if h.pool == nil {
@@ -95,39 +100,13 @@ func (h *Handler) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 
 	principalID := h.principalFromCookie(r)
 	store := auth.NewTokenStore(h.pool)
-	if _, err := store.Create(r.Context(), principalID, hash, name, scopeIDs, permissions, expiresAt); err != nil {
+	if _, err := store.Create(r.Context(), principalID, hash, name, scopeIDs, rawPerms, expiresAt); err != nil {
 		h.renderTokens(w, r, err.Error(), "")
 		return
 	}
 
 	// Re-render with the raw token shown once — it is never stored.
 	h.renderTokens(w, r, "", raw)
-}
-
-func parseTokenPermissions(values []string) ([]string, error) {
-	if len(values) == 0 {
-		return []string{auth.PermissionRead, auth.PermissionWrite}, nil
-	}
-	allowed := map[string]struct{}{
-		auth.PermissionRead:  {},
-		auth.PermissionWrite: {},
-		auth.PermissionAdmin: {},
-	}
-	seen := map[string]struct{}{}
-	for _, p := range values {
-		if _, ok := allowed[p]; !ok {
-			return nil, fmt.Errorf("invalid permission: %s", p)
-		}
-		seen[p] = struct{}{}
-	}
-	ordered := []string{auth.PermissionRead, auth.PermissionWrite, auth.PermissionAdmin}
-	out := make([]string, 0, len(seen))
-	for _, p := range ordered {
-		if _, ok := seen[p]; ok {
-			out = append(out, p)
-		}
-	}
-	return out, nil
 }
 
 func parseScopeIDs(values []string) ([]uuid.UUID, error) {

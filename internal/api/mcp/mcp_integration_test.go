@@ -8,10 +8,12 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
 	mcpapi "github.com/simplyblock/postbrain/internal/api/mcp"
 	"github.com/simplyblock/postbrain/internal/auth"
+	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/testhelper"
@@ -31,7 +33,7 @@ func TestMCP_Remember_Recall_Forget(t *testing.T) {
 	mcpSrv := srv.MCPServer()
 
 	scopeStr := "project:" + scope.ExternalID
-	ctx = withAuthContext(ctx, principal.ID, scope.ID)
+	ctx = withAuthContext(ctx, pool, principal.ID, scope.ID)
 
 	// Test remember.
 	rememberTool := mcpSrv.GetTool("remember")
@@ -157,7 +159,7 @@ func TestMCP_Publish_Endorse_AutoPublish(t *testing.T) {
 	mcpSrv := srv.MCPServer()
 
 	scopeStr := "project:" + scope.ExternalID
-	ctx = withAuthContext(ctx, principal.ID, scope.ID)
+	ctx = withAuthContext(ctx, pool, principal.ID, scope.ID)
 
 	// Publish an artifact.
 	publishTool := mcpSrv.GetTool("publish")
@@ -184,12 +186,23 @@ func TestMCP_Publish_Endorse_AutoPublish(t *testing.T) {
 	}
 }
 
-func withAuthContext(ctx context.Context, principalID, scopeID uuid.UUID) context.Context {
+func withAuthContext(ctx context.Context, pool *pgxpool.Pool, principalID, scopeID uuid.UUID) context.Context {
+	return withAuthContextPerms(ctx, pool, principalID, scopeID, []string{"read", "write", "edit", "delete"})
+}
+
+func withAuthContextPerms(ctx context.Context, pool *pgxpool.Pool, principalID, scopeID uuid.UUID, rawPerms []string) context.Context {
 	ctx = context.WithValue(ctx, auth.ContextKeyPrincipalID, principalID)
 	token := &db.Token{
 		PrincipalID: principalID,
 		ScopeIds:    []uuid.UUID{scopeID},
-		Permissions: []string{"read", "write"},
+		Permissions: rawPerms,
 	}
-	return context.WithValue(ctx, auth.ContextKeyToken, token)
+	perms, _ := authz.ParseTokenPermissions(rawPerms)
+	ctx = context.WithValue(ctx, auth.ContextKeyToken, token)
+	ctx = context.WithValue(ctx, auth.ContextKeyPermissions, perms)
+	if pool != nil {
+		resolver := authz.NewTokenResolver(authz.NewDBResolver(pool))
+		ctx = context.WithValue(ctx, auth.ContextKeyTokenResolver, resolver)
+	}
+	return ctx
 }

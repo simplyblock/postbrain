@@ -149,6 +149,8 @@ func socialLoginScopes() []string {
 		oauth.ScopeKnowledgeWrite,
 		oauth.ScopeSkillsRead,
 		oauth.ScopeSkillsWrite,
-		oauth.ScopeAdmin,
+		oauth.ScopePrincipalsRead,
+		oauth.ScopeTokensRead,
+		oauth.ScopeTokensWrite,
 	}
 }

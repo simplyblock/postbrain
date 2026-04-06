@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/auth"
+	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/closeutil"
 	"github.com/simplyblock/postbrain/internal/codegraph"
 	"github.com/simplyblock/postbrain/internal/config"
@@ -307,11 +308,32 @@ func (h *Handler) hasUIPermission(r *http.Request, required uiPermission) bool {
 	if token == nil {
 		return false
 	}
+	if required == permissionNone {
+		return true
+	}
+	perms, err := authz.ParseTokenPermissions(token.Permissions)
+	if err != nil {
+		return false
+	}
 	switch required {
 	case permissionRead:
-		return auth.HasReadPermission(token.Permissions)
+		// Allow if the token holds any :read permission.
+		for _, p := range perms.Permissions() {
+			_, op, err := p.Parse()
+			if err == nil && op == authz.OperationRead {
+				return true
+			}
+		}
+		return false
 	case permissionWrite:
-		return auth.HasWritePermission(token.Permissions)
+		// Allow if the token holds any :write permission.
+		for _, p := range perms.Permissions() {
+			_, op, err := p.Parse()
+			if err == nil && op == authz.OperationWrite {
+				return true
+			}
+		}
+		return false
 	default:
 		return false
 	}
@@ -1596,6 +1618,32 @@ func (h *Handler) authorizedScopesForRequest(ctx context.Context, r *http.Reques
 			}
 		}
 		ids = intersected
+	}
+	scopes, err := db.GetScopesByIDs(ctx, h.pool, ids)
+	if err != nil {
+		return []*db.Scope{}, out
+	}
+	for _, s := range scopes {
+		out[s.ID] = struct{}{}
+	}
+	return scopes, out
+}
+
+// effectivePrincipalScopesForRequest resolves the current principal's effective scopes
+// via ownership/memberships, without applying current token scope restrictions.
+func (h *Handler) effectivePrincipalScopesForRequest(ctx context.Context, r *http.Request) ([]*db.Scope, map[uuid.UUID]struct{}) {
+	out := map[uuid.UUID]struct{}{}
+	if h.pool == nil {
+		return []*db.Scope{}, out
+	}
+	token := h.tokenFromCookie(r)
+	if token == nil || token.PrincipalID == uuid.Nil {
+		return []*db.Scope{}, out
+	}
+	ms := principals.NewMembershipStore(h.pool)
+	ids, err := ms.EffectiveScopeIDs(ctx, token.PrincipalID)
+	if err != nil {
+		return []*db.Scope{}, out
 	}
 	scopes, err := db.GetScopesByIDs(ctx, h.pool, ids)
 	if err != nil {

@@ -248,8 +248,9 @@ func TestTokensPage_UsesDialogForScopeEditing(t *testing.T) {
 	if !strings.Contains(bodyText, "openTokenScopesDialog(") {
 		t.Fatalf("expected openTokenScopesDialog JS hook")
 	}
-	if strings.Contains(bodyText, "<details") {
-		t.Fatalf("did not expect inline <details> UI for scope editing")
+	// Ensure scope editing uses the dialog button, not a <details> element inline.
+	if strings.Contains(bodyText, "<details") && !strings.Contains(bodyText, "id=\"dlg-token-scopes\"") {
+		t.Fatalf("did not expect inline <details> UI for scope editing without dialog")
 	}
 }
 
@@ -262,7 +263,7 @@ func TestCreateToken_UsesSelectedPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, user.ID, hashSession, "session", nil, []string{"write"}, nil); err != nil {
+	if _, err := db.CreateToken(ctx, pool, user.ID, hashSession, "session", nil, nil, nil); err != nil {
 		t.Fatalf("create session token: %v", err)
 	}
 
@@ -270,7 +271,7 @@ func TestCreateToken_UsesSelectedPermissions(t *testing.T) {
 
 	form := url.Values{}
 	form.Set("name", "read-only-created")
-	form.Add("permissions", "read")
+	form.Add("permissions", "memories:read")
 	req, err := http.NewRequest(http.MethodPost, baseURL+"/ui/tokens", strings.NewReader(form.Encode()))
 	if err != nil {
 		t.Fatalf("build request: %v", err)
@@ -294,8 +295,8 @@ func TestCreateToken_UsesSelectedPermissions(t *testing.T) {
 		if tok.Name != "read-only-created" {
 			continue
 		}
-		if len(tok.Permissions) != 1 || tok.Permissions[0] != "read" {
-			t.Fatalf("permissions = %v, want [read]", tok.Permissions)
+		if len(tok.Permissions) != 1 || tok.Permissions[0] != "memories:read" {
+			t.Fatalf("permissions = %v, want [memories:read]", tok.Permissions)
 		}
 		return
 	}
@@ -311,10 +312,10 @@ func TestTokensPage_ShowsTokenPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, user.ID, hashSession, "session", nil, []string{"read"}, nil); err != nil {
+	if _, err := db.CreateToken(ctx, pool, user.ID, hashSession, "session", nil, []string{"tokens:read"}, nil); err != nil {
 		t.Fatalf("create session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, user.ID, auth.HashToken("pb_token_perms_visible"), "permissions-visible", nil, []string{"admin"}, nil); err != nil {
+	if _, err := db.CreateToken(ctx, pool, user.ID, auth.HashToken("pb_token_perms_visible"), "permissions-visible", nil, []string{"memories:read", "memories:write"}, nil); err != nil {
 		t.Fatalf("create visible token: %v", err)
 	}
 
@@ -335,8 +336,50 @@ func TestTokensPage_ShowsTokenPermissions(t *testing.T) {
 	if !strings.Contains(bodyText, "permissions-visible") {
 		t.Fatalf("expected created token in page output")
 	}
-	if !strings.Contains(bodyText, "admin") {
-		t.Fatalf("expected permissions column to include admin value")
+	if !strings.Contains(bodyText, "memories:read") {
+		t.Fatalf("expected permissions column to include memories:read value")
+	}
+}
+
+func TestTokensPage_EditScopes_ShowsPrincipalEffectiveScopes(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+
+	user := testhelper.CreateTestPrincipal(t, pool, "user", "ui-token-edit-scope-effective-user")
+	scopeA := testhelper.CreateTestScope(t, pool, "department", "ui-token-edit-scope-effective-a", nil, user.ID)
+	scopeB := testhelper.CreateTestScope(t, pool, "department", "ui-token-edit-scope-effective-b", nil, user.ID)
+
+	rawSession, hashSession, err := auth.GenerateToken()
+	if err != nil {
+		t.Fatalf("generate session token: %v", err)
+	}
+	if _, err := db.CreateToken(ctx, pool, user.ID, hashSession, "session-scoped-a", []uuid.UUID{scopeA.ID}, []string{"tokens:read", "scopes:read"}, nil); err != nil {
+		t.Fatalf("create scoped session token: %v", err)
+	}
+	if _, err := db.CreateToken(ctx, pool, user.ID, auth.HashToken("pb_edit_scope_multi"), "editable-multi", []uuid.UUID{scopeA.ID, scopeB.ID}, []string{"memories:read", "memories:write"}, nil); err != nil {
+		t.Fatalf("create editable token: %v", err)
+	}
+
+	client, baseURL := loginUITestClient(t, pool, rawSession)
+	resp, err := client.Get(baseURL + "/ui/tokens")
+	if err != nil {
+		t.Fatalf("GET /ui/tokens: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	bodyText := string(body)
+	if !strings.Contains(bodyText, "department:"+scopeA.ExternalID) {
+		t.Fatalf("expected scope A in edit-scope options")
+	}
+	if !strings.Contains(bodyText, "department:"+scopeB.ExternalID) {
+		t.Fatalf("expected scope B in edit-scope options")
 	}
 }
 

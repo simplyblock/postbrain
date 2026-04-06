@@ -433,7 +433,7 @@ func DeleteRelationsBySourceFile(ctx context.Context, pool *pgxpool.Pool, scopeI
 // CreateToken inserts a new token record.
 func CreateToken(ctx context.Context, pool *pgxpool.Pool, principalID uuid.UUID, tokenHash, name string, scopeIDs []uuid.UUID, permissions []string, expiresAt *time.Time) (*Token, error) {
 	if len(permissions) == 0 {
-		permissions = []string{"read", "write"}
+		permissions = []string{"read", "write", "edit", "delete"}
 	}
 	q := New(pool)
 	t, err := q.CreateToken(ctx, CreateTokenParams{

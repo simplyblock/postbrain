@@ -8,166 +8,84 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
+	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/db"
 )
 
-func TestAuthorizeRequestedScope(t *testing.T) {
-	t.Parallel()
-
-	requested := uuid.New()
-	other := uuid.New()
-
-	tests := []struct {
-		name             string
-		token            *db.Token
-		effectiveScopeID []uuid.UUID
-		wantErr          error
-	}{
-		{
-			name: "token unrestricted and requested in effective scopes",
-			token: &db.Token{
-				ScopeIds: nil,
-			},
-			effectiveScopeID: []uuid.UUID{requested},
-		},
-		{
-			name: "token restricted includes requested and effective includes requested",
-			token: &db.Token{
-				ScopeIds: []uuid.UUID{requested},
-			},
-			effectiveScopeID: []uuid.UUID{requested},
-		},
-		{
-			name: "token restricted excludes requested",
-			token: &db.Token{
-				ScopeIds: []uuid.UUID{other},
-			},
-			effectiveScopeID: []uuid.UUID{requested},
-			wantErr:          ErrTokenScopeDenied,
-		},
-		{
-			name: "effective scopes exclude requested",
-			token: &db.Token{
-				ScopeIds: nil,
-			},
-			effectiveScopeID: []uuid.UUID{other},
-			wantErr:          ErrPrincipalScopeDenied,
-		},
-		{
-			name: "empty effective scopes denies",
-			token: &db.Token{
-				ScopeIds: nil,
-			},
-			effectiveScopeID: nil,
-			wantErr:          ErrPrincipalScopeDenied,
-		},
-	}
-
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			err := AuthorizeRequestedScope(tc.token, requested, tc.effectiveScopeID)
-			if tc.wantErr == nil {
-				if err != nil {
-					t.Fatalf("expected nil error, got %v", err)
-				}
-				return
-			}
-			if err == nil {
-				t.Fatalf("expected error %v, got nil", tc.wantErr)
-			}
-			if !errors.Is(err, tc.wantErr) {
-				t.Fatalf("expected error %v, got %v", tc.wantErr, err)
-			}
-		})
-	}
-}
-
-type fakeEffectiveScopeResolver struct {
-	ids   []uuid.UUID
+// fakeResolver is a test implementation of authz.Resolver.
+type fakeResolver struct {
+	perms authz.PermissionSet
 	err   error
-	calls int
 }
 
-func (f *fakeEffectiveScopeResolver) EffectiveScopeIDs(_ context.Context, _ uuid.UUID) ([]uuid.UUID, error) {
-	f.calls++
-	return f.ids, f.err
+func (f *fakeResolver) EffectivePermissions(_ context.Context, _, _ uuid.UUID) (authz.PermissionSet, error) {
+	return f.perms, f.err
+}
+
+func (f *fakeResolver) HasPermission(_ context.Context, _, _ uuid.UUID, perm authz.Permission) (bool, error) {
+	return f.perms.Contains(perm), f.err
+}
+
+// makeToken returns a minimal *db.Token with the given permissions set.
+func makeToken(perms ...string) *db.Token {
+	return &db.Token{
+		ID:          uuid.New(),
+		Permissions: perms,
+	}
 }
 
 func TestAuthorizeContextScope(t *testing.T) {
 	t.Parallel()
 
-	principalID := uuid.New()
+	const testPerm authz.Permission = "memories:write"
 	requested := uuid.New()
-	other := uuid.New()
-	baseCtx := context.Background()
 
-	withToken := func(ctx context.Context, token *db.Token) context.Context {
-		return context.WithValue(ctx, auth.ContextKeyToken, token)
+	withToken := func(ctx context.Context, tok *db.Token) context.Context {
+		return context.WithValue(ctx, auth.ContextKeyToken, tok)
 	}
-	withPrincipal := func(ctx context.Context, pid uuid.UUID) context.Context {
-		return context.WithValue(ctx, auth.ContextKeyPrincipalID, pid)
+	withResolver := func(ctx context.Context, tr *authz.TokenResolver) context.Context {
+		return context.WithValue(ctx, auth.ContextKeyTokenResolver, tr)
+	}
+	withPrincipal := func(ctx context.Context) context.Context {
+		return context.WithValue(ctx, auth.ContextKeyPrincipalID, uuid.New())
 	}
 
 	tests := []struct {
-		name     string
-		ctx      context.Context
-		resolver EffectiveScopeResolver
-		wantErr  error
+		name    string
+		ctx     context.Context
+		wantErr error
 	}{
 		{
-			name: "authorized",
-			ctx: withPrincipal(
-				withToken(baseCtx, &db.Token{ScopeIds: []uuid.UUID{requested}}),
-				principalID,
-			),
-			resolver: &fakeEffectiveScopeResolver{ids: []uuid.UUID{requested}},
+			name: "authorized: principal has permission, token unrestricted",
+			ctx: func() context.Context {
+				perms, _ := authz.NewPermissionSet([]string{"memories:write"})
+				tr := authz.NewTokenResolver(&fakeResolver{perms: perms})
+				ctx := withToken(context.Background(), makeToken("memories:write"))
+				ctx = withPrincipal(ctx)
+				return withResolver(ctx, tr)
+			}(),
 		},
 		{
-			name: "missing token",
-			ctx: withPrincipal(
-				baseCtx,
-				principalID,
-			),
-			resolver: &fakeEffectiveScopeResolver{ids: []uuid.UUID{requested}},
-			wantErr:  ErrMissingToken,
+			name: "denied: principal lacks permission on scope",
+			ctx: func() context.Context {
+				// Principal only has memories:read; token also only read.
+				perms, _ := authz.NewPermissionSet([]string{"memories:read"})
+				tr := authz.NewTokenResolver(&fakeResolver{perms: perms})
+				ctx := withToken(context.Background(), makeToken("memories:read"))
+				ctx = withPrincipal(ctx)
+				return withResolver(ctx, tr)
+			}(),
+			wantErr: ErrTokenScopeDenied,
 		},
 		{
-			name: "missing principal",
-			ctx: withToken(
-				baseCtx,
-				&db.Token{ScopeIds: []uuid.UUID{requested}},
-			),
-			resolver: &fakeEffectiveScopeResolver{ids: []uuid.UUID{requested}},
-			wantErr:  ErrMissingPrincipal,
+			name:    "missing token returns ErrMissingToken",
+			ctx:     withResolver(context.Background(), authz.NewTokenResolver(&fakeResolver{})),
+			wantErr: ErrMissingToken,
 		},
 		{
-			name: "token denies scope",
-			ctx: withPrincipal(
-				withToken(baseCtx, &db.Token{ScopeIds: []uuid.UUID{other}}),
-				principalID,
-			),
-			resolver: &fakeEffectiveScopeResolver{ids: []uuid.UUID{requested}},
-			wantErr:  ErrTokenScopeDenied,
-		},
-		{
-			name: "principal effective scopes deny",
-			ctx: withPrincipal(
-				withToken(baseCtx, &db.Token{ScopeIds: []uuid.UUID{requested}}),
-				principalID,
-			),
-			resolver: &fakeEffectiveScopeResolver{ids: []uuid.UUID{other}},
-			wantErr:  ErrPrincipalScopeDenied,
-		},
-		{
-			name: "resolver unavailable",
-			ctx: withPrincipal(
-				withToken(baseCtx, &db.Token{ScopeIds: []uuid.UUID{requested}}),
-				principalID,
-			),
-			resolver: nil,
-			wantErr:  ErrScopeResolverUnavailable,
+			name:    "missing resolver returns ErrScopeResolverUnavailable",
+			ctx:     withToken(context.Background(), makeToken("memories:write")),
+			wantErr: ErrScopeResolverUnavailable,
 		},
 	}
 
@@ -175,7 +93,7 @@ func TestAuthorizeContextScope(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			err := AuthorizeContextScope(tc.ctx, tc.resolver, requested)
+			err := AuthorizeContextScope(tc.ctx, requested, testPerm)
 			if tc.wantErr == nil {
 				if err != nil {
 					t.Fatalf("expected nil error, got %v", err)
@@ -189,25 +107,5 @@ func TestAuthorizeContextScope(t *testing.T) {
 				t.Fatalf("expected error %v, got %v", tc.wantErr, err)
 			}
 		})
-	}
-}
-
-func TestAuthorizeContextScope_UsesCachedEffectiveScopes(t *testing.T) {
-	t.Parallel()
-
-	principalID := uuid.New()
-	requested := uuid.New()
-
-	resolver := &fakeEffectiveScopeResolver{ids: []uuid.UUID{}}
-	ctx := context.Background()
-	ctx = context.WithValue(ctx, auth.ContextKeyToken, &db.Token{ScopeIds: []uuid.UUID{requested}})
-	ctx = context.WithValue(ctx, auth.ContextKeyPrincipalID, principalID)
-	ctx = WithEffectiveScopeIDs(ctx, []uuid.UUID{requested})
-
-	if err := AuthorizeContextScope(ctx, resolver, requested); err != nil {
-		t.Fatalf("expected nil error, got %v", err)
-	}
-	if resolver.calls != 0 {
-		t.Fatalf("resolver calls = %d, want 0 when cache is present", resolver.calls)
 	}
 }

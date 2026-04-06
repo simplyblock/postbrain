@@ -11,12 +11,21 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/api/scopeauth"
 	"github.com/simplyblock/postbrain/internal/auth"
+	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/metrics"
 )
 
+// authorizeRequestedScope enforces scope access for the current request.
+// It reads the route's required permission from context (set by permissionAuthzMiddleware)
+// and calls AuthorizeContextScope with the TokenResolver injected by the auth middleware.
 func (ro *Router) authorizeRequestedScope(ctx context.Context, requestedScopeID uuid.UUID) error {
-	return scopeauth.AuthorizeContextScope(ctx, ro.membership, requestedScopeID)
+	perm, _ := ctx.Value(contextKeyRoutePermission{}).(authz.Permission)
+	if perm == "" {
+		// No route permission entry — conservative default.
+		perm = "scopes:read"
+	}
+	return scopeauth.AuthorizeContextScope(ctx, requestedScopeID, perm)
 }
 
 func (ro *Router) authorizeObjectScope(ctx context.Context, objectScopeID uuid.UUID) error {
@@ -69,15 +78,26 @@ func (ro *Router) authorizeScopeAdmin(ctx context.Context, scopeID uuid.UUID) er
 	return nil
 }
 
+// effectiveScopeIDsForRequest returns all scope IDs accessible to the principal,
+// using the authz.DBResolver when available (which includes scope grants and
+// upward-read inheritance), falling back to the membership store otherwise.
 func (ro *Router) effectiveScopeIDsForRequest(ctx context.Context) ([]uuid.UUID, error) {
-	if ids, ok := scopeauth.EffectiveScopeIDsFromContext(ctx); ok {
-		return ids, nil
-	}
-	if ro.membership == nil {
-		return nil, nil
-	}
 	principalID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 	if principalID == uuid.Nil {
+		return nil, nil
+	}
+
+	// Use the DB resolver's ReachableScopeIDs when available — it covers scope
+	// grants and upward-read inheritance in addition to membership.
+	tokenResolver, _ := ctx.Value(auth.ContextKeyTokenResolver).(*authz.TokenResolver)
+	if tokenResolver != nil {
+		if dbr := tokenResolver.DBResolver(); dbr != nil {
+			return dbr.ReachableScopeIDs(ctx, principalID)
+		}
+	}
+
+	// Fallback: membership-only scope resolution.
+	if ro.membership == nil {
 		return nil, nil
 	}
 	return ro.membership.EffectiveScopeIDs(ctx, principalID)
@@ -89,7 +109,7 @@ func (ro *Router) authorizedScopeIDsForRequest(ctx context.Context) ([]uuid.UUID
 		return nil, err
 	}
 	token, _ := ctx.Value(auth.ContextKeyToken).(*db.Token)
-	if token == nil || token.ScopeIds == nil {
+	if token == nil || len(token.ScopeIds) == 0 {
 		return effectiveScopeIDs, nil
 	}
 	allowedByToken := make(map[uuid.UUID]struct{}, len(token.ScopeIds))
