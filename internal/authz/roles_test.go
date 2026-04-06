@@ -196,6 +196,86 @@ func TestRolePermissions_UnknownRole(t *testing.T) {
 	}
 }
 
+// TestRolePermissions_Member_CompleteAbsences verifies that the full set of
+// permissions a member must NOT hold covers all missing operations.
+func TestRolePermissions_Member_CompleteAbsences(t *testing.T) {
+	perms := authz.RolePermissions(authz.RoleMember)
+	mustNotHave := []authz.Permission{
+		// tokens: member has no token management rights (self-service is implicit, not a permission)
+		authz.NewPermission(authz.ResourceTokens, authz.OperationRead),
+		authz.NewPermission(authz.ResourceTokens, authz.OperationWrite),
+		// sessions: member can create sessions (write) but not query history (read)
+		authz.NewPermission(authz.ResourceSessions, authz.OperationRead),
+		// principals: member can read but not create, edit, or delete
+		authz.NewPermission(authz.ResourcePrincipals, authz.OperationWrite),
+		// collections: member can read+write content but not edit/delete the collection entity itself
+		authz.NewPermission(authz.ResourceCollections, authz.OperationEdit),
+		authz.NewPermission(authz.ResourceCollections, authz.OperationDelete),
+		// skills: member can read+write skills but not edit (status/visibility) or delete
+		authz.NewPermission(authz.ResourceSkills, authz.OperationEdit),
+		authz.NewPermission(authz.ResourceSkills, authz.OperationDelete),
+	}
+	assertLacks(t, "RoleMember (complete absences)", perms, mustNotHave)
+}
+
+// TestRolePermissions_Admin_CompleteAbsences verifies that admin does NOT hold
+// permissions that are reserved for owner or systemadmin.
+func TestRolePermissions_Admin_CompleteAbsences(t *testing.T) {
+	perms := authz.RolePermissions(authz.RoleAdmin)
+	mustNotHave := []authz.Permission{
+		// principal creation is reserved for systemadmin
+		authz.NewPermission(authz.ResourcePrincipals, authz.OperationWrite),
+		// token creation for others is reserved for systemadmin
+		authz.NewPermission(authz.ResourceTokens, authz.OperationWrite),
+		// session history reading is not granted by any role
+		authz.NewPermission(authz.ResourceSessions, authz.OperationRead),
+	}
+	assertLacks(t, "RoleAdmin (complete absences)", perms, mustNotHave)
+}
+
+// TestRolePermissions_Owner_NeverGrantedByAnyRole verifies permissions that no
+// membership role grants, regardless of owner/admin/member.
+func TestRolePermissions_Owner_NeverGrantedByAnyRole(t *testing.T) {
+	neverGranted := []authz.Permission{
+		// principal creation: only systemadmin
+		authz.NewPermission(authz.ResourcePrincipals, authz.OperationWrite),
+		// token creation for others: only systemadmin or self-service
+		authz.NewPermission(authz.ResourceTokens, authz.OperationWrite),
+		// session history: not exposed via any membership role
+		authz.NewPermission(authz.ResourceSessions, authz.OperationRead),
+	}
+	for _, role := range []authz.Role{authz.RoleMember, authz.RoleAdmin, authz.RoleOwner} {
+		perms := authz.RolePermissions(role)
+		assertLacks(t, string(role)+" (never-granted)", perms, neverGranted)
+	}
+}
+
+// TestRolePermissions_NoDuplicates verifies each role's permission set contains no duplicate entries.
+func TestRolePermissions_NoDuplicates(t *testing.T) {
+	for _, role := range []authz.Role{authz.RoleMember, authz.RoleAdmin, authz.RoleOwner} {
+		perms := authz.RolePermissions(role)
+		all := perms.Permissions()
+		seen := make(map[authz.Permission]bool)
+		for _, p := range all {
+			if seen[p] {
+				t.Errorf("role %q: duplicate permission %q", role, p)
+			}
+			seen[p] = true
+		}
+	}
+}
+
+// TestParseRole_CaseSensitive verifies that role parsing is case-sensitive.
+func TestParseRole_CaseSensitive(t *testing.T) {
+	cases := []string{"Member", "MEMBER", "Admin", "ADMIN", "Owner", "OWNER"}
+	for _, raw := range cases {
+		_, err := authz.ParseRole(raw)
+		if err == nil {
+			t.Errorf("ParseRole(%q): expected error for non-lowercase role, got nil", raw)
+		}
+	}
+}
+
 // helpers
 
 func assertHas(t *testing.T, label string, ps authz.PermissionSet, want []authz.Permission) {

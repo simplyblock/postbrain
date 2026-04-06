@@ -289,6 +289,104 @@ func TestExpand_UnknownShorthand(t *testing.T) {
 	}
 }
 
+// TestResourceConstants_UniqueValues verifies no two Resource constants share a string value.
+func TestResourceConstants_UniqueValues(t *testing.T) {
+	seen := make(map[string]authz.Resource)
+	for _, r := range authz.AllResources() {
+		if prev, ok := seen[string(r)]; ok {
+			t.Errorf("duplicate resource string %q: used by %q and %q", r, prev, r)
+		}
+		seen[string(r)] = r
+	}
+}
+
+// TestOperationConstants_ExpectedValues verifies each Operation constant has the expected string value.
+func TestOperationConstants_ExpectedValues(t *testing.T) {
+	cases := []struct {
+		op   authz.Operation
+		want string
+	}{
+		{authz.OperationRead, "read"},
+		{authz.OperationWrite, "write"},
+		{authz.OperationEdit, "edit"},
+		{authz.OperationDelete, "delete"},
+	}
+	for _, tc := range cases {
+		if string(tc.op) != tc.want {
+			t.Errorf("Operation constant = %q, want %q", tc.op, tc.want)
+		}
+	}
+	// uniqueness
+	seen := make(map[string]bool)
+	for _, tc := range cases {
+		if seen[string(tc.op)] {
+			t.Errorf("duplicate operation string %q", tc.op)
+		}
+		seen[string(tc.op)] = true
+	}
+}
+
+// TestValidOperations_UnknownResource verifies nil is returned for an unknown resource.
+func TestValidOperations_UnknownResource(t *testing.T) {
+	got := authz.ValidOperations(authz.Resource("nonexistent"))
+	if got != nil {
+		t.Errorf("ValidOperations(unknown): expected nil, got %v", got)
+	}
+}
+
+// TestAllPermissions_ExactCount verifies the count matches the sum of ValidOperations per resource.
+func TestAllPermissions_ExactCount(t *testing.T) {
+	want := 0
+	for _, r := range authz.AllResources() {
+		want += len(authz.ValidOperations(r))
+	}
+	got := len(authz.AllPermissions())
+	if got != want {
+		t.Errorf("AllPermissions() count = %d, want %d (sum of ValidOperations per resource)", got, want)
+	}
+}
+
+// TestExpand_InvalidOperation_AllRestrictedResources verifies every invalid
+// resource:operation combination that stems from the restricted-operation resources.
+func TestExpand_InvalidOperation_AllRestrictedResources(t *testing.T) {
+	cases := []string{
+		// graph supports only read
+		"graph:write", "graph:edit", "graph:delete",
+		// sessions supports only read+write
+		"sessions:edit", "sessions:delete",
+		// sharing supports only read+write+delete (no edit)
+		"sharing:edit",
+	}
+	for _, raw := range cases {
+		_, err := authz.Expand(raw)
+		if err == nil {
+			t.Errorf("Expand(%q): expected error for invalid operation, got nil", raw)
+		}
+	}
+}
+
+// TestExpand_EdgeCases verifies Expand rejects malformed input strings.
+func TestExpand_EdgeCases(t *testing.T) {
+	cases := []struct {
+		raw  string
+		desc string
+	}{
+		{"memories:read:extra", "multiple colons"},
+		{"read:memories", "reversed resource:operation order"},
+		{" read", "leading whitespace"},
+		{"read ", "trailing whitespace"},
+		{"memories: read", "space around operation"},
+		{"MEMORIES:READ", "uppercase resource and operation"},
+		{"Read", "mixed case shorthand"},
+	}
+	for _, tc := range cases {
+		_, err := authz.Expand(tc.raw)
+		if err == nil {
+			t.Errorf("Expand(%q) [%s]: expected error, got nil", tc.raw, tc.desc)
+		}
+	}
+}
+
 // TestPermission_Parse verifies round-trip parsing of Permission values.
 func TestPermission_Parse(t *testing.T) {
 	cases := []struct {
@@ -297,8 +395,20 @@ func TestPermission_Parse(t *testing.T) {
 		op       authz.Operation
 	}{
 		{authz.NewPermission(authz.ResourceMemories, authz.OperationRead), authz.ResourceMemories, authz.OperationRead},
-		{authz.NewPermission(authz.ResourceScopes, authz.OperationEdit), authz.ResourceScopes, authz.OperationEdit},
+		{authz.NewPermission(authz.ResourceMemories, authz.OperationWrite), authz.ResourceMemories, authz.OperationWrite},
+		{authz.NewPermission(authz.ResourceMemories, authz.OperationEdit), authz.ResourceMemories, authz.OperationEdit},
+		{authz.NewPermission(authz.ResourceMemories, authz.OperationDelete), authz.ResourceMemories, authz.OperationDelete},
+		{authz.NewPermission(authz.ResourceKnowledge, authz.OperationRead), authz.ResourceKnowledge, authz.OperationRead},
+		{authz.NewPermission(authz.ResourceCollections, authz.OperationWrite), authz.ResourceCollections, authz.OperationWrite},
+		{authz.NewPermission(authz.ResourceSkills, authz.OperationDelete), authz.ResourceSkills, authz.OperationDelete},
+		{authz.NewPermission(authz.ResourceSessions, authz.OperationRead), authz.ResourceSessions, authz.OperationRead},
+		{authz.NewPermission(authz.ResourceSessions, authz.OperationWrite), authz.ResourceSessions, authz.OperationWrite},
 		{authz.NewPermission(authz.ResourceGraph, authz.OperationRead), authz.ResourceGraph, authz.OperationRead},
+		{authz.NewPermission(authz.ResourceScopes, authz.OperationEdit), authz.ResourceScopes, authz.OperationEdit},
+		{authz.NewPermission(authz.ResourcePrincipals, authz.OperationDelete), authz.ResourcePrincipals, authz.OperationDelete},
+		{authz.NewPermission(authz.ResourceTokens, authz.OperationRead), authz.ResourceTokens, authz.OperationRead},
+		{authz.NewPermission(authz.ResourceSharing, authz.OperationDelete), authz.ResourceSharing, authz.OperationDelete},
+		{authz.NewPermission(authz.ResourcePromotions, authz.OperationEdit), authz.ResourcePromotions, authz.OperationEdit},
 	}
 	for _, tc := range cases {
 		r, op, err := tc.perm.Parse()
@@ -308,6 +418,30 @@ func TestPermission_Parse(t *testing.T) {
 		}
 		if r != tc.resource || op != tc.op {
 			t.Errorf("Parse(%q) = (%q, %q), want (%q, %q)", tc.perm, r, op, tc.resource, tc.op)
+		}
+	}
+}
+
+// TestPermission_Parse_Invalid verifies Parse returns an error for malformed Permission values.
+func TestPermission_Parse_Invalid(t *testing.T) {
+	cases := []struct {
+		perm authz.Permission
+		desc string
+	}{
+		{authz.Permission(""), "empty string"},
+		{authz.Permission("memories"), "no colon"},
+		{authz.Permission(":read"), "empty resource"},
+		{authz.Permission("memories:"), "empty operation"},
+		{authz.Permission("unknown:read"), "unknown resource"},
+		{authz.Permission("memories:unknown"), "unknown operation for resource"},
+		{authz.Permission("graph:write"), "invalid operation for resource"},
+		{authz.Permission("sessions:delete"), "invalid operation for sessions"},
+		{authz.Permission("memories:read:extra"), "multiple colons"},
+	}
+	for _, tc := range cases {
+		_, _, err := tc.perm.Parse()
+		if err == nil {
+			t.Errorf("Parse(%q) [%s]: expected error, got nil", tc.perm, tc.desc)
 		}
 	}
 }

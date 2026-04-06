@@ -201,6 +201,168 @@ func TestMergeGrants_Empty(t *testing.T) {
 	}
 }
 
+// TestApplyUpwardRead_SourceNotInGrants verifies that when the source scope has no
+// entry in the grants map, no ancestor entries are created.
+func TestApplyUpwardRead_SourceNotInGrants(t *testing.T) {
+	source := scopeID(t)
+	parent := scopeID(t)
+
+	// grants does not contain source at all
+	grants := map[authz.ScopeID]authz.PermissionSet{}
+
+	result := authz.ApplyUpwardRead(grants, source, []authz.ScopeID{parent})
+
+	if _, ok := result[parent]; ok {
+		if !result[parent].IsEmpty() {
+			t.Error("parent should not gain permissions when source is absent from grants")
+		}
+	}
+}
+
+// TestApplyUpwardRead_AncestorAlreadyHasGrants verifies that existing ancestor grants
+// are merged (union) with the propagated read permissions rather than overwritten.
+func TestApplyUpwardRead_AncestorAlreadyHasGrants(t *testing.T) {
+	child := scopeID(t)
+	parent := scopeID(t)
+
+	childPerms, _ := authz.NewPermissionSet([]string{"memories:read"})
+	existingParentPerms, _ := authz.NewPermissionSet([]string{"knowledge:write"})
+
+	grants := map[authz.ScopeID]authz.PermissionSet{
+		child:  childPerms,
+		parent: existingParentPerms,
+	}
+
+	result := authz.ApplyUpwardRead(grants, child, []authz.ScopeID{parent})
+
+	// existing parent grant is preserved
+	if !result[parent].Contains(authz.NewPermission(authz.ResourceKnowledge, authz.OperationWrite)) {
+		t.Error("parent should retain existing knowledge:write grant")
+	}
+	// propagated read is added
+	if !result[parent].Contains(authz.NewPermission(authz.ResourceMemories, authz.OperationRead)) {
+		t.Error("parent should gain memories:read via upward read propagation")
+	}
+}
+
+// TestApplyUpwardRead_DoesNotMutateInput verifies that the input grants map is not
+// modified by ApplyUpwardRead.
+func TestApplyUpwardRead_DoesNotMutateInput(t *testing.T) {
+	child := scopeID(t)
+	parent := scopeID(t)
+
+	childPerms, _ := authz.NewPermissionSet([]string{"memories:read"})
+	grants := map[authz.ScopeID]authz.PermissionSet{child: childPerms}
+	originalLen := len(grants)
+
+	_ = authz.ApplyUpwardRead(grants, child, []authz.ScopeID{parent})
+
+	if len(grants) != originalLen {
+		t.Errorf("ApplyUpwardRead mutated the input grants map (len %d → %d)", originalLen, len(grants))
+	}
+	if _, ok := grants[parent]; ok {
+		t.Error("ApplyUpwardRead added parent to the input grants map")
+	}
+}
+
+// TestMergeGrants_NoArgs verifies that MergeGrants with no arguments returns an empty map.
+func TestMergeGrants_NoArgs(t *testing.T) {
+	result := authz.MergeGrants()
+	if len(result) != 0 {
+		t.Errorf("MergeGrants(): expected empty result, got %d entries", len(result))
+	}
+}
+
+// TestMergeGrants_SingleArg verifies that MergeGrants with a single argument returns
+// an equivalent (but independent) copy.
+func TestMergeGrants_SingleArg(t *testing.T) {
+	s := scopeID(t)
+	perms, _ := authz.NewPermissionSet([]string{"memories:read", "knowledge:write"})
+	source := map[authz.ScopeID]authz.PermissionSet{s: perms}
+
+	result := authz.MergeGrants(source)
+
+	if len(result) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(result))
+	}
+	if !result[s].Contains(authz.NewPermission(authz.ResourceMemories, authz.OperationRead)) {
+		t.Error("result missing memories:read")
+	}
+	if !result[s].Contains(authz.NewPermission(authz.ResourceKnowledge, authz.OperationWrite)) {
+		t.Error("result missing knowledge:write")
+	}
+}
+
+// TestMergeGrants_ThreeSources verifies that MergeGrants correctly merges three source maps.
+func TestMergeGrants_ThreeSources(t *testing.T) {
+	s := scopeID(t)
+
+	a := map[authz.ScopeID]authz.PermissionSet{s: mustPS(t, "memories:read")}
+	b := map[authz.ScopeID]authz.PermissionSet{s: mustPS(t, "memories:write")}
+	c := map[authz.ScopeID]authz.PermissionSet{s: mustPS(t, "knowledge:read")}
+
+	result := authz.MergeGrants(a, b, c)
+
+	if !result[s].Contains(authz.NewPermission(authz.ResourceMemories, authz.OperationRead)) {
+		t.Error("merged missing memories:read")
+	}
+	if !result[s].Contains(authz.NewPermission(authz.ResourceMemories, authz.OperationWrite)) {
+		t.Error("merged missing memories:write")
+	}
+	if !result[s].Contains(authz.NewPermission(authz.ResourceKnowledge, authz.OperationRead)) {
+		t.Error("merged missing knowledge:read")
+	}
+}
+
+// TestMergeGrants_DoesNotMutateInputs verifies that source maps are not modified.
+func TestMergeGrants_DoesNotMutateInputs(t *testing.T) {
+	s1 := scopeID(t)
+	s2 := scopeID(t)
+
+	a := map[authz.ScopeID]authz.PermissionSet{s1: mustPS(t, "memories:read")}
+	b := map[authz.ScopeID]authz.PermissionSet{s2: mustPS(t, "knowledge:read")}
+
+	origLenA := len(a)
+	origLenB := len(b)
+
+	_ = authz.MergeGrants(a, b)
+
+	if len(a) != origLenA {
+		t.Errorf("MergeGrants mutated first input (len %d → %d)", origLenA, len(a))
+	}
+	if len(b) != origLenB {
+		t.Errorf("MergeGrants mutated second input (len %d → %d)", origLenB, len(b))
+	}
+	// s2 must not have been added to a
+	if _, ok := a[s2]; ok {
+		t.Error("MergeGrants added s2 to first input map")
+	}
+}
+
+// TestApplyUpwardRead_MultipleReadResources verifies that all read permissions from
+// a child scope are propagated to ancestors, not just the first resource.
+func TestApplyUpwardRead_MultipleReadResources(t *testing.T) {
+	child := scopeID(t)
+	parent := scopeID(t)
+
+	childPerms, _ := authz.NewPermissionSet([]string{
+		"memories:read", "knowledge:read", "collections:read", "skills:read",
+	})
+	grants := map[authz.ScopeID]authz.PermissionSet{child: childPerms}
+
+	result := authz.ApplyUpwardRead(grants, child, []authz.ScopeID{parent})
+
+	for _, r := range []authz.Resource{
+		authz.ResourceMemories, authz.ResourceKnowledge,
+		authz.ResourceCollections, authz.ResourceSkills,
+	} {
+		p := authz.NewPermission(r, authz.OperationRead)
+		if !result[parent].Contains(p) {
+			t.Errorf("parent missing %q from upward read propagation", p)
+		}
+	}
+}
+
 // mustPS is a test helper that creates a PermissionSet from a single raw string.
 func mustPS(t *testing.T, raw string) authz.PermissionSet {
 	t.Helper()

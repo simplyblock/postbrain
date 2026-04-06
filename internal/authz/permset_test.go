@@ -231,3 +231,211 @@ func TestPermissionSet_Len(t *testing.T) {
 		t.Errorf("empty Len() = %d, want 0", empty.Len())
 	}
 }
+
+// TestNewPermissionSet_NilInput verifies nil input returns an empty set without error.
+func TestNewPermissionSet_NilInput(t *testing.T) {
+	ps, err := authz.NewPermissionSet(nil)
+	if err != nil {
+		t.Fatalf("NewPermissionSet(nil): unexpected error: %v", err)
+	}
+	if !ps.IsEmpty() {
+		t.Errorf("NewPermissionSet(nil): expected empty set, got %v", ps.ToSlice())
+	}
+}
+
+// TestNewPermissionSet_MixedShorthandAndResourceOp verifies a mix of shorthand and
+// resource:operation strings is accepted and both are correctly included.
+func TestNewPermissionSet_MixedShorthandAndResourceOp(t *testing.T) {
+	ps, err := authz.NewPermissionSet([]string{"read", "memories:write"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// shorthand read expanded
+	if !ps.Contains(authz.NewPermission(authz.ResourceKnowledge, authz.OperationRead)) {
+		t.Error("missing knowledge:read from shorthand expansion")
+	}
+	// explicit resource:op present
+	if !ps.Contains(authz.NewPermission(authz.ResourceMemories, authz.OperationWrite)) {
+		t.Error("missing memories:write")
+	}
+	// memories:read was in shorthand expansion too; no duplicate
+	if ps.Len() != len(authz.AllResources())+1 {
+		// "read" expands to 11 perms (one per resource), "memories:write" adds 1 more
+		t.Errorf("Len() = %d, want %d", ps.Len(), len(authz.AllResources())+1)
+	}
+}
+
+// TestNewPermissionSet_MixedValidInvalid verifies that a mix of valid and invalid
+// strings causes the whole call to fail.
+func TestNewPermissionSet_MixedValidInvalid(t *testing.T) {
+	_, err := authz.NewPermissionSet([]string{"memories:read", "graph:write"})
+	if err == nil {
+		t.Error("NewPermissionSet([valid, invalid]): expected error, got nil")
+	}
+}
+
+// TestPermissionSet_Permissions verifies the Permissions method returns all held permissions.
+func TestPermissionSet_Permissions(t *testing.T) {
+	ps, _ := authz.NewPermissionSet([]string{"memories:read", "knowledge:write", "skills:delete"})
+	got := ps.Permissions()
+	if len(got) != 3 {
+		t.Fatalf("Permissions() len = %d, want 3", len(got))
+	}
+	want := []authz.Permission{
+		authz.NewPermission(authz.ResourceMemories, authz.OperationRead),
+		authz.NewPermission(authz.ResourceKnowledge, authz.OperationWrite),
+		authz.NewPermission(authz.ResourceSkills, authz.OperationDelete),
+	}
+	for _, w := range want {
+		if !slices.Contains(got, w) {
+			t.Errorf("Permissions() missing %q", w)
+		}
+	}
+}
+
+// TestPermissionSet_Permissions_Empty verifies Permissions on an empty set returns empty slice.
+func TestPermissionSet_Permissions_Empty(t *testing.T) {
+	got := authz.EmptyPermissionSet().Permissions()
+	if len(got) != 0 {
+		t.Errorf("Permissions() on empty set returned %v", got)
+	}
+}
+
+// TestPermissionSet_ToSlice_ExactContent verifies ToSlice returns the correct alphabetically-sorted values.
+func TestPermissionSet_ToSlice_ExactContent(t *testing.T) {
+	ps, _ := authz.NewPermissionSet([]string{"skills:read", "memories:read", "knowledge:write"})
+	got := ps.ToSlice()
+	want := []string{"knowledge:write", "memories:read", "skills:read"}
+	if len(got) != len(want) {
+		t.Fatalf("ToSlice() len = %d, want %d", len(got), len(want))
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("ToSlice()[%d] = %q, want %q", i, got[i], w)
+		}
+	}
+}
+
+// TestPermissionSet_ToSlice_Empty verifies ToSlice on an empty set returns an empty (non-nil) slice.
+func TestPermissionSet_ToSlice_Empty(t *testing.T) {
+	got := authz.EmptyPermissionSet().ToSlice()
+	if got == nil {
+		t.Error("ToSlice() on empty set should return non-nil empty slice")
+	}
+	if len(got) != 0 {
+		t.Errorf("ToSlice() on empty set: got %v", got)
+	}
+}
+
+// TestPermissionSet_Union_ZeroArgs verifies Union() with no arguments returns an empty set.
+func TestPermissionSet_Union_ZeroArgs(t *testing.T) {
+	u := authz.Union()
+	if !u.IsEmpty() {
+		t.Errorf("Union() with no args should be empty, got %v", u.ToSlice())
+	}
+}
+
+// TestPermissionSet_Union_SingleArg verifies Union of a single set returns an equivalent set.
+func TestPermissionSet_Union_SingleArg(t *testing.T) {
+	ps, _ := authz.NewPermissionSet([]string{"memories:read", "knowledge:write"})
+	u := authz.Union(ps)
+	if u.Len() != ps.Len() {
+		t.Errorf("Union(a).Len() = %d, want %d", u.Len(), ps.Len())
+	}
+	for _, p := range ps.Permissions() {
+		if !u.Contains(p) {
+			t.Errorf("Union(a) missing %q", p)
+		}
+	}
+}
+
+// TestPermissionSet_Union_WithEmpty verifies Union(a, empty) equals a.
+func TestPermissionSet_Union_WithEmpty(t *testing.T) {
+	a, _ := authz.NewPermissionSet([]string{"memories:read"})
+	u := authz.Union(a, authz.EmptyPermissionSet())
+	if u.Len() != a.Len() {
+		t.Errorf("Union(a, empty).Len() = %d, want %d", u.Len(), a.Len())
+	}
+	if !u.Contains(authz.NewPermission(authz.ResourceMemories, authz.OperationRead)) {
+		t.Error("Union(a, empty) missing memories:read")
+	}
+}
+
+// TestPermissionSet_Intersect_WithEmpty verifies Intersect(a, empty) returns empty.
+func TestPermissionSet_Intersect_WithEmpty(t *testing.T) {
+	a, _ := authz.NewPermissionSet([]string{"memories:read", "knowledge:write"})
+	i := authz.Intersect(a, authz.EmptyPermissionSet())
+	if !i.IsEmpty() {
+		t.Errorf("Intersect(a, empty) should be empty, got %v", i.ToSlice())
+	}
+	i2 := authz.Intersect(authz.EmptyPermissionSet(), a)
+	if !i2.IsEmpty() {
+		t.Errorf("Intersect(empty, a) should be empty, got %v", i2.ToSlice())
+	}
+}
+
+// TestPermissionSet_Intersect_Commutative verifies Intersect(a,b) equals Intersect(b,a).
+func TestPermissionSet_Intersect_Commutative(t *testing.T) {
+	a, _ := authz.NewPermissionSet([]string{"memories:read", "knowledge:write", "skills:read"})
+	b, _ := authz.NewPermissionSet([]string{"memories:read", "scopes:edit", "skills:read"})
+
+	ab := authz.Intersect(a, b)
+	ba := authz.Intersect(b, a)
+
+	if ab.Len() != ba.Len() {
+		t.Errorf("Intersect not commutative: Intersect(a,b).Len()=%d, Intersect(b,a).Len()=%d", ab.Len(), ba.Len())
+	}
+	for _, p := range ab.Permissions() {
+		if !ba.Contains(p) {
+			t.Errorf("Intersect(a,b) has %q but Intersect(b,a) does not", p)
+		}
+	}
+}
+
+// TestPermissionSet_Intersect_Idempotent verifies Intersect(a,a) equals a.
+func TestPermissionSet_Intersect_Idempotent(t *testing.T) {
+	a, _ := authz.NewPermissionSet([]string{"memories:read", "knowledge:write"})
+	i := authz.Intersect(a, a)
+	if i.Len() != a.Len() {
+		t.Errorf("Intersect(a,a).Len() = %d, want %d", i.Len(), a.Len())
+	}
+	for _, p := range a.Permissions() {
+		if !i.Contains(p) {
+			t.Errorf("Intersect(a,a) missing %q", p)
+		}
+	}
+}
+
+// TestPermissionSet_Immutability_Union verifies Union does not mutate its input sets.
+func TestPermissionSet_Immutability_Union(t *testing.T) {
+	a, _ := authz.NewPermissionSet([]string{"memories:read"})
+	b, _ := authz.NewPermissionSet([]string{"knowledge:write"})
+	aLenBefore := a.Len()
+	bLenBefore := b.Len()
+
+	_ = authz.Union(a, b)
+
+	if a.Len() != aLenBefore {
+		t.Errorf("Union mutated first argument: Len changed from %d to %d", aLenBefore, a.Len())
+	}
+	if b.Len() != bLenBefore {
+		t.Errorf("Union mutated second argument: Len changed from %d to %d", bLenBefore, b.Len())
+	}
+}
+
+// TestPermissionSet_Immutability_Intersect verifies Intersect does not mutate its input sets.
+func TestPermissionSet_Immutability_Intersect(t *testing.T) {
+	a, _ := authz.NewPermissionSet([]string{"memories:read", "knowledge:write"})
+	b, _ := authz.NewPermissionSet([]string{"memories:read"})
+	aLenBefore := a.Len()
+	bLenBefore := b.Len()
+
+	_ = authz.Intersect(a, b)
+
+	if a.Len() != aLenBefore {
+		t.Errorf("Intersect mutated first argument: Len changed from %d to %d", aLenBefore, a.Len())
+	}
+	if b.Len() != bLenBefore {
+		t.Errorf("Intersect mutated second argument: Len changed from %d to %d", bLenBefore, b.Len())
+	}
+}

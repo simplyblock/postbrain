@@ -191,3 +191,108 @@ func TestEffectiveTokenPermissions_EmptyPrincipal(t *testing.T) {
 		t.Errorf("empty principal should yield empty effective permissions, got %v", effective.ToSlice())
 	}
 }
+
+// TestParseTokenPermissions_MixedShorthandAndResourceOp verifies that a mix of shorthands
+// and specific resource:operation strings is accepted and expanded correctly.
+func TestParseTokenPermissions_MixedShorthandAndResourceOp(t *testing.T) {
+	// "read" expands to all :read permissions; "memories:write" adds exactly one more
+	ps, err := authz.ParseTokenPermissions([]string{"read", "memories:write"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !ps.Contains(authz.NewPermission(authz.ResourceMemories, authz.OperationRead)) {
+		t.Error("missing memories:read (from shorthand read)")
+	}
+	if !ps.Contains(authz.NewPermission(authz.ResourceGraph, authz.OperationRead)) {
+		t.Error("missing graph:read (from shorthand read)")
+	}
+	if !ps.Contains(authz.NewPermission(authz.ResourceMemories, authz.OperationWrite)) {
+		t.Error("missing memories:write (explicit)")
+	}
+	// write shorthand was NOT given, so knowledge:write should not be present
+	if ps.Contains(authz.NewPermission(authz.ResourceKnowledge, authz.OperationWrite)) {
+		t.Error("knowledge:write should not be present (write shorthand not given)")
+	}
+}
+
+// TestEffectiveTokenPermissions_ResourceSpecificRestriction verifies that a token
+// declaring only a specific resource:operation is bounded to just that permission.
+func TestEffectiveTokenPermissions_ResourceSpecificRestriction(t *testing.T) {
+	// principal (owner) has full permissions
+	principalPerms := authz.RolePermissions(authz.RoleOwner)
+	// token narrowed to memories:read only
+	tokenPerms, err := authz.ParseTokenPermissions([]string{"memories:read"})
+	if err != nil {
+		t.Fatalf("ParseTokenPermissions: %v", err)
+	}
+
+	effective := authz.EffectiveTokenPermissions(principalPerms, tokenPerms)
+
+	if !effective.Contains(authz.NewPermission(authz.ResourceMemories, authz.OperationRead)) {
+		t.Error("effective should contain memories:read")
+	}
+	// All other permissions must be absent
+	for _, p := range principalPerms.Permissions() {
+		if p == authz.NewPermission(authz.ResourceMemories, authz.OperationRead) {
+			continue
+		}
+		if effective.Contains(p) {
+			t.Errorf("effective should not contain %q (token only declared memories:read)", p)
+		}
+	}
+}
+
+// TestEffectiveTokenPermissions_BothEmpty verifies that empty principal and empty token
+// (constructed via EmptyPermissionSet) yields an empty effective set.
+func TestEffectiveTokenPermissions_BothEmpty(t *testing.T) {
+	effective := authz.EffectiveTokenPermissions(authz.EmptyPermissionSet(), authz.EmptyPermissionSet())
+	if !effective.IsEmpty() {
+		t.Errorf("both empty should yield empty effective, got %v", effective.ToSlice())
+	}
+}
+
+// TestEffectiveTokenPermissions_ExactOutputSize verifies the output size equals the
+// intersection size — no permissions are dropped or duplicated.
+func TestEffectiveTokenPermissions_ExactOutputSize(t *testing.T) {
+	// principal has memories read+write, knowledge read+write
+	principalPerms, _ := authz.NewPermissionSet([]string{
+		"memories:read", "memories:write", "knowledge:read", "knowledge:write",
+	})
+	// token declares only read — intersection should be exactly memories:read + knowledge:read
+	tokenPerms, _ := authz.ParseTokenPermissions([]string{"memories:read", "knowledge:read"})
+
+	effective := authz.EffectiveTokenPermissions(principalPerms, tokenPerms)
+	if effective.Len() != 2 {
+		t.Errorf("expected 2 effective permissions (memories:read + knowledge:read), got %d: %v",
+			effective.Len(), effective.ToSlice())
+	}
+}
+
+// TestParseTokenPermissions_AllResourceOperationPairs verifies every valid
+// resource:operation pair is accepted individually.
+func TestParseTokenPermissions_AllResourceOperationPairs(t *testing.T) {
+	for _, r := range authz.AllResources() {
+		for _, op := range authz.ValidOperations(r) {
+			raw := string(r) + ":" + string(op)
+			_, err := authz.ParseTokenPermissions([]string{raw})
+			if err != nil {
+				t.Errorf("ParseTokenPermissions([%q]): unexpected error: %v", raw, err)
+			}
+		}
+	}
+}
+
+// TestParseTokenPermissions_RejectsDuplicateAdmin verifies "admin" embedded in a
+// longer list is still rejected even when surrounded by valid entries.
+func TestParseTokenPermissions_RejectsDuplicateAdmin(t *testing.T) {
+	cases := [][]string{
+		{"memories:read", "admin", "knowledge:read"},
+		{"write", "edit", "admin"},
+	}
+	for _, raw := range cases {
+		_, err := authz.ParseTokenPermissions(raw)
+		if err == nil {
+			t.Errorf("ParseTokenPermissions(%v): expected error for 'admin', got nil", raw)
+		}
+	}
+}
