@@ -83,10 +83,10 @@ package-init:
 	@echo "Initial split package manifests are in packaging/ for postbrain-server and postbrain-client."
 
 test: ensure-markitdown go-junit-report
-	PATH="$(MARKITDOWN_VENV)/bin:$$PATH" go test -coverprofile=coverage.out -covermode=atomic -v 2>&1 ./... | $(GO_JUNIT_REPORT) -set-exit-code > report.xml
+	PATH="$(MARKITDOWN_VENV)/bin:$$PATH" go test -coverprofile=coverage.out -covermode=atomic -v 2>&1 ./... | tee /dev/stderr | $(GO_JUNIT_REPORT) -set-exit-code > report.xml
 
 test-integration: ensure-markitdown go-junit-report ensure-gopls
-	PATH="$(MARKITDOWN_VENV)/bin:$$PATH" go test -tags integration -coverprofile=coverage.out -covermode=atomic -v 2>&1 ./... | $(GO_JUNIT_REPORT) -set-exit-code > report.xml
+	PATH="$(MARKITDOWN_VENV)/bin:$$PATH" go test -tags integration -coverprofile=coverage.out -covermode=atomic -v 2>&1 ./... | tee /dev/stderr | $(GO_JUNIT_REPORT) -set-exit-code > report.xml
 
 test-scope-authz: go-junit-report
 	go test -v 2>&1 ./internal/api/scopeauth ./internal/memory | $(GO_JUNIT_REPORT) -set-exit-code > report-scope-authz-unit.xml
