@@ -60,6 +60,11 @@
 
 ### Maintenance
 
+- [x] 2026-04-07: Performed full `README.md` verification and reduced drift/duplication:
+  - Replaced outdated configuration examples (`server.token`, legacy `embedding.backend` shape) with docs-first guidance.
+  - Removed duplicated MCP tool and workflow deep dives from root README to avoid parallel documentation tracks.
+  - Converted root README into a concise entry point and linked canonical references in `docs/` for setup, configuration, API/MCP usage, operations, and troubleshooting.
+
 - [x] 2026-04-06: Added dedicated docs reference for scopes/permissions/tokens:
   - Added `docs/access-control-reference.md` as the canonical text reference for principal/scope/resource:operation authorization.
   - Included permission sources, inheritance rules, role summary, token downscoping, self-service semantics, promotions paths, and troubleshooting checks.
