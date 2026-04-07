@@ -172,3 +172,13 @@ Before every `git commit`, verify all of the following:
 - [ ] `designs/TASKS.md` — updated to reflect completed and newly discovered work
 - [ ] Changes are focused — no unrelated modifications staged
 - [ ] `designs/DESIGN.md` — not modified unless approved and necessary
+
+<!-- postbrain-config -->
+## Postbrain
+
+The `.codex/skills/postbrain.md` skill is active for this project.
+
+```
+POSTBRAIN_URL=http://localhost:7433
+# POSTBRAIN_SCOPE=project:your-org/your-repo   <- set this to skip the scope prompt
+```

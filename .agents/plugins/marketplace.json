@@ -1,7 +1,7 @@
 {
-  "name": "[TODO: marketplace-name]",
+  "name": "Postbrain",
   "interface": {
-    "displayName": "[TODO: Marketplace Display Name]"
+    "displayName": "Postbrain"
   },
   "plugins": [
     {
