@@ -60,6 +60,13 @@
 
 ### Maintenance
 
+- [x] 2026-04-07: Added a design/task overview index and updated agent entry points:
+  - Added `docs/index.md` as the canonical starting point for routing into `designs/DESIGN*.md` and `designs/TASKS*.md`.
+  - Included concise summaries + "read in full when..." guidance for each design/task stream (core, permissions, OAuth, code graph, embedding update, Go LSP tasks).
+  - Updated `AGENTS.md` to require `docs/index.md` as the first step for design intake before implementation.
+  - Updated root `README.md` "For Agents" section to route additional design-document reading through `docs/index.md`.
+  - Linked `docs/index.md` from `docs/README.md` "Start here".
+
 - [x] 2026-04-07: Performed full `README.md` verification and reduced drift/duplication:
   - Replaced outdated configuration examples (`server.token`, legacy `embedding.backend` shape) with docs-first guidance.
   - Removed duplicated MCP tool and workflow deep dives from root README to avoid parallel documentation tracks.

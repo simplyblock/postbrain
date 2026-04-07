@@ -9,6 +9,7 @@ This documentation is also published via GitHub Pages for repository browsing.
 
 ## Start here
 
+- [Design and Tasks Index](./index.md): map of all `designs/` files with quick context and when to read each in full.
 - [Introduction](./introduction.md): what Postbrain is and why it matters.
 - [Getting Started](./getting-started.md): first-time setup for local/custom and managed environments.
 - [Server Installation](./server-installation.md): install/run the server via source, release artifacts/packages, Docker, or Helm.

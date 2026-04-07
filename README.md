@@ -80,6 +80,7 @@ postbrain/
 Before making changes, read these in order:
 
 1. `AGENTS.md` (mandatory coding and workflow rules)
-2. `designs/DESIGN.md` (architecture and design constraints)
-3. `designs/DESIGN_PERMISSIONS.md` (authorization model)
-4. `designs/TASKS.md` (task tracking, must be updated before commit)
+2. `docs/index.md` (starting point for selecting additional `designs/` documents to read in full)
+3. `designs/DESIGN.md` (architecture and design constraints)
+4. subsystem-specific design/task files identified from `docs/index.md` (for example permissions, OAuth, code graph)
+5. `designs/TASKS.md` (task tracking, must be updated before commit)
