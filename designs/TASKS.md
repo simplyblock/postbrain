@@ -86,6 +86,11 @@
   - Added query-playground regression coverage for sibling scope separation in `internal/ui/handler_query_integration_test.go`:
     - `TestQueryPlayground_SelectedScopeExcludesSiblingMemories`.
 
+- [x] 2026-04-07: Updated docs for Codex hook/plugin parity with Claude workflows:
+  - Updated `docs/using-with-coding-agents.md` to document Codex hook setup, including feature flag and hook command examples.
+  - Documented Codex plugins usage and aligned guidance to use plugin workflows similarly to Claude command workflows.
+  - Updated `docs/getting-started.md` with optional Codex hooks/plugins setup and explicitly noted Windows hook limitation.
+
 - [x] 2026-04-07: Scaffolded repo-local Codex plugin via plugin-creator skill:
   - Created `plugins/postbrain/.codex-plugin/plugin.json` with normalized plugin name (`postbrain`) and placeholder manifest fields.
   - Created repo marketplace file `.agents/plugins/marketplace.json` with a `postbrain` plugin entry (`source.path: ./plugins/postbrain`, `installation: AVAILABLE`, `authentication: ON_INSTALL`, `category: Productivity`).
