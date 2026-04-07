@@ -229,3 +229,28 @@ func TestEnableCodexHooks_MergesWithExistingConfigAndIsIdempotent(t *testing.T) 
 		t.Fatalf("codex_hooks line count = %d, want 1", got)
 	}
 }
+
+func TestInstallCodexSkillWithOptions_DisablesHookInstall(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+
+	installedPath, updatedAgents, err := InstallCodexSkillWithOptions(
+		targetDir,
+		"skill-content",
+		"http://localhost:7433",
+		"",
+		CodexSkillInstallOptions{InstallHooks: false},
+	)
+	if err != nil {
+		t.Fatalf("InstallCodexSkillWithOptions: %v", err)
+	}
+	if installedPath == "" {
+		t.Fatal("installedPath is empty")
+	}
+	if updatedAgents {
+		t.Fatal("updatedAgents = true, want false without AGENTS.md")
+	}
+	if _, err := os.Stat(filepath.Join(targetDir, ".codex", "hooks.json")); !os.IsNotExist(err) {
+		t.Fatalf("hooks.json exists unexpectedly or stat error: %v", err)
+	}
+}

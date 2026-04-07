@@ -10,11 +10,27 @@ import (
 
 const postbrainConfigMarker = "<!-- postbrain-config -->"
 
+// CodexSkillInstallOptions controls optional Codex installer behavior.
+type CodexSkillInstallOptions struct {
+	InstallHooks bool
+}
+
 // InstallCodexSkill installs the postbrain codex skill file into targetDir and
 // optionally appends a Postbrain hint block to AGENTS.md.
 //
 // Returns the installed skill path, whether AGENTS.md was updated, and an error.
 func InstallCodexSkill(targetDir, skillContent, postbrainURL, postbrainScope string) (string, bool, error) {
+	return InstallCodexSkillWithOptions(targetDir, skillContent, postbrainURL, postbrainScope, CodexSkillInstallOptions{
+		InstallHooks: true,
+	})
+}
+
+// InstallCodexSkillWithOptions installs the postbrain codex skill file with
+// optional hook provisioning based on install options.
+func InstallCodexSkillWithOptions(
+	targetDir, skillContent, postbrainURL, postbrainScope string,
+	opts CodexSkillInstallOptions,
+) (string, bool, error) {
 	if strings.TrimSpace(targetDir) == "" {
 		targetDir = "."
 	}
@@ -33,8 +49,10 @@ func InstallCodexSkill(targetDir, skillContent, postbrainURL, postbrainScope str
 	if err := os.WriteFile(destFile, []byte(skillContent), 0o644); err != nil {
 		return "", false, fmt.Errorf("write skill file: %w", err)
 	}
-	if _, err := InstallCodexHooks(targetDir, postbrainScope); err != nil {
-		return "", false, err
+	if opts.InstallHooks {
+		if _, err := InstallCodexHooks(targetDir, postbrainScope); err != nil {
+			return "", false, err
+		}
 	}
 
 	agentsPath := filepath.Join(targetDir, "AGENTS.md")

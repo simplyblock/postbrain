@@ -60,6 +60,21 @@
 
 ### Maintenance
 
+- [x] 2026-04-07: Added Codex install-time version gating and platform-specific skill profiles (TDD-first):
+  - Added CLI unit coverage in `cmd/postbrain-cli/main_test.go`:
+    - `TestCodexVersionMeetsMinimum`
+    - `TestCodexVersionMeetsMinimum_TooLow`
+    - `TestCodexVersionMeetsMinimum_InvalidVersion`
+    - verifies semantic-version parsing and minimum-version gating behavior for Codex hooks support.
+  - Added installer options regression coverage in `internal/postbraincli/codex_skill_installer_test.go`:
+    - `TestInstallCodexSkillWithOptions_DisablesHookInstall`
+    - verifies Windows-mode installs can skip `.codex/hooks.json` provisioning.
+  - Updated `cmd/postbrain-cli/main.go`:
+    - `install-codex-skill` now runs `codex --version` and rejects versions below `0.114.0`.
+    - non-Windows installs use a new lightweight hooks-enabled Codex skill profile and install hooks/config.
+    - Windows installs emit a warning, use the full Codex skill profile, and skip hook provisioning.
+  - Added `cmd/postbrain-cli/assets/codex-lite.md` as the hooks-enabled lightweight Codex skill variant.
+
 - [x] 2026-04-07: Extended Codex skill installation to provision repo-local hooks (TDD-first):
   - Added regression coverage in `internal/postbraincli/codex_skill_installer_test.go`:
     - `TestInstallCodexSkill_NoAgentsFileStillInstallsSkill` now verifies `.codex/hooks.json` is created with `PostToolUse` and `Stop` entries.
