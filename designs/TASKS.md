@@ -167,6 +167,17 @@
   - Added query-playground regression coverage for sibling scope separation in `internal/ui/handler_query_integration_test.go`:
     - `TestQueryPlayground_SelectedScopeExcludesSiblingMemories`.
 
+- [x] 2026-04-07: Enabled Codex hooks config during `install-codex-skill` (TDD-first):
+  - Added red/green unit coverage in `internal/postbraincli/codex_skill_installer_test.go` for `.codex/config.toml` management:
+    - creates config when missing with `[features]` and `codex_hooks = true`
+    - merges into existing `[features]` config while preserving unrelated keys
+    - remains idempotent when run repeatedly.
+  - Added `EnableCodexHooks` to `internal/postbraincli/codex_skill_installer.go`:
+    - ensures `<target>/.codex/config.toml` exists
+    - enables hooks via `[features].codex_hooks = true`
+    - preserves existing config content and avoids duplicate entries.
+  - Updated `postbrain-cli install-codex-skill` command flow in `cmd/postbrain-cli/main.go` to call `EnableCodexHooks` after skill install.
+
 - [x] 2026-04-07: Updated docs for Codex hook/plugin parity with Claude workflows:
   - Updated `docs/using-with-coding-agents.md` to document Codex hook setup, including feature flag and hook command examples.
   - Documented Codex plugins usage and aligned guidance to use plugin workflows similarly to Claude command workflows.

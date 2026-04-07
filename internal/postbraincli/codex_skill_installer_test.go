@@ -381,3 +381,75 @@ func TestInstallCodexHooks_QuotesExplicitScopeInCommands(t *testing.T) {
 		t.Fatalf("hooks.json contains unquoted scope: %s", content)
 	}
 }
+
+func TestEnableCodexHooks_CreatesConfigWhenMissing(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+
+	updated, err := EnableCodexHooks(targetDir)
+	if err != nil {
+		t.Fatalf("EnableCodexHooks: %v", err)
+	}
+	if !updated {
+		t.Fatal("updated = false, want true")
+	}
+
+	configPath := filepath.Join(targetDir, ".codex", "config.toml")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config.toml: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "[features]") {
+		t.Fatal("config.toml missing [features] section")
+	}
+	if !strings.Contains(content, "codex_hooks = true") {
+		t.Fatal("config.toml missing codex_hooks = true")
+	}
+}
+
+func TestEnableCodexHooks_MergesWithExistingConfigAndIsIdempotent(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+	configDir := filepath.Join(targetDir, ".codex")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("mkdir .codex: %v", err)
+	}
+	existing := strings.Join([]string{
+		"model = \"gpt-5.4\"",
+		"",
+		"[features]",
+		"other_flag = true",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(existing), 0o644); err != nil {
+		t.Fatalf("write config.toml: %v", err)
+	}
+
+	updated, err := EnableCodexHooks(targetDir)
+	if err != nil {
+		t.Fatalf("EnableCodexHooks first call: %v", err)
+	}
+	if !updated {
+		t.Fatal("updated = false on first call, want true")
+	}
+
+	updated, err = EnableCodexHooks(targetDir)
+	if err != nil {
+		t.Fatalf("EnableCodexHooks second call: %v", err)
+	}
+	if updated {
+		t.Fatal("updated = true on second call, want false")
+	}
+
+	data, err := os.ReadFile(filepath.Join(configDir, "config.toml"))
+	if err != nil {
+		t.Fatalf("read config.toml: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "other_flag = true") {
+		t.Fatal("existing [features] keys should be preserved")
+	}
+	if got := strings.Count(content, "codex_hooks = true"); got != 1 {
+		t.Fatalf("codex_hooks line count = %d, want 1", got)
+	}
+}
