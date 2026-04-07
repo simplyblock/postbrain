@@ -86,6 +86,10 @@
   - Added query-playground regression coverage for sibling scope separation in `internal/ui/handler_query_integration_test.go`:
     - `TestQueryPlayground_SelectedScopeExcludesSiblingMemories`.
 
+- [x] 2026-04-07: Scaffolded repo-local Codex plugin via plugin-creator skill:
+  - Created `plugins/postbrain/.codex-plugin/plugin.json` with normalized plugin name (`postbrain`) and placeholder manifest fields.
+  - Created repo marketplace file `.agents/plugins/marketplace.json` with a `postbrain` plugin entry (`source.path: ./plugins/postbrain`, `installation: AVAILABLE`, `authentication: ON_INSTALL`, `category: Productivity`).
+
 - [x] 2026-04-07: Split `designs/DESIGN.md` into overview + focused design documents:
   - Replaced `designs/DESIGN.md` content with a concise architecture overview and explicit links to detailed design files.
   - Added focused design docs:
