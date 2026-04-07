@@ -13,6 +13,7 @@ any other agent). Rules here are not suggestions — they are required behaviour
 Before implementation, use `docs/index.md` as the **starting point** for design-level context.
 
 - Read `docs/index.md` first to identify which `designs/DESIGN*.md` and `designs/TASKS*.md` files apply to your change.
+- Treat `designs/DESIGN.md` as the high-level architecture overview; use focused design files for subsystem specifics.
 - Read every applicable design/task file in full before modifying related code.
 - If scope is unclear or spans multiple subsystems, default to reading `designs/DESIGN.md` in full.
 

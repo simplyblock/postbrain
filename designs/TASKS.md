@@ -60,6 +60,16 @@
 
 ### Maintenance
 
+- [x] 2026-04-07: Split `designs/DESIGN.md` into overview + focused design documents:
+  - Replaced `designs/DESIGN.md` content with a concise architecture overview and explicit links to detailed design files.
+  - Added focused design docs:
+    - `designs/DESIGN_DATA_MODEL.md`
+    - `designs/DESIGN_API_AND_INTEGRATIONS.md`
+    - `designs/DESIGN_RETRIEVAL_AND_LIFECYCLE.md`
+    - `designs/DESIGN_OPERATIONS.md`
+    - `designs/DESIGN_UX.md`
+  - Updated design-routing guidance in `docs/index.md`, `AGENTS.md`, and root `README.md` to treat `designs/DESIGN.md` as high-level only.
+
 - [x] 2026-04-07: Added a design/task overview index and updated agent entry points:
   - Added `docs/index.md` as the canonical starting point for routing into `designs/DESIGN*.md` and `designs/TASKS*.md`.
   - Included concise summaries + "read in full when..." guidance for each design/task stream (core, permissions, OAuth, code graph, embedding update, Go LSP tasks).

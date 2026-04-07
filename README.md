@@ -81,6 +81,6 @@ Before making changes, read these in order:
 
 1. `AGENTS.md` (mandatory coding and workflow rules)
 2. `docs/index.md` (starting point for selecting additional `designs/` documents to read in full)
-3. `designs/DESIGN.md` (architecture and design constraints)
+3. `designs/DESIGN.md` (high-level architecture overview and invariants)
 4. subsystem-specific design/task files identified from `docs/index.md` (for example permissions, OAuth, code graph)
 5. `designs/TASKS.md` (task tracking, must be updated before commit)
