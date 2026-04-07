@@ -60,6 +60,24 @@
 
 ### Maintenance
 
+- [x] 2026-04-07: Fixed model-table memory recall sibling-scope leakage in selected-scope queries (TDD-first):
+  - Added integration regression coverage in `internal/memory/memory_integration_test.go`:
+    - `TestMemoryRecall_ModelTablePathDoesNotLeakSiblingScopeMemories`
+    - reproduces leakage when selected-scope fan-out includes an ancestor scope and model-table ANN scope-path matching pulls descendant sibling memories.
+  - Updated `internal/memory/recall.go`:
+    - `recallMemoriesByModelTable` now enforces exact fan-out scope membership on hydrated memory rows before appending results.
+    - prevents ancestor scope-path ANN matches from leaking descendant sibling memories into selected-scope recall.
+
+- [x] 2026-04-07: Fixed query-playground sibling-scope leakage from graph-augmented recall (TDD-first):
+  - Added integration regression coverage in `internal/retrieval/orchestrate_integration_test.go`:
+    - `TestOrchestrateRecall_GraphContextDoesNotLeakSiblingScopeMemories`
+    - reproduces leakage path where graph augmentation pulled memories linked to shared entities from sibling scopes.
+  - Updated `internal/retrieval/orchestrate.go`:
+    - graph-context memory augmentation now enforces selected-scope fan-out (`selected + ancestors/personal`) and intersects it with authorized scope IDs before appending graph-derived memories.
+    - prevents cross-branch/sibling scope memories from appearing in query-playground recall results.
+  - Added query-playground regression coverage for sibling scope separation in `internal/ui/handler_query_integration_test.go`:
+    - `TestQueryPlayground_SelectedScopeExcludesSiblingMemories`.
+
 - [x] 2026-04-07: Split `designs/DESIGN.md` into overview + focused design documents:
   - Replaced `designs/DESIGN.md` content with a concise architecture overview and explicit links to detailed design files.
   - Added focused design docs:
