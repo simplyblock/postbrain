@@ -86,7 +86,7 @@ func InstallClaudeHooks(targetDir, scope string) (bool, error) {
 		targetDir = "."
 	}
 
-	settingsPath := filepath.Join(targetDir, ".claude", "settings.json")
+	settingsPath := filepath.Join(targetDir, ".claude", "settings.local.json")
 
 	// Read existing settings or start from an empty map.
 	settings := make(map[string]any)

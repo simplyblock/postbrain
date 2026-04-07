@@ -147,7 +147,7 @@ func TestInstallClaudeHooks_CreatesSettingsWithHooks(t *testing.T) {
 		t.Fatal("updated = false, want true")
 	}
 
-	data, err := os.ReadFile(filepath.Join(targetDir, ".claude", "settings.json"))
+	data, err := os.ReadFile(filepath.Join(targetDir, ".claude", "settings.local.json"))
 	if err != nil {
 		t.Fatalf("read settings.json: %v", err)
 	}
@@ -190,7 +190,7 @@ func TestInstallClaudeHooks_NoScope_UsesEnvVar(t *testing.T) {
 		t.Fatalf("InstallClaudeHooks: %v", err)
 	}
 
-	data, _ := os.ReadFile(filepath.Join(targetDir, ".claude", "settings.json"))
+	data, _ := os.ReadFile(filepath.Join(targetDir, ".claude", "settings.local.json"))
 	if !strings.Contains(string(data), "$POSTBRAIN_SCOPE") {
 		t.Error("settings.json should use $POSTBRAIN_SCOPE when no scope provided")
 	}
@@ -204,7 +204,7 @@ func TestInstallClaudeHooks_MergesIntoExistingSettings(t *testing.T) {
 		t.Fatalf("mkdir: %v", err)
 	}
 	existing := `{"theme":"dark","hooks":{"PreToolUse":[{"command":"echo pre"}]}}`
-	if err := os.WriteFile(filepath.Join(clDir, "settings.json"), []byte(existing), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(clDir, "settings.local.json"), []byte(existing), 0o644); err != nil {
 		t.Fatalf("write settings.json: %v", err)
 	}
 
@@ -216,7 +216,7 @@ func TestInstallClaudeHooks_MergesIntoExistingSettings(t *testing.T) {
 		t.Fatal("updated = false, want true")
 	}
 
-	data, _ := os.ReadFile(filepath.Join(clDir, "settings.json"))
+	data, _ := os.ReadFile(filepath.Join(clDir, "settings.local.json"))
 	var s map[string]any
 	if err := json.Unmarshal(data, &s); err != nil {
 		t.Fatalf("parse merged settings.json: %v", err)
@@ -262,7 +262,7 @@ func TestInstallClaudeHooks_Idempotent(t *testing.T) {
 	}
 
 	// Hooks must not be duplicated.
-	data, _ := os.ReadFile(filepath.Join(targetDir, ".claude", "settings.json"))
+	data, _ := os.ReadFile(filepath.Join(targetDir, ".claude", "settings.local.json"))
 	if strings.Count(string(data), "postbrain-cli snapshot") != 1 {
 		t.Error("postbrain snapshot hook duplicated in settings.json")
 	}
