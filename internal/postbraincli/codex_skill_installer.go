@@ -1,6 +1,7 @@
 package postbraincli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -31,6 +32,9 @@ func InstallCodexSkill(targetDir, skillContent, postbrainURL, postbrainScope str
 	}
 	if err := os.WriteFile(destFile, []byte(skillContent), 0o644); err != nil {
 		return "", false, fmt.Errorf("write skill file: %w", err)
+	}
+	if _, err := InstallCodexHooks(targetDir, postbrainScope); err != nil {
+		return "", false, err
 	}
 
 	agentsPath := filepath.Join(targetDir, "AGENTS.md")
@@ -73,6 +77,83 @@ func InstallCodexSkill(targetDir, skillContent, postbrainURL, postbrainScope str
 	}
 
 	return destFile, true, nil
+}
+
+// InstallCodexHooks merges Postbrain hooks into .codex/hooks.json.
+// It creates the file if it does not exist and preserves existing settings.
+// The call is idempotent.
+func InstallCodexHooks(targetDir, scope string) (bool, error) {
+	if strings.TrimSpace(targetDir) == "" {
+		targetDir = "."
+	}
+
+	configDir := filepath.Join(targetDir, ".codex")
+	hooksPath := filepath.Join(configDir, "hooks.json")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		return false, fmt.Errorf("create .codex directory: %w", err)
+	}
+
+	root := make(map[string]any)
+	data, err := os.ReadFile(hooksPath)
+	if err != nil && !os.IsNotExist(err) {
+		return false, fmt.Errorf("read hooks.json: %w", err)
+	}
+	if len(data) > 0 {
+		if err := json.Unmarshal(data, &root); err != nil {
+			return false, fmt.Errorf("parse hooks.json: %w", err)
+		}
+	}
+
+	if existingCodexHooksHavePostbrain(root) {
+		return false, nil
+	}
+
+	var snapshotCmd, summarizeCmd string
+	if strings.TrimSpace(scope) != "" {
+		snapshotCmd = "postbrain-cli snapshot --scope " + scope
+		summarizeCmd = "postbrain-cli summarize-session --scope " + scope
+	} else {
+		snapshotCmd = `[ -n "$POSTBRAIN_SCOPE" ] && postbrain-cli snapshot --scope "$POSTBRAIN_SCOPE" || true`
+		summarizeCmd = `[ -n "$POSTBRAIN_SCOPE" ] && postbrain-cli summarize-session --scope "$POSTBRAIN_SCOPE" || true`
+	}
+
+	hooks, _ := root["hooks"].(map[string]any)
+	if hooks == nil {
+		hooks = make(map[string]any)
+		root["hooks"] = hooks
+	}
+
+	postToolUse, _ := hooks["PostToolUse"].([]any)
+	postToolUse = append(postToolUse, map[string]any{
+		"matcher": "Bash",
+		"hooks": []any{
+			map[string]any{
+				"type":    "command",
+				"command": snapshotCmd,
+			},
+		},
+	})
+	hooks["PostToolUse"] = postToolUse
+
+	stop, _ := hooks["Stop"].([]any)
+	stop = append(stop, map[string]any{
+		"hooks": []any{
+			map[string]any{
+				"type":    "command",
+				"command": summarizeCmd,
+			},
+		},
+	})
+	hooks["Stop"] = stop
+
+	out, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return false, fmt.Errorf("marshal hooks.json: %w", err)
+	}
+	if err := os.WriteFile(hooksPath, append(out, '\n'), 0o644); err != nil {
+		return false, fmt.Errorf("write hooks.json: %w", err)
+	}
+	return true, nil
 }
 
 // EnableCodexHooks ensures .codex/config.toml enables experimental Codex hooks
@@ -175,4 +256,24 @@ func parseTOMLAssignment(line string) (key, value string, ok bool) {
 	key = strings.TrimSpace(trimmed[:eq])
 	value = strings.TrimSpace(trimmed[eq+1:])
 	return key, value, true
+}
+
+func existingCodexHooksHavePostbrain(root map[string]any) bool {
+	hooks, _ := root["hooks"].(map[string]any)
+	if hooks == nil {
+		return false
+	}
+	entries, _ := hooks["PostToolUse"].([]any)
+	for _, e := range entries {
+		entry, _ := e.(map[string]any)
+		hooksList, _ := entry["hooks"].([]any)
+		for _, h := range hooksList {
+			hook, _ := h.(map[string]any)
+			cmd, _ := hook["command"].(string)
+			if strings.Contains(cmd, "postbrain-cli snapshot") {
+				return true
+			}
+		}
+	}
+	return false
 }

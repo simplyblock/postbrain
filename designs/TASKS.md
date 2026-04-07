@@ -60,6 +60,15 @@
 
 ### Maintenance
 
+- [x] 2026-04-07: Extended Codex skill installation to provision repo-local hooks (TDD-first):
+  - Added regression coverage in `internal/postbraincli/codex_skill_installer_test.go`:
+    - `TestInstallCodexSkill_NoAgentsFileStillInstallsSkill` now verifies `.codex/hooks.json` is created with `PostToolUse` and `Stop` entries.
+    - `TestInstallCodexSkill_DoesNotDuplicateHooks` verifies idempotent repeated installs do not duplicate Postbrain hook entries.
+  - Updated `internal/postbraincli/codex_skill_installer.go`:
+    - `InstallCodexSkill` now installs Codex hooks in the repo-local `.codex/hooks.json` as part of the skill install flow.
+    - added `InstallCodexHooks` to merge hook commands for `snapshot` and `summarize-session` while preserving existing hook config.
+    - added `existingCodexHooksHavePostbrain` idempotency detection for previously-installed Postbrain hook commands.
+
 - [x] 2026-04-07: Avoided eager graph-augmentation scope fan-out when recall results have no source refs (TDD-first):
   - Added unit regression coverage in `internal/retrieval/orchestrate_test.go`:
     - `TestOrchestrateRecall_DoesNotComputeGraphAugmentationScopesWithoutSourceRefs`
