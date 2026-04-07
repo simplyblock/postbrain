@@ -19,9 +19,10 @@ var (
 	ErrInvalidTransition = errors.New("skills: invalid state transition")
 )
 
-// membershipChecker can determine whether a principal is a scope admin.
+// membershipChecker can determine admin status for a principal.
 type membershipChecker interface {
 	IsScopeAdmin(ctx context.Context, principalID, scopeID uuid.UUID) (bool, error)
+	IsSystemAdmin(ctx context.Context, principalID uuid.UUID) (bool, error)
 }
 
 // lifecycleDB abstracts all database calls made by Lifecycle, enabling unit tests.
@@ -75,6 +76,19 @@ func NewLifecycle(pool *pgxpool.Pool, membership membershipChecker) *Lifecycle {
 		membership: membership,
 		dbOps:      &poolLifecycleDB{pool: pool},
 	}
+}
+
+// isEffectiveAdmin returns true if the principal is either a system admin or a
+// scope admin on the given scope. System admin is checked first.
+func (l *Lifecycle) isEffectiveAdmin(ctx context.Context, principalID, scopeID uuid.UUID) (bool, error) {
+	if l.membership == nil {
+		return false, nil
+	}
+	sysAdmin, err := l.membership.IsSystemAdmin(ctx, principalID)
+	if err != nil || sysAdmin {
+		return sysAdmin, err
+	}
+	return l.membership.IsScopeAdmin(ctx, principalID, scopeID)
 }
 
 // EndorseResult carries the outcome of an Endorse call.
@@ -169,7 +183,7 @@ func (l *Lifecycle) Deprecate(ctx context.Context, skillID, callerID uuid.UUID) 
 		return ErrInvalidTransition
 	}
 
-	ok, err := l.membership.IsScopeAdmin(ctx, callerID, skill.ScopeID)
+	ok, err := l.isEffectiveAdmin(ctx, callerID, skill.ScopeID)
 	if err != nil {
 		return err
 	}
@@ -194,7 +208,7 @@ func (l *Lifecycle) Republish(ctx context.Context, skillID, callerID uuid.UUID) 
 		return ErrInvalidTransition
 	}
 
-	ok, err := l.membership.IsScopeAdmin(ctx, callerID, skill.ScopeID)
+	ok, err := l.isEffectiveAdmin(ctx, callerID, skill.ScopeID)
 	if err != nil {
 		return err
 	}
@@ -219,7 +233,7 @@ func (l *Lifecycle) EmergencyRollback(ctx context.Context, skillID, callerID uui
 		return ErrInvalidTransition
 	}
 
-	ok, err := l.membership.IsScopeAdmin(ctx, callerID, skill.ScopeID)
+	ok, err := l.isEffectiveAdmin(ctx, callerID, skill.ScopeID)
 	if err != nil {
 		return err
 	}

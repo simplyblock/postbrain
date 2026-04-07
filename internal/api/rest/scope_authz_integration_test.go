@@ -775,19 +775,22 @@ func TestREST_ScopeAuthz_WriteParentAllowed_DeleteParentDenied(t *testing.T) {
 	})
 }
 
-func TestREST_Recall_IntersectsFanOutWithPrincipalScopes(t *testing.T) {
+// TestREST_Recall_IncludesAncestorScopeMemories verifies that recall walks up the
+// scope hierarchy. Ancestor memories (company-wide agent instructions, code styles,
+// overarching definitions, etc.) must appear when recalling from a child scope.
+func TestREST_Recall_IncludesAncestorScopeMemories(t *testing.T) {
 	ctx := context.Background()
 	pool := testhelper.NewTestPool(t)
 	svc := testhelper.NewMockEmbeddingService()
 	cfg := &config.Config{}
 	testhelper.CreateTestEmbeddingModel(t, pool)
 
-	user := testhelper.CreateTestPrincipal(t, pool, "user", "fanout-intersect-user-"+uuid.New().String())
-	team := testhelper.CreateTestPrincipal(t, pool, "team", "fanout-intersect-team-"+uuid.New().String())
-	company := testhelper.CreateTestPrincipal(t, pool, "company", "fanout-intersect-company-"+uuid.New().String())
+	user := testhelper.CreateTestPrincipal(t, pool, "user", "fanout-ancestor-user-"+uuid.New().String())
+	team := testhelper.CreateTestPrincipal(t, pool, "team", "fanout-ancestor-team-"+uuid.New().String())
+	company := testhelper.CreateTestPrincipal(t, pool, "company", "fanout-ancestor-company-"+uuid.New().String())
 
-	companyScope := testhelper.CreateTestScope(t, pool, "project", "fanout-intersect-company-scope-"+uuid.New().String(), nil, company.ID)
-	teamScope := testhelper.CreateTestScope(t, pool, "project", "fanout-intersect-team-scope-"+uuid.New().String(), &companyScope.ID, team.ID)
+	companyScope := testhelper.CreateTestScope(t, pool, "project", "fanout-ancestor-company-scope-"+uuid.New().String(), nil, company.ID)
+	teamScope := testhelper.CreateTestScope(t, pool, "project", "fanout-ancestor-team-scope-"+uuid.New().String(), &companyScope.ID, team.ID)
 
 	ms := principals.NewMembershipStore(pool)
 	if err := ms.AddMembership(ctx, user.ID, team.ID, "member", nil); err != nil {
@@ -795,16 +798,17 @@ func TestREST_Recall_IntersectsFanOutWithPrincipalScopes(t *testing.T) {
 	}
 
 	memStore := memory.NewStore(pool, svc)
-	if _, err := memStore.Create(ctx, memory.CreateInput{
-		Content:    "ancestor confidential recall marker",
+	companyMemRes, err := memStore.Create(ctx, memory.CreateInput{
+		Content:    "company-wide code style definition",
 		MemoryType: "semantic",
 		ScopeID:    companyScope.ID,
 		AuthorID:   company.ID,
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("create company memory: %v", err)
 	}
 	teamMemRes, err := memStore.Create(ctx, memory.CreateInput{
-		Content:    "team public recall marker",
+		Content:    "team-specific recall marker",
 		MemoryType: "semantic",
 		ScopeID:    teamScope.ID,
 		AuthorID:   team.ID,
@@ -817,7 +821,7 @@ func TestREST_Recall_IntersectsFanOutWithPrincipalScopes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.CreateToken(ctx, pool, user.ID, hashToken, "fanout-intersect-token", nil, nil, nil)
+	_, err = db.CreateToken(ctx, pool, user.ID, hashToken, "fanout-ancestor-token", nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -855,6 +859,7 @@ func TestREST_Recall_IntersectsFanOutWithPrincipalScopes(t *testing.T) {
 	}
 
 	foundTeamMemory := false
+	foundCompanyMemory := false
 	for _, item := range resultsAny {
 		row, _ := item.(map[string]any)
 		memObj, _ := row["Memory"].(map[string]any)
@@ -864,13 +869,6 @@ func TestREST_Recall_IntersectsFanOutWithPrincipalScopes(t *testing.T) {
 		if memObj == nil {
 			continue
 		}
-		scopeID, _ := memObj["ScopeID"].(string)
-		if scopeID == "" {
-			scopeID, _ = memObj["scope_id"].(string)
-		}
-		if scopeID == companyScope.ID.String() {
-			t.Fatalf("unexpected ancestor-scope memory leaked into recall results: scope_id=%s", scopeID)
-		}
 		memID, _ := memObj["ID"].(string)
 		if memID == "" {
 			memID, _ = memObj["id"].(string)
@@ -878,9 +876,15 @@ func TestREST_Recall_IntersectsFanOutWithPrincipalScopes(t *testing.T) {
 		if memID == teamMemRes.MemoryID.String() {
 			foundTeamMemory = true
 		}
+		if memID == companyMemRes.MemoryID.String() {
+			foundCompanyMemory = true
+		}
 	}
 	if !foundTeamMemory {
 		t.Fatalf("expected team-scope memory %s in results", teamMemRes.MemoryID)
+	}
+	if !foundCompanyMemory {
+		t.Fatalf("expected ancestor company-scope memory %s in results (recall walks up the stack)", companyMemRes.MemoryID)
 	}
 }
 

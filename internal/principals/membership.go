@@ -96,6 +96,20 @@ func (m *MembershipStore) EffectiveScopeIDs(ctx context.Context, principalID uui
 	return scopeIDs, rows.Err()
 }
 
+// IsSystemAdmin returns true if the principal has the is_system_admin flag set.
+// Returns false (not an error) when the principal does not exist.
+func (m *MembershipStore) IsSystemAdmin(ctx context.Context, principalID uuid.UUID) (bool, error) {
+	var isAdmin bool
+	err := m.pool.QueryRow(ctx,
+		`SELECT COALESCE((SELECT is_system_admin FROM principals WHERE id = $1), false)`,
+		principalID,
+	).Scan(&isAdmin)
+	if err != nil {
+		return false, fmt.Errorf("principals: is system admin: %w", err)
+	}
+	return isAdmin, nil
+}
+
 // IsScopeAdmin returns true if principalID has role="admin" in the given scope or any ancestor scope.
 func (m *MembershipStore) IsScopeAdmin(ctx context.Context, principalID, scopeID uuid.UUID) (bool, error) {
 	ancestorScopeIDs, err := db.GetAncestorScopeIDs(ctx, m.pool, scopeID)

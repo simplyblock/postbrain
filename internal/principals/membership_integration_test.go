@@ -258,3 +258,44 @@ func TestMembershipStore_IsScopeAdmin(t *testing.T) {
 		t.Error("member role should not be admin")
 	}
 }
+
+func TestMembershipStore_IsSystemAdmin(t *testing.T) {
+	t.Parallel()
+	pool := testhelper.NewTestPool(t)
+	ms := principals.NewMembershipStore(pool)
+	ctx := context.Background()
+
+	regular := testhelper.CreateTestPrincipal(t, pool, "user", "sys-admin-regular-"+uuid.New().String())
+	sysAdmin := testhelper.CreateTestPrincipal(t, pool, "user", "sys-admin-flag-"+uuid.New().String())
+
+	if _, err := pool.Exec(ctx,
+		`UPDATE principals SET is_system_admin = true WHERE id = $1`, sysAdmin.ID,
+	); err != nil {
+		t.Fatalf("set is_system_admin: %v", err)
+	}
+
+	ok, err := ms.IsSystemAdmin(ctx, regular.ID)
+	if err != nil {
+		t.Fatalf("IsSystemAdmin(regular): %v", err)
+	}
+	if ok {
+		t.Error("regular principal should not be system admin")
+	}
+
+	ok, err = ms.IsSystemAdmin(ctx, sysAdmin.ID)
+	if err != nil {
+		t.Fatalf("IsSystemAdmin(sysAdmin): %v", err)
+	}
+	if !ok {
+		t.Error("principal with is_system_admin=true should be system admin")
+	}
+
+	// Non-existent principal returns false without error.
+	ok, err = ms.IsSystemAdmin(ctx, uuid.New())
+	if err != nil {
+		t.Fatalf("IsSystemAdmin(unknown): %v", err)
+	}
+	if ok {
+		t.Error("unknown principal should not be system admin")
+	}
+}

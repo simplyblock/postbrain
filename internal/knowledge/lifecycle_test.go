@@ -11,12 +11,17 @@ import (
 
 // fakeLifecycleMembership implements membershipChecker for unit tests.
 type fakeLifecycleMembership struct {
-	isAdmin bool
-	err     error
+	isAdmin       bool
+	isSystemAdmin bool
+	err           error
 }
 
 func (f *fakeLifecycleMembership) IsScopeAdmin(_ context.Context, _, _ uuid.UUID) (bool, error) {
 	return f.isAdmin, f.err
+}
+
+func (f *fakeLifecycleMembership) IsSystemAdmin(_ context.Context, _ uuid.UUID) (bool, error) {
+	return f.isSystemAdmin, f.err
 }
 
 // noopLifecycleDB satisfies the full lifecycleDB interface with no-ops.
@@ -133,6 +138,17 @@ func newTestLifecycle(artifact *db.KnowledgeArtifact, isAdmin bool) (*Lifecycle,
 	fdb := &fakeLifecycleDB{artifact: artifact}
 	lc := &Lifecycle{
 		membership: &fakeLifecycleMembership{isAdmin: isAdmin},
+		dbOps:      fdb,
+	}
+	return lc, fdb
+}
+
+// newTestLifecycleSystemAdmin creates a Lifecycle where the caller is a system admin
+// (but not a scope admin via membership) to verify system-admin bypass paths.
+func newTestLifecycleSystemAdmin(artifact *db.KnowledgeArtifact) (*Lifecycle, *fakeLifecycleDB) {
+	fdb := &fakeLifecycleDB{artifact: artifact}
+	lc := &Lifecycle{
+		membership: &fakeLifecycleMembership{isSystemAdmin: true, isAdmin: false},
 		dbOps:      fdb,
 	}
 	return lc, fdb
@@ -560,5 +576,135 @@ func TestEmergencyRollback_ClearsPublishedAt(t *testing.T) {
 	}
 	if fdb.statusUpdated != "draft" {
 		t.Errorf("expected statusUpdated=draft, got %s", fdb.statusUpdated)
+	}
+}
+
+// ── System admin bypass tests ─────────────────────────────────────────────────
+
+func TestSubmitForReview_SystemAdminCanActOnNonAuthorArtifact(t *testing.T) {
+	t.Parallel()
+	artifact := &db.KnowledgeArtifact{
+		ID:           uuid.New(),
+		AuthorID:     uuid.New(),
+		OwnerScopeID: uuid.New(),
+		Status:       "draft",
+	}
+	lc, fdb := newTestLifecycleSystemAdmin(artifact)
+
+	err := lc.SubmitForReview(context.Background(), artifact.ID, uuid.New() /* non-author */)
+	if err != nil {
+		t.Fatalf("system admin should be able to submit for review, got %v", err)
+	}
+	if fdb.statusUpdated != "in_review" {
+		t.Errorf("expected statusUpdated=in_review, got %q", fdb.statusUpdated)
+	}
+}
+
+func TestRetractToDraft_SystemAdminCanRetract(t *testing.T) {
+	t.Parallel()
+	artifact := &db.KnowledgeArtifact{
+		ID:           uuid.New(),
+		AuthorID:     uuid.New(),
+		OwnerScopeID: uuid.New(),
+		Status:       "in_review",
+	}
+	lc, fdb := newTestLifecycleSystemAdmin(artifact)
+
+	err := lc.RetractToDraft(context.Background(), artifact.ID, uuid.New() /* non-author */)
+	if err != nil {
+		t.Fatalf("system admin should be able to retract to draft, got %v", err)
+	}
+	if fdb.statusUpdated != "draft" {
+		t.Errorf("expected statusUpdated=draft, got %q", fdb.statusUpdated)
+	}
+}
+
+func TestDeprecate_SystemAdminCanDeprecate(t *testing.T) {
+	t.Parallel()
+	artifact := &db.KnowledgeArtifact{
+		ID:           uuid.New(),
+		OwnerScopeID: uuid.New(),
+		Status:       "published",
+	}
+	lc, fdb := newTestLifecycleSystemAdmin(artifact)
+
+	err := lc.Deprecate(context.Background(), artifact.ID, uuid.New())
+	if err != nil {
+		t.Fatalf("system admin should be able to deprecate, got %v", err)
+	}
+	if fdb.statusUpdated != "deprecated" {
+		t.Errorf("expected statusUpdated=deprecated, got %q", fdb.statusUpdated)
+	}
+}
+
+func TestRepublish_SystemAdminCanRepublish(t *testing.T) {
+	t.Parallel()
+	artifact := &db.KnowledgeArtifact{
+		ID:           uuid.New(),
+		OwnerScopeID: uuid.New(),
+		Status:       "deprecated",
+	}
+	lc, fdb := newTestLifecycleSystemAdmin(artifact)
+
+	err := lc.Republish(context.Background(), artifact.ID, uuid.New())
+	if err != nil {
+		t.Fatalf("system admin should be able to republish, got %v", err)
+	}
+	if fdb.statusUpdated != "published" {
+		t.Errorf("expected statusUpdated=published, got %q", fdb.statusUpdated)
+	}
+}
+
+func TestDelete_SystemAdminCanDelete(t *testing.T) {
+	t.Parallel()
+	artifact := &db.KnowledgeArtifact{
+		ID:           uuid.New(),
+		OwnerScopeID: uuid.New(),
+		Status:       "published",
+	}
+	lc, fdb := newTestLifecycleSystemAdmin(artifact)
+
+	err := lc.Delete(context.Background(), artifact.ID, uuid.New())
+	if err != nil {
+		t.Fatalf("system admin should be able to delete, got %v", err)
+	}
+	if !fdb.artifactDeleted {
+		t.Error("expected deleteArtifact to be called")
+	}
+}
+
+func TestEmergencyRollback_SystemAdminCanRollback(t *testing.T) {
+	t.Parallel()
+	artifact := &db.KnowledgeArtifact{
+		ID:           uuid.New(),
+		OwnerScopeID: uuid.New(),
+		Status:       "published",
+	}
+	lc, fdb := newTestLifecycleSystemAdmin(artifact)
+
+	err := lc.EmergencyRollback(context.Background(), artifact.ID, uuid.New())
+	if err != nil {
+		t.Fatalf("system admin should be able to emergency rollback, got %v", err)
+	}
+	if fdb.statusUpdated != "draft" {
+		t.Errorf("expected statusUpdated=draft, got %q", fdb.statusUpdated)
+	}
+}
+
+func TestEndorse_SystemAdminCanEndorseOwnArtifact(t *testing.T) {
+	t.Parallel()
+	authorID := uuid.New()
+	artifact := &db.KnowledgeArtifact{
+		ID:             uuid.New(),
+		AuthorID:       authorID,
+		OwnerScopeID:   uuid.New(),
+		Status:         "in_review",
+		ReviewRequired: 2,
+	}
+	lc, _ := newTestLifecycleSystemAdmin(artifact)
+
+	_, err := lc.Endorse(context.Background(), artifact.ID, authorID, nil)
+	if err != nil {
+		t.Errorf("system admin self-endorsement should be allowed, got %v", err)
 	}
 }

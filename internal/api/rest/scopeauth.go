@@ -61,12 +61,30 @@ func (ro *Router) authorizeScopeAdmin(ctx context.Context, scopeID uuid.UUID) er
 	if err := ro.authorizeRequestedScope(ctx, scopeID); err != nil {
 		return err
 	}
-	if ro.membership == nil {
-		return fmt.Errorf("%w", scopeauth.ErrScopeResolverUnavailable)
-	}
 	principalID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 	if principalID == uuid.Nil {
 		return fmt.Errorf("%w", scopeauth.ErrMissingPrincipal)
+	}
+
+	// Prefer the DB resolver — it checks is_system_admin, ownership, membership
+	// roles (admin+), and scope grants, so system admins are handled correctly.
+	tokenResolver, _ := ctx.Value(auth.ContextKeyTokenResolver).(*authz.TokenResolver)
+	if tokenResolver != nil {
+		if dbr := tokenResolver.DBResolver(); dbr != nil {
+			ok, err := dbr.HasPermission(ctx, principalID, scopeID, authz.NewPermission(authz.ResourceScopes, authz.OperationEdit))
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return fmt.Errorf("%w: scope admin required", scopeauth.ErrPrincipalScopeDenied)
+			}
+			return nil
+		}
+	}
+
+	// Fallback: membership-only admin check.
+	if ro.membership == nil {
+		return fmt.Errorf("%w", scopeauth.ErrScopeResolverUnavailable)
 	}
 	ok, err := ro.membership.IsScopeAdmin(ctx, principalID, scopeID)
 	if err != nil {

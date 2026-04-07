@@ -11,12 +11,17 @@ import (
 
 // fakeMembership implements membershipChecker for unit tests.
 type fakeMembership struct {
-	isAdmin bool
-	err     error
+	isAdmin       bool
+	isSystemAdmin bool
+	err           error
 }
 
 func (f *fakeMembership) IsScopeAdmin(_ context.Context, _, _ uuid.UUID) (bool, error) {
 	return f.isAdmin, f.err
+}
+
+func (f *fakeMembership) IsSystemAdmin(_ context.Context, _ uuid.UUID) (bool, error) {
+	return f.isSystemAdmin, f.err
 }
 
 // fakeLifecycleDB wires up the lifecycle operations without a real DB.
@@ -57,6 +62,17 @@ func newTestLifecycle(skill *db.Skill, endorsements int, isAdmin bool) (*Lifecyc
 	fdb := newFakeLifecycleDB(skill, endorsements)
 	lc := &Lifecycle{
 		membership: &fakeMembership{isAdmin: isAdmin},
+		dbOps:      fdb,
+	}
+	return lc, fdb
+}
+
+// newTestLifecycleSystemAdmin creates a Lifecycle where the caller is a system admin
+// (but not a scope admin via membership) to verify system-admin bypass paths.
+func newTestLifecycleSystemAdmin(skill *db.Skill, endorsements int) (*Lifecycle, *fakeLifecycleDB) {
+	fdb := newFakeLifecycleDB(skill, endorsements)
+	lc := &Lifecycle{
+		membership: &fakeMembership{isSystemAdmin: true, isAdmin: false},
 		dbOps:      fdb,
 	}
 	return lc, fdb
@@ -352,6 +368,61 @@ func TestEmergencyRollback_AdminTransitionsToDraft(t *testing.T) {
 			err := lc.EmergencyRollback(context.Background(), skill.ID, uuid.New())
 			if err != nil {
 				t.Fatalf("status=%s: unexpected error: %v", status, err)
+			}
+			if fdb.statusUpdated != "draft" {
+				t.Errorf("status=%s: expected statusUpdated=draft, got %q", status, fdb.statusUpdated)
+			}
+		})
+	}
+}
+
+// ── System admin bypass tests ─────────────────────────────────────────────────
+
+func TestDeprecate_SystemAdminCanDeprecate(t *testing.T) {
+	t.Parallel()
+	skill := &db.Skill{
+		ID:      uuid.New(),
+		ScopeID: uuid.New(),
+		Status:  "published",
+	}
+	lc, fdb := newTestLifecycleSystemAdmin(skill, 0)
+	err := lc.Deprecate(context.Background(), skill.ID, uuid.New())
+	if err != nil {
+		t.Fatalf("system admin should be able to deprecate, got %v", err)
+	}
+	if fdb.statusUpdated != "deprecated" {
+		t.Errorf("expected statusUpdated=deprecated, got %q", fdb.statusUpdated)
+	}
+}
+
+func TestRepublish_SystemAdminCanRepublish(t *testing.T) {
+	t.Parallel()
+	skill := &db.Skill{
+		ID:      uuid.New(),
+		ScopeID: uuid.New(),
+		Status:  "deprecated",
+	}
+	lc, fdb := newTestLifecycleSystemAdmin(skill, 0)
+	err := lc.Republish(context.Background(), skill.ID, uuid.New())
+	if err != nil {
+		t.Fatalf("system admin should be able to republish, got %v", err)
+	}
+	if fdb.statusUpdated != "published" {
+		t.Errorf("expected statusUpdated=published, got %q", fdb.statusUpdated)
+	}
+}
+
+func TestEmergencyRollback_SystemAdminTransitionsToDraft(t *testing.T) {
+	t.Parallel()
+	for _, status := range []string{"in_review", "published", "deprecated"} {
+		status := status
+		t.Run(status, func(t *testing.T) {
+			t.Parallel()
+			skill := &db.Skill{ID: uuid.New(), ScopeID: uuid.New(), Status: status}
+			lc, fdb := newTestLifecycleSystemAdmin(skill, 0)
+			err := lc.EmergencyRollback(context.Background(), skill.ID, uuid.New())
+			if err != nil {
+				t.Fatalf("status=%s: system admin should be able to rollback, got %v", status, err)
 			}
 			if fdb.statusUpdated != "draft" {
 				t.Errorf("status=%s: expected statusUpdated=draft, got %q", status, fdb.statusUpdated)
