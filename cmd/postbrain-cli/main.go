@@ -529,10 +529,14 @@ func codexSkillContent(goos string) string {
 
 func detectCodexVersion() (string, error) {
 	out, err := exec.Command("codex", "--version").CombinedOutput()
+	trimmedOut := strings.TrimSpace(string(out))
 	if err != nil {
+		if trimmedOut != "" {
+			return "", fmt.Errorf("run codex --version: %w (output: %q)", err, trimmedOut)
+		}
 		return "", fmt.Errorf("run codex --version: %w", err)
 	}
-	return strings.TrimSpace(string(out)), nil
+	return trimmedOut, nil
 }
 
 func codexVersionMeetsMinimum(versionOutput, minimum string) (bool, error) {
