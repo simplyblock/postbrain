@@ -170,7 +170,12 @@ func TestInstallClaudeHooks_CreatesSettingsWithHooks(t *testing.T) {
 
 	// Snapshot command must include the literal scope.
 	entry, _ := postToolUse[0].(map[string]any)
-	cmd, _ := entry["command"].(string)
+	hooksList, _ := entry["hooks"].([]any)
+	if len(hooksList) == 0 {
+		t.Fatal("PostToolUse entry missing hooks array")
+	}
+	hook, _ := hooksList[0].(map[string]any)
+	cmd, _ := hook["command"].(string)
 	if !strings.Contains(cmd, "postbrain-cli snapshot") {
 		t.Errorf("PostToolUse command %q missing 'postbrain-cli snapshot'", cmd)
 	}

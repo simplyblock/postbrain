@@ -121,14 +121,25 @@ func InstallClaudeHooks(targetDir, scope string) (bool, error) {
 	postToolUse, _ := hooks["PostToolUse"].([]any)
 	postToolUse = append(postToolUse, map[string]any{
 		"matcher": "Edit|Write|Bash",
-		"command": "postbrain-cli snapshot --scope " + scopeArg,
+		"hooks": []any{
+			map[string]any{
+				"type":    "command",
+				"command": "postbrain-cli snapshot --scope " + scopeArg,
+			},
+		},
 	})
 	hooks["PostToolUse"] = postToolUse
 
 	// Stop: summarize session when the agent stops.
 	stop, _ := hooks["Stop"].([]any)
 	stop = append(stop, map[string]any{
-		"command": "postbrain-cli summarize-session --scope " + scopeArg,
+		"matcher": "",
+		"hooks": []any{
+			map[string]any{
+				"type":    "command",
+				"command": "postbrain-cli summarize-session --scope " + scopeArg,
+			},
+		},
 	})
 	hooks["Stop"] = stop
 
@@ -152,9 +163,13 @@ func existingHooksHavePostbrain(settings map[string]any) bool {
 	entries, _ := hooks["PostToolUse"].([]any)
 	for _, e := range entries {
 		entry, _ := e.(map[string]any)
-		cmd, _ := entry["command"].(string)
-		if strings.Contains(cmd, "postbrain-cli snapshot") {
-			return true
+		hooksList, _ := entry["hooks"].([]any)
+		for _, h := range hooksList {
+			hook, _ := h.(map[string]any)
+			cmd, _ := hook["command"].(string)
+			if strings.Contains(cmd, "postbrain-cli snapshot") {
+				return true
+			}
 		}
 	}
 	return false
