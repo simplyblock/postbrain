@@ -60,6 +60,35 @@
 
 ### Maintenance
 
+- [x] 2026-04-07: Fixed model-table memory recall sibling-scope leakage in selected-scope queries (TDD-first):
+  - Added integration regression coverage in `internal/memory/memory_integration_test.go`:
+    - `TestMemoryRecall_ModelTablePathDoesNotLeakSiblingScopeMemories`
+    - reproduces leakage when selected-scope fan-out includes an ancestor scope and model-table ANN scope-path matching pulls descendant sibling memories.
+  - Updated `internal/memory/recall.go`:
+    - `recallMemoriesByModelTable` now enforces exact fan-out scope membership on hydrated memory rows before appending results.
+    - prevents ancestor scope-path ANN matches from leaking descendant sibling memories into selected-scope recall.
+
+- [x] 2026-04-07: Fixed query-playground sibling-scope leakage from graph-augmented recall (TDD-first):
+  - Added integration regression coverage in `internal/retrieval/orchestrate_integration_test.go`:
+    - `TestOrchestrateRecall_GraphContextDoesNotLeakSiblingScopeMemories`
+    - reproduces leakage path where graph augmentation pulled memories linked to shared entities from sibling scopes.
+  - Updated `internal/retrieval/orchestrate.go`:
+    - graph-context memory augmentation now enforces selected-scope fan-out (`selected + ancestors/personal`) and intersects it with authorized scope IDs before appending graph-derived memories.
+    - prevents cross-branch/sibling scope memories from appearing in query-playground recall results.
+  - Added query-playground regression coverage for sibling scope separation in `internal/ui/handler_query_integration_test.go`:
+    - `TestQueryPlayground_SelectedScopeExcludesSiblingMemories`.
+
+- [x] 2026-04-07: Enabled Codex hooks config during `install-codex-skill` (TDD-first):
+  - Added red/green unit coverage in `internal/postbraincli/codex_skill_installer_test.go` for `.codex/config.toml` management:
+    - creates config when missing with `[features]` and `codex_hooks = true`
+    - merges into existing `[features]` config while preserving unrelated keys
+    - remains idempotent when run repeatedly.
+  - Added `EnableCodexHooks` to `internal/postbraincli/codex_skill_installer.go`:
+    - ensures `<target>/.codex/config.toml` exists
+    - enables hooks via `[features].codex_hooks = true`
+    - preserves existing config content and avoids duplicate entries.
+  - Updated `postbrain-cli install-codex-skill` command flow in `cmd/postbrain-cli/main.go` to call `EnableCodexHooks` after skill install.
+
 - [x] 2026-04-07: Updated docs for Codex hook/plugin parity with Claude workflows:
   - Updated `docs/using-with-coding-agents.md` to document Codex hook setup, including feature flag and hook command examples.
   - Documented Codex plugins usage and aligned guidance to use plugin workflows similarly to Claude command workflows.

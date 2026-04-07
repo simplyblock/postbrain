@@ -304,6 +304,10 @@ func (s *Store) recallMemoriesByModelTable(ctx context.Context, modelID uuid.UUI
 	if s.repo == nil || s.pool == nil || len(queryVec) == 0 || len(scopeIDs) == 0 {
 		return nil, nil
 	}
+	allowedScopeSet := make(map[uuid.UUID]struct{}, len(scopeIDs))
+	for _, scopeID := range scopeIDs {
+		allowedScopeSet[scopeID] = struct{}{}
+	}
 	type row struct {
 		id    uuid.UUID
 		score float64
@@ -347,6 +351,9 @@ func (s *Store) recallMemoriesByModelTable(ctx context.Context, modelID uuid.UUI
 			return nil, err
 		}
 		if mem == nil || !mem.IsActive {
+			continue
+		}
+		if _, ok := allowedScopeSet[mem.ScopeID]; !ok {
 			continue
 		}
 		rows = append(rows, db.MemoryScore{

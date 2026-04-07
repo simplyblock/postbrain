@@ -161,6 +161,7 @@ func OrchestrateRecall(ctx context.Context, deps OrchestrateDeps, input Orchestr
 	if input.GraphDepth <= 0 || input.ScopeID == uuid.Nil || deps.Pool == nil {
 		return merged, nil
 	}
+	allowedGraphScopes := graphAugmentationScopeSet(ctx, deps.Pool, input.ScopeID, input.PrincipalID, input.AuthorizedScopeIDs)
 
 	seen := make(map[uuid.UUID]bool, len(merged))
 	for _, r := range merged {
@@ -186,6 +187,9 @@ func OrchestrateRecall(ctx context.Context, deps OrchestrateDeps, input Orchestr
 				continue
 			}
 			for _, m := range mems {
+				if _, ok := allowedGraphScopes[m.ScopeID]; !ok {
+					continue
+				}
 				if seen[m.ID] {
 					continue
 				}
@@ -208,6 +212,41 @@ func OrchestrateRecall(ctx context.Context, deps OrchestrateDeps, input Orchestr
 		}
 	}
 	return append(merged, graphExtra...), nil
+}
+
+func graphAugmentationScopeSet(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	scopeID, principalID uuid.UUID,
+	authorizedScopeIDs []uuid.UUID,
+) map[uuid.UUID]struct{} {
+	out := make(map[uuid.UUID]struct{})
+	fanout, err := memory.FanOutScopeIDs(ctx, pool, scopeID, principalID, 0, false)
+	if err != nil || len(fanout) == 0 {
+		out[scopeID] = struct{}{}
+	} else {
+		for _, id := range fanout {
+			out[id] = struct{}{}
+		}
+	}
+	if len(authorizedScopeIDs) == 0 {
+		return out
+	}
+	authSet := make(map[uuid.UUID]struct{}, len(authorizedScopeIDs))
+	for _, id := range authorizedScopeIDs {
+		authSet[id] = struct{}{}
+	}
+	filtered := make(map[uuid.UUID]struct{}, len(out))
+	for id := range out {
+		if _, ok := authSet[id]; ok {
+			filtered[id] = struct{}{}
+		}
+	}
+	if len(filtered) == 0 {
+		// Be conservative: when intersection is empty, keep selected scope only.
+		return map[uuid.UUID]struct{}{scopeID: {}}
+	}
+	return filtered
 }
 
 func trimSourceRefLine(sourceRef string) string {

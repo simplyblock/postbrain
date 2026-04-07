@@ -470,7 +470,14 @@ func installCodexSkillCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			slog.Info("install-codex-skill: installed", "path", installedPath, "agents_updated", updatedAgents)
+			updatedConfig, err := postbraincli.EnableCodexHooks(targetDir)
+			if err != nil {
+				return err
+			}
+			slog.Info("install-codex-skill: installed",
+				"path", installedPath,
+				"agents_updated", updatedAgents,
+				"config_updated", updatedConfig)
 			return nil
 		},
 	}
