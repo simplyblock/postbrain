@@ -116,8 +116,9 @@ func InstallCodexHooks(targetDir, scope string) (bool, error) {
 	if err != nil && !os.IsNotExist(err) {
 		return false, fmt.Errorf("read hooks.json: %w", err)
 	}
-	if len(data) > 0 {
-		if err := json.Unmarshal(data, &root); err != nil {
+	trimmedData := strings.TrimSpace(string(data))
+	if trimmedData != "" {
+		if err := json.Unmarshal([]byte(trimmedData), &root); err != nil {
 			return false, fmt.Errorf("parse hooks.json: %w", err)
 		}
 	}
