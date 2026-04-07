@@ -364,3 +364,112 @@ func TestMemoryRecall_TextSearch_UsesModelTableWhenLegacyEmbeddingMissing(t *tes
 		t.Fatalf("first result memory id = %s, want %s", results[0].Memory.ID, created.MemoryID)
 	}
 }
+
+func TestMemoryRecall_ModelTablePathDoesNotLeakSiblingScopeMemories(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+
+	model, err := db.RegisterEmbeddingModel(ctx, pool, db.RegisterEmbeddingModelParams{
+		Slug:          "mem-recall-scope-leak-" + uuid.NewString(),
+		Provider:      "ollama",
+		ServiceURL:    "http://localhost:11434",
+		ProviderModel: "nomic-embed-text",
+		Dimensions:    4,
+		ContentType:   "text",
+		Activate:      true,
+	})
+	if err != nil {
+		t.Fatalf("register model: %v", err)
+	}
+
+	svc := testhelper.NewDeterministicEmbeddingService()
+	author := testhelper.CreateTestPrincipal(t, pool, "user", "recall-scope-leak-user-"+uuid.NewString())
+	company := testhelper.CreateTestScope(t, pool, "company", "recall-scope-leak-company-"+uuid.NewString(), nil, author.ID)
+	selectedProject := testhelper.CreateTestScope(t, pool, "project", "recall-scope-leak-selected-"+uuid.NewString(), &company.ID, author.ID)
+	siblingProject := testhelper.CreateTestScope(t, pool, "project", "recall-scope-leak-sibling-"+uuid.NewString(), &company.ID, author.ID)
+	store := memory.NewStore(pool, svc)
+
+	selected, err := store.Create(ctx, memory.CreateInput{
+		Content:    "MODEL_SCOPE_LEAK_QUERY selected",
+		MemoryType: "semantic",
+		ScopeID:    selectedProject.ID,
+		AuthorID:   author.ID,
+	})
+	if err != nil {
+		t.Fatalf("create selected memory: %v", err)
+	}
+	sibling, err := store.Create(ctx, memory.CreateInput{
+		Content:    "MODEL_SCOPE_LEAK_QUERY sibling",
+		MemoryType: "semantic",
+		ScopeID:    siblingProject.ID,
+		AuthorID:   author.ID,
+	})
+	if err != nil {
+		t.Fatalf("create sibling memory: %v", err)
+	}
+
+	queryText := "MODEL_SCOPE_LEAK_QUERY"
+	queryVec, err := svc.EmbedText(ctx, queryText)
+	if err != nil {
+		t.Fatalf("EmbedText: %v", err)
+	}
+	repo := db.NewEmbeddingRepository(pool)
+	if err := repo.UpsertEmbedding(ctx, db.UpsertEmbeddingInput{
+		ObjectType: "memory",
+		ObjectID:   selected.MemoryID,
+		ScopeID:    selectedProject.ID,
+		ModelID:    model.ID,
+		Embedding:  queryVec,
+	}); err != nil {
+		t.Fatalf("seed selected model-table embedding: %v", err)
+	}
+	if err := repo.UpsertEmbedding(ctx, db.UpsertEmbeddingInput{
+		ObjectType: "memory",
+		ObjectID:   sibling.MemoryID,
+		ScopeID:    siblingProject.ID,
+		ModelID:    model.ID,
+		Embedding:  queryVec,
+	}); err != nil {
+		t.Fatalf("seed sibling model-table embedding: %v", err)
+	}
+
+	// Force recall to use model-table path only.
+	if _, err := pool.Exec(ctx, `
+		UPDATE memories
+		SET embedding = NULL, embedding_model_id = NULL
+		WHERE id = ANY($1::uuid[])
+	`, []uuid.UUID{selected.MemoryID, sibling.MemoryID}); err != nil {
+		t.Fatalf("clear legacy embedding columns: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		UPDATE embedding_index
+		SET status = 'ready'
+		WHERE object_type = 'memory' AND object_id = ANY($1::uuid[]) AND model_id = $2
+	`, []uuid.UUID{selected.MemoryID, sibling.MemoryID}, model.ID); err != nil {
+		t.Fatalf("mark embedding_index ready: %v", err)
+	}
+
+	results, err := store.Recall(ctx, memory.RecallInput{
+		Query:       queryText,
+		ScopeID:     selectedProject.ID,
+		PrincipalID: author.ID,
+		SearchMode:  "text",
+		Limit:       20,
+	})
+	if err != nil {
+		t.Fatalf("Recall: %v", err)
+	}
+
+	var foundSelected bool
+	for _, res := range results {
+		if res.Memory.ID == selected.MemoryID {
+			foundSelected = true
+		}
+		if res.Memory.ID == sibling.MemoryID {
+			t.Fatalf("unexpected sibling-scope memory %s in selected-scope recall", sibling.MemoryID)
+		}
+	}
+	if !foundSelected {
+		t.Fatalf("expected selected memory %s in recall results", selected.MemoryID)
+	}
+}

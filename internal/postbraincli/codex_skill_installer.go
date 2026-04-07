@@ -74,3 +74,105 @@ func InstallCodexSkill(targetDir, skillContent, postbrainURL, postbrainScope str
 
 	return destFile, true, nil
 }
+
+// EnableCodexHooks ensures .codex/config.toml enables experimental Codex hooks
+// via [features].codex_hooks = true. The operation is idempotent.
+func EnableCodexHooks(targetDir string) (bool, error) {
+	if strings.TrimSpace(targetDir) == "" {
+		targetDir = "."
+	}
+
+	configDir := filepath.Join(targetDir, ".codex")
+	configPath := filepath.Join(configDir, "config.toml")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		return false, fmt.Errorf("create .codex directory: %w", err)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil && !os.IsNotExist(err) {
+		return false, fmt.Errorf("read config.toml: %w", err)
+	}
+
+	updated, content := ensureCodexHooksEnabled(string(data))
+	if !updated {
+		return false, nil
+	}
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
+		return false, fmt.Errorf("write config.toml: %w", err)
+	}
+	return true, nil
+}
+
+func ensureCodexHooksEnabled(content string) (bool, string) {
+	if strings.TrimSpace(content) == "" {
+		return true, "[features]\ncodex_hooks = true\n"
+	}
+
+	lines := strings.Split(content, "\n")
+	featuresStart, featuresEnd := findSection(lines, "features")
+	if featuresStart >= 0 {
+		for i := featuresStart + 1; i < featuresEnd; i++ {
+			key, value, ok := parseTOMLAssignment(lines[i])
+			if !ok || key != "codex_hooks" {
+				continue
+			}
+			if strings.EqualFold(strings.TrimSpace(value), "true") {
+				return false, content
+			}
+			lines[i] = "codex_hooks = true"
+			return true, strings.Join(lines, "\n")
+		}
+
+		lines = append(lines, "")
+		copy(lines[featuresEnd+1:], lines[featuresEnd:])
+		lines[featuresEnd] = "codex_hooks = true"
+		return true, strings.Join(lines, "\n")
+	}
+
+	trimmed := strings.TrimRight(content, "\n")
+	if trimmed == "" {
+		return true, "[features]\ncodex_hooks = true\n"
+	}
+	return true, trimmed + "\n\n[features]\ncodex_hooks = true\n"
+}
+
+func findSection(lines []string, section string) (start, end int) {
+	start = -1
+	end = len(lines)
+	target := "[" + section + "]"
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !isSectionHeader(trimmed) {
+			continue
+		}
+		if start >= 0 {
+			end = i
+			return start, end
+		}
+		if strings.EqualFold(trimmed, target) {
+			start = i
+		}
+	}
+	return start, end
+}
+
+func isSectionHeader(line string) bool {
+	return strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]")
+}
+
+func parseTOMLAssignment(line string) (key, value string, ok bool) {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+		return "", "", false
+	}
+	eq := strings.Index(trimmed, "=")
+	if eq <= 0 {
+		return "", "", false
+	}
+	key = strings.TrimSpace(trimmed[:eq])
+	value = strings.TrimSpace(trimmed[eq+1:])
+	return key, value, true
+}
