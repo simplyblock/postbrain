@@ -60,6 +60,13 @@
 
 ### Maintenance
 
+- [x] 2026-04-07: Fixed `POSTBRAIN_SCOPE` hook-example double-prefixing in docs:
+  - Updated `docs/getting-started.md` Codex hook command examples:
+    - replaced `--scope project:$POSTBRAIN_SCOPE` with `--scope "$POSTBRAIN_SCOPE"`.
+    - clarified `POSTBRAIN_SCOPE` must contain full `kind:external_id` (for example `project:acme/platform/postbrain`).
+  - Updated `docs/using-with-coding-agents.md` Codex hook command examples:
+    - replaced `--scope project:$POSTBRAIN_SCOPE` with `--scope "$POSTBRAIN_SCOPE"` for consistency.
+
 - [x] 2026-04-07: Hardened hook command scope handling against shell injection (TDD-first):
   - Added quoting utility and unit coverage:
     - `internal/postbraincli/shellquote.go`

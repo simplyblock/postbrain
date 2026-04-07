@@ -81,6 +81,7 @@ Then set client-side environment variables:
 - `POSTBRAIN_URL` (for example `http://localhost:7433`)
 - `POSTBRAIN_TOKEN` (issued bearer token)
 - optional `POSTBRAIN_SCOPE` for default scope selection
+  - set this to a full `kind:external_id` value (for example `project:acme/platform/postbrain`)
 
 Permission model reference for token design:
 
@@ -130,7 +131,7 @@ Then add Postbrain commands to `~/.codex/hooks.json` or `<repo>/.codex/hooks.jso
         "hooks": [
           {
             "type": "command",
-            "command": "postbrain-cli snapshot --scope project:$POSTBRAIN_SCOPE"
+            "command": "postbrain-cli snapshot --scope \"$POSTBRAIN_SCOPE\""
           }
         ]
       }
@@ -140,7 +141,7 @@ Then add Postbrain commands to `~/.codex/hooks.json` or `<repo>/.codex/hooks.jso
         "hooks": [
           {
             "type": "command",
-            "command": "postbrain-cli summarize-session --scope project:$POSTBRAIN_SCOPE"
+            "command": "postbrain-cli summarize-session --scope \"$POSTBRAIN_SCOPE\""
           }
         ]
       }

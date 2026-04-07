@@ -41,7 +41,7 @@ codex_hooks = true
         "hooks": [
           {
             "type": "command",
-            "command": "postbrain-cli snapshot --scope project:$POSTBRAIN_SCOPE"
+            "command": "postbrain-cli snapshot --scope \"$POSTBRAIN_SCOPE\""
           }
         ]
       }
@@ -51,7 +51,7 @@ codex_hooks = true
         "hooks": [
           {
             "type": "command",
-            "command": "postbrain-cli summarize-session --scope project:$POSTBRAIN_SCOPE"
+            "command": "postbrain-cli summarize-session --scope \"$POSTBRAIN_SCOPE\""
           }
         ]
       }
