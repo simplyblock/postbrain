@@ -15,6 +15,8 @@ import (
 	"github.com/simplyblock/postbrain/internal/skills"
 )
 
+var graphAugmentationScopeSetFn = graphAugmentationScopeSet
+
 // OrchestrateDeps wires concrete stores used by OrchestrateRecall.
 type OrchestrateDeps struct {
 	Pool     *pgxpool.Pool
@@ -161,7 +163,17 @@ func OrchestrateRecall(ctx context.Context, deps OrchestrateDeps, input Orchestr
 	if input.GraphDepth <= 0 || input.ScopeID == uuid.Nil || deps.Pool == nil {
 		return merged, nil
 	}
-	allowedGraphScopes := graphAugmentationScopeSet(ctx, deps.Pool, input.ScopeID, input.PrincipalID, input.AuthorizedScopeIDs)
+	hasSourceRef := false
+	for _, r := range merged {
+		if r.SourceRef != "" {
+			hasSourceRef = true
+			break
+		}
+	}
+	if !hasSourceRef {
+		return merged, nil
+	}
+	allowedGraphScopes := graphAugmentationScopeSetFn(ctx, deps.Pool, input.ScopeID, input.PrincipalID, input.AuthorizedScopeIDs)
 
 	seen := make(map[uuid.UUID]bool, len(merged))
 	for _, r := range merged {

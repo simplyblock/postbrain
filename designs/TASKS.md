@@ -60,6 +60,14 @@
 
 ### Maintenance
 
+- [x] 2026-04-07: Avoided eager graph-augmentation scope fan-out when recall results have no source refs (TDD-first):
+  - Added unit regression coverage in `internal/retrieval/orchestrate_test.go`:
+    - `TestOrchestrateRecall_DoesNotComputeGraphAugmentationScopesWithoutSourceRefs`
+    - verifies graph augmentation scope-set computation is skipped when merged results contain no `SourceRef`.
+  - Updated `internal/retrieval/orchestrate.go`:
+    - graph augmentation now checks for at least one merged result with `SourceRef` before computing fan-out/authorized scope intersection.
+    - introduced package-level hook `graphAugmentationScopeSetFn` for deterministic unit testing of lazy evaluation behavior.
+
 - [x] 2026-04-07: Fixed model-table memory recall sibling-scope leakage in selected-scope queries (TDD-first):
   - Added integration regression coverage in `internal/memory/memory_integration_test.go`:
     - `TestMemoryRecall_ModelTablePathDoesNotLeakSiblingScopeMemories`
