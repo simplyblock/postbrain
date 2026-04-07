@@ -233,6 +233,12 @@ recall(
                   "knowledge_type", "full_content_available", ... }] }
 ```
 
+Recall **walks up the scope hierarchy**: querying `project:acme/api` also
+surfaces memories and knowledge from parent team and company scopes. This is
+intentional — ancestor scopes hold overarching definitions (company-wide agent
+instructions, code style rules, architecture decisions) that should always be
+visible to child contexts.
+
 When a knowledge result has `full_content_available: true`, only the summary
 is returned. Use `knowledge_detail` to retrieve the full content.
 
@@ -342,9 +348,12 @@ endorse(
 ```
 
 Rules:
-- Authors cannot endorse their own artifacts (unless they are also a scope admin).
-- The artifact must be `in_review`; use the REST API or a scope admin to
-  submit a draft for review first.
+- Authors cannot endorse their own artifacts unless they are a scope admin or
+  system admin, in which case the self-endorsement guard is bypassed.
+- Scope and system admins can also endorse artifacts regardless of their current
+  status (not limited to `in_review`).
+- The artifact must be `in_review` for non-admins; use the REST API or an admin
+  to submit a draft for review first.
 - Endorsements are idempotent: endorsing twice has no additional effect.
 
 #### `promote`
@@ -652,6 +661,7 @@ For general semantic search across all layers:
 ```
 recall(query="how do we handle authentication", scope)
   → results from memory + knowledge + skills, ranked by relevance
+  → includes ancestor-scope content (company guidelines, team conventions, …)
 
 recall(query="...", scope, layers=["knowledge"], min_score=0.7)
   → knowledge only, high-confidence results
@@ -700,6 +710,9 @@ postbrain/
 ├── internal/
 │   ├── api/mcp/            # MCP server and tool handlers
 │   ├── api/rest/           # REST API handlers
+│   ├── api/scopeauth/      # shared scope authorization helpers
+│   ├── auth/               # token hashing, context keys, Bearer enforcement
+│   ├── authz/              # permission resolver: roles, grants, system admin, inheritance
 │   ├── db/                 # pgx pool, migration runner, sqlc queries
 │   │   └── migrations/     # embedded SQL migration files (000001_…)
 │   ├── embedding/          # text and code embedding backends
@@ -708,16 +721,20 @@ postbrain/
 │   ├── skills/             # skill registry, install, sync
 │   ├── retrieval/          # cross-layer merge and re-rank
 │   ├── graph/              # entity/relation store, Apache AGE sync
+│   ├── oauth/              # OAuth 2.0 server (authorization code + PKCE)
 │   ├── principals/         # principal and membership management
 │   ├── sharing/            # sharing grant enforcement
+│   ├── codegraph/          # code symbol graph (LSP-backed)
 │   └── jobs/               # background jobs scheduler
 ├── AGENTS.md               # ← agent rules (read first)
 ├── designs/                # ← architecture, design, and task documents
 │   ├── DESIGN.md           #   full architecture and design decisions
 │   ├── DESIGN_CODE_GRAPH.md
 │   ├── DESIGN_OAUTH.md
+│   ├── DESIGN_PERMISSIONS.md #  permissions model: roles, grants, system admin
 │   ├── TASKS.md            #   current task list and status
-│   └── TASKS_OAUTH.md      #   OAuth implementation task list
+│   ├── TASKS_OAUTH.md      #   OAuth implementation task list
+│   └── TASKS_PERMISSIONS.md #  permissions implementation task list
 ├── config.example.yaml
 └── docker-compose.yml
 ```
@@ -735,7 +752,12 @@ Before writing a single line of code, read these files **in order**:
    the database schema, the scope hierarchy, and the extension rationale
    before touching any code. Do **not** change the design without asking first.
 
-3. **`designs/TASKS.md`** — the current task list. Find your assigned task, understand
+3. **`designs/DESIGN_PERMISSIONS.md`** — the permissions model. Understand how
+   roles, scope grants, system admin, and upward-read inheritance interact before
+   touching any authorization code. The `internal/authz` package is the source of
+   truth; never bypass it with direct membership or DB queries.
+
+4. **`designs/TASKS.md`** — the current task list. Find your assigned task, understand
    its scope, and update this file before every commit.
 
 ### Key constraints (summary — full rules in `AGENTS.md`)
