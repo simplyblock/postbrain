@@ -60,6 +60,18 @@
 
 ### Maintenance
 
+- [x] 2026-04-07: Replaced scaffolded Postbrain plugin placeholders with real plugin artifacts:
+  - Added concrete plugin payload files under `plugins/postbrain/`:
+    - `skills/codex.md`
+    - `skills/codex-lite.md`
+    - `skills/claude-code.md`
+    - `hooks.json`
+    - `.mcp.json`
+  - Updated `plugins/postbrain/.codex-plugin/plugin.json`:
+    - replaced `[TODO: ...]` placeholder metadata with concrete values.
+    - configured `skills`, `hooks`, and `mcpServers` to real plugin-local file paths.
+    - set plugin version to current tagged release baseline (`0.0.3`).
+
 - [x] 2026-04-07: Fixed `POSTBRAIN_SCOPE` hook-example double-prefixing in docs:
   - Updated `docs/getting-started.md` Codex hook command examples:
     - replaced `--scope project:$POSTBRAIN_SCOPE` with `--scope "$POSTBRAIN_SCOPE"`.
