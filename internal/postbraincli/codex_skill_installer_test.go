@@ -254,3 +254,104 @@ func TestInstallCodexSkillWithOptions_DisablesHookInstall(t *testing.T) {
 		t.Fatalf("hooks.json exists unexpectedly or stat error: %v", err)
 	}
 }
+
+func TestInstallCodexHooks_AddsMissingStopWhenSnapshotExists(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+	configDir := filepath.Join(targetDir, ".codex")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("mkdir .codex: %v", err)
+	}
+	existing := `{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "postbrain-cli snapshot --scope project:acme/api" }
+        ]
+      }
+    ]
+  }
+}`
+	hooksPath := filepath.Join(configDir, "hooks.json")
+	if err := os.WriteFile(hooksPath, []byte(existing), 0o644); err != nil {
+		t.Fatalf("write hooks.json: %v", err)
+	}
+
+	updated, err := InstallCodexHooks(targetDir, "project:acme/api")
+	if err != nil {
+		t.Fatalf("InstallCodexHooks: %v", err)
+	}
+	if !updated {
+		t.Fatal("updated = false, want true")
+	}
+
+	data, err := os.ReadFile(hooksPath)
+	if err != nil {
+		t.Fatalf("read hooks.json: %v", err)
+	}
+	var root map[string]any
+	if err := json.Unmarshal(data, &root); err != nil {
+		t.Fatalf("parse hooks.json: %v", err)
+	}
+	hooks, _ := root["hooks"].(map[string]any)
+	stop, _ := hooks["Stop"].([]any)
+	if len(stop) != 1 {
+		t.Fatalf("Stop entries = %d, want 1", len(stop))
+	}
+	postToolUse, _ := hooks["PostToolUse"].([]any)
+	if len(postToolUse) != 1 {
+		t.Fatalf("PostToolUse entries = %d, want 1", len(postToolUse))
+	}
+}
+
+func TestInstallCodexHooks_AddsMissingSnapshotWhenStopExists(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+	configDir := filepath.Join(targetDir, ".codex")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("mkdir .codex: %v", err)
+	}
+	existing := `{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "postbrain-cli summarize-session --scope project:acme/api" }
+        ]
+      }
+    ]
+  }
+}`
+	hooksPath := filepath.Join(configDir, "hooks.json")
+	if err := os.WriteFile(hooksPath, []byte(existing), 0o644); err != nil {
+		t.Fatalf("write hooks.json: %v", err)
+	}
+
+	updated, err := InstallCodexHooks(targetDir, "project:acme/api")
+	if err != nil {
+		t.Fatalf("InstallCodexHooks: %v", err)
+	}
+	if !updated {
+		t.Fatal("updated = false, want true")
+	}
+
+	data, err := os.ReadFile(hooksPath)
+	if err != nil {
+		t.Fatalf("read hooks.json: %v", err)
+	}
+	var root map[string]any
+	if err := json.Unmarshal(data, &root); err != nil {
+		t.Fatalf("parse hooks.json: %v", err)
+	}
+	hooks, _ := root["hooks"].(map[string]any)
+	postToolUse, _ := hooks["PostToolUse"].([]any)
+	if len(postToolUse) != 1 {
+		t.Fatalf("PostToolUse entries = %d, want 1", len(postToolUse))
+	}
+	stop, _ := hooks["Stop"].([]any)
+	if len(stop) != 1 {
+		t.Fatalf("Stop entries = %d, want 1", len(stop))
+	}
+}

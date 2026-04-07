@@ -60,6 +60,16 @@
 
 ### Maintenance
 
+- [x] 2026-04-07: Fixed Codex hook installer idempotency for partially configured hook files (TDD-first):
+  - Added regression tests in `internal/postbraincli/codex_skill_installer_test.go`:
+    - `TestInstallCodexHooks_AddsMissingStopWhenSnapshotExists`
+    - `TestInstallCodexHooks_AddsMissingSnapshotWhenStopExists`
+    - verifies partial `.codex/hooks.json` configurations are healed without duplicating existing hook entries.
+  - Updated `internal/postbraincli/codex_skill_installer.go`:
+    - removed single boolean early-return based only on snapshot detection.
+    - now detects Postbrain snapshot and summarize commands independently per event (`PostToolUse`, `Stop`) and appends only missing entries.
+    - preserves idempotent no-op behavior when both required hooks are already present.
+
 - [x] 2026-04-07: Added Codex install-time version gating and platform-specific skill profiles (TDD-first):
   - Added CLI unit coverage in `cmd/postbrain-cli/main_test.go`:
     - `TestCodexVersionMeetsMinimum`

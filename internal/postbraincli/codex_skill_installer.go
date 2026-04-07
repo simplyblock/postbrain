@@ -123,10 +123,6 @@ func InstallCodexHooks(targetDir, scope string) (bool, error) {
 		}
 	}
 
-	if existingCodexHooksHavePostbrain(root) {
-		return false, nil
-	}
-
 	var snapshotCmd, summarizeCmd string
 	if strings.TrimSpace(scope) != "" {
 		snapshotCmd = "postbrain-cli snapshot --scope " + scope
@@ -143,27 +139,35 @@ func InstallCodexHooks(targetDir, scope string) (bool, error) {
 	}
 
 	postToolUse, _ := hooks["PostToolUse"].([]any)
-	postToolUse = append(postToolUse, map[string]any{
-		"matcher": "Bash",
-		"hooks": []any{
-			map[string]any{
-				"type":    "command",
-				"command": snapshotCmd,
-			},
-		},
-	})
-	hooks["PostToolUse"] = postToolUse
-
 	stop, _ := hooks["Stop"].([]any)
-	stop = append(stop, map[string]any{
-		"hooks": []any{
-			map[string]any{
-				"type":    "command",
-				"command": summarizeCmd,
+	hasSnapshot := eventHooksContainCommand(postToolUse, "postbrain-cli snapshot")
+	hasSummarize := eventHooksContainCommand(stop, "postbrain-cli summarize-session")
+	if !hasSnapshot {
+		postToolUse = append(postToolUse, map[string]any{
+			"matcher": "Bash",
+			"hooks": []any{
+				map[string]any{
+					"type":    "command",
+					"command": snapshotCmd,
+				},
 			},
-		},
-	})
-	hooks["Stop"] = stop
+		})
+		hooks["PostToolUse"] = postToolUse
+	}
+	if !hasSummarize {
+		stop = append(stop, map[string]any{
+			"hooks": []any{
+				map[string]any{
+					"type":    "command",
+					"command": summarizeCmd,
+				},
+			},
+		})
+		hooks["Stop"] = stop
+	}
+	if hasSnapshot && hasSummarize {
+		return false, nil
+	}
 
 	out, err := json.MarshalIndent(root, "", "  ")
 	if err != nil {
@@ -277,19 +281,14 @@ func parseTOMLAssignment(line string) (key, value string, ok bool) {
 	return key, value, true
 }
 
-func existingCodexHooksHavePostbrain(root map[string]any) bool {
-	hooks, _ := root["hooks"].(map[string]any)
-	if hooks == nil {
-		return false
-	}
-	entries, _ := hooks["PostToolUse"].([]any)
+func eventHooksContainCommand(entries []any, needle string) bool {
 	for _, e := range entries {
 		entry, _ := e.(map[string]any)
 		hooksList, _ := entry["hooks"].([]any)
 		for _, h := range hooksList {
 			hook, _ := h.(map[string]any)
 			cmd, _ := hook["command"].(string)
-			if strings.Contains(cmd, "postbrain-cli snapshot") {
+			if strings.Contains(cmd, needle) {
 				return true
 			}
 		}
