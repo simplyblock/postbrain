@@ -473,19 +473,22 @@ func installCodexSkillCmd() *cobra.Command {
 				targetDir = "."
 			}
 
-			codexVersion, err := detectCodexVersionFn()
-			if err != nil {
-				return err
-			}
-			ok, err := codexVersionMeetsMinimum(codexVersion, minimumCodexHooksVersion)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				return fmt.Errorf("codex version %q is below required minimum %s", codexVersion, minimumCodexHooksVersion)
-			}
-
 			installHooks := runtime.GOOS != "windows"
+			codexVersion := "not-checked-on-windows"
+			var err error
+			if shouldEnforceCodexVersion(runtime.GOOS) {
+				codexVersion, err = detectCodexVersionFn()
+				if err != nil {
+					return err
+				}
+				ok, err := codexVersionMeetsMinimum(codexVersion, minimumCodexHooksVersion)
+				if err != nil {
+					return err
+				}
+				if !ok {
+					return fmt.Errorf("codex version %q is below required minimum %s", codexVersion, minimumCodexHooksVersion)
+				}
+			}
 			if !installHooks {
 				slog.Warn("Codex hooks are unavailable on Windows; installing full skill without hooks")
 			}
@@ -525,6 +528,10 @@ func codexSkillContent(goos string) string {
 		return embeddedCodexSkillFull
 	}
 	return embeddedCodexSkillLight
+}
+
+func shouldEnforceCodexVersion(goos string) bool {
+	return !strings.EqualFold(goos, "windows")
 }
 
 func detectCodexVersion() (string, error) {

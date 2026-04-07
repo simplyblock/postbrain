@@ -60,6 +60,24 @@
 
 ### Maintenance
 
+- [x] 2026-04-07: Hardened hook command scope handling against shell injection (TDD-first):
+  - Added quoting utility and unit coverage:
+    - `internal/postbraincli/shellquote.go`
+    - `internal/postbraincli/shellquote_test.go::TestShellSingleQuote`
+  - Added regression tests for explicit-scope hook command safety:
+    - `internal/postbraincli/codex_skill_installer_test.go::TestInstallCodexHooks_QuotesExplicitScopeInCommands`
+    - `internal/postbraincli/claude_skill_installer_test.go::TestInstallClaudeHooks_QuotesExplicitScopeInCommands`
+  - Updated hook installers:
+    - `internal/postbraincli/codex_skill_installer.go` now shell-quotes non-empty explicit scope values before embedding in hook command strings.
+    - `internal/postbraincli/claude_skill_installer.go` now shell-quotes non-empty explicit scope values before embedding in hook command strings.
+  - Added robustness fix:
+    - `InstallClaudeHooks` now ensures `.claude/` exists before writing `settings.local.json`.
+  - Updated Codex installer platform gating:
+    - `cmd/postbrain-cli/main.go` now skips Codex minimum-version enforcement on Windows (full-skill/no-hook mode) and only enforces the `0.114.0` minimum on non-Windows platforms where hooks are installed.
+    - added unit coverage in `cmd/postbrain-cli/main_test.go`:
+      - `TestShouldEnforceCodexVersion_WindowsFalse`
+      - `TestShouldEnforceCodexVersion_NonWindowsTrue`
+
 - [x] 2026-04-07: Fixed Claude hook installer idempotency for partial settings (TDD-first):
   - Added regression tests in `internal/postbraincli/claude_skill_installer_test.go`:
     - `TestInstallClaudeHooks_AddsMissingStopWhenSnapshotExists`

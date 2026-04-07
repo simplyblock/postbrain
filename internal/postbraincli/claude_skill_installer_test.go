@@ -365,3 +365,29 @@ func TestInstallClaudeHooks_AddsMissingSnapshotWhenStopExists(t *testing.T) {
 		t.Fatalf("PostToolUse entries = %d, want 1", len(postToolUse))
 	}
 }
+
+func TestInstallClaudeHooks_QuotesExplicitScopeInCommands(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+	scope := "project:acme/api; echo pwned"
+
+	updated, err := InstallClaudeHooks(targetDir, scope)
+	if err != nil {
+		t.Fatalf("InstallClaudeHooks: %v", err)
+	}
+	if !updated {
+		t.Fatal("updated = false, want true")
+	}
+
+	data, err := os.ReadFile(filepath.Join(targetDir, ".claude", "settings.local.json"))
+	if err != nil {
+		t.Fatalf("read settings.local.json: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "--scope 'project:acme/api; echo pwned'") {
+		t.Fatalf("settings.local.json missing quoted scope: %s", content)
+	}
+	if strings.Contains(content, "--scope project:acme/api; echo pwned") {
+		t.Fatalf("settings.local.json contains unquoted scope: %s", content)
+	}
+}

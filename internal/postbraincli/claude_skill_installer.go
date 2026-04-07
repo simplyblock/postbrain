@@ -86,7 +86,11 @@ func InstallClaudeHooks(targetDir, scope string) (bool, error) {
 		targetDir = "."
 	}
 
-	settingsPath := filepath.Join(targetDir, ".claude", "settings.local.json")
+	claudeDir := filepath.Join(targetDir, ".claude")
+	settingsPath := filepath.Join(claudeDir, "settings.local.json")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		return false, fmt.Errorf("create .claude directory: %w", err)
+	}
 
 	// Read existing settings or start from an empty map.
 	settings := make(map[string]any)
@@ -102,8 +106,9 @@ func InstallClaudeHooks(targetDir, scope string) (bool, error) {
 
 	var snapshotCmd, summarizeCmd string
 	if strings.TrimSpace(scope) != "" {
-		snapshotCmd = "postbrain-cli snapshot --scope " + scope
-		summarizeCmd = "postbrain-cli summarize-session --scope " + scope
+		quotedScope := shellSingleQuote(scope)
+		snapshotCmd = "postbrain-cli snapshot --scope " + quotedScope
+		summarizeCmd = "postbrain-cli summarize-session --scope " + quotedScope
 	} else {
 		snapshotCmd = `[ -n "$POSTBRAIN_SCOPE" ] && postbrain-cli snapshot --scope "$POSTBRAIN_SCOPE" || true`
 		summarizeCmd = `[ -n "$POSTBRAIN_SCOPE" ] && postbrain-cli summarize-session --scope "$POSTBRAIN_SCOPE" || true`

@@ -355,3 +355,29 @@ func TestInstallCodexHooks_AddsMissingSnapshotWhenStopExists(t *testing.T) {
 		t.Fatalf("Stop entries = %d, want 1", len(stop))
 	}
 }
+
+func TestInstallCodexHooks_QuotesExplicitScopeInCommands(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+	scope := "project:acme/api; echo pwned"
+
+	updated, err := InstallCodexHooks(targetDir, scope)
+	if err != nil {
+		t.Fatalf("InstallCodexHooks: %v", err)
+	}
+	if !updated {
+		t.Fatal("updated = false, want true")
+	}
+
+	data, err := os.ReadFile(filepath.Join(targetDir, ".codex", "hooks.json"))
+	if err != nil {
+		t.Fatalf("read hooks.json: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "--scope 'project:acme/api; echo pwned'") {
+		t.Fatalf("hooks.json missing quoted scope: %s", content)
+	}
+	if strings.Contains(content, "--scope project:acme/api; echo pwned") {
+		t.Fatalf("hooks.json contains unquoted scope: %s", content)
+	}
+}

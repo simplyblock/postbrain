@@ -113,3 +113,17 @@ func TestCodexSkillContent_NonWindowsUsesLightProfile(t *testing.T) {
 		t.Fatal("non-windows should use light Codex skill profile")
 	}
 }
+
+func TestShouldEnforceCodexVersion_WindowsFalse(t *testing.T) {
+	t.Parallel()
+	if shouldEnforceCodexVersion("windows") {
+		t.Fatal("windows should skip codex version enforcement")
+	}
+}
+
+func TestShouldEnforceCodexVersion_NonWindowsTrue(t *testing.T) {
+	t.Parallel()
+	if !shouldEnforceCodexVersion("linux") {
+		t.Fatal("non-windows should enforce codex version")
+	}
+}
