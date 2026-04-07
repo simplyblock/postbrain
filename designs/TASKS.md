@@ -60,6 +60,16 @@
 
 ### Maintenance
 
+- [x] 2026-04-07: Fixed Claude hook installer idempotency for partial settings (TDD-first):
+  - Added regression tests in `internal/postbraincli/claude_skill_installer_test.go`:
+    - `TestInstallClaudeHooks_AddsMissingStopWhenSnapshotExists`
+    - `TestInstallClaudeHooks_AddsMissingSnapshotWhenStopExists`
+    - verifies partially configured `.claude/settings.local.json` is healed by adding only missing Postbrain hooks.
+  - Updated `internal/postbraincli/claude_skill_installer.go`:
+    - removed early-return idempotency check based solely on snapshot presence.
+    - now detects snapshot and summarize hooks independently per event and appends only missing entries.
+    - preserves no-op idempotency when both required hooks are already present.
+
 - [x] 2026-04-07: Fixed Codex hook installer idempotency for partially configured hook files (TDD-first):
   - Added regression tests in `internal/postbraincli/codex_skill_installer_test.go`:
     - `TestInstallCodexHooks_AddsMissingStopWhenSnapshotExists`

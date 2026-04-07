@@ -100,11 +100,6 @@ func InstallClaudeHooks(targetDir, scope string) (bool, error) {
 		}
 	}
 
-	// Idempotency: already installed if any PostToolUse command mentions postbrain-cli snapshot.
-	if existingHooksHavePostbrain(settings) {
-		return false, nil
-	}
-
 	var snapshotCmd, summarizeCmd string
 	if strings.TrimSpace(scope) != "" {
 		snapshotCmd = "postbrain-cli snapshot --scope " + scope
@@ -121,31 +116,39 @@ func InstallClaudeHooks(targetDir, scope string) (bool, error) {
 		settings["hooks"] = hooks
 	}
 
-	// PostToolUse: snapshot on file edits.
 	postToolUse, _ := hooks["PostToolUse"].([]any)
-	postToolUse = append(postToolUse, map[string]any{
-		"matcher": "Edit|Write|Bash",
-		"hooks": []any{
-			map[string]any{
-				"type":    "command",
-				"command": snapshotCmd,
-			},
-		},
-	})
-	hooks["PostToolUse"] = postToolUse
-
-	// Stop: summarize session when the agent stops.
 	stop, _ := hooks["Stop"].([]any)
-	stop = append(stop, map[string]any{
-		"matcher": "",
-		"hooks": []any{
-			map[string]any{
-				"type":    "command",
-				"command": summarizeCmd,
+	hasSnapshot := eventHooksContainCommand(postToolUse, "postbrain-cli snapshot")
+	hasSummarize := eventHooksContainCommand(stop, "postbrain-cli summarize-session")
+	if !hasSnapshot {
+		// PostToolUse: snapshot on file edits.
+		postToolUse = append(postToolUse, map[string]any{
+			"matcher": "Edit|Write|Bash",
+			"hooks": []any{
+				map[string]any{
+					"type":    "command",
+					"command": snapshotCmd,
+				},
 			},
-		},
-	})
-	hooks["Stop"] = stop
+		})
+		hooks["PostToolUse"] = postToolUse
+	}
+	if !hasSummarize {
+		// Stop: summarize session when the agent stops.
+		stop = append(stop, map[string]any{
+			"matcher": "",
+			"hooks": []any{
+				map[string]any{
+					"type":    "command",
+					"command": summarizeCmd,
+				},
+			},
+		})
+		hooks["Stop"] = stop
+	}
+	if hasSnapshot && hasSummarize {
+		return false, nil
+	}
 
 	out, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
@@ -155,26 +158,4 @@ func InstallClaudeHooks(targetDir, scope string) (bool, error) {
 		return false, fmt.Errorf("write settings.json: %w", err)
 	}
 	return true, nil
-}
-
-// existingHooksHavePostbrain returns true if settings already contains a
-// PostToolUse hook whose command mentions "postbrain-cli snapshot".
-func existingHooksHavePostbrain(settings map[string]any) bool {
-	hooks, _ := settings["hooks"].(map[string]any)
-	if hooks == nil {
-		return false
-	}
-	entries, _ := hooks["PostToolUse"].([]any)
-	for _, e := range entries {
-		entry, _ := e.(map[string]any)
-		hooksList, _ := entry["hooks"].([]any)
-		for _, h := range hooksList {
-			hook, _ := h.(map[string]any)
-			cmd, _ := hook["command"].(string)
-			if strings.Contains(cmd, "postbrain-cli snapshot") {
-				return true
-			}
-		}
-	}
-	return false
 }

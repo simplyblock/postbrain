@@ -272,3 +272,96 @@ func TestInstallClaudeHooks_Idempotent(t *testing.T) {
 		t.Error("postbrain snapshot hook duplicated in settings.json")
 	}
 }
+
+func TestInstallClaudeHooks_AddsMissingStopWhenSnapshotExists(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+	clDir := filepath.Join(targetDir, ".claude")
+	if err := os.MkdirAll(clDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	existing := `{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|Bash",
+        "hooks": [
+          { "type": "command", "command": "postbrain-cli snapshot --scope project:acme/api" }
+        ]
+      }
+    ]
+  }
+}`
+	if err := os.WriteFile(filepath.Join(clDir, "settings.local.json"), []byte(existing), 0o644); err != nil {
+		t.Fatalf("write settings.local.json: %v", err)
+	}
+
+	updated, err := InstallClaudeHooks(targetDir, "project:acme/api")
+	if err != nil {
+		t.Fatalf("InstallClaudeHooks: %v", err)
+	}
+	if !updated {
+		t.Fatal("updated = false, want true")
+	}
+
+	data, _ := os.ReadFile(filepath.Join(clDir, "settings.local.json"))
+	var s map[string]any
+	if err := json.Unmarshal(data, &s); err != nil {
+		t.Fatalf("parse settings.local.json: %v", err)
+	}
+	hooks, _ := s["hooks"].(map[string]any)
+	postToolUse, _ := hooks["PostToolUse"].([]any)
+	if len(postToolUse) != 1 {
+		t.Fatalf("PostToolUse entries = %d, want 1", len(postToolUse))
+	}
+	stop, _ := hooks["Stop"].([]any)
+	if len(stop) != 1 {
+		t.Fatalf("Stop entries = %d, want 1", len(stop))
+	}
+}
+
+func TestInstallClaudeHooks_AddsMissingSnapshotWhenStopExists(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+	clDir := filepath.Join(targetDir, ".claude")
+	if err := os.MkdirAll(clDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	existing := `{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "postbrain-cli summarize-session --scope project:acme/api" }
+        ]
+      }
+    ]
+  }
+}`
+	if err := os.WriteFile(filepath.Join(clDir, "settings.local.json"), []byte(existing), 0o644); err != nil {
+		t.Fatalf("write settings.local.json: %v", err)
+	}
+
+	updated, err := InstallClaudeHooks(targetDir, "project:acme/api")
+	if err != nil {
+		t.Fatalf("InstallClaudeHooks: %v", err)
+	}
+	if !updated {
+		t.Fatal("updated = false, want true")
+	}
+
+	data, _ := os.ReadFile(filepath.Join(clDir, "settings.local.json"))
+	var s map[string]any
+	if err := json.Unmarshal(data, &s); err != nil {
+		t.Fatalf("parse settings.local.json: %v", err)
+	}
+	hooks, _ := s["hooks"].(map[string]any)
+	stop, _ := hooks["Stop"].([]any)
+	if len(stop) != 1 {
+		t.Fatalf("Stop entries = %d, want 1", len(stop))
+	}
+	postToolUse, _ := hooks["PostToolUse"].([]any)
+	if len(postToolUse) != 1 {
+		t.Fatalf("PostToolUse entries = %d, want 1", len(postToolUse))
+	}
+}
