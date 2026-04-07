@@ -491,16 +491,24 @@ func installClaudeSkillCmd() *cobra.Command {
 			if strings.TrimSpace(targetDir) == "" {
 				targetDir = "."
 			}
+			scope := os.Getenv("POSTBRAIN_SCOPE")
 			installedPath, updatedClaude, err := postbraincli.InstallClaudeSkill(
 				targetDir,
 				embeddedClaudeSkill,
 				os.Getenv("POSTBRAIN_URL"),
-				os.Getenv("POSTBRAIN_SCOPE"),
+				scope,
 			)
 			if err != nil {
 				return err
 			}
-			slog.Info("install-claude-skill: installed", "path", installedPath, "claude_updated", updatedClaude)
+			updatedSettings, err := postbraincli.InstallClaudeHooks(targetDir, scope)
+			if err != nil {
+				return err
+			}
+			slog.Info("install-claude-skill: installed",
+				"path", installedPath,
+				"claude_updated", updatedClaude,
+				"settings_updated", updatedSettings)
 			return nil
 		},
 	}
