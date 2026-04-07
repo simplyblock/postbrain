@@ -19,6 +19,55 @@ If your agent supports hooks, wire Postbrain into:
 
 This keeps memory up to date without manual overhead.
 
+### Codex hooks (non-Windows)
+
+Codex hooks are experimental and currently disabled on Windows. On macOS/Linux, enable hooks in Codex config and add
+Postbrain hook commands in `~/.codex/hooks.json` or `<repo>/.codex/hooks.json`.
+
+Example:
+
+```toml
+# ~/.codex/config.toml
+[features]
+codex_hooks = true
+```
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "postbrain-cli snapshot --scope project:$POSTBRAIN_SCOPE"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "postbrain-cli summarize-session --scope project:$POSTBRAIN_SCOPE"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Codex plugins
+
+Codex now supports plugins in app and CLI (`/plugins`). Treat plugin usage similarly to Claude command workflows:
+
+- install plugins for reusable workflows/integrations
+- install project-local Postbrain skills for repo-specific conventions
+- keep scope and token restrictions the same across both agent surfaces
+
 ## Skill installation
 
 Install both agent skill files when a repository is shared by multiple tools:
