@@ -337,6 +337,9 @@ func TestQueryPlayground_MemoryOnly_DoesNotLeakSiblingGraphContext(t *testing.T)
 	}
 	bodyText := string(body)
 
+	if !strings.Contains(bodyText, "auth") {
+		t.Fatalf("expected selected-scope query response to include at least one auth-related result")
+	}
 	if strings.Contains(bodyText, "SIBLING_GRAPH_LEAK_AUTH_MARKER") {
 		t.Fatalf("did not expect sibling graph-context memory in query response")
 	}
