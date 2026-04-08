@@ -60,6 +60,10 @@
 
 ### Maintenance
 
+- [x] 2026-04-08: Unified CLI semantic-version comparison path:
+  - Refactored `cmd/postbrain-cli/main.go` so `codexVersionMeetsMinimum` now uses the shared `compareVersionStrings`/`compareSemver` helpers.
+  - Removed duplicate inline semver comparison logic from the Codex minimum-version gate path.
+
 - [x] 2026-04-08: Added `postbrain-cli check-update` command for release update checks (TDD-first):
   - Updated `cmd/postbrain-cli/main.go`:
     - added `check-update` root subcommand to query latest GitHub release version (`/releases/latest`) and compare against current build version.

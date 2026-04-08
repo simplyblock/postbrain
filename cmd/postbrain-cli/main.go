@@ -582,21 +582,11 @@ func detectCodexVersion() (string, error) {
 }
 
 func codexVersionMeetsMinimum(versionOutput, minimum string) (bool, error) {
-	v, err := extractSemver(versionOutput)
+	cmp, err := compareVersionStrings(versionOutput, minimum)
 	if err != nil {
 		return false, err
 	}
-	min, err := extractSemver(minimum)
-	if err != nil {
-		return false, err
-	}
-	if v.major != min.major {
-		return v.major > min.major, nil
-	}
-	if v.minor != min.minor {
-		return v.minor > min.minor, nil
-	}
-	return v.patch >= min.patch, nil
+	return cmp >= 0, nil
 }
 
 type semver struct {
