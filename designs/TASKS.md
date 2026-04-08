@@ -60,6 +60,14 @@
 
 ### Maintenance
 
+- [x] 2026-04-08: Added strict AGE-available integration coverage for overlay activation (TDD-first):
+  - Added new integration test in `internal/db/age_overlay_integration_test.go`:
+    - `TestEnsureAGEOverlay_AGEImage_ActivatesExtensionAndGraph`
+    - uses `POSTBRAIN_TEST_AGE_IMAGE` to opt into strict validation on an AGE-enabled Postgres image.
+    - asserts `EnsureAGEOverlay` results in both installed `age` extension and existing `postbrain` graph.
+  - Extended integration test helper in `internal/testhelper/container.go`:
+    - added `NewTestPoolWithImage(t, image, customizers...)` to allow image-specific integration coverage while preserving default `NewTestPool` behavior.
+
 - [x] 2026-04-08: Fixed system-admin principal management bypass for memberships and principal-admin checks (TDD-first):
   - Added integration regressions:
     - `internal/principals/membership_integration_test.go::TestMembershipStore_SystemAdminBypassesAdminChecks`
