@@ -38,12 +38,12 @@ func (j *AGEBackfillJob) Run(ctx context.Context) error {
 	if j.pool == nil {
 		return fmt.Errorf("age backfill: nil pool")
 	}
+	if err := db.EnsureAGEOverlay(ctx, j.pool); err != nil {
+		return fmt.Errorf("age backfill: ensure overlay: %w", err)
+	}
 	if !graph.DetectAGE(ctx, j.pool) {
 		slog.Info("age backfill: AGE unavailable; skipping")
 		return nil
-	}
-	if err := db.EnsureAGEOverlay(ctx, j.pool); err != nil {
-		return fmt.Errorf("age backfill: ensure overlay: %w", err)
 	}
 
 	entitiesSynced, err := j.backfillEntities(ctx)

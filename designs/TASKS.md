@@ -192,6 +192,14 @@
   - Extended integration test helper in `internal/testhelper/container.go`:
     - added `NewTestPoolWithImage(t, image, customizers...)` to allow image-specific integration coverage while preserving default `NewTestPool` behavior.
 
+- [x] 2026-04-08: Fixed AGE backfill startup ordering so jobs can self-heal when AGE is available but not yet activated:
+  - Updated `internal/jobs/age_backfill.go`:
+    - `AGEBackfillJob.Run` now calls `db.EnsureAGEOverlay` before `graph.DetectAGE`.
+    - prevents false skip when AGE extension/graph can be created at runtime during job execution.
+  - Added strict AGE-image integration regression coverage:
+    - `internal/jobs/age_backfill_integration_test.go::TestAGEBackfillJob_Run_EnsuresOverlayBeforeDetectAndBackfills`
+    - validates backfill run installs/activates AGE overlay and mirrors existing relational relations without pre-calling `EnsureAGEOverlay`.
+
 - [x] 2026-04-08: Fixed system-admin principal management bypass for memberships and principal-admin checks (TDD-first):
   - Added integration regressions:
     - `internal/principals/membership_integration_test.go::TestMembershipStore_SystemAdminBypassesAdminChecks`
