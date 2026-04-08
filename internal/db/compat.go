@@ -1006,9 +1006,7 @@ func UpsertRelation(ctx context.Context, pool *pgxpool.Pool, r *Relation) (*Rela
 		CreatedAt:      result.CreatedAt,
 	}
 	if err := syncRelationToAGEIfAvailable(ctx, pool, rel); err != nil {
-		if handled := bestEffortAGEDualWriteError("relation", err); handled != nil {
-			return nil, handled
-		}
+		bestEffortAGEDualWriteError("relation", err)
 	}
 	return rel, nil
 }
