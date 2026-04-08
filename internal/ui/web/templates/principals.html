@@ -197,8 +197,25 @@
     </label>
     <fieldset>
       <legend>Permissions</legend>
-      {{range .ScopeGrantPermission}}
-      <label><input type="checkbox" name="permissions" value="{{.}}"> <span class="mono">{{.}}</span></label>
+      {{range .ScopeGrantResources}}
+      {{$resource := .Resource}}
+      <div style="margin-bottom:0.5rem" data-scope-grant-resource="{{.Resource}}">
+        <label>
+          <input type="checkbox" name="permissions_basic" value="{{.Resource}}" data-scope-grant-basic="{{.Resource}}">
+          <span class="mono">{{.Resource}}</span>
+        </label>
+        <details style="margin-top:0.25rem">
+          <summary>Advanced</summary>
+          <div style="padding-left:1rem;margin-top:0.25rem">
+            {{range .Operations}}
+            <label>
+              <input type="checkbox" name="permissions_adv" value="{{$resource}}:{{.}}" data-scope-grant-adv="{{$resource}}">
+              <span class="mono">{{.}}</span>
+            </label>
+            {{end}}
+          </div>
+        </details>
+      </div>
       {{end}}
     </fieldset>
     <div class="dialog-footer">
@@ -224,5 +241,30 @@
     form.action = '/ui/principals/' + id;
     document.getElementById('dlg-principal-edit').showModal();
   }
+
+  (function syncScopeGrantPermissionGroups() {
+    var basics = document.querySelectorAll('input[data-scope-grant-basic]');
+    basics.forEach(function (basic) {
+      var resource = basic.getAttribute('data-scope-grant-basic');
+      var advanced = document.querySelectorAll('input[data-scope-grant-adv="' + resource + '"]');
+      var syncBasicFromAdvanced = function () {
+        var allChecked = advanced.length > 0;
+        advanced.forEach(function (item) {
+          if (!item.checked) {
+            allChecked = false;
+          }
+        });
+        basic.checked = allChecked;
+      };
+      basic.addEventListener('change', function () {
+        advanced.forEach(function (item) {
+          item.checked = basic.checked;
+        });
+      });
+      advanced.forEach(function (item) {
+        item.addEventListener('change', syncBasicFromAdvanced);
+      });
+    });
+  })();
 </script>
 {{end}}

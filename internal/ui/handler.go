@@ -6,6 +6,7 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"html/template"
 	"io"
 	"io/fs"
@@ -1127,31 +1128,43 @@ type scopeGrantScopeOption struct {
 	DisplayName string
 }
 
+type scopeGrantResourceOption struct {
+	Resource   string
+	Operations []string
+}
+
 func (h *Handler) renderPrincipals(
 	w http.ResponseWriter,
 	r *http.Request,
 	principalErr, principalEditErr, membershipErr, scopeGrantErr string,
 ) {
 	data := struct {
-		Principals           []*db.Principal
-		Memberships          []*db.MembershipRow
-		PrincipalFormError   string
-		PrincipalEditError   string
-		MembershipFormError  string
-		ScopeGrantFormError  string
-		ScopeGrantRows       []scopeGrantRow
-		ScopeGrantScopes     []scopeGrantScopeOption
-		ScopeGrantPermission []string
+		Principals          []*db.Principal
+		Memberships         []*db.MembershipRow
+		PrincipalFormError  string
+		PrincipalEditError  string
+		MembershipFormError string
+		ScopeGrantFormError string
+		ScopeGrantRows      []scopeGrantRow
+		ScopeGrantScopes    []scopeGrantScopeOption
+		ScopeGrantResources []scopeGrantResourceOption
 	}{
 		PrincipalFormError:  principalErr,
 		PrincipalEditError:  principalEditErr,
 		MembershipFormError: membershipErr,
 		ScopeGrantFormError: scopeGrantErr,
 	}
-	for _, p := range authz.AllPermissions() {
-		data.ScopeGrantPermission = append(data.ScopeGrantPermission, string(p))
+	for _, resource := range authz.AllResources() {
+		ops := authz.ValidOperations(resource)
+		option := scopeGrantResourceOption{
+			Resource:   string(resource),
+			Operations: make([]string, 0, len(ops)),
+		}
+		for _, op := range ops {
+			option.Operations = append(option.Operations, string(op))
+		}
+		data.ScopeGrantResources = append(data.ScopeGrantResources, option)
 	}
-	sort.Strings(data.ScopeGrantPermission)
 
 	if h.pool != nil {
 		reachable := h.reachablePrincipalIDSet(r.Context(), r)
@@ -1623,12 +1636,15 @@ func (h *Handler) handleCreateScopeGrant(w http.ResponseWriter, r *http.Request)
 		h.renderPrincipals(w, r, "", "", "", "invalid principal id")
 		return
 	}
-	rawPerms := r.Form["permissions"]
+	rawPerms := append([]string{}, r.Form["permissions_basic"]...)
+	rawPerms = append(rawPerms, r.Form["permissions_adv"]...)
+	// Backward compatibility for older forms/tests.
+	rawPerms = append(rawPerms, r.Form["permissions"]...)
 	if len(rawPerms) == 0 {
 		h.renderPrincipals(w, r, "", "", "", "at least one permission is required")
 		return
 	}
-	perms, err := authz.ParseTokenPermissions(rawPerms)
+	perms, err := parseScopeGrantPermissionsInput(rawPerms)
 	if err != nil {
 		h.renderPrincipals(w, r, "", "", "", "invalid permissions: "+err.Error())
 		return
@@ -1699,6 +1715,29 @@ func (h *Handler) handleCreateScopeGrant(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
+}
+
+func parseScopeGrantPermissionsInput(raw []string) (authz.PermissionSet, error) {
+	expanded := make([]string, 0, len(raw))
+	for _, entry := range raw {
+		value := strings.TrimSpace(entry)
+		if value == "" {
+			continue
+		}
+		if strings.Contains(value, ":") {
+			expanded = append(expanded, value)
+			continue
+		}
+		resource := authz.Resource(value)
+		ops := authz.ValidOperations(resource)
+		if len(ops) == 0 {
+			return authz.PermissionSet{}, fmt.Errorf("unknown resource %q", value)
+		}
+		for _, op := range ops {
+			expanded = append(expanded, string(authz.NewPermission(resource, op)))
+		}
+	}
+	return authz.ParseTokenPermissions(expanded)
 }
 
 // handleDeleteScopeGrant serves POST /ui/scope-grants/delete.

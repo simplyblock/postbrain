@@ -39,6 +39,19 @@
   - Added integration coverage in `internal/ui/principals_integration_test.go`:
     - `TestPrincipalsPage_SystemAdminCanManageScopeGrants` validates create + revoke flow via Web UI endpoints.
 
+- [x] 2026-04-08: Improved Web UI scope grant permission picker with basic and advanced resource selection:
+  - Updated principals scope-grant dialog in `internal/ui/web/templates/principals.html`:
+    - basic checkbox per resource (e.g. `collections`, `skills`, `memories`)
+    - expandable advanced operation checkboxes (`read`, `write`, `edit`, `delete`) per resource
+    - basic/advanced sync behavior in template JS
+  - Updated `internal/ui/handler.go`:
+    - added `parseScopeGrantPermissionsInput(...)` to accept both resource-level and `resource:operation` inputs
+    - `handleCreateScopeGrant` now reads `permissions_basic` and `permissions_adv` (plus backward-compatible `permissions`)
+  - Added unit regression coverage in `internal/ui/handler_principals_test.go`:
+    - `TestParseScopeGrantPermissionsInput_ResourceAndAdvanced`
+    - `TestParseScopeGrantPermissionsInput_RejectsUnknownResource`
+    - `TestHandlePrincipals_RendersScopeGrantGroupedPermissions`.
+
 - [x] 2026-04-06: Fixed `internal/authz` security and design-alignment gaps raised by regression tests:
   - Fixed `TokenResolver` scope restriction path to avoid unsafe resolver type assertion panic:
     - `internal/authz/token_resolver.go` now safely unwraps DB-backed resolvers and returns an explicit error when scope checks cannot be evaluated, instead of panicking.
