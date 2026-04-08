@@ -269,6 +269,12 @@
     - `TestBuildRelationUpsertCypher_UsesMerge`
     - enforces MERGE-based query shape and forbids standalone CREATE fallback.
 
+- [x] 2026-04-08: Aligned AGE backfill integration assertions with production-safe non-map Cypher filters:
+  - Updated `internal/jobs/age_backfill_integration_test.go`:
+    - replaced map-pattern assertions like `MATCH (n:Entity {id: '...'})` with `MATCH (...) WHERE ...` filters.
+    - replaced edge map-pattern assertions with explicit `MATCH ... WHERE a.id = ... AND b.id = ... AND r.predicate = ...`.
+  - This keeps integration coverage aligned with runtime AGE query compatibility constraints.
+
 - [x] 2026-04-08: Fixed system-admin principal management bypass for memberships and principal-admin checks (TDD-first):
   - Added integration regressions:
     - `internal/principals/membership_integration_test.go::TestMembershipStore_SystemAdminBypassesAdminChecks`

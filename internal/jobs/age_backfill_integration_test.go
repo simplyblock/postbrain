@@ -69,7 +69,7 @@ func TestAGEBackfillJob_Run_BackfillsExistingRelationalGraph(t *testing.T) {
 
 	var nodeCount int
 	if err := pool.QueryRow(ctx,
-		fmt.Sprintf("SELECT count(*) FROM cypher('postbrain', $$ MATCH (n:Entity {id: '%s'}) RETURN n $$) AS (result agtype)", subjectID.String()),
+		fmt.Sprintf("SELECT count(*) FROM cypher('postbrain', $$ MATCH (n:Entity) WHERE n.id = '%s' RETURN n $$) AS (result agtype)", subjectID.String()),
 	).Scan(&nodeCount); err != nil {
 		t.Fatalf("query AGE node: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestAGEBackfillJob_Run_BackfillsExistingRelationalGraph(t *testing.T) {
 	var edgeCount int
 	if err := pool.QueryRow(ctx,
 		fmt.Sprintf(
-			"SELECT count(*) FROM cypher('postbrain', $$ MATCH (a:Entity {id: '%s'})-[r:RELATION {predicate: 'depends_on'}]->(b:Entity {id: '%s'}) RETURN r $$) AS (result agtype)",
+			"SELECT count(*) FROM cypher('postbrain', $$ MATCH (a:Entity)-[r:RELATION]->(b:Entity) WHERE a.id = '%s' AND b.id = '%s' AND r.predicate = 'depends_on' RETURN r $$) AS (result agtype)",
 			subjectID.String(),
 			objectID.String(),
 		),
@@ -151,7 +151,7 @@ func TestAGEBackfillJob_Run_EnsuresOverlayBeforeDetectAndBackfills(t *testing.T)
 	var edgeCount int
 	if err := pool.QueryRow(ctx,
 		fmt.Sprintf(
-			"SELECT count(*) FROM cypher('postbrain', $$ MATCH (a:Entity {id: '%s'})-[r:RELATION {predicate: 'depends_on'}]->(b:Entity {id: '%s'}) RETURN r $$) AS (result agtype)",
+			"SELECT count(*) FROM cypher('postbrain', $$ MATCH (a:Entity)-[r:RELATION]->(b:Entity) WHERE a.id = '%s' AND b.id = '%s' AND r.predicate = 'depends_on' RETURN r $$) AS (result agtype)",
 			subjectID.String(),
 			objectID.String(),
 		),
