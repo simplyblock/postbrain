@@ -17,6 +17,7 @@ import (
 
 const defaultAGEBackfillBatchSize = 500
 const ageBackfillAdvisoryLockKey int64 = 830472911245001337
+const ageBackfillUnlockTimeout = 5 * time.Second
 
 var ageBackfillTryAdvisoryLockSQL = fmt.Sprintf("SELECT pg_try_advisory_lock(%d)", ageBackfillAdvisoryLockKey)
 var ageBackfillAdvisoryUnlockSQL = fmt.Sprintf("SELECT pg_advisory_unlock(%d)", ageBackfillAdvisoryLockKey)
@@ -96,7 +97,7 @@ func (j *AGEBackfillJob) Run(ctx context.Context) error {
 		return nil
 	}
 	defer func() {
-		if unlockErr := releaseAGEBackfillLock(context.Background(), lockConn); unlockErr != nil {
+		if unlockErr := releaseAGEBackfillLockWithTimeout(lockConn); unlockErr != nil {
 			slog.Warn("age backfill: advisory unlock failed", "error", unlockErr)
 		}
 	}()
@@ -264,4 +265,10 @@ func releaseAGEBackfillLock(ctx context.Context, conn ageBackfillLockConn) error
 		return fmt.Errorf("advisory lock %d was not held", ageBackfillAdvisoryLockKey)
 	}
 	return nil
+}
+
+func releaseAGEBackfillLockWithTimeout(conn ageBackfillLockConn) error {
+	unlockCtx, cancel := context.WithTimeout(context.Background(), ageBackfillUnlockTimeout)
+	defer cancel()
+	return releaseAGEBackfillLock(unlockCtx, conn)
 }

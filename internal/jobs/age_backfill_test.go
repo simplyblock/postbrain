@@ -82,6 +82,7 @@ func TestRelationBatchQuery_FirstPageWithoutCursor(t *testing.T) {
 
 type fakeAGEBackfillLockConn struct {
 	queryRowSQL string
+	queryRowCtx context.Context
 	queryRowErr error
 	queryRowVal bool
 
@@ -89,7 +90,8 @@ type fakeAGEBackfillLockConn struct {
 	execErr error
 }
 
-func (f *fakeAGEBackfillLockConn) QueryRow(_ context.Context, sql string, _ ...any) pgx.Row {
+func (f *fakeAGEBackfillLockConn) QueryRow(ctx context.Context, sql string, _ ...any) pgx.Row {
+	f.queryRowCtx = ctx
 	f.queryRowSQL = sql
 	if f.queryRowErr != nil {
 		return fakeBoolRow{err: f.queryRowErr}
@@ -154,5 +156,18 @@ func TestReleaseAGEBackfillLock(t *testing.T) {
 	}
 	if fake.queryRowSQL != ageBackfillAdvisoryUnlockSQL {
 		t.Fatalf("unlock SQL = %q, want %q", fake.queryRowSQL, ageBackfillAdvisoryUnlockSQL)
+	}
+}
+
+func TestReleaseAGEBackfillLockWithTimeout_UsesDeadlineContext(t *testing.T) {
+	fake := &fakeAGEBackfillLockConn{queryRowVal: true}
+	if err := releaseAGEBackfillLockWithTimeout(fake); err != nil {
+		t.Fatalf("releaseAGEBackfillLockWithTimeout: %v", err)
+	}
+	if fake.queryRowCtx == nil {
+		t.Fatal("expected unlock query context to be captured")
+	}
+	if _, ok := fake.queryRowCtx.Deadline(); !ok {
+		t.Fatal("expected unlock query context to have deadline")
 	}
 }

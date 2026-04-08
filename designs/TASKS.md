@@ -292,6 +292,14 @@
     - `TestReleaseAGEBackfillLock`
     - validates advisory lock SQL path and lock/unlock helper behavior.
 
+- [x] 2026-04-08: Bounded AGE backfill advisory unlock with timeout context:
+  - Updated `internal/jobs/age_backfill.go`:
+    - replaced deferred unlock call from unbounded `context.Background()` to `releaseAGEBackfillLockWithTimeout(...)`.
+    - new helper uses `context.WithTimeout` to avoid indefinite unlock hangs on slow/unreachable DB during shutdown.
+  - Added unit coverage in `internal/jobs/age_backfill_test.go`:
+    - `TestReleaseAGEBackfillLockWithTimeout_UsesDeadlineContext`
+    - verifies unlock path uses a context with deadline.
+
 - [x] 2026-04-08: Fixed system-admin principal management bypass for memberships and principal-admin checks (TDD-first):
   - Added integration regressions:
     - `internal/principals/membership_integration_test.go::TestMembershipStore_SystemAdminBypassesAdminChecks`
