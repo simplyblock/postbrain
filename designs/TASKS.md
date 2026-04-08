@@ -259,6 +259,16 @@
   - Updated operations runbook:
     - `docs/apache-age-usage.md` now documents runtime-role-targeted startup grants and explicit multi-role grant requirement.
 
+- [x] 2026-04-08: Made AGE DB dual-write upserts atomic to avoid race-created duplicates:
+  - Updated `internal/db/age_dualwrite.go`:
+    - `syncEntityToAGE` now uses single-statement `MERGE (e:Entity {id: ...})` upsert semantics.
+    - `syncRelationToAGE` now uses single-statement `MERGE` for relation identity `(subject, predicate, object)`.
+    - removed two-step `MATCH/SET` then `CREATE` fallback logic from DB dual-write sync path.
+  - Added/extended unit regression coverage in `internal/db/age_dualwrite_test.go`:
+    - `TestBuildEntityUpsertCypher_UsesMerge`
+    - `TestBuildRelationUpsertCypher_UsesMerge`
+    - enforces MERGE-based query shape and forbids standalone CREATE fallback.
+
 - [x] 2026-04-08: Fixed system-admin principal management bypass for memberships and principal-admin checks (TDD-first):
   - Added integration regressions:
     - `internal/principals/membership_integration_test.go::TestMembershipStore_SystemAdminBypassesAdminChecks`
