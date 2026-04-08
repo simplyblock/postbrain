@@ -24,22 +24,19 @@ const ensureAGEPrivilegesSQL = `
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_extension WHERE extname='age') THEN
-        BEGIN
-            GRANT USAGE ON SCHEMA ag_catalog TO PUBLIC;
-        EXCEPTION WHEN OTHERS THEN
-            RAISE NOTICE 'Failed to grant usage on ag_catalog: %', SQLERRM;
-        END;
-
-        BEGIN
-            IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname='postbrain') THEN
-                GRANT USAGE ON SCHEMA postbrain TO PUBLIC;
-            END IF;
-        EXCEPTION WHEN OTHERS THEN
-            RAISE NOTICE 'Failed to grant usage on postbrain schema: %', SQLERRM;
-        END;
+        GRANT USAGE ON SCHEMA ag_catalog TO PUBLIC;
+        GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA ag_catalog TO PUBLIC;
+        GRANT USAGE ON TYPE ag_catalog.agtype TO PUBLIC;
+        IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname='postbrain') THEN
+            GRANT USAGE ON SCHEMA postbrain TO PUBLIC;
+        END IF;
     END IF;
 END;
 $$;
+`
+
+const ensureAGEAccessProbeSQL = `
+SELECT * FROM ag_catalog.cypher('postbrain', $$ RETURN 1 $$) AS (result ag_catalog.agtype);
 `
 
 // EnsureAGEOverlay is idempotent and best-effort.
@@ -55,6 +52,15 @@ func EnsureAGEOverlay(ctx context.Context, pool *pgxpool.Pool) error {
 	}
 	if _, err := pool.Exec(ctx, ensureAGEPrivilegesSQL); err != nil {
 		return fmt.Errorf("ensure age privileges: %w", err)
+	}
+	var ageInstalled bool
+	if err := pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname='age')").Scan(&ageInstalled); err != nil {
+		return fmt.Errorf("ensure age overlay: detect extension: %w", err)
+	}
+	if ageInstalled {
+		if _, err := pool.Exec(ctx, ensureAGEAccessProbeSQL); err != nil {
+			return fmt.Errorf("ensure age access probe: %w", err)
+		}
 	}
 	return nil
 }

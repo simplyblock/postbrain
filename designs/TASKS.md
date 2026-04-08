@@ -70,6 +70,18 @@
     - `TestEnsureAGEOverlay_GrantsAGESchemaUsage_ForRestrictedRole`
     - provisions a restricted login role and asserts `db.UpsertEntity` succeeds (including AGE dual-write path) without `permission denied for schema ag_catalog`.
 
+- [x] 2026-04-08: Hardened AGE startup checks to fail fast when AGE is enabled but unusable:
+  - Updated `internal/db/age_overlay.go`:
+    - privilege grants are now strict (no silent NOTICE-only fallback) when AGE extension is present:
+      - `USAGE` on `ag_catalog`
+      - `EXECUTE` on all `ag_catalog` functions
+      - `USAGE` on `ag_catalog.agtype`
+      - `USAGE` on `postbrain` schema when present
+    - added runtime probe (`ag_catalog.cypher('postbrain', 'RETURN 1')`) so startup fails if AGE access is still broken for the current role.
+  - Added integration regression coverage in `internal/db/age_overlay_integration_test.go`:
+    - `TestEnsureAGEOverlay_FailsWhenAGEInstalledButRoleCannotUseAGCatalog`
+    - validates `EnsureAGEOverlay` returns an error for a restricted role after revoking `ag_catalog` permissions.
+
 - [x] 2026-04-08: Fixed memory near-duplicate update path to keep graph/AGE links current (TDD-first):
   - Added regression unit test:
     - `internal/memory/store_test.go::TestCreate_NearDuplicateFound_StillLinksEntitiesAndRelations`
