@@ -24,12 +24,28 @@ const ensureAGEPrivilegesSQL = `
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_extension WHERE extname='age') THEN
-        GRANT USAGE ON SCHEMA ag_catalog TO PUBLIC;
-        GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA ag_catalog TO PUBLIC;
-        GRANT USAGE ON TYPE ag_catalog.agtype TO PUBLIC;
-        IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname='postbrain') THEN
-            GRANT USAGE ON SCHEMA postbrain TO PUBLIC;
-        END IF;
+        BEGIN
+            GRANT USAGE ON SCHEMA ag_catalog TO PUBLIC;
+        EXCEPTION WHEN insufficient_privilege THEN
+            RAISE NOTICE 'insufficient privilege to grant USAGE on ag_catalog; continuing with runtime probe';
+        END;
+        BEGIN
+            GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA ag_catalog TO PUBLIC;
+        EXCEPTION WHEN insufficient_privilege THEN
+            RAISE NOTICE 'insufficient privilege to grant EXECUTE on ag_catalog functions; continuing with runtime probe';
+        END;
+        BEGIN
+            GRANT USAGE ON TYPE ag_catalog.agtype TO PUBLIC;
+        EXCEPTION WHEN insufficient_privilege THEN
+            RAISE NOTICE 'insufficient privilege to grant USAGE on ag_catalog.agtype; continuing with runtime probe';
+        END;
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname='postbrain') THEN
+                GRANT USAGE ON SCHEMA postbrain TO PUBLIC;
+            END IF;
+        EXCEPTION WHEN insufficient_privilege THEN
+            RAISE NOTICE 'insufficient privilege to grant USAGE on postbrain schema; continuing with runtime probe';
+        END;
     END IF;
 END;
 $$;

@@ -82,6 +82,12 @@
     - `TestEnsureAGEOverlay_FailsWhenAGEInstalledButRoleCannotUseAGCatalog`
     - validates `EnsureAGEOverlay` returns an error for a restricted role after revoking `ag_catalog` permissions.
 
+- [x] 2026-04-08: Relaxed AGE grant step for non-superuser startup roles while keeping strict usability checks:
+  - Updated `internal/db/age_overlay.go`:
+    - `GRANT` operations in `EnsureAGEOverlay` now handle `insufficient_privilege` as NOTICE-only best effort.
+    - retained strict runtime probe (`ag_catalog.cypher(...)`) so startup still fails whenever AGE is actually unusable for the current role.
+  - This avoids false startup failures caused only by inability to administer grants, while preserving fail-fast behavior for broken AGE runtime access.
+
 - [x] 2026-04-08: Fixed memory near-duplicate update path to keep graph/AGE links current (TDD-first):
   - Added regression unit test:
     - `internal/memory/store_test.go::TestCreate_NearDuplicateFound_StillLinksEntitiesAndRelations`
