@@ -192,6 +192,122 @@
   - Extended integration test helper in `internal/testhelper/container.go`:
     - added `NewTestPoolWithImage(t, image, customizers...)` to allow image-specific integration coverage while preserving default `NewTestPool` behavior.
 
+- [x] 2026-04-08: Fixed AGE backfill startup ordering so jobs can self-heal when AGE is available but not yet activated:
+  - Updated `internal/jobs/age_backfill.go`:
+    - `AGEBackfillJob.Run` now calls `db.EnsureAGEOverlay` before `graph.DetectAGE`.
+    - prevents false skip when AGE extension/graph can be created at runtime during job execution.
+  - Added strict AGE-image integration regression coverage:
+    - `internal/jobs/age_backfill_integration_test.go::TestAGEBackfillJob_Run_EnsuresOverlayBeforeDetectAndBackfills`
+    - validates backfill run installs/activates AGE overlay and mirrors existing relational relations without pre-calling `EnsureAGEOverlay`.
+
+- [x] 2026-04-08: Replaced AGE backfill OFFSET pagination with keyset pagination for predictable large-table performance:
+  - Updated `internal/jobs/age_backfill.go`:
+    - `backfillEntities` now pages by cursor `(created_at, id)` via `WHERE (created_at, id) > (...) ORDER BY created_at, id LIMIT ...`.
+    - `backfillRelations` now uses the same keyset cursor strategy with relation `id` + `created_at`.
+    - removed `LIMIT/OFFSET` batch scans to avoid growing-offset query cost.
+  - Added unit regression coverage in `internal/jobs/age_backfill_test.go`:
+    - `TestEntityBatchQuery_UsesKeysetWhenCursorPresent`
+    - `TestEntityBatchQuery_FirstPageWithoutCursor`
+    - `TestRelationBatchQuery_UsesKeysetWhenCursorPresent`
+    - `TestRelationBatchQuery_FirstPageWithoutCursor`
+    - asserts keyset predicates and explicitly forbids `OFFSET` in batch queries.
+
+- [x] 2026-04-08: Corrected AGE backfill job comment to match current sync behavior:
+  - Updated `internal/jobs/age_backfill.go` doc comment for `AGEBackfillJob`:
+    - removed stale wording that no longer matched the graph sync implementation.
+    - clarified current behavior uses MERGE-based AGE sync helpers.
+
+- [x] 2026-04-08: Made AGE graph sync upserts atomic to reduce duplicate risk under concurrency:
+  - Updated `internal/graph/age_sync.go`:
+    - `SyncEntityToAGE` now uses single-statement `MERGE (e:Entity {id: ...})` upsert semantics.
+    - `SyncRelationToAGE` now uses single-statement `MERGE` for relation identity `(subject, predicate, object)`.
+    - removed two-step `MATCH/SET` then `CREATE` fallback logic from graph sync path.
+  - Added unit regression coverage in `internal/graph/age_sync_test.go`:
+    - `TestBuildEntityUpsertCypher_UsesMergeAndEscapesStrings`
+    - `TestBuildRelationUpsertCypher_UsesMergeAndEscapesPredicate`
+    - verifies MERGE-based query shape and string escaping.
+  - Updated `internal/jobs/age_backfill.go` comment to reflect MERGE-based graph sync helpers.
+
+- [x] 2026-04-08: Made AGE dual-write best-effort so optional overlay failures do not break relational upserts:
+  - Updated `internal/db/compat.go`:
+    - `UpsertEntity` no longer fails primary relational writes when AGE mirror sync returns an error.
+    - `UpsertRelation` now follows the same best-effort behavior for AGE mirror sync errors.
+    - added `bestEffortAGEDualWriteError` helper that logs warning-level dual-write failures and continues.
+  - Added regression coverage:
+    - unit: `internal/db/compat_age_dualwrite_test.go`
+      - `TestBestEffortAGEDualWriteError_NilError`
+      - `TestBestEffortAGEDualWriteError_SwallowsError`
+    - integration (AGE image-gated): `internal/db/age_dualwrite_integration_test.go::TestUpsertEntityAndRelation_DoNotFailWhenAGEDualWriteErrors`
+      - validates relational entity/relation upserts still succeed when AGE permissions are intentionally broken for the app role.
+
+- [x] 2026-04-08: Ensured AGE overlay setup runs on a single acquired DB connection/session:
+  - Updated `internal/db/age_overlay.go`:
+    - `EnsureAGEOverlay` now acquires one `pgxpool` connection and runs overlay setup, privilege grants, extension/schema checks, and runtime probe on that same connection.
+    - extracted `ensureAGEOverlayOnExecutor(...)` helper to keep step sequencing explicit.
+  - Added regression unit coverage in `internal/db/age_overlay_internal_test.go`:
+    - `TestEnsureAGEOverlayOnExecutor_UsesSequentialSteps`
+    - `TestEnsureAGEOverlayOnExecutor_AgeInstalledRunsSchemaChecksAndProbe`
+    - verifies ordered step execution and AGE-installed probe path through a single executor abstraction.
+
+- [x] 2026-04-08: Narrowed AGE bootstrap grants from `PUBLIC` to runtime role only:
+  - Updated `internal/db/age_overlay.go`:
+    - `ensureAGEPrivilegesSQL` now grants AGE and graph-schema privileges to `quote_ident(current_user)` instead of `PUBLIC`.
+    - keeps insufficient-privilege handling as NOTICE-only best effort.
+  - Added regression unit check:
+    - `internal/db/age_overlay_test.go::TestEnsureAGEPrivilegesSQL_DoesNotGrantToPublic`
+    - enforces no `TO PUBLIC` grants and requires `current_user` targeting.
+  - Updated operations runbook:
+    - `docs/apache-age-usage.md` now documents runtime-role-targeted startup grants and explicit multi-role grant requirement.
+
+- [x] 2026-04-08: Made AGE DB dual-write upserts atomic to avoid race-created duplicates:
+  - Updated `internal/db/age_dualwrite.go`:
+    - `syncEntityToAGE` now uses single-statement `MERGE (e:Entity {id: ...})` upsert semantics.
+    - `syncRelationToAGE` now uses single-statement `MERGE` for relation identity `(subject, predicate, object)`.
+    - removed two-step `MATCH/SET` then `CREATE` fallback logic from DB dual-write sync path.
+  - Added/extended unit regression coverage in `internal/db/age_dualwrite_test.go`:
+    - `TestBuildEntityUpsertCypher_UsesMerge`
+    - `TestBuildRelationUpsertCypher_UsesMerge`
+    - enforces MERGE-based query shape and forbids standalone CREATE fallback.
+
+- [x] 2026-04-08: Aligned AGE backfill integration assertions with production-safe non-map Cypher filters:
+  - Updated `internal/jobs/age_backfill_integration_test.go`:
+    - replaced map-pattern assertions like `MATCH (n:Entity {id: '...'})` with `MATCH (...) WHERE ...` filters.
+    - replaced edge map-pattern assertions with explicit `MATCH ... WHERE a.id = ... AND b.id = ... AND r.predicate = ...`.
+  - This keeps integration coverage aligned with runtime AGE query compatibility constraints.
+
+- [x] 2026-04-08: Aligned AGE dual-write integration assertions with production-safe non-map Cypher filters:
+  - Updated `internal/db/age_dualwrite_integration_test.go`:
+    - replaced map-pattern node assertion with `MATCH (n:Entity) WHERE n.id = ...`.
+    - replaced map-pattern edge assertion with `MATCH ... WHERE a.id = ... AND b.id = ... AND r.predicate = ...`.
+  - Keeps dual-write integration coverage aligned with runtime AGE query compatibility constraints.
+
+- [x] 2026-04-08: Added non-overlap protection for AGE backfill scheduler runs:
+  - Updated `internal/jobs/age_backfill.go`:
+    - `AGEBackfillJob.Run` now acquires a process-independent PostgreSQL advisory lock (`pg_try_advisory_lock`) before executing backfill.
+    - if the lock is already held (another run active), the job logs a skip and exits without overlap.
+    - lock is released at job end via `pg_advisory_unlock`.
+  - Added unit regression coverage in `internal/jobs/age_backfill_test.go`:
+    - `TestTryAcquireAGEBackfillLock`
+    - `TestTryAcquireAGEBackfillLock_QueryError`
+    - `TestReleaseAGEBackfillLock`
+    - validates advisory lock SQL path and lock/unlock helper behavior.
+
+- [x] 2026-04-08: Bounded AGE backfill advisory unlock with timeout context:
+  - Updated `internal/jobs/age_backfill.go`:
+    - replaced deferred unlock call from unbounded `context.Background()` to `releaseAGEBackfillLockWithTimeout(...)`.
+    - new helper uses `context.WithTimeout` to avoid indefinite unlock hangs on slow/unreachable DB during shutdown.
+  - Added unit coverage in `internal/jobs/age_backfill_test.go`:
+    - `TestReleaseAGEBackfillLockWithTimeout_UsesDeadlineContext`
+    - verifies unlock path uses a context with deadline.
+
+- [x] 2026-04-08: Avoided AGE backfill self-deadlock with small DB pools:
+  - Updated `internal/jobs/age_backfill.go`:
+    - moved `EnsureAGEOverlay` + `DetectAGE` checks before advisory-lock connection acquisition.
+    - prevents holding one pool connection for lock while trying to acquire another for overlay setup.
+  - Added integration regression coverage in `internal/jobs/age_backfill_integration_test.go`:
+    - `TestAGEBackfillJob_Run_MaxOneConnection_DoesNotSelfDeadlock`
+    - validates backfill no longer times out with `MaxOpen=1` pool due to lock/overlay connection contention.
+
 - [x] 2026-04-08: Fixed system-admin principal management bypass for memberships and principal-admin checks (TDD-first):
   - Added integration regressions:
     - `internal/principals/membership_integration_test.go::TestMembershipStore_SystemAdminBypassesAdminChecks`

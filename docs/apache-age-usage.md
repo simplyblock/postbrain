@@ -20,6 +20,10 @@ SHOW search_path;
 
 All grants in this page must target the runtime role returned by `current_user`.
 
+Postbrain startup bootstrap (`EnsureAGEOverlay`) now grants AGE privileges to the
+session runtime role (`current_user`) only. It does not grant to `PUBLIC`.
+If you run with multiple application roles, grant each explicitly (section 2).
+
 ## 2. Required Grants (Parameterized by Username)
 
 Run as a role that can grant privileges (owner/admin).

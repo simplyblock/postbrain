@@ -1,6 +1,14 @@
 package jobs
 
-import "testing"
+import (
+	"context"
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+)
 
 func TestNewAGEBackfillJob_DefaultBatchSize(t *testing.T) {
 	j := NewAGEBackfillJob(nil, 0)
@@ -18,4 +26,148 @@ func TestNewAGEBackfillJob_CustomBatchSize(t *testing.T) {
 
 func TestAGEBackfillJob_Signature(t *testing.T) {
 	var _ = (*AGEBackfillJob)(nil).Run
+}
+
+func TestEntityBatchQuery_UsesKeysetWhenCursorPresent(t *testing.T) {
+	q := entityBatchQuery(true)
+	if !strings.Contains(q, "WHERE (created_at, id) > ($1, $2)") {
+		t.Fatalf("entity keyset query missing cursor predicate:\n%s", q)
+	}
+	if !strings.Contains(q, "LIMIT $3") {
+		t.Fatalf("entity keyset query missing limit placeholder $3:\n%s", q)
+	}
+	if strings.Contains(q, "OFFSET") {
+		t.Fatalf("entity keyset query must not contain OFFSET:\n%s", q)
+	}
+}
+
+func TestEntityBatchQuery_FirstPageWithoutCursor(t *testing.T) {
+	q := entityBatchQuery(false)
+	if strings.Contains(q, "WHERE (created_at, id) >") {
+		t.Fatalf("entity first-page query should not contain keyset WHERE:\n%s", q)
+	}
+	if !strings.Contains(q, "LIMIT $1") {
+		t.Fatalf("entity first-page query missing limit placeholder $1:\n%s", q)
+	}
+	if strings.Contains(q, "OFFSET") {
+		t.Fatalf("entity first-page query must not contain OFFSET:\n%s", q)
+	}
+}
+
+func TestRelationBatchQuery_UsesKeysetWhenCursorPresent(t *testing.T) {
+	q := relationBatchQuery(true)
+	if !strings.Contains(q, "WHERE (created_at, id) > ($1, $2)") {
+		t.Fatalf("relation keyset query missing cursor predicate:\n%s", q)
+	}
+	if !strings.Contains(q, "LIMIT $3") {
+		t.Fatalf("relation keyset query missing limit placeholder $3:\n%s", q)
+	}
+	if strings.Contains(q, "OFFSET") {
+		t.Fatalf("relation keyset query must not contain OFFSET:\n%s", q)
+	}
+}
+
+func TestRelationBatchQuery_FirstPageWithoutCursor(t *testing.T) {
+	q := relationBatchQuery(false)
+	if strings.Contains(q, "WHERE (created_at, id) >") {
+		t.Fatalf("relation first-page query should not contain keyset WHERE:\n%s", q)
+	}
+	if !strings.Contains(q, "LIMIT $1") {
+		t.Fatalf("relation first-page query missing limit placeholder $1:\n%s", q)
+	}
+	if strings.Contains(q, "OFFSET") {
+		t.Fatalf("relation first-page query must not contain OFFSET:\n%s", q)
+	}
+}
+
+type fakeAGEBackfillLockConn struct {
+	queryRowSQL string
+	queryRowCtx context.Context
+	queryRowErr error
+	queryRowVal bool
+
+	execSQL string
+	execErr error
+}
+
+func (f *fakeAGEBackfillLockConn) QueryRow(ctx context.Context, sql string, _ ...any) pgx.Row {
+	f.queryRowCtx = ctx
+	f.queryRowSQL = sql
+	if f.queryRowErr != nil {
+		return fakeBoolRow{err: f.queryRowErr}
+	}
+	return fakeBoolRow{val: f.queryRowVal}
+}
+
+func (f *fakeAGEBackfillLockConn) Exec(_ context.Context, sql string, _ ...any) (pgconn.CommandTag, error) {
+	f.execSQL = sql
+	if f.execErr != nil {
+		return pgconn.CommandTag{}, f.execErr
+	}
+	return pgconn.CommandTag{}, nil
+}
+
+type fakeBoolRow struct {
+	val bool
+	err error
+}
+
+func (r fakeBoolRow) Scan(dest ...any) error {
+	if r.err != nil {
+		return r.err
+	}
+	if len(dest) != 1 {
+		return fmt.Errorf("unexpected destination count: %d", len(dest))
+	}
+	b, ok := dest[0].(*bool)
+	if !ok {
+		return fmt.Errorf("expected *bool destination")
+	}
+	*b = r.val
+	return nil
+}
+
+func TestTryAcquireAGEBackfillLock(t *testing.T) {
+	fake := &fakeAGEBackfillLockConn{queryRowVal: true}
+	locked, err := tryAcquireAGEBackfillLock(context.Background(), fake)
+	if err != nil {
+		t.Fatalf("tryAcquireAGEBackfillLock: %v", err)
+	}
+	if !locked {
+		t.Fatal("expected advisory lock to be acquired")
+	}
+	if fake.queryRowSQL != ageBackfillTryAdvisoryLockSQL {
+		t.Fatalf("lock SQL = %q, want %q", fake.queryRowSQL, ageBackfillTryAdvisoryLockSQL)
+	}
+}
+
+func TestTryAcquireAGEBackfillLock_QueryError(t *testing.T) {
+	fake := &fakeAGEBackfillLockConn{queryRowErr: fmt.Errorf("boom")}
+	_, err := tryAcquireAGEBackfillLock(context.Background(), fake)
+	if err == nil {
+		t.Fatal("expected query error")
+	}
+}
+
+func TestReleaseAGEBackfillLock(t *testing.T) {
+	fake := &fakeAGEBackfillLockConn{queryRowVal: true}
+	if err := releaseAGEBackfillLock(context.Background(), fake); err != nil {
+		t.Fatalf("releaseAGEBackfillLock: %v", err)
+	}
+	if fake.queryRowSQL != ageBackfillAdvisoryUnlockSQL {
+		t.Fatalf("unlock SQL = %q, want %q", fake.queryRowSQL, ageBackfillAdvisoryUnlockSQL)
+	}
+}
+
+func TestReleaseAGEBackfillLockWithTimeout_UsesDeadlineContext(t *testing.T) {
+	fake := &fakeAGEBackfillLockConn{queryRowVal: true}
+	if err := releaseAGEBackfillLockWithTimeout(fake); err != nil {
+		t.Fatalf("releaseAGEBackfillLockWithTimeout: %v", err)
+	}
+	if fake.queryRowCtx == nil {
+		t.Fatal("expected unlock query context to be captured")
+	}
+	if _, ok := fake.queryRowCtx.Deadline(); !ok {
+		t.Fatal("expected unlock query context to have deadline")
+	}
 }
