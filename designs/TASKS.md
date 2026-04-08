@@ -60,6 +60,16 @@
 
 ### Maintenance
 
+- [x] 2026-04-08: Fixed AGE dual-write permission failure for restricted DB roles (regression-covered):
+  - Updated `internal/db/age_overlay.go`:
+    - `EnsureAGEOverlay` now also runs a best-effort privileges step that grants:
+      - `USAGE` on `ag_catalog` to `PUBLIC`
+      - `USAGE` on `postbrain` schema to `PUBLIC` (when schema exists)
+    - keeps graph setup best-effort semantics while enabling runtime AGE calls from non-owner application roles.
+  - Added integration regression coverage in `internal/db/age_overlay_integration_test.go`:
+    - `TestEnsureAGEOverlay_GrantsAGESchemaUsage_ForRestrictedRole`
+    - provisions a restricted login role and asserts `db.UpsertEntity` succeeds (including AGE dual-write path) without `permission denied for schema ag_catalog`.
+
 - [x] 2026-04-08: Fixed memory near-duplicate update path to keep graph/AGE links current (TDD-first):
   - Added regression unit test:
     - `internal/memory/store_test.go::TestCreate_NearDuplicateFound_StillLinksEntitiesAndRelations`
