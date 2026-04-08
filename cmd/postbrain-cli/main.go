@@ -131,6 +131,7 @@ func checkUpdateCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "check-update",
 		Short: "Check whether a newer postbrain-cli release is available",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			if ctx == nil {
