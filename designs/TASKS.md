@@ -60,6 +60,20 @@
 
 ### Maintenance
 
+- [x] 2026-04-08: Unified CLI semantic-version comparison path:
+  - Refactored `cmd/postbrain-cli/main.go` so `codexVersionMeetsMinimum` now uses the shared `compareVersionStrings`/`compareSemver` helpers.
+  - Removed duplicate inline semver comparison logic from the Codex minimum-version gate path.
+
+- [x] 2026-04-08: Added `postbrain-cli check-update` command for release update checks (TDD-first):
+  - Updated `cmd/postbrain-cli/main.go`:
+    - added `check-update` root subcommand to query latest GitHub release version (`/releases/latest`) and compare against current build version.
+    - reports one of: `update available`, `up to date`, or `unable to compare dev build`.
+    - added reusable semantic-version comparison helpers for current-vs-latest evaluation.
+  - Added CLI unit coverage in `cmd/postbrain-cli/main_test.go`:
+    - `TestCheckUpdateCommand_UpdateAvailable`
+    - `TestCheckUpdateCommand_UpToDate`
+    - `TestCheckUpdateCommand_DevBuild`
+
 - [x] 2026-04-07: Replaced scaffolded Postbrain plugin placeholders with real plugin artifacts:
   - Added concrete plugin payload files under `plugins/postbrain/`:
     - `skills/codex.md`
@@ -166,6 +180,17 @@
     - prevents cross-branch/sibling scope memories from appearing in query-playground recall results.
   - Added query-playground regression coverage for sibling scope separation in `internal/ui/handler_query_integration_test.go`:
     - `TestQueryPlayground_SelectedScopeExcludesSiblingMemories`.
+
+- [x] 2026-04-07: Enabled Codex hooks config during `install-codex-skill` (TDD-first):
+  - Added red/green unit coverage in `internal/postbraincli/codex_skill_installer_test.go` for `.codex/config.toml` management:
+    - creates config when missing with `[features]` and `codex_hooks = true`
+    - merges into existing `[features]` config while preserving unrelated keys
+    - remains idempotent when run repeatedly.
+  - Added `EnableCodexHooks` to `internal/postbraincli/codex_skill_installer.go`:
+    - ensures `<target>/.codex/config.toml` exists
+    - enables hooks via `[features].codex_hooks = true`
+    - preserves existing config content and avoids duplicate entries.
+  - Updated `postbrain-cli install-codex-skill` command flow in `cmd/postbrain-cli/main.go` to call `EnableCodexHooks` after skill install.
 
 - [x] 2026-04-07: Updated docs for Codex hook/plugin parity with Claude workflows:
   - Updated `docs/using-with-coding-agents.md` to document Codex hook setup, including feature flag and hook command examples.

@@ -38,8 +38,10 @@ var embeddedCodexSkillLight string
 var embeddedClaudeSkill string
 
 const minimumCodexHooksVersion = "0.114.0"
+const latestReleaseAPIURL = "https://api.github.com/repos/simplyblock/postbrain/releases/latest"
 
 var detectCodexVersionFn = detectCodexVersion
+var fetchLatestPostbrainVersionFn = fetchLatestPostbrainVersion
 
 // hookClient is a minimal HTTP client for the Postbrain REST API.
 type hookClient struct {
@@ -104,7 +106,7 @@ func newRootCmd() *cobra.Command {
 	}
 	root.PersistentFlags().StringVar(&scopeFlag, "scope", "", "scope (e.g. project:acme/api)")
 
-	root.AddCommand(snapshotCmd(), summarizeSessionCmd(), skillCmd(), installCodexSkillCmd(), installClaudeSkillCmd(), versionCmd())
+	root.AddCommand(snapshotCmd(), summarizeSessionCmd(), skillCmd(), installCodexSkillCmd(), installClaudeSkillCmd(), versionCmd(), checkUpdateCmd())
 	return root
 }
 
@@ -120,6 +122,44 @@ func versionCmd() *cobra.Command {
 				buildGitRef,
 				buildTimestamp,
 			)
+			return err
+		},
+	}
+}
+
+func checkUpdateCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "check-update",
+		Short: "Check whether a newer postbrain-cli release is available",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			if ctx == nil {
+				ctx = context.Background()
+			}
+
+			latest, err := fetchLatestPostbrainVersionFn(ctx)
+			if err != nil {
+				return err
+			}
+			current := buildVersion
+			if strings.TrimSpace(current) == "" || strings.EqualFold(strings.TrimSpace(current), "dev") {
+				_, err := fmt.Fprintf(cmd.OutOrStdout(), "current=%s latest=%s (unable to compare dev build)\n", current, latest)
+				return err
+			}
+			cmp, err := compareVersionStrings(latest, current)
+			if err != nil {
+				return err
+			}
+			if cmp > 0 {
+				_, err := fmt.Fprintf(cmd.OutOrStdout(), "update available: current=%s latest=%s\n", current, latest)
+				return err
+			}
+			if cmp < 0 {
+				_, err := fmt.Fprintf(cmd.OutOrStdout(), "current version is ahead of latest release: current=%s latest=%s\n", current, latest)
+				return err
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "up to date: current=%s latest=%s\n", current, latest)
 			return err
 		},
 	}
@@ -547,27 +587,80 @@ func detectCodexVersion() (string, error) {
 }
 
 func codexVersionMeetsMinimum(versionOutput, minimum string) (bool, error) {
-	v, err := extractSemver(versionOutput)
+	cmp, err := compareVersionStrings(versionOutput, minimum)
 	if err != nil {
 		return false, err
 	}
-	min, err := extractSemver(minimum)
-	if err != nil {
-		return false, err
-	}
-	if v.major != min.major {
-		return v.major > min.major, nil
-	}
-	if v.minor != min.minor {
-		return v.minor > min.minor, nil
-	}
-	return v.patch >= min.patch, nil
+	return cmp >= 0, nil
 }
 
 type semver struct {
 	major int
 	minor int
 	patch int
+}
+
+func fetchLatestPostbrainVersion(ctx context.Context) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, latestReleaseAPIURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("build latest release request: %w", err)
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "postbrain-cli")
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("fetch latest release: %w", err)
+	}
+	defer closeutil.Log(resp.Body, "latest release response body")
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return "", fmt.Errorf("fetch latest release: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var payload struct {
+		TagName string `json:"tag_name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return "", fmt.Errorf("decode latest release response: %w", err)
+	}
+	if strings.TrimSpace(payload.TagName) == "" {
+		return "", fmt.Errorf("latest release response missing tag_name")
+	}
+	return strings.TrimPrefix(strings.TrimSpace(payload.TagName), "v"), nil
+}
+
+func compareVersionStrings(a, b string) (int, error) {
+	av, err := extractSemver(a)
+	if err != nil {
+		return 0, err
+	}
+	bv, err := extractSemver(b)
+	if err != nil {
+		return 0, err
+	}
+	return compareSemver(av, bv), nil
+}
+
+func compareSemver(a, b semver) int {
+	if a.major != b.major {
+		if a.major > b.major {
+			return 1
+		}
+		return -1
+	}
+	if a.minor != b.minor {
+		if a.minor > b.minor {
+			return 1
+		}
+		return -1
+	}
+	if a.patch != b.patch {
+		if a.patch > b.patch {
+			return 1
+		}
+		return -1
+	}
+	return 0
 }
 
 func extractSemver(input string) (semver, error) {
