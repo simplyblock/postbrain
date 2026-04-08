@@ -214,8 +214,8 @@
 
 - [x] 2026-04-08: Corrected AGE backfill job comment to match current sync behavior:
   - Updated `internal/jobs/age_backfill.go` doc comment for `AGEBackfillJob`:
-    - removed stale "MERGE-based" repeat-safety wording.
-    - clarified current behavior uses match-then-create AGE sync helpers.
+    - removed stale wording that no longer matched the graph sync implementation.
+    - clarified current behavior uses MERGE-based AGE sync helpers.
 
 - [x] 2026-04-08: Made AGE graph sync upserts atomic to reduce duplicate risk under concurrency:
   - Updated `internal/graph/age_sync.go`:
