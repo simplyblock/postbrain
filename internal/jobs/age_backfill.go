@@ -46,7 +46,8 @@ const ageBackfillRelationBatchCursorSQL = `
 `
 
 // AGEBackfillJob mirrors relational entities/relations into the AGE overlay.
-// It is safe to run repeatedly because AGE writes are MERGE-based.
+// It is intended for periodic reconciliation and currently relies on
+// match-then-create AGE sync helpers (not Cypher MERGE upserts).
 type AGEBackfillJob struct {
 	pool      *pgxpool.Pool
 	batchSize int

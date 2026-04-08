@@ -212,6 +212,11 @@
     - `TestRelationBatchQuery_FirstPageWithoutCursor`
     - asserts keyset predicates and explicitly forbids `OFFSET` in batch queries.
 
+- [x] 2026-04-08: Corrected AGE backfill job comment to match current sync behavior:
+  - Updated `internal/jobs/age_backfill.go` doc comment for `AGEBackfillJob`:
+    - removed stale "MERGE-based" repeat-safety wording.
+    - clarified current behavior uses match-then-create AGE sync helpers.
+
 - [x] 2026-04-08: Fixed system-admin principal management bypass for memberships and principal-admin checks (TDD-first):
   - Added integration regressions:
     - `internal/principals/membership_integration_test.go::TestMembershipStore_SystemAdminBypassesAdminChecks`
