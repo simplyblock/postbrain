@@ -240,6 +240,15 @@
     - integration (AGE image-gated): `internal/db/age_dualwrite_integration_test.go::TestUpsertEntityAndRelation_DoNotFailWhenAGEDualWriteErrors`
       - validates relational entity/relation upserts still succeed when AGE permissions are intentionally broken for the app role.
 
+- [x] 2026-04-08: Ensured AGE overlay setup runs on a single acquired DB connection/session:
+  - Updated `internal/db/age_overlay.go`:
+    - `EnsureAGEOverlay` now acquires one `pgxpool` connection and runs overlay setup, privilege grants, extension/schema checks, and runtime probe on that same connection.
+    - extracted `ensureAGEOverlayOnExecutor(...)` helper to keep step sequencing explicit.
+  - Added regression unit coverage in `internal/db/age_overlay_internal_test.go`:
+    - `TestEnsureAGEOverlayOnExecutor_UsesSequentialSteps`
+    - `TestEnsureAGEOverlayOnExecutor_AgeInstalledRunsSchemaChecksAndProbe`
+    - verifies ordered step execution and AGE-installed probe path through a single executor abstraction.
+
 - [x] 2026-04-08: Fixed system-admin principal management bypass for memberships and principal-admin checks (TDD-first):
   - Added integration regressions:
     - `internal/principals/membership_integration_test.go::TestMembershipStore_SystemAdminBypassesAdminChecks`

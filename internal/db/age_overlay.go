@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -57,6 +59,11 @@ const ensureAGEAccessProbeSQL = `
 SELECT * FROM ag_catalog.cypher('postbrain', $$ RETURN 1 $$) AS (result ag_catalog.agtype);
 `
 
+type ageOverlayExecutor interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
 // EnsureAGEOverlay is idempotent and best-effort.
 //
 // It allows enabling AGE later even when the original AGE migration ran while
@@ -65,31 +72,41 @@ func EnsureAGEOverlay(ctx context.Context, pool *pgxpool.Pool) error {
 	if pool == nil {
 		return fmt.Errorf("ensure age overlay: nil pool")
 	}
-	if _, err := pool.Exec(ctx, ensureAGEOverlaySQL); err != nil {
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("ensure age overlay: acquire conn: %w", err)
+	}
+	defer conn.Release()
+
+	return ensureAGEOverlayOnExecutor(ctx, conn, pool.Config().ConnConfig.User)
+}
+
+func ensureAGEOverlayOnExecutor(ctx context.Context, exec ageOverlayExecutor, currentUser string) error {
+	if _, err := exec.Exec(ctx, ensureAGEOverlaySQL); err != nil {
 		return fmt.Errorf("ensure age overlay: %w", err)
 	}
-	if _, err := pool.Exec(ctx, ensureAGEPrivilegesSQL); err != nil {
+	if _, err := exec.Exec(ctx, ensureAGEPrivilegesSQL); err != nil {
 		return fmt.Errorf("ensure age privileges: %w", err)
 	}
 	var ageInstalled bool
-	if err := pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname='age')").Scan(&ageInstalled); err != nil {
+	if err := exec.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname='age')").Scan(&ageInstalled); err != nil {
 		return fmt.Errorf("ensure age overlay: detect extension: %w", err)
 	}
 	if ageInstalled {
 		var graphSchemaExists bool
-		if err := pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname='postbrain')").Scan(&graphSchemaExists); err != nil {
+		if err := exec.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname='postbrain')").Scan(&graphSchemaExists); err != nil {
 			return fmt.Errorf("ensure age overlay: detect graph schema: %w", err)
 		}
 		if graphSchemaExists {
 			var hasUsage bool
-			if err := pool.QueryRow(ctx, "SELECT has_schema_privilege(current_user, 'postbrain', 'USAGE')").Scan(&hasUsage); err != nil {
+			if err := exec.QueryRow(ctx, "SELECT has_schema_privilege(current_user, 'postbrain', 'USAGE')").Scan(&hasUsage); err != nil {
 				return fmt.Errorf("ensure age overlay: check postbrain schema usage: %w", err)
 			}
 			if !hasUsage {
-				return fmt.Errorf("ensure age overlay: role %q lacks USAGE on schema postbrain", pool.Config().ConnConfig.User)
+				return fmt.Errorf("ensure age overlay: role %q lacks USAGE on schema postbrain", currentUser)
 			}
 		}
-		if _, err := pool.Exec(ctx, ensureAGEAccessProbeSQL); err != nil {
+		if _, err := exec.Exec(ctx, ensureAGEAccessProbeSQL); err != nil {
 			return fmt.Errorf("ensure age access probe: %w", err)
 		}
 	}
