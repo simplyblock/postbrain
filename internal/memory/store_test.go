@@ -64,6 +64,10 @@ type mockCreator struct {
 	updated []*db.Memory
 	// upsertRelErr, if set, is returned by UpsertRelation.
 	upsertRelErr error
+	// instrumentation for graph-link assertions.
+	upsertEntityCalls int
+	linkEntityCalls   int
+	upsertRelCalls    int
 }
 
 func (mc *mockCreator) CreateMemory(_ context.Context, m *db.Memory) (*db.Memory, error) {
@@ -90,15 +94,18 @@ func (mc *mockCreator) SoftDeleteMemory(_ context.Context, id uuid.UUID) error {
 }
 
 func (mc *mockCreator) UpsertEntity(_ context.Context, e *db.Entity) (*db.Entity, error) {
+	mc.upsertEntityCalls++
 	e.ID = uuid.New()
 	return e, nil
 }
 
 func (mc *mockCreator) LinkMemoryToEntity(_ context.Context, _, _ uuid.UUID, _ string) error {
+	mc.linkEntityCalls++
 	return nil
 }
 
 func (mc *mockCreator) UpsertRelation(_ context.Context, r *db.Relation) (*db.Relation, error) {
+	mc.upsertRelCalls++
 	if mc.upsertRelErr != nil {
 		return nil, mc.upsertRelErr
 	}
@@ -264,6 +271,44 @@ func TestCreate_NearDuplicateFound_ActionIsUpdated(t *testing.T) {
 	// No new memory should have been created.
 	if len(mc.createdAll) != 0 {
 		t.Errorf("CreateMemory called %d times, want 0 (duplicate path skips insert)", len(mc.createdAll))
+	}
+}
+
+func TestCreate_NearDuplicateFound_StillLinksEntitiesAndRelations(t *testing.T) {
+	t.Parallel()
+	existingID := uuid.New()
+	mc := &mockCreator{
+		dupes: []*db.Memory{{ID: existingID, Content: "similar content"}},
+	}
+	s := newTestStore(false, mc)
+
+	result, err := s.Create(context.Background(), CreateInput{
+		Content:    "near duplicate but with explicit entities",
+		MemoryType: "semantic",
+		ScopeID:    uuid.New(),
+		AuthorID:   uuid.New(),
+		Entities: []EntityInput{
+			{Name: "alpha", Type: "concept"},
+			{Name: "beta", Type: "concept"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Action != "updated" {
+		t.Fatalf("Action = %q, want %q", result.Action, "updated")
+	}
+	if result.MemoryID != existingID {
+		t.Fatalf("MemoryID = %v, want existing ID %v", result.MemoryID, existingID)
+	}
+	if mc.upsertEntityCalls < 2 {
+		t.Fatalf("UpsertEntity called %d times, want at least 2 for explicit entities", mc.upsertEntityCalls)
+	}
+	if mc.linkEntityCalls < 2 {
+		t.Fatalf("LinkMemoryToEntity called %d times, want at least 2", mc.linkEntityCalls)
+	}
+	if mc.upsertRelCalls < 1 {
+		t.Fatalf("UpsertRelation called %d times, want at least 1 co_occurs_with relation", mc.upsertRelCalls)
 	}
 }
 

@@ -60,6 +60,15 @@
 
 ### Maintenance
 
+- [x] 2026-04-08: Fixed memory near-duplicate update path to keep graph/AGE links current (TDD-first):
+  - Added regression unit test:
+    - `internal/memory/store_test.go::TestCreate_NearDuplicateFound_StillLinksEntitiesAndRelations`
+    - verifies `Create(...)->action=updated` still upserts entities, links memory entities, and writes `co_occurs_with` relations.
+  - Updated `internal/memory/store.go`:
+    - extracted shared entity/relation linking into `linkEntitiesForMemory(...)`.
+    - duplicate-update branch now invokes the same linking path as create.
+    - duplicate-update branch now runs code-graph extraction for code memories with `file:` source refs, matching create semantics.
+
 - [x] 2026-04-08: Fixed AGE execution path to avoid search_path-dependent `cypher(...)` failures:
   - Updated AGE SQL call sites to use schema-qualified objects:
     - `ag_catalog.cypher(... ) AS (result ag_catalog.agtype)` in:
