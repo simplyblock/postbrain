@@ -60,6 +60,13 @@
 
 ### Maintenance
 
+- [x] 2026-04-08: Fixed DB pool search_path override that broke AGE runtime in app sessions:
+  - Updated `internal/db/conn.go`:
+    - `NewPool` now sets connection `search_path` to `ag_catalog, "$user", public` in `AfterConnect`.
+    - replaces previous `SET search_path = public`, which could hide AGE operator/function resolution in runtime Cypher paths.
+  - Added unit regression coverage:
+    - `internal/db/conn_internal_test.go::TestDefaultSearchPathSQL_IncludesAGECatalog`.
+
 - [x] 2026-04-08: Added Apache AGE operations runbook documentation:
   - New page `docs/apache-age-usage.md` covering:
     - required grants (parameterized by username/database)
