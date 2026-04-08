@@ -21,6 +21,9 @@ For model lifecycle and re-embedding procedures, use
 
 ## Common issues
 
+For Apache AGE-specific setup and troubleshooting, see
+[Apache AGE Usage and Operations](./apache-age-usage.md).
+
 ### 1. "scope access denied" or "insufficient permissions"
 
 Likely causes:

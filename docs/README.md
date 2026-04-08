@@ -30,6 +30,7 @@ This documentation is also published via GitHub Pages for repository browsing.
 - [Security and Access Model](./security.md)
 - [Access Control Reference](./access-control-reference.md)
 - [Operations and Troubleshooting](./operations.md)
+- [Apache AGE Usage and Operations](./apache-age-usage.md)
 - [Embedding Model Operations](./embedding-model-operations.md)
 - [Upgrade Guide](./upgrade-guide.md)
 - [Compatibility Matrix](./compatibility.md)

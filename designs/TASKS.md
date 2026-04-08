@@ -60,6 +60,17 @@
 
 ### Maintenance
 
+- [x] 2026-04-08: Added Apache AGE operations runbook documentation:
+  - New page `docs/apache-age-usage.md` covering:
+    - required grants (parameterized by username/database)
+    - default privileges for future graph objects
+    - ownership checks/fixes for `_ag_label_vertex` and `_ag_label_edge`
+    - `search_path` requirements (`ag_catalog` first) and persistence
+    - health-check SQL and symptom-to-fix troubleshooting map
+  - Added discoverability links:
+    - `docs/README.md` technical/operations section
+    - `docs/operations.md` common issues section
+
 - [x] 2026-04-08: Fixed AGE dual-write permission failure for restricted DB roles (regression-covered):
   - Updated `internal/db/age_overlay.go`:
     - `EnsureAGEOverlay` now also runs a best-effort privileges step that grants:
