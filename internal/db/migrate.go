@@ -266,7 +266,8 @@ func buildMigratorDSN(connConfig *pgx.ConnConfig) (string, error) {
 		return "", err
 	}
 	q := u.Query()
-	q.Set("x-migrations-table", "public.schema_migrations")
+	q.Set("x-migrations-table", `"public"."schema_migrations"`)
+	q.Set("x-migrations-table-quoted", "1")
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }

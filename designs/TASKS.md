@@ -69,7 +69,9 @@
 
 - [x] 2026-04-08: Fixed migrator schema placement regression with AGE-first search_path:
   - Updated `internal/db/migrate.go`:
-    - `newMigrator` now builds a migrator DSN that sets `x-migrations-table=public.schema_migrations` explicitly.
+    - `newMigrator` now builds a migrator DSN that sets:
+      - `x-migrations-table="public"."schema_migrations"`
+      - `x-migrations-table-quoted=1`
     - prevents `golang-migrate` from trying to create `schema_migrations` in `ag_catalog`.
     - avoids unsupported startup-parameter failures on managed Postgres by not setting DSN-level `search_path`.
   - Added unit regression coverage:
