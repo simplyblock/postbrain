@@ -228,6 +228,18 @@
     - verifies MERGE-based query shape and string escaping.
   - Updated `internal/jobs/age_backfill.go` comment to reflect MERGE-based graph sync helpers.
 
+- [x] 2026-04-08: Made AGE dual-write best-effort so optional overlay failures do not break relational upserts:
+  - Updated `internal/db/compat.go`:
+    - `UpsertEntity` no longer fails primary relational writes when AGE mirror sync returns an error.
+    - `UpsertRelation` now follows the same best-effort behavior for AGE mirror sync errors.
+    - added `bestEffortAGEDualWriteError` helper that logs warning-level dual-write failures and continues.
+  - Added regression coverage:
+    - unit: `internal/db/compat_age_dualwrite_test.go`
+      - `TestBestEffortAGEDualWriteError_NilError`
+      - `TestBestEffortAGEDualWriteError_SwallowsError`
+    - integration (AGE image-gated): `internal/db/age_dualwrite_integration_test.go::TestUpsertEntityAndRelation_DoNotFailWhenAGEDualWriteErrors`
+      - validates relational entity/relation upserts still succeed when AGE permissions are intentionally broken for the app role.
+
 - [x] 2026-04-08: Fixed system-admin principal management bypass for memberships and principal-admin checks (TDD-first):
   - Added integration regressions:
     - `internal/principals/membership_integration_test.go::TestMembershipStore_SystemAdminBypassesAdminChecks`

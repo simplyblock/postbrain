@@ -7,6 +7,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -873,7 +874,9 @@ func UpsertEntity(ctx context.Context, pool *pgxpool.Pool, e *Entity) (*Entity, 
 		return nil, fmt.Errorf("db: upsert entity: %w", err)
 	}
 	if err := syncEntityToAGEIfAvailable(ctx, pool, result); err != nil {
-		return nil, fmt.Errorf("db: upsert entity age dual-write: %w", err)
+		if handled := bestEffortAGEDualWriteError("entity", err); handled != nil {
+			return nil, handled
+		}
 	}
 
 	if result.EmbeddingModelID != nil && result.Embedding != nil {
@@ -1005,9 +1008,22 @@ func UpsertRelation(ctx context.Context, pool *pgxpool.Pool, r *Relation) (*Rela
 		CreatedAt:      result.CreatedAt,
 	}
 	if err := syncRelationToAGEIfAvailable(ctx, pool, rel); err != nil {
-		return nil, fmt.Errorf("db: upsert relation age dual-write: %w", err)
+		if handled := bestEffortAGEDualWriteError("relation", err); handled != nil {
+			return nil, handled
+		}
 	}
 	return rel, nil
+}
+
+func bestEffortAGEDualWriteError(kind string, err error) error {
+	if err == nil {
+		return nil
+	}
+	slog.Warn("db: age dual-write failed; continuing with relational write",
+		"kind", kind,
+		"error", err,
+	)
+	return nil
 }
 
 // ListRelationsForEntity returns relations for an entity, optionally filtered by predicate.
