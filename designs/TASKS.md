@@ -217,6 +217,17 @@
     - removed stale "MERGE-based" repeat-safety wording.
     - clarified current behavior uses match-then-create AGE sync helpers.
 
+- [x] 2026-04-08: Made AGE graph sync upserts atomic to reduce duplicate risk under concurrency:
+  - Updated `internal/graph/age_sync.go`:
+    - `SyncEntityToAGE` now uses single-statement `MERGE (e:Entity {id: ...})` upsert semantics.
+    - `SyncRelationToAGE` now uses single-statement `MERGE` for relation identity `(subject, predicate, object)`.
+    - removed two-step `MATCH/SET` then `CREATE` fallback logic from graph sync path.
+  - Added unit regression coverage in `internal/graph/age_sync_test.go`:
+    - `TestBuildEntityUpsertCypher_UsesMergeAndEscapesStrings`
+    - `TestBuildRelationUpsertCypher_UsesMergeAndEscapesPredicate`
+    - verifies MERGE-based query shape and string escaping.
+  - Updated `internal/jobs/age_backfill.go` comment to reflect MERGE-based graph sync helpers.
+
 - [x] 2026-04-08: Fixed system-admin principal management bypass for memberships and principal-admin checks (TDD-first):
   - Added integration regressions:
     - `internal/principals/membership_integration_test.go::TestMembershipStore_SystemAdminBypassesAdminChecks`

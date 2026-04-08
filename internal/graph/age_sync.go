@@ -23,45 +23,8 @@ func SyncEntityToAGE(ctx context.Context, pool *pgxpool.Pool, entity *db.Entity)
 		return ErrAGEUnavailable
 	}
 
-	updateCypher := fmt.Sprintf(`
-MATCH (e:Entity)
-WHERE e.id = '%s'
-SET e.scope_id = '%s',
-    e.entity_type = '%s',
-    e.name = '%s',
-    e.canonical = '%s'
-RETURN e
-`,
-		entity.ID.String(),
-		entity.ScopeID.String(),
-		escapeCypherString(entity.EntityType),
-		escapeCypherString(entity.Name),
-		escapeCypherString(entity.Canonical),
-	)
-	updated, err := ageCypherHasRows(ctx, pool, updateCypher)
-	if err != nil {
-		return fmt.Errorf("graph: sync entity to age: %w", err)
-	}
-	if updated {
-		return nil
-	}
-
-	createCypher := fmt.Sprintf(`
-CREATE (e:Entity)
-SET e.id = '%s',
-    e.scope_id = '%s',
-    e.entity_type = '%s',
-    e.name = '%s',
-    e.canonical = '%s'
-RETURN e
-`,
-		entity.ID.String(),
-		entity.ScopeID.String(),
-		escapeCypherString(entity.EntityType),
-		escapeCypherString(entity.Name),
-		escapeCypherString(entity.Canonical),
-	)
-	if _, err := pool.Exec(ctx, buildAGECypherSQL(createCypher)); err != nil {
+	cypher := buildEntityUpsertCypher(entity)
+	if _, err := pool.Exec(ctx, buildAGECypherSQL(cypher)); err != nil {
 		return fmt.Errorf("graph: sync entity to age: %w", err)
 	}
 	return nil
@@ -79,11 +42,36 @@ func SyncRelationToAGE(ctx context.Context, pool *pgxpool.Pool, rel *db.Relation
 		return ErrAGEUnavailable
 	}
 
-	updateCypher := fmt.Sprintf(`
-MATCH (a:Entity)-[r:RELATION]->(b:Entity)
+	cypher := buildRelationUpsertCypher(rel)
+	if _, err := pool.Exec(ctx, buildAGECypherSQL(cypher)); err != nil {
+		return fmt.Errorf("graph: sync relation to age: %w", err)
+	}
+	return nil
+}
+
+func buildEntityUpsertCypher(entity *db.Entity) string {
+	return fmt.Sprintf(`
+MERGE (e:Entity {id: '%s'})
+SET e.scope_id = '%s',
+    e.entity_type = '%s',
+    e.name = '%s',
+    e.canonical = '%s'
+RETURN e
+`,
+		entity.ID.String(),
+		entity.ScopeID.String(),
+		escapeCypherString(entity.EntityType),
+		escapeCypherString(entity.Name),
+		escapeCypherString(entity.Canonical),
+	)
+}
+
+func buildRelationUpsertCypher(rel *db.Relation) string {
+	return fmt.Sprintf(`
+MATCH (a:Entity), (b:Entity)
 WHERE a.id = '%s'
   AND b.id = '%s'
-  AND r.predicate = '%s'
+MERGE (a)-[r:RELATION {predicate: '%s'}]->(b)
 SET r.confidence = %s,
     r.scope_id = '%s'
 RETURN r
@@ -94,43 +82,6 @@ RETURN r
 		strconv.FormatFloat(rel.Confidence, 'f', -1, 64),
 		rel.ScopeID.String(),
 	)
-	updated, err := ageCypherHasRows(ctx, pool, updateCypher)
-	if err != nil {
-		return fmt.Errorf("graph: sync relation to age: %w", err)
-	}
-	if updated {
-		return nil
-	}
-
-	createCypher := fmt.Sprintf(`
-MATCH (a:Entity), (b:Entity)
-WHERE a.id = '%s'
-  AND b.id = '%s'
-CREATE (a)-[r:RELATION]->(b)
-SET r.predicate = '%s',
-    r.confidence = %s,
-    r.scope_id = '%s'
-RETURN r
-`,
-		rel.SubjectID.String(),
-		rel.ObjectID.String(),
-		escapeCypherString(rel.Predicate),
-		strconv.FormatFloat(rel.Confidence, 'f', -1, 64),
-		rel.ScopeID.String(),
-	)
-	if _, err := pool.Exec(ctx, buildAGECypherSQL(createCypher)); err != nil {
-		return fmt.Errorf("graph: sync relation to age: %w", err)
-	}
-	return nil
-}
-
-func ageCypherHasRows(ctx context.Context, pool *pgxpool.Pool, cypher string) (bool, error) {
-	rows, err := pool.Query(ctx, buildAGECypherSQL(cypher))
-	if err != nil {
-		return false, err
-	}
-	defer rows.Close()
-	return rows.Next(), rows.Err()
 }
 
 func escapeCypherString(s string) string {
