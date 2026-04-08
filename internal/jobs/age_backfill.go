@@ -18,8 +18,8 @@ import (
 const defaultAGEBackfillBatchSize = 500
 const ageBackfillAdvisoryLockKey int64 = 830472911245001337
 
-const ageBackfillTryAdvisoryLockSQL = "SELECT pg_try_advisory_lock(830472911245001337)"
-const ageBackfillAdvisoryUnlockSQL = "SELECT pg_advisory_unlock(830472911245001337)"
+var ageBackfillTryAdvisoryLockSQL = fmt.Sprintf("SELECT pg_try_advisory_lock(%d)", ageBackfillAdvisoryLockKey)
+var ageBackfillAdvisoryUnlockSQL = fmt.Sprintf("SELECT pg_advisory_unlock(%d)", ageBackfillAdvisoryLockKey)
 
 const ageBackfillEntityBatchFirstPageSQL = `
 	SELECT id, scope_id, entity_type, name, canonical, created_at
