@@ -874,7 +874,7 @@ func UpsertEntity(ctx context.Context, pool *pgxpool.Pool, e *Entity) (*Entity, 
 		return nil, fmt.Errorf("db: upsert entity: %w", err)
 	}
 	if err := syncEntityToAGEIfAvailable(ctx, pool, result); err != nil {
-		bestEffortAGEDualWriteError("entity", err)
+		_ = bestEffortAGEDualWriteError("entity", err)
 	}
 
 	if result.EmbeddingModelID != nil && result.Embedding != nil {
@@ -1006,7 +1006,7 @@ func UpsertRelation(ctx context.Context, pool *pgxpool.Pool, r *Relation) (*Rela
 		CreatedAt:      result.CreatedAt,
 	}
 	if err := syncRelationToAGEIfAvailable(ctx, pool, rel); err != nil {
-		bestEffortAGEDualWriteError("relation", err)
+		_ = bestEffortAGEDualWriteError("relation", err)
 	}
 	return rel, nil
 }

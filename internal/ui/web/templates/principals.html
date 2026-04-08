@@ -61,6 +61,41 @@
   </tbody>
 </table>
 
+<!-- ── Scope Grants ─────────────────────────────────────── -->
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem">
+  <h2 style="margin:0">Scope Grants</h2>
+  <button onclick="document.getElementById('dlg-scope-grant').showModal()">+ Add Scope Grant</button>
+</div>
+{{if .ScopeGrantFormError}}<div class="alert alert-error">{{.ScopeGrantFormError}}</div>{{end}}
+<table>
+  <thead><tr><th>Principal</th><th>Scope</th><th>Permissions</th><th>Expires</th><th>Created</th><th></th></tr></thead>
+  <tbody>
+  {{range .ScopeGrantRows}}
+  <tr>
+    <td>{{.PrincipalName}} <span class="muted">({{or .PrincipalSlug .PrincipalID}})</span></td>
+    <td>{{.ScopeDisplayName}}</td>
+    <td class="mono">{{join .Permissions ", "}}</td>
+    <td class="muted">{{if .ExpiresAt}}{{derefTime .ExpiresAt}}{{else}}—{{end}}</td>
+    <td class="muted">{{timeAgo .CreatedAt}}</td>
+    <td>
+      {{if .CanDelete}}
+      <form method="POST" action="/ui/scope-grants/delete" style="display:inline"
+            onsubmit="return confirm('Delete this scope grant?')">
+        <input type="hidden" name="scope_id" value="{{.ScopeID}}">
+        <input type="hidden" name="grant_id" value="{{.ID}}">
+        <button type="submit" class="danger">Remove</button>
+      </form>
+      {{else}}
+      <span class="muted">No delete access</span>
+      {{end}}
+    </td>
+  </tr>
+  {{else}}
+  <tr><td colspan="6" class="muted">No scope grants.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+
 <!-- ── Dialog: Create Principal ───────────────────────────── -->
 <dialog id="dlg-principal">
   <h2>Create Principal</h2>
@@ -140,10 +175,44 @@
   </form>
 </dialog>
 
+<!-- ── Dialog: Add Scope Grant ───────────────────────────── -->
+<dialog id="dlg-scope-grant">
+  <h2>Add Scope Grant</h2>
+  <form method="POST" action="/ui/scope-grants">
+    <label>Scope
+      <select name="scope_id" required>
+        <option value="">— select —</option>
+        {{range .ScopeGrantScopes}}
+        <option value="{{.ID}}">{{.DisplayName}}</option>
+        {{end}}
+      </select>
+    </label>
+    <label>Grantee Principal
+      <select name="principal_id" required>
+        <option value="">— select —</option>
+        {{range .Principals}}
+        <option value="{{.ID}}">{{.DisplayName}} ({{.Kind}}: {{.Slug}})</option>
+        {{end}}
+      </select>
+    </label>
+    <fieldset>
+      <legend>Permissions</legend>
+      {{range .ScopeGrantPermission}}
+      <label><input type="checkbox" name="permissions" value="{{.}}"> <span class="mono">{{.}}</span></label>
+      {{end}}
+    </fieldset>
+    <div class="dialog-footer">
+      <button type="button" class="secondary" onclick="document.getElementById('dlg-scope-grant').close()">Cancel</button>
+      <button type="submit">Grant</button>
+    </div>
+  </form>
+</dialog>
+
 <!-- Re-open dialog if form error on redirect-back -->
 {{if .PrincipalFormError}}<script>document.getElementById('dlg-principal').showModal()</script>{{end}}
 {{if .PrincipalEditError}}<script>document.getElementById('dlg-principal-edit').showModal()</script>{{end}}
 {{if .MembershipFormError}}<script>document.getElementById('dlg-membership').showModal()</script>{{end}}
+{{if .ScopeGrantFormError}}<script>document.getElementById('dlg-scope-grant').showModal()</script>{{end}}
 <script>
   function openPrincipalEdit(button) {
     var id = button.dataset.id;

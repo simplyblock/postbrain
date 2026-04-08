@@ -27,6 +27,18 @@
 
 ### Permissions Redesign
 
+- [x] 2026-04-08: Added Web UI management for direct scope grants in Principals section (TDD-first):
+  - Added principals-page scope grant CRUD wiring in `internal/ui/handler.go`:
+    - new UI handlers: `POST /ui/scope-grants` and `POST /ui/scope-grants/delete`
+    - scope-grant operations enforce `sharing:write`/`sharing:delete` on the target scope
+    - anti-escalation check for non-system-admin callers: cannot grant permissions beyond caller's effective token permissions on the scope
+    - principals page rendering now includes readable scope grants (`sharing:read`) and available grantable scopes
+  - Updated principals template `internal/ui/web/templates/principals.html`:
+    - added "Scope Grants" table with remove actions
+    - added "Add Scope Grant" dialog with scope/principal selectors and permission checkboxes
+  - Added integration coverage in `internal/ui/principals_integration_test.go`:
+    - `TestPrincipalsPage_SystemAdminCanManageScopeGrants` validates create + revoke flow via Web UI endpoints.
+
 - [x] 2026-04-06: Fixed `internal/authz` security and design-alignment gaps raised by regression tests:
   - Fixed `TokenResolver` scope restriction path to avoid unsafe resolver type assertion panic:
     - `internal/authz/token_resolver.go` now safely unwraps DB-backed resolvers and returns an explicit error when scope checks cannot be evaluated, instead of panicking.

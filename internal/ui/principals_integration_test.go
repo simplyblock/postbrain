@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 
@@ -301,5 +302,102 @@ func TestPrincipalsPage_SystemAdminCanAddMembership(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("expected membership to be created by system admin")
+	}
+}
+
+func TestPrincipalsPage_SystemAdminCanManageScopeGrants(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+
+	systemAdmin := testhelper.CreateTestPrincipal(t, pool, "user", "ui-systemadmin-scopegrant-actor-"+uuid.NewString())
+	owner := testhelper.CreateTestPrincipal(t, pool, "team", "ui-systemadmin-scopegrant-owner-"+uuid.NewString())
+	grantee := testhelper.CreateTestPrincipal(t, pool, "user", "ui-systemadmin-scopegrant-grantee-"+uuid.NewString())
+
+	if _, err := pool.Exec(ctx, `UPDATE principals SET is_system_admin = true WHERE id = $1`, systemAdmin.ID); err != nil {
+		t.Fatalf("set is_system_admin: %v", err)
+	}
+
+	scope, err := db.CreateScope(
+		ctx,
+		pool,
+		"project",
+		"ui-scopegrant-scope-"+uuid.NewString(),
+		"UI Scope Grant",
+		nil,
+		owner.ID,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("create scope: %v", err)
+	}
+
+	rawSession, hashSession, err := auth.GenerateToken()
+	if err != nil {
+		t.Fatalf("generate session token: %v", err)
+	}
+	if _, err := db.CreateToken(ctx, pool, systemAdmin.ID, hashSession, "ui-systemadmin-scopegrant-session", nil, nil, nil); err != nil {
+		t.Fatalf("create session token: %v", err)
+	}
+
+	client, baseURL := loginUITestClient(t, pool, rawSession)
+
+	createForm := url.Values{}
+	createForm.Set("scope_id", scope.ID.String())
+	createForm.Set("principal_id", grantee.ID.String())
+	createForm.Add("permissions", "memories:read")
+	createForm.Add("permissions", "knowledge:read")
+
+	createReq, err := http.NewRequest(http.MethodPost, baseURL+"/ui/scope-grants", strings.NewReader(createForm.Encode()))
+	if err != nil {
+		t.Fatalf("build create request: %v", err)
+	}
+	createReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	createResp, err := client.Do(createReq)
+	if err != nil {
+		t.Fatalf("create request failed: %v", err)
+	}
+	defer createResp.Body.Close()
+	if createResp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("create status = %d, want %d", createResp.StatusCode, http.StatusSeeOther)
+	}
+
+	q := db.New(pool)
+	grant, err := q.GetScopeGrant(ctx, db.GetScopeGrantParams{PrincipalID: grantee.ID, ScopeID: scope.ID})
+	if err != nil {
+		t.Fatalf("get scope grant: %v", err)
+	}
+	if grant == nil {
+		t.Fatal("expected scope grant to exist")
+	}
+	if !slices.Contains(grant.Permissions, "memories:read") || !slices.Contains(grant.Permissions, "knowledge:read") {
+		t.Fatalf("unexpected grant permissions: %#v", grant.Permissions)
+	}
+
+	deleteForm := url.Values{}
+	deleteForm.Set("scope_id", scope.ID.String())
+	deleteForm.Set("grant_id", grant.ID.String())
+
+	deleteReq, err := http.NewRequest(http.MethodPost, baseURL+"/ui/scope-grants/delete", strings.NewReader(deleteForm.Encode()))
+	if err != nil {
+		t.Fatalf("build delete request: %v", err)
+	}
+	deleteReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	deleteResp, err := client.Do(deleteReq)
+	if err != nil {
+		t.Fatalf("delete request failed: %v", err)
+	}
+	defer deleteResp.Body.Close()
+	if deleteResp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("delete status = %d, want %d", deleteResp.StatusCode, http.StatusSeeOther)
+	}
+
+	grants, err := q.ListScopeGrantsByScope(ctx, scope.ID)
+	if err != nil {
+		t.Fatalf("list scope grants: %v", err)
+	}
+	if len(grants) != 0 {
+		t.Fatalf("expected no grants after delete, got %d", len(grants))
 	}
 }
