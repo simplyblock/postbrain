@@ -874,9 +874,7 @@ func UpsertEntity(ctx context.Context, pool *pgxpool.Pool, e *Entity) (*Entity, 
 		return nil, fmt.Errorf("db: upsert entity: %w", err)
 	}
 	if err := syncEntityToAGEIfAvailable(ctx, pool, result); err != nil {
-		if handled := bestEffortAGEDualWriteError("entity", err); handled != nil {
-			return nil, handled
-		}
+		bestEffortAGEDualWriteError("entity", err)
 	}
 
 	if result.EmbeddingModelID != nil && result.Embedding != nil {
