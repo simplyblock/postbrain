@@ -281,6 +281,17 @@
     - replaced map-pattern edge assertion with `MATCH ... WHERE a.id = ... AND b.id = ... AND r.predicate = ...`.
   - Keeps dual-write integration coverage aligned with runtime AGE query compatibility constraints.
 
+- [x] 2026-04-08: Added non-overlap protection for AGE backfill scheduler runs:
+  - Updated `internal/jobs/age_backfill.go`:
+    - `AGEBackfillJob.Run` now acquires a process-independent PostgreSQL advisory lock (`pg_try_advisory_lock`) before executing backfill.
+    - if the lock is already held (another run active), the job logs a skip and exits without overlap.
+    - lock is released at job end via `pg_advisory_unlock`.
+  - Added unit regression coverage in `internal/jobs/age_backfill_test.go`:
+    - `TestTryAcquireAGEBackfillLock`
+    - `TestTryAcquireAGEBackfillLock_QueryError`
+    - `TestReleaseAGEBackfillLock`
+    - validates advisory lock SQL path and lock/unlock helper behavior.
+
 - [x] 2026-04-08: Fixed system-admin principal management bypass for memberships and principal-admin checks (TDD-first):
   - Added integration regressions:
     - `internal/principals/membership_integration_test.go::TestMembershipStore_SystemAdminBypassesAdminChecks`

@@ -1,8 +1,13 @@
 package jobs
 
 import (
+	"context"
+	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func TestNewAGEBackfillJob_DefaultBatchSize(t *testing.T) {
@@ -72,5 +77,82 @@ func TestRelationBatchQuery_FirstPageWithoutCursor(t *testing.T) {
 	}
 	if strings.Contains(q, "OFFSET") {
 		t.Fatalf("relation first-page query must not contain OFFSET:\n%s", q)
+	}
+}
+
+type fakeAGEBackfillLockConn struct {
+	queryRowSQL string
+	queryRowErr error
+	queryRowVal bool
+
+	execSQL string
+	execErr error
+}
+
+func (f *fakeAGEBackfillLockConn) QueryRow(_ context.Context, sql string, _ ...any) pgx.Row {
+	f.queryRowSQL = sql
+	if f.queryRowErr != nil {
+		return fakeBoolRow{err: f.queryRowErr}
+	}
+	return fakeBoolRow{val: f.queryRowVal}
+}
+
+func (f *fakeAGEBackfillLockConn) Exec(_ context.Context, sql string, _ ...any) (pgconn.CommandTag, error) {
+	f.execSQL = sql
+	if f.execErr != nil {
+		return pgconn.CommandTag{}, f.execErr
+	}
+	return pgconn.CommandTag{}, nil
+}
+
+type fakeBoolRow struct {
+	val bool
+	err error
+}
+
+func (r fakeBoolRow) Scan(dest ...any) error {
+	if r.err != nil {
+		return r.err
+	}
+	if len(dest) != 1 {
+		return fmt.Errorf("unexpected destination count: %d", len(dest))
+	}
+	b, ok := dest[0].(*bool)
+	if !ok {
+		return fmt.Errorf("expected *bool destination")
+	}
+	*b = r.val
+	return nil
+}
+
+func TestTryAcquireAGEBackfillLock(t *testing.T) {
+	fake := &fakeAGEBackfillLockConn{queryRowVal: true}
+	locked, err := tryAcquireAGEBackfillLock(context.Background(), fake)
+	if err != nil {
+		t.Fatalf("tryAcquireAGEBackfillLock: %v", err)
+	}
+	if !locked {
+		t.Fatal("expected advisory lock to be acquired")
+	}
+	if fake.queryRowSQL != ageBackfillTryAdvisoryLockSQL {
+		t.Fatalf("lock SQL = %q, want %q", fake.queryRowSQL, ageBackfillTryAdvisoryLockSQL)
+	}
+}
+
+func TestTryAcquireAGEBackfillLock_QueryError(t *testing.T) {
+	fake := &fakeAGEBackfillLockConn{queryRowErr: fmt.Errorf("boom")}
+	_, err := tryAcquireAGEBackfillLock(context.Background(), fake)
+	if err == nil {
+		t.Fatal("expected query error")
+	}
+}
+
+func TestReleaseAGEBackfillLock(t *testing.T) {
+	fake := &fakeAGEBackfillLockConn{queryRowVal: true}
+	if err := releaseAGEBackfillLock(context.Background(), fake); err != nil {
+		t.Fatalf("releaseAGEBackfillLock: %v", err)
+	}
+	if fake.queryRowSQL != ageBackfillAdvisoryUnlockSQL {
+		t.Fatalf("unlock SQL = %q, want %q", fake.queryRowSQL, ageBackfillAdvisoryUnlockSQL)
 	}
 }

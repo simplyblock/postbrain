@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
@@ -14,6 +16,10 @@ import (
 )
 
 const defaultAGEBackfillBatchSize = 500
+const ageBackfillAdvisoryLockKey int64 = 830472911245001337
+
+const ageBackfillTryAdvisoryLockSQL = "SELECT pg_try_advisory_lock(830472911245001337)"
+const ageBackfillAdvisoryUnlockSQL = "SELECT pg_advisory_unlock(830472911245001337)"
 
 const ageBackfillEntityBatchFirstPageSQL = `
 	SELECT id, scope_id, entity_type, name, canonical, created_at
@@ -52,6 +58,11 @@ type AGEBackfillJob struct {
 	batchSize int
 }
 
+type ageBackfillLockConn interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
 // NewAGEBackfillJob creates a new AGEBackfillJob.
 // batchSize <= 0 defaults to 500.
 func NewAGEBackfillJob(pool *pgxpool.Pool, batchSize int) *AGEBackfillJob {
@@ -69,6 +80,27 @@ func (j *AGEBackfillJob) Run(ctx context.Context) error {
 	if j.pool == nil {
 		return fmt.Errorf("age backfill: nil pool")
 	}
+
+	lockConn, err := j.pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("age backfill: acquire advisory lock conn: %w", err)
+	}
+	defer lockConn.Release()
+
+	locked, err := tryAcquireAGEBackfillLock(ctx, lockConn)
+	if err != nil {
+		return fmt.Errorf("age backfill: acquire advisory lock: %w", err)
+	}
+	if !locked {
+		slog.Info("age backfill: previous run still active; skipping")
+		return nil
+	}
+	defer func() {
+		if unlockErr := releaseAGEBackfillLock(context.Background(), lockConn); unlockErr != nil {
+			slog.Warn("age backfill: advisory unlock failed", "error", unlockErr)
+		}
+	}()
+
 	if err := db.EnsureAGEOverlay(ctx, j.pool); err != nil {
 		return fmt.Errorf("age backfill: ensure overlay: %w", err)
 	}
@@ -213,4 +245,23 @@ func relationBatchQuery(hasCursor bool) string {
 		return ageBackfillRelationBatchCursorSQL
 	}
 	return ageBackfillRelationBatchFirstPageSQL
+}
+
+func tryAcquireAGEBackfillLock(ctx context.Context, conn ageBackfillLockConn) (bool, error) {
+	var locked bool
+	if err := conn.QueryRow(ctx, ageBackfillTryAdvisoryLockSQL).Scan(&locked); err != nil {
+		return false, err
+	}
+	return locked, nil
+}
+
+func releaseAGEBackfillLock(ctx context.Context, conn ageBackfillLockConn) error {
+	var unlocked bool
+	if err := conn.QueryRow(ctx, ageBackfillAdvisoryUnlockSQL).Scan(&unlocked); err != nil {
+		return err
+	}
+	if !unlocked {
+		return fmt.Errorf("advisory lock %d was not held", ageBackfillAdvisoryLockKey)
+	}
+	return nil
 }
