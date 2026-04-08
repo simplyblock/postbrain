@@ -9,6 +9,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+const runAGECypherSQL = "SELECT * FROM ag_catalog.cypher('postbrain', $1) AS (result ag_catalog.agtype)"
+
 func ageAvailable(ctx context.Context, pool *pgxpool.Pool) bool {
 	if pool == nil {
 		return false
@@ -50,7 +52,7 @@ RETURN e
 		escapeCypherString(entity.Canonical),
 	)
 
-	if _, err := pool.Exec(ctx, "SELECT * FROM cypher('postbrain', $1) AS (result agtype)", cypher); err != nil {
+	if _, err := pool.Exec(ctx, runAGECypherSQL, cypher); err != nil {
 		return fmt.Errorf("sync entity to age: %w", err)
 	}
 	return nil
@@ -71,7 +73,7 @@ RETURN r
 		rel.ScopeID.String(),
 	)
 
-	if _, err := pool.Exec(ctx, "SELECT * FROM cypher('postbrain', $1) AS (result agtype)", cypher); err != nil {
+	if _, err := pool.Exec(ctx, runAGECypherSQL, cypher); err != nil {
 		return fmt.Errorf("sync relation to age: %w", err)
 	}
 	return nil

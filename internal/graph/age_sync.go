@@ -38,7 +38,7 @@ RETURN e
 		escapeCypherString(entity.Canonical),
 	)
 
-	if _, err := pool.Exec(ctx, "SELECT * FROM cypher('postbrain', $1) AS (result agtype)", cypher); err != nil {
+	if _, err := pool.Exec(ctx, runCypherSQL, cypher); err != nil {
 		return fmt.Errorf("graph: sync entity to age: %w", err)
 	}
 	return nil
@@ -70,7 +70,7 @@ RETURN r
 		rel.ScopeID.String(),
 	)
 
-	if _, err := pool.Exec(ctx, "SELECT * FROM cypher('postbrain', $1) AS (result agtype)", cypher); err != nil {
+	if _, err := pool.Exec(ctx, runCypherSQL, cypher); err != nil {
 		return fmt.Errorf("graph: sync relation to age: %w", err)
 	}
 	return nil

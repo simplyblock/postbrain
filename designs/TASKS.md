@@ -60,6 +60,18 @@
 
 ### Maintenance
 
+- [x] 2026-04-08: Fixed AGE execution path to avoid search_path-dependent `cypher(...)` failures:
+  - Updated AGE SQL call sites to use schema-qualified objects:
+    - `ag_catalog.cypher(... ) AS (result ag_catalog.agtype)` in:
+      - `internal/graph/age_query.go`
+      - `internal/graph/age_sync.go`
+      - `internal/db/age_dualwrite.go`
+    - `ag_catalog.age_pagerank(...)` in `internal/graph/pagerank.go`.
+  - Added regression unit coverage:
+    - `internal/db/age_dualwrite_test.go` verifies dual-write query uses `ag_catalog.cypher` and `ag_catalog.agtype`.
+    - `internal/graph/age_query_test.go` verifies runtime cypher query uses schema-qualified AGE objects.
+    - `internal/graph/pagerank_test.go` verifies schema-qualified `age_pagerank` usage.
+
 - [x] 2026-04-08: Added AGE graph backfill + dual-write integration (TDD-first):
   - Added optional AGE dual-write on relational graph upserts in `internal/db`:
     - `db.UpsertEntity` now mirrors to AGE when extension is available.

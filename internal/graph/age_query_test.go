@@ -19,3 +19,12 @@ func TestBuildScopedCypher_PrependsScopeAnchor(t *testing.T) {
 		t.Fatalf("buildScopedCypher missing original cypher: %q", got)
 	}
 }
+
+func TestRunCypherSQL_UsesSchemaQualifiedAGEObjects(t *testing.T) {
+	if !strings.Contains(runCypherSQL, "ag_catalog.cypher(") {
+		t.Fatalf("runCypherSQL must use schema-qualified ag_catalog.cypher: %q", runCypherSQL)
+	}
+	if !strings.Contains(runCypherSQL, "ag_catalog.agtype") {
+		t.Fatalf("runCypherSQL must use schema-qualified ag_catalog.agtype: %q", runCypherSQL)
+	}
+}
