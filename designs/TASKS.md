@@ -60,6 +60,14 @@
 
 ### Maintenance
 
+- [x] 2026-04-08: Fixed system-admin principal management bypass for memberships and principal-admin checks (TDD-first):
+  - Added integration regressions:
+    - `internal/principals/membership_integration_test.go::TestMembershipStore_SystemAdminBypassesAdminChecks`
+    - `internal/ui/principals_integration_test.go::TestPrincipalsPage_SystemAdminCanAddMembership`
+  - Updated `internal/principals/membership.go`:
+    - `IsPrincipalAdmin`, `IsScopeAdmin`, and `HasAnyAdminRole` now short-circuit for principals with `is_system_admin=true`.
+  - Fixes `principal admin required` denials for system admins when adding team memberships.
+
 - [x] 2026-04-08: Unified CLI semantic-version comparison path:
   - Refactored `cmd/postbrain-cli/main.go` so `codexVersionMeetsMinimum` now uses the shared `compareVersionStrings`/`compareSemver` helpers.
   - Removed duplicate inline semver comparison logic from the Codex minimum-version gate path.

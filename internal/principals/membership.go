@@ -112,6 +112,14 @@ func (m *MembershipStore) IsSystemAdmin(ctx context.Context, principalID uuid.UU
 
 // IsScopeAdmin returns true if principalID has role="admin" in the given scope or any ancestor scope.
 func (m *MembershipStore) IsScopeAdmin(ctx context.Context, principalID, scopeID uuid.UUID) (bool, error) {
+	isSystemAdmin, err := m.IsSystemAdmin(ctx, principalID)
+	if err != nil {
+		return false, fmt.Errorf("principals: is scope admin system check: %w", err)
+	}
+	if isSystemAdmin {
+		return true, nil
+	}
+
 	ancestorScopeIDs, err := db.GetAncestorScopeIDs(ctx, m.pool, scopeID)
 	if err != nil {
 		return false, fmt.Errorf("principals: is scope admin: %w", err)
@@ -142,6 +150,14 @@ func (m *MembershipStore) IsScopeAdmin(ctx context.Context, principalID, scopeID
 // IsPrincipalAdmin returns true if principalID has role="admin" on targetPrincipalID
 // or any ancestor principal of targetPrincipalID.
 func (m *MembershipStore) IsPrincipalAdmin(ctx context.Context, principalID, targetPrincipalID uuid.UUID) (bool, error) {
+	isSystemAdmin, err := m.IsSystemAdmin(ctx, principalID)
+	if err != nil {
+		return false, fmt.Errorf("principals: is principal admin system check: %w", err)
+	}
+	if isSystemAdmin {
+		return true, nil
+	}
+
 	ancestorPrincipalIDs, err := db.GetAllParentIDs(ctx, m.pool, targetPrincipalID)
 	if err != nil {
 		return false, fmt.Errorf("principals: is principal admin: %w", err)
@@ -166,8 +182,16 @@ func (m *MembershipStore) IsPrincipalAdmin(ctx context.Context, principalID, tar
 
 // HasAnyAdminRole returns true if principalID holds at least one admin membership.
 func (m *MembershipStore) HasAnyAdminRole(ctx context.Context, principalID uuid.UUID) (bool, error) {
+	isSystemAdmin, err := m.IsSystemAdmin(ctx, principalID)
+	if err != nil {
+		return false, fmt.Errorf("principals: has any admin role system check: %w", err)
+	}
+	if isSystemAdmin {
+		return true, nil
+	}
+
 	var exists bool
-	err := m.pool.QueryRow(ctx,
+	err = m.pool.QueryRow(ctx,
 		`SELECT EXISTS(
 		     SELECT 1
 		     FROM principal_memberships pm

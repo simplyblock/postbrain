@@ -246,3 +246,60 @@ func TestPrincipalsPage_PrincipalSlugChangeRequiresAdmin(t *testing.T) {
 		}
 	})
 }
+
+func TestPrincipalsPage_SystemAdminCanAddMembership(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+
+	systemAdmin := testhelper.CreateTestPrincipal(t, pool, "user", "ui-systemadmin-membership-actor-"+uuid.NewString())
+	team := testhelper.CreateTestPrincipal(t, pool, "team", "ui-systemadmin-membership-team-"+uuid.NewString())
+	member := testhelper.CreateTestPrincipal(t, pool, "user", "ui-systemadmin-membership-member-"+uuid.NewString())
+
+	if _, err := pool.Exec(ctx, `UPDATE principals SET is_system_admin = true WHERE id = $1`, systemAdmin.ID); err != nil {
+		t.Fatalf("set is_system_admin: %v", err)
+	}
+
+	rawSession, hashSession, err := auth.GenerateToken()
+	if err != nil {
+		t.Fatalf("generate session token: %v", err)
+	}
+	if _, err := db.CreateToken(ctx, pool, systemAdmin.ID, hashSession, "ui-systemadmin-membership-session", nil, nil, nil); err != nil {
+		t.Fatalf("create session token: %v", err)
+	}
+
+	client, baseURL := loginUITestClient(t, pool, rawSession)
+	form := url.Values{}
+	form.Set("member_id", member.ID.String())
+	form.Set("parent_id", team.ID.String())
+	form.Set("role", "member")
+
+	req, err := http.NewRequest(http.MethodPost, baseURL+"/ui/memberships", strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusSeeOther)
+	}
+
+	memberships, err := db.GetMemberships(ctx, pool, member.ID)
+	if err != nil {
+		t.Fatalf("get memberships: %v", err)
+	}
+	var found bool
+	for _, m := range memberships {
+		if m.ParentID == team.ID && m.Role == "member" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected membership to be created by system admin")
+	}
+}

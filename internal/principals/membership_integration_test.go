@@ -299,3 +299,42 @@ func TestMembershipStore_IsSystemAdmin(t *testing.T) {
 		t.Error("unknown principal should not be system admin")
 	}
 }
+
+func TestMembershipStore_SystemAdminBypassesAdminChecks(t *testing.T) {
+	t.Parallel()
+	pool := testhelper.NewTestPool(t)
+	ms := principals.NewMembershipStore(pool)
+	ctx := context.Background()
+
+	sysAdmin := testhelper.CreateTestPrincipal(t, pool, "user", "sys-admin-bypass-"+uuid.NewString())
+	target := testhelper.CreateTestPrincipal(t, pool, "team", "sys-admin-bypass-target-"+uuid.NewString())
+	scope := testhelper.CreateTestScope(t, pool, "project", "sys-admin-bypass-scope-"+uuid.NewString(), nil, target.ID)
+
+	if _, err := pool.Exec(ctx, `UPDATE principals SET is_system_admin = true WHERE id = $1`, sysAdmin.ID); err != nil {
+		t.Fatalf("set is_system_admin: %v", err)
+	}
+
+	ok, err := ms.IsPrincipalAdmin(ctx, sysAdmin.ID, target.ID)
+	if err != nil {
+		t.Fatalf("IsPrincipalAdmin(system admin): %v", err)
+	}
+	if !ok {
+		t.Fatal("system admin should have principal admin access")
+	}
+
+	ok, err = ms.IsScopeAdmin(ctx, sysAdmin.ID, scope.ID)
+	if err != nil {
+		t.Fatalf("IsScopeAdmin(system admin): %v", err)
+	}
+	if !ok {
+		t.Fatal("system admin should have scope admin access")
+	}
+
+	ok, err = ms.HasAnyAdminRole(ctx, sysAdmin.ID)
+	if err != nil {
+		t.Fatalf("HasAnyAdminRole(system admin): %v", err)
+	}
+	if !ok {
+		t.Fatal("system admin should satisfy any-admin-role checks")
+	}
+}
