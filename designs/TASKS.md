@@ -67,6 +67,14 @@
   - Added unit regression coverage:
     - `internal/db/conn_internal_test.go::TestDefaultSearchPathSQL_IncludesAGECatalog`.
 
+- [x] 2026-04-08: Fixed migrator schema placement regression with AGE-first search_path:
+  - Updated `internal/db/migrate.go`:
+    - `newMigrator` now builds a migrator DSN that sets `x-migrations-table=public.schema_migrations` explicitly.
+    - prevents `golang-migrate` from trying to create `schema_migrations` in `ag_catalog`.
+    - avoids unsupported startup-parameter failures on managed Postgres by not setting DSN-level `search_path`.
+  - Added unit regression coverage:
+    - `internal/db/migrate_test.go::TestBuildMigratorDSN_ForcesPublicMigrationsTable`.
+
 - [x] 2026-04-08: Added Apache AGE operations runbook documentation:
   - New page `docs/apache-age-usage.md` covering:
     - required grants (parameterized by username/database)

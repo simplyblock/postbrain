@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5" // pgx/v5 database driver
 	"github.com/golang-migrate/migrate/v4/source/iofs"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -225,13 +227,11 @@ func newMigrator(ctx context.Context, pool *pgxpool.Pool) (*migrate.Migrate, *pg
 	}
 
 	connConfig := conn.Conn().Config()
-	dsn := fmt.Sprintf("pgx5://%s:%s@%s:%d/%s",
-		connConfig.User,
-		connConfig.Password,
-		connConfig.Host,
-		connConfig.Port,
-		connConfig.Database,
-	)
+	dsn, err := buildMigratorDSN(connConfig)
+	if err != nil {
+		conn.Release()
+		return nil, nil, func() {}, fmt.Errorf("migrate: build migrator dsn: %w", err)
+	}
 
 	m, err := migrate.NewWithSourceInstance("iofs", src, dsn)
 	if err != nil {
@@ -251,4 +251,22 @@ func newMigrator(ctx context.Context, pool *pgxpool.Pool) (*migrate.Migrate, *pg
 	}
 
 	return m, conn, release, nil
+}
+
+func buildMigratorDSN(connConfig *pgx.ConnConfig) (string, error) {
+	base := fmt.Sprintf("pgx5://%s:%s@%s:%d/%s",
+		url.QueryEscape(connConfig.User),
+		url.QueryEscape(connConfig.Password),
+		connConfig.Host,
+		connConfig.Port,
+		connConfig.Database,
+	)
+	u, err := url.Parse(base)
+	if err != nil {
+		return "", err
+	}
+	q := u.Query()
+	q.Set("x-migrations-table", "public.schema_migrations")
+	u.RawQuery = q.Encode()
+	return u.String(), nil
 }
