@@ -74,7 +74,7 @@ func TestUpsertEntityAndRelation_DualWriteToAGE_WhenAvailable(t *testing.T) {
 
 	var nodeCount int
 	if err := pool.QueryRow(ctx,
-		fmt.Sprintf("SELECT count(*) FROM cypher('postbrain', $$ MATCH (n:Entity {id: '%s'}) RETURN n $$) AS (result agtype)", subject.ID.String()),
+		fmt.Sprintf("SELECT count(*) FROM cypher('postbrain', $$ MATCH (n:Entity) WHERE n.id = '%s' RETURN n $$) AS (result agtype)", subject.ID.String()),
 	).Scan(&nodeCount); err != nil {
 		t.Fatalf("query AGE node: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestUpsertEntityAndRelation_DualWriteToAGE_WhenAvailable(t *testing.T) {
 	var edgeCount int
 	if err := pool.QueryRow(ctx,
 		fmt.Sprintf(
-			"SELECT count(*) FROM cypher('postbrain', $$ MATCH (a:Entity {id: '%s'})-[r:RELATION {predicate: 'depends_on'}]->(b:Entity {id: '%s'}) RETURN r $$) AS (result agtype)",
+			"SELECT count(*) FROM cypher('postbrain', $$ MATCH (a:Entity)-[r:RELATION]->(b:Entity) WHERE a.id = '%s' AND b.id = '%s' AND r.predicate = 'depends_on' RETURN r $$) AS (result agtype)",
 			subject.ID.String(),
 			object.ID.String(),
 		),

@@ -275,6 +275,12 @@
     - replaced edge map-pattern assertions with explicit `MATCH ... WHERE a.id = ... AND b.id = ... AND r.predicate = ...`.
   - This keeps integration coverage aligned with runtime AGE query compatibility constraints.
 
+- [x] 2026-04-08: Aligned AGE dual-write integration assertions with production-safe non-map Cypher filters:
+  - Updated `internal/db/age_dualwrite_integration_test.go`:
+    - replaced map-pattern node assertion with `MATCH (n:Entity) WHERE n.id = ...`.
+    - replaced map-pattern edge assertion with `MATCH ... WHERE a.id = ... AND b.id = ... AND r.predicate = ...`.
+  - Keeps dual-write integration coverage aligned with runtime AGE query compatibility constraints.
+
 - [x] 2026-04-08: Fixed system-admin principal management bypass for memberships and principal-admin checks (TDD-first):
   - Added integration regressions:
     - `internal/principals/membership_integration_test.go::TestMembershipStore_SystemAdminBypassesAdminChecks`
