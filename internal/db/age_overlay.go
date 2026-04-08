@@ -42,6 +42,8 @@ BEGIN
         BEGIN
             IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname='postbrain') THEN
                 GRANT USAGE ON SCHEMA postbrain TO PUBLIC;
+                GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA postbrain TO PUBLIC;
+                GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA postbrain TO PUBLIC;
             END IF;
         EXCEPTION WHEN insufficient_privilege THEN
             RAISE NOTICE 'insufficient privilege to grant USAGE on postbrain schema; continuing with runtime probe';
@@ -52,7 +54,13 @@ $$;
 `
 
 const ensureAGEAccessProbeSQL = `
-SELECT * FROM ag_catalog.cypher('postbrain', $$ RETURN 1 $$) AS (result ag_catalog.agtype);
+SELECT * FROM ag_catalog.cypher('postbrain', $$
+CREATE (n:Entity)
+SET n.id = '__postbrain_age_startup_probe__'
+WITH n
+DELETE n
+RETURN 1
+$$) AS (result ag_catalog.agtype);
 `
 
 // EnsureAGEOverlay is idempotent and best-effort.
@@ -74,6 +82,19 @@ func EnsureAGEOverlay(ctx context.Context, pool *pgxpool.Pool) error {
 		return fmt.Errorf("ensure age overlay: detect extension: %w", err)
 	}
 	if ageInstalled {
+		var graphSchemaExists bool
+		if err := pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname='postbrain')").Scan(&graphSchemaExists); err != nil {
+			return fmt.Errorf("ensure age overlay: detect graph schema: %w", err)
+		}
+		if graphSchemaExists {
+			var hasUsage bool
+			if err := pool.QueryRow(ctx, "SELECT has_schema_privilege(current_user, 'postbrain', 'USAGE')").Scan(&hasUsage); err != nil {
+				return fmt.Errorf("ensure age overlay: check postbrain schema usage: %w", err)
+			}
+			if !hasUsage {
+				return fmt.Errorf("ensure age overlay: role %q lacks USAGE on schema postbrain", pool.Config().ConnConfig.User)
+			}
+		}
 		if _, err := pool.Exec(ctx, ensureAGEAccessProbeSQL); err != nil {
 			return fmt.Errorf("ensure age access probe: %w", err)
 		}

@@ -99,6 +99,21 @@
     - `internal/db/age_dualwrite_test.go`
     - verifies schema-qualified AGE usage, literal embedding, no `$1` usage, and delimiter-collision handling.
 
+- [x] 2026-04-08: Removed AGE map-pattern dependence and tightened graph-schema usability checks:
+  - Updated `internal/graph/age_query.go`:
+    - scope anchoring now uses `MATCH (n:Entity) ... WHERE n.scope_id = '...'` instead of map-pattern filters that require `agtype @> agtype`.
+  - Updated AGE dual-write sync logic to avoid map-pattern `MERGE` filters:
+    - `internal/graph/age_sync.go`
+    - `internal/db/age_dualwrite.go`
+    - now performs explicit `MATCH ... WHERE ...` update first and falls back to `CREATE` for missing nodes/edges.
+  - Updated `internal/db/age_overlay.go`:
+    - best-effort grant step now also attempts table/sequence grants in schema `postbrain`.
+    - startup fail-fast now explicitly checks `has_schema_privilege(current_user, 'postbrain', 'USAGE')` before probe.
+    - runtime probe now executes a create/delete cycle on `Entity` label to validate writable AGE graph access, not just `RETURN 1`.
+  - Added regression coverage:
+    - `internal/graph/age_query_test.go` now enforces non-map scoped filters.
+    - `internal/db/age_overlay_integration_test.go` adds `TestEnsureAGEOverlay_FailsWhenAGEInstalledButRoleCannotUseGraphSchema`.
+
 - [x] 2026-04-08: Fixed memory near-duplicate update path to keep graph/AGE links current (TDD-first):
   - Added regression unit test:
     - `internal/memory/store_test.go::TestCreate_NearDuplicateFound_StillLinksEntitiesAndRelations`

@@ -65,7 +65,7 @@ func buildScopedCypher(scopeID uuid.UUID, cypher string) string {
 		trimmed = "RETURN n"
 	}
 	return fmt.Sprintf(
-		"MATCH (n:Entity {scope_id: '%s'})\nWITH n\n%s",
+		"MATCH (n:Entity)\nWHERE n.scope_id = '%s'\nWITH n\n%s",
 		scopeID.String(),
 		trimmed,
 	)

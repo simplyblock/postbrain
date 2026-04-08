@@ -199,3 +199,55 @@ func TestEnsureAGEOverlay_FailsWhenAGEInstalledButRoleCannotUseAGCatalog(t *test
 		t.Fatal("EnsureAGEOverlay expected permission error for limited role, got nil")
 	}
 }
+
+func TestEnsureAGEOverlay_FailsWhenAGEInstalledButRoleCannotUseGraphSchema(t *testing.T) {
+	ageImage := strings.TrimSpace(os.Getenv("POSTBRAIN_TEST_AGE_IMAGE"))
+	if ageImage == "" {
+		t.Skip("set POSTBRAIN_TEST_AGE_IMAGE to run strict AGE activation coverage")
+	}
+
+	pool := testhelper.NewTestPoolWithImage(
+		t,
+		ageImage,
+		testcontainers.WithCmd(
+			"postgres",
+			"-c", "shared_preload_libraries=age,pg_cron,pg_partman_bgw",
+			"-c", "cron.database_name=postbrain_test",
+			"-c", "pg_partman_bgw.dbname=postbrain_test",
+		),
+	)
+	ctx := context.Background()
+	if err := db.EnsureAGEOverlay(ctx, pool); err != nil {
+		t.Fatalf("EnsureAGEOverlay bootstrap: %v", err)
+	}
+
+	if _, err := pool.Exec(ctx, `REVOKE USAGE ON SCHEMA postbrain FROM PUBLIC`); err != nil {
+		t.Fatalf("revoke postbrain schema usage: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `CREATE ROLE pb_graph_limited LOGIN PASSWORD 'pb_graph_limited'`); err != nil {
+		t.Fatalf("create limited role: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `GRANT CONNECT ON DATABASE postbrain_test TO pb_graph_limited`); err != nil {
+		t.Fatalf("grant connect: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `GRANT USAGE ON SCHEMA public TO pb_graph_limited`); err != nil {
+		t.Fatalf("grant public usage: %v", err)
+	}
+
+	cfg := pool.Config().ConnConfig
+	limitedURL := "postgres://pb_graph_limited:pb_graph_limited@" + cfg.Host + ":" + strconv.Itoa(int(cfg.Port)) + "/" + cfg.Database + "?sslmode=disable"
+	limitedPool, err := db.NewPool(ctx, &config.DatabaseConfig{
+		URL:            limitedURL,
+		MaxOpen:        2,
+		MaxIdle:        1,
+		ConnectTimeout: 10 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("create limited pool: %v", err)
+	}
+	defer limitedPool.Close()
+
+	if err := db.EnsureAGEOverlay(ctx, limitedPool); err == nil {
+		t.Fatal("EnsureAGEOverlay expected graph schema permission error for limited role, got nil")
+	}
+}
