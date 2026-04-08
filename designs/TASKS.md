@@ -60,6 +60,20 @@
 
 ### Maintenance
 
+- [x] 2026-04-08: Added AGE graph backfill + dual-write integration (TDD-first):
+  - Added optional AGE dual-write on relational graph upserts in `internal/db`:
+    - `db.UpsertEntity` now mirrors to AGE when extension is available.
+    - `db.UpsertRelation` now mirrors to AGE when extension is available.
+    - new helper file: `internal/db/age_dualwrite.go`.
+  - Added `internal/jobs/age_backfill.go`:
+    - new `AGEBackfillJob` to replay existing `entities`/`relations` into AGE via `MERGE` sync.
+    - scheduler wiring: `internal/jobs/scheduler.go` now runs `age_backfill` every hour when `jobs.age_check_enabled=true`.
+  - Updated startup job visibility:
+    - `cmd/postbrain/main.go` `enabledJobNames` now includes `age_backfill` with `age_check`.
+  - Added coverage:
+    - unit: `internal/jobs/age_backfill_test.go`
+    - integration: `internal/db/age_dualwrite_integration_test.go` and `internal/jobs/age_backfill_integration_test.go` (strict AGE checks gated by `POSTBRAIN_TEST_AGE_IMAGE`).
+
 - [x] 2026-04-08: Added strict AGE-available integration coverage for overlay activation (TDD-first):
   - Added new integration test in `internal/db/age_overlay_integration_test.go`:
     - `TestEnsureAGEOverlay_AGEImage_ActivatesExtensionAndGraph`

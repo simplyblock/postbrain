@@ -872,6 +872,9 @@ func UpsertEntity(ctx context.Context, pool *pgxpool.Pool, e *Entity) (*Entity, 
 	if err != nil {
 		return nil, fmt.Errorf("db: upsert entity: %w", err)
 	}
+	if err := syncEntityToAGEIfAvailable(ctx, pool, result); err != nil {
+		return nil, fmt.Errorf("db: upsert entity age dual-write: %w", err)
+	}
 
 	if result.EmbeddingModelID != nil && result.Embedding != nil {
 		repo := NewEmbeddingRepository(pool)
@@ -989,7 +992,7 @@ func UpsertRelation(ctx context.Context, pool *pgxpool.Pool, r *Relation) (*Rela
 	if err != nil {
 		return nil, fmt.Errorf("db: upsert relation: %w", err)
 	}
-	return &Relation{
+	rel := &Relation{
 		ID:             result.ID,
 		ScopeID:        result.ScopeID,
 		SubjectID:      result.SubjectID,
@@ -1000,7 +1003,11 @@ func UpsertRelation(ctx context.Context, pool *pgxpool.Pool, r *Relation) (*Rela
 		SourceArtifact: result.SourceArtifact,
 		SourceFile:     result.SourceFile,
 		CreatedAt:      result.CreatedAt,
-	}, nil
+	}
+	if err := syncRelationToAGEIfAvailable(ctx, pool, rel); err != nil {
+		return nil, fmt.Errorf("db: upsert relation age dual-write: %w", err)
+	}
+	return rel, nil
 }
 
 // ListRelationsForEntity returns relations for an entity, optionally filtered by predicate.
