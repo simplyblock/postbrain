@@ -9,8 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const runAGECypherSQL = "SELECT * FROM ag_catalog.cypher('postbrain', $1) AS (result ag_catalog.agtype)"
-
 func ageAvailable(ctx context.Context, pool *pgxpool.Pool) bool {
 	if pool == nil {
 		return false
@@ -52,7 +50,7 @@ RETURN e
 		escapeCypherString(entity.Canonical),
 	)
 
-	if _, err := pool.Exec(ctx, runAGECypherSQL, cypher); err != nil {
+	if _, err := pool.Exec(ctx, buildAGECypherSQLLiteral(cypher)); err != nil {
 		return fmt.Errorf("sync entity to age: %w", err)
 	}
 	return nil
@@ -73,10 +71,25 @@ RETURN r
 		rel.ScopeID.String(),
 	)
 
-	if _, err := pool.Exec(ctx, runAGECypherSQL, cypher); err != nil {
+	if _, err := pool.Exec(ctx, buildAGECypherSQLLiteral(cypher)); err != nil {
 		return fmt.Errorf("sync relation to age: %w", err)
 	}
 	return nil
+}
+
+func buildAGECypherSQLLiteral(cypher string) string {
+	tag := "postbrain"
+	delim := "$" + tag + "$"
+	for strings.Contains(cypher, delim) {
+		tag += "_x"
+		delim = "$" + tag + "$"
+	}
+	return fmt.Sprintf(
+		"SELECT * FROM ag_catalog.cypher('postbrain', %s%s%s) AS (result ag_catalog.agtype)",
+		delim,
+		cypher,
+		delim,
+	)
 }
 
 func escapeCypherString(s string) string {

@@ -21,10 +21,24 @@ func TestBuildScopedCypher_PrependsScopeAnchor(t *testing.T) {
 }
 
 func TestRunCypherSQL_UsesSchemaQualifiedAGEObjects(t *testing.T) {
-	if !strings.Contains(runCypherSQL, "ag_catalog.cypher(") {
-		t.Fatalf("runCypherSQL must use schema-qualified ag_catalog.cypher: %q", runCypherSQL)
+	sql := buildAGECypherSQL("RETURN 1")
+	if !strings.Contains(sql, "ag_catalog.cypher(") {
+		t.Fatalf("AGE query SQL must use schema-qualified ag_catalog.cypher: %q", sql)
 	}
-	if !strings.Contains(runCypherSQL, "ag_catalog.agtype") {
-		t.Fatalf("runCypherSQL must use schema-qualified ag_catalog.agtype: %q", runCypherSQL)
+	if !strings.Contains(sql, "ag_catalog.agtype") {
+		t.Fatalf("AGE query SQL must use schema-qualified ag_catalog.agtype: %q", sql)
+	}
+	if !strings.Contains(sql, "$postbrain$RETURN 1$postbrain$") {
+		t.Fatalf("AGE query SQL must embed cypher in dollar-quoted literal: %q", sql)
+	}
+	if strings.Contains(sql, "$1") {
+		t.Fatalf("AGE query SQL must not use bind params for cypher body: %q", sql)
+	}
+}
+
+func TestBuildAGECypherSQL_DollarTagCollisionGetsEscaped(t *testing.T) {
+	sql := buildAGECypherSQL("RETURN '$postbrain$'")
+	if strings.Contains(sql, "$postbrain$RETURN '$postbrain$'$postbrain$") {
+		t.Fatalf("expected builder to avoid delimiter collision: %q", sql)
 	}
 }

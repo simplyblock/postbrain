@@ -10,8 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const runCypherSQL = "SELECT * FROM ag_catalog.cypher('postbrain', $1) AS (result ag_catalog.agtype)"
-
 // ErrAGEUnavailable indicates Apache AGE is not available in the active DB.
 var ErrAGEUnavailable = errors.New("graph: age unavailable")
 
@@ -37,7 +35,7 @@ func RunCypherQuery(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, 
 	}
 
 	scopedCypher := buildScopedCypher(scopeID, cypher)
-	rows, err := pool.Query(ctx, runCypherSQL, scopedCypher)
+	rows, err := pool.Query(ctx, buildAGECypherSQL(scopedCypher))
 	if err != nil {
 		return nil, fmt.Errorf("graph: run cypher query: %w", err)
 	}
@@ -70,6 +68,21 @@ func buildScopedCypher(scopeID uuid.UUID, cypher string) string {
 		"MATCH (n:Entity {scope_id: '%s'})\nWITH n\n%s",
 		scopeID.String(),
 		trimmed,
+	)
+}
+
+func buildAGECypherSQL(cypher string) string {
+	tag := "postbrain"
+	delim := "$" + tag + "$"
+	for strings.Contains(cypher, delim) {
+		tag += "_x"
+		delim = "$" + tag + "$"
+	}
+	return fmt.Sprintf(
+		"SELECT * FROM ag_catalog.cypher('postbrain', %s%s%s) AS (result ag_catalog.agtype)",
+		delim,
+		cypher,
+		delim,
 	)
 }
 

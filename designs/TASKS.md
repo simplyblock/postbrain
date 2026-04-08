@@ -88,6 +88,17 @@
     - retained strict runtime probe (`ag_catalog.cypher(...)`) so startup still fails whenever AGE is actually unusable for the current role.
   - This avoids false startup failures caused only by inability to administer grants, while preserving fail-fast behavior for broken AGE runtime access.
 
+- [x] 2026-04-08: Fixed AGE cypher execution to use literal dollar-quoted query bodies (no bind param):
+  - Updated AGE execution paths:
+    - `internal/graph/age_query.go`
+    - `internal/graph/age_sync.go`
+    - `internal/db/age_dualwrite.go`
+  - Replaced `ag_catalog.cypher(..., $1)` parameter style with generated SQL that embeds the Cypher body as a safe dollar-quoted literal; AGE expects a literal and otherwise returns `a dollar-quoted string constant is expected` (`SQLSTATE 42601`).
+  - Added unit regression coverage:
+    - `internal/graph/age_query_test.go`
+    - `internal/db/age_dualwrite_test.go`
+    - verifies schema-qualified AGE usage, literal embedding, no `$1` usage, and delimiter-collision handling.
+
 - [x] 2026-04-08: Fixed memory near-duplicate update path to keep graph/AGE links current (TDD-first):
   - Added regression unit test:
     - `internal/memory/store_test.go::TestCreate_NearDuplicateFound_StillLinksEntitiesAndRelations`
