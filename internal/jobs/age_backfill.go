@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -13,6 +14,36 @@ import (
 )
 
 const defaultAGEBackfillBatchSize = 500
+
+const ageBackfillEntityBatchFirstPageSQL = `
+	SELECT id, scope_id, entity_type, name, canonical, created_at
+	FROM entities
+	ORDER BY created_at, id
+	LIMIT $1
+`
+
+const ageBackfillEntityBatchCursorSQL = `
+	SELECT id, scope_id, entity_type, name, canonical, created_at
+	FROM entities
+	WHERE (created_at, id) > ($1, $2)
+	ORDER BY created_at, id
+	LIMIT $3
+`
+
+const ageBackfillRelationBatchFirstPageSQL = `
+	SELECT id, scope_id, subject_id, predicate, object_id, confidence, created_at
+	FROM relations
+	ORDER BY created_at, id
+	LIMIT $1
+`
+
+const ageBackfillRelationBatchCursorSQL = `
+	SELECT id, scope_id, subject_id, predicate, object_id, confidence, created_at
+	FROM relations
+	WHERE (created_at, id) > ($1, $2)
+	ORDER BY created_at, id
+	LIMIT $3
+`
 
 // AGEBackfillJob mirrors relational entities/relations into the AGE overlay.
 // It is safe to run repeatedly because AGE writes are MERGE-based.
@@ -63,23 +94,28 @@ func (j *AGEBackfillJob) Run(ctx context.Context) error {
 }
 
 func (j *AGEBackfillJob) backfillEntities(ctx context.Context) (int, error) {
-	offset := 0
 	total := 0
+	var (
+		lastCreatedAt time.Time
+		lastID        uuid.UUID
+		hasCursor     bool
+	)
 	for {
-		rows, err := j.pool.Query(ctx, `
-			SELECT id, scope_id, entity_type, name, canonical
-			FROM entities
-			ORDER BY created_at, id
-			LIMIT $1 OFFSET $2
-		`, j.batchSize, offset)
+		query := entityBatchQuery(hasCursor)
+		args := []any{j.batchSize}
+		if hasCursor {
+			args = []any{lastCreatedAt, lastID, j.batchSize}
+		}
+		rows, err := j.pool.Query(ctx, query, args...)
 		if err != nil {
-			return total, fmt.Errorf("age backfill entities: query batch offset %d: %w", offset, err)
+			return total, fmt.Errorf("age backfill entities: query batch: %w", err)
 		}
 
 		count := 0
 		for rows.Next() {
 			var e db.Entity
-			if err := rows.Scan(&e.ID, &e.ScopeID, &e.EntityType, &e.Name, &e.Canonical); err != nil {
+			var createdAt time.Time
+			if err := rows.Scan(&e.ID, &e.ScopeID, &e.EntityType, &e.Name, &e.Canonical, &createdAt); err != nil {
 				rows.Close()
 				return total, fmt.Errorf("age backfill entities: scan: %w", err)
 			}
@@ -87,6 +123,9 @@ func (j *AGEBackfillJob) backfillEntities(ctx context.Context) (int, error) {
 				rows.Close()
 				return total, fmt.Errorf("age backfill entities: sync %s: %w", e.ID, err)
 			}
+			lastCreatedAt = createdAt
+			lastID = e.ID
+			hasCursor = true
 			count++
 			total++
 		}
@@ -97,35 +136,40 @@ func (j *AGEBackfillJob) backfillEntities(ctx context.Context) (int, error) {
 		if count < j.batchSize {
 			break
 		}
-		offset += j.batchSize
 	}
 	return total, nil
 }
 
 func (j *AGEBackfillJob) backfillRelations(ctx context.Context) (int, error) {
-	offset := 0
 	total := 0
+	var (
+		lastCreatedAt time.Time
+		lastID        uuid.UUID
+		hasCursor     bool
+	)
 	for {
-		rows, err := j.pool.Query(ctx, `
-			SELECT scope_id, subject_id, predicate, object_id, confidence
-			FROM relations
-			ORDER BY created_at, id
-			LIMIT $1 OFFSET $2
-		`, j.batchSize, offset)
+		query := relationBatchQuery(hasCursor)
+		args := []any{j.batchSize}
+		if hasCursor {
+			args = []any{lastCreatedAt, lastID, j.batchSize}
+		}
+		rows, err := j.pool.Query(ctx, query, args...)
 		if err != nil {
-			return total, fmt.Errorf("age backfill relations: query batch offset %d: %w", offset, err)
+			return total, fmt.Errorf("age backfill relations: query batch: %w", err)
 		}
 
 		count := 0
 		for rows.Next() {
 			var (
+				id         uuid.UUID
 				scopeID    uuid.UUID
 				subjectID  uuid.UUID
 				predicate  string
 				objectID   uuid.UUID
 				confidence float64
+				createdAt  time.Time
 			)
-			if err := rows.Scan(&scopeID, &subjectID, &predicate, &objectID, &confidence); err != nil {
+			if err := rows.Scan(&id, &scopeID, &subjectID, &predicate, &objectID, &confidence, &createdAt); err != nil {
 				rows.Close()
 				return total, fmt.Errorf("age backfill relations: scan: %w", err)
 			}
@@ -140,6 +184,9 @@ func (j *AGEBackfillJob) backfillRelations(ctx context.Context) (int, error) {
 				rows.Close()
 				return total, fmt.Errorf("age backfill relations: sync %s->%s %s: %w", subjectID, objectID, predicate, err)
 			}
+			lastCreatedAt = createdAt
+			lastID = id
+			hasCursor = true
 			count++
 			total++
 		}
@@ -150,7 +197,20 @@ func (j *AGEBackfillJob) backfillRelations(ctx context.Context) (int, error) {
 		if count < j.batchSize {
 			break
 		}
-		offset += j.batchSize
 	}
 	return total, nil
+}
+
+func entityBatchQuery(hasCursor bool) string {
+	if hasCursor {
+		return ageBackfillEntityBatchCursorSQL
+	}
+	return ageBackfillEntityBatchFirstPageSQL
+}
+
+func relationBatchQuery(hasCursor bool) string {
+	if hasCursor {
+		return ageBackfillRelationBatchCursorSQL
+	}
+	return ageBackfillRelationBatchFirstPageSQL
 }

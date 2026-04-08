@@ -200,6 +200,18 @@
     - `internal/jobs/age_backfill_integration_test.go::TestAGEBackfillJob_Run_EnsuresOverlayBeforeDetectAndBackfills`
     - validates backfill run installs/activates AGE overlay and mirrors existing relational relations without pre-calling `EnsureAGEOverlay`.
 
+- [x] 2026-04-08: Replaced AGE backfill OFFSET pagination with keyset pagination for predictable large-table performance:
+  - Updated `internal/jobs/age_backfill.go`:
+    - `backfillEntities` now pages by cursor `(created_at, id)` via `WHERE (created_at, id) > (...) ORDER BY created_at, id LIMIT ...`.
+    - `backfillRelations` now uses the same keyset cursor strategy with relation `id` + `created_at`.
+    - removed `LIMIT/OFFSET` batch scans to avoid growing-offset query cost.
+  - Added unit regression coverage in `internal/jobs/age_backfill_test.go`:
+    - `TestEntityBatchQuery_UsesKeysetWhenCursorPresent`
+    - `TestEntityBatchQuery_FirstPageWithoutCursor`
+    - `TestRelationBatchQuery_UsesKeysetWhenCursorPresent`
+    - `TestRelationBatchQuery_FirstPageWithoutCursor`
+    - asserts keyset predicates and explicitly forbids `OFFSET` in batch queries.
+
 - [x] 2026-04-08: Fixed system-admin principal management bypass for memberships and principal-admin checks (TDD-first):
   - Added integration regressions:
     - `internal/principals/membership_integration_test.go::TestMembershipStore_SystemAdminBypassesAdminChecks`
