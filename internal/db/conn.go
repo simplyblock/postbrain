@@ -12,10 +12,11 @@ import (
 	"github.com/simplyblock/postbrain/internal/config"
 )
 
+const defaultSearchPathSQL = `SET search_path = ag_catalog, "$user", public`
+
 // NewPool creates and returns a pgx connection pool configured from cfg.
-// AfterConnect sets search_path = public so queries always resolve to the
-// correct schema (ag_catalog is omitted here; AGE support is optional and
-// handled at the application layer when the extension is present).
+// AfterConnect sets search_path so AGE runtime paths resolve ag_catalog
+// operators/functions consistently while preserving user/public schemas.
 func NewPool(ctx context.Context, cfg *config.DatabaseConfig) (*pgxpool.Pool, error) {
 	if cfg.URL == "" {
 		return nil, fmt.Errorf("db: database URL is empty")
@@ -31,7 +32,7 @@ func NewPool(ctx context.Context, cfg *config.DatabaseConfig) (*pgxpool.Pool, er
 	poolConfig.ConnConfig.ConnectTimeout = cfg.ConnectTimeout
 
 	poolConfig.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
-		_, err := conn.Exec(ctx, "SET search_path = public")
+		_, err := conn.Exec(ctx, defaultSearchPathSQL)
 		if err != nil {
 			return fmt.Errorf("db: set search_path: %w", err)
 		}

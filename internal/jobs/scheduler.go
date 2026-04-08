@@ -77,6 +77,14 @@ func (s *Scheduler) Register() error {
 
 	if s.cfg.AgeCheckEnabled {
 		slog.Info("low_access_age staleness detection is handled by pg_cron job detect-stale-knowledge-age")
+		job := NewAGEBackfillJob(s.pool, 0)
+		if _, err := s.cron.AddFunc("@every 1h", safeRun("age_backfill", func() {
+			if err := job.Run(context.Background()); err != nil {
+				slog.Error("age backfill job failed", "error", err)
+			}
+		})); err != nil {
+			return err
+		}
 	}
 
 	if s.cfg.BackfillSummariesEnabled {

@@ -35,7 +35,7 @@ func RunCypherQuery(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, 
 	}
 
 	scopedCypher := buildScopedCypher(scopeID, cypher)
-	rows, err := pool.Query(ctx, "SELECT * FROM cypher('postbrain', $1) AS (result agtype)", scopedCypher)
+	rows, err := pool.Query(ctx, buildAGECypherSQL(scopedCypher))
 	if err != nil {
 		return nil, fmt.Errorf("graph: run cypher query: %w", err)
 	}
@@ -65,9 +65,24 @@ func buildScopedCypher(scopeID uuid.UUID, cypher string) string {
 		trimmed = "RETURN n"
 	}
 	return fmt.Sprintf(
-		"MATCH (n:Entity {scope_id: '%s'})\nWITH n\n%s",
+		"MATCH (n:Entity)\nWHERE n.scope_id = '%s'\nWITH n\n%s",
 		scopeID.String(),
 		trimmed,
+	)
+}
+
+func buildAGECypherSQL(cypher string) string {
+	tag := "postbrain"
+	delim := "$" + tag + "$"
+	for strings.Contains(cypher, delim) {
+		tag += "_x"
+		delim = "$" + tag + "$"
+	}
+	return fmt.Sprintf(
+		"SELECT * FROM ag_catalog.cypher('postbrain', %s%s%s) AS (result ag_catalog.agtype)",
+		delim,
+		cypher,
+		delim,
 	)
 }
 

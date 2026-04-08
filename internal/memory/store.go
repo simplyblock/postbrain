@@ -237,6 +237,12 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 		if err := s.dualWriteMemoryEmbeddings(ctx, updated.ID, updated.ScopeID, textVec, textModelID, codeVec, codeModelID); err != nil {
 			return nil, fmt.Errorf("memory: dual-write duplicate: %w", err)
 		}
+		if err := s.linkEntitiesForMemory(ctx, updated.ID, input.ScopeID, input.Entities, input.Content, input.SourceRef); err != nil {
+			return nil, err
+		}
+		if contentKind == "code" && input.SourceRef != nil {
+			s.extractCodeGraph(ctx, input.Content, *input.SourceRef, input.ScopeID, updated.ID)
+		}
 		return &CreateResult{MemoryID: updated.ID, Action: "updated"}, nil
 	}
 
@@ -275,10 +281,28 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 		s.createChunks(ctx, created.ID, created.ScopeID, created.AuthorID, input.Content, contentKind)
 	}
 
-	// 8. Link explicit entities and auto-extracted entities.
+	if err := s.linkEntitiesForMemory(ctx, created.ID, input.ScopeID, input.Entities, input.Content, input.SourceRef); err != nil {
+		return nil, err
+	}
+
+	// 9. Code graph extraction for code memories with a file: source_ref.
+	if contentKind == "code" && input.SourceRef != nil {
+		s.extractCodeGraph(ctx, input.Content, *input.SourceRef, input.ScopeID, created.ID)
+	}
+
+	return &CreateResult{MemoryID: created.ID, Action: "created"}, nil
+}
+
+func (s *Store) linkEntitiesForMemory(
+	ctx context.Context,
+	memoryID, scopeID uuid.UUID,
+	explicitEntities []EntityInput,
+	content string,
+	sourceRef *string,
+) error {
 	linkedEntityIDs := make(map[uuid.UUID]struct{})
 
-	for _, ei := range input.Entities {
+	for _, ei := range explicitEntities {
 		canonical := strings.ToLower(ei.Name)
 		if canonical == "" {
 			continue
@@ -288,43 +312,43 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 			entityType = "concept"
 		}
 		entity := &db.Entity{
-			ScopeID:    input.ScopeID,
+			ScopeID:    scopeID,
 			EntityType: entityType,
 			Name:       canonical,
 			Canonical:  canonical,
 		}
 		ent, err := s.creator.UpsertEntity(ctx, entity)
 		if err != nil {
-			return nil, fmt.Errorf("memory: upsert entity %q: %w", canonical, err)
+			return fmt.Errorf("memory: upsert entity %q: %w", canonical, err)
 		}
-		if err := s.creator.LinkMemoryToEntity(ctx, created.ID, ent.ID, "related"); err != nil {
-			return nil, fmt.Errorf("memory: link entity %q: %w", canonical, err)
+		if err := s.creator.LinkMemoryToEntity(ctx, memoryID, ent.ID, "related"); err != nil {
+			return fmt.Errorf("memory: link entity %q: %w", canonical, err)
 		}
-		s.linkSameAs(ctx, input.ScopeID, ent.ID, entity.Canonical, entity.EntityType)
+		s.linkSameAs(ctx, scopeID, ent.ID, entity.Canonical, entity.EntityType)
 		linkedEntityIDs[ent.ID] = struct{}{}
 	}
 
-	for _, e := range graph.ExtractEntitiesFromMemory(input.Content, input.SourceRef) {
-		e.ScopeID = input.ScopeID
+	for _, e := range graph.ExtractEntitiesFromMemory(content, sourceRef) {
+		e.ScopeID = scopeID
 		ent, err := s.creator.UpsertEntity(ctx, e)
 		if err != nil {
 			continue // best-effort; don't fail the write on extraction errors
 		}
-		_ = s.creator.LinkMemoryToEntity(ctx, created.ID, ent.ID, "related")
-		s.linkSameAs(ctx, input.ScopeID, ent.ID, e.Canonical, e.EntityType)
+		_ = s.creator.LinkMemoryToEntity(ctx, memoryID, ent.ID, "related")
+		s.linkSameAs(ctx, scopeID, ent.ID, e.Canonical, e.EntityType)
 		linkedEntityIDs[ent.ID] = struct{}{}
 	}
 
-	// 8. Create co_occurs_with relations between all entities linked to this memory.
+	// Create co_occurs_with relations between all entities linked to this memory.
 	entityIDs := make([]uuid.UUID, 0, len(linkedEntityIDs))
 	for id := range linkedEntityIDs {
 		entityIDs = append(entityIDs, id)
 	}
-	memID := created.ID
+	memID := memoryID
 	for i := 0; i < len(entityIDs); i++ {
 		for j := i + 1; j < len(entityIDs); j++ {
 			if _, err := s.creator.UpsertRelation(ctx, &db.Relation{
-				ScopeID:      input.ScopeID,
+				ScopeID:      scopeID,
 				SubjectID:    entityIDs[i],
 				Predicate:    "co_occurs_with",
 				ObjectID:     entityIDs[j],
@@ -335,13 +359,7 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 			}
 		}
 	}
-
-	// 9. Code graph extraction for code memories with a file: source_ref.
-	if contentKind == "code" && input.SourceRef != nil {
-		s.extractCodeGraph(ctx, input.Content, *input.SourceRef, input.ScopeID, created.ID)
-	}
-
-	return &CreateResult{MemoryID: created.ID, Action: "created"}, nil
+	return nil
 }
 
 // Update re-embeds and persists updated content for a memory.

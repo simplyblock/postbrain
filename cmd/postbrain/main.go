@@ -285,6 +285,7 @@ func enabledJobNames(cfg config.JobsConfig) []string {
 	}
 	if cfg.AgeCheckEnabled {
 		names = append(names, "age_check")
+		names = append(names, "age_backfill")
 	}
 	if cfg.BackfillSummariesEnabled {
 		names = append(names, "backfill_summaries")

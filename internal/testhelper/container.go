@@ -21,10 +21,19 @@ import (
 // when t.Cleanup runs.
 func NewTestPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
+	return NewTestPoolWithImage(t, "pgvector/pgvector:pg18")
+}
+
+// NewTestPoolWithImage starts a PostgreSQL container from the provided image,
+// runs test migrations, and returns a ready connection pool. Additional
+// testcontainers customizers are forwarded to tcpostgres.Run.
+func NewTestPoolWithImage(t *testing.T, image string, customizers ...testcontainers.ContainerCustomizer) *pgxpool.Pool {
+	t.Helper()
 	ctx := context.Background()
 
-	ctr, err := tcpostgres.Run(ctx,
-		"pgvector/pgvector:pg18",
+	runCustomizers := make([]testcontainers.ContainerCustomizer, 0, len(customizers)+4)
+	runCustomizers = append(runCustomizers, customizers...)
+	runCustomizers = append(runCustomizers,
 		tcpostgres.WithDatabase("postbrain_test"),
 		tcpostgres.WithUsername("postbrain"),
 		tcpostgres.WithPassword("postbrain"),
@@ -34,6 +43,8 @@ func NewTestPool(t *testing.T) *pgxpool.Pool {
 				WithStartupTimeout(60*time.Second),
 		),
 	)
+
+	ctr, err := tcpostgres.Run(ctx, image, runCustomizers...)
 	if err != nil {
 		t.Fatalf("start postgres container: %v", err)
 	}

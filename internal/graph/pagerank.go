@@ -10,7 +10,7 @@ import (
 const runPageRankSQL = `
 WITH ranked AS (
     SELECT id, rank
-    FROM age_pagerank('postbrain', 'Entity', 'RELATION', 0.85, 20)
+    FROM ag_catalog.age_pagerank('postbrain', 'Entity', 'RELATION', 0.85, 20)
 )
 UPDATE entities e
 SET meta = jsonb_set(COALESCE(e.meta, '{}'::jsonb), '{pagerank}', to_jsonb(ranked.rank))

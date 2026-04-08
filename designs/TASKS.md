@@ -60,6 +60,146 @@
 
 ### Maintenance
 
+- [x] 2026-04-08: Fixed DB pool search_path override that broke AGE runtime in app sessions:
+  - Updated `internal/db/conn.go`:
+    - `NewPool` now sets connection `search_path` to `ag_catalog, "$user", public` in `AfterConnect`.
+    - replaces previous `SET search_path = public`, which could hide AGE operator/function resolution in runtime Cypher paths.
+  - Added unit regression coverage:
+    - `internal/db/conn_internal_test.go::TestDefaultSearchPathSQL_IncludesAGECatalog`.
+
+- [x] 2026-04-08: Fixed migrator schema placement regression with AGE-first search_path:
+  - Updated `internal/db/migrate.go`:
+    - `newMigrator` now builds a migrator DSN that sets:
+      - `x-migrations-table="public"."schema_migrations"`
+      - `x-migrations-table-quoted=1`
+    - prevents `golang-migrate` from trying to create `schema_migrations` in `ag_catalog`.
+    - avoids unsupported startup-parameter failures on managed Postgres by not setting DSN-level `search_path`.
+  - Added unit regression coverage:
+    - `internal/db/migrate_test.go::TestBuildMigratorDSN_ForcesPublicMigrationsTable`.
+
+- [x] 2026-04-08: Added Apache AGE operations runbook documentation:
+  - New page `docs/apache-age-usage.md` covering:
+    - required grants (parameterized by username/database)
+    - default privileges for future graph objects
+    - ownership checks/fixes for `_ag_label_vertex` and `_ag_label_edge`
+    - `search_path` requirements (`ag_catalog` first) and persistence
+    - health-check SQL and symptom-to-fix troubleshooting map
+  - Added discoverability links:
+    - `docs/README.md` technical/operations section
+    - `docs/operations.md` common issues section
+
+- [x] 2026-04-08: Fixed AGE dual-write permission failure for restricted DB roles (regression-covered):
+  - Updated `internal/db/age_overlay.go`:
+    - `EnsureAGEOverlay` now also runs a best-effort privileges step that grants:
+      - `USAGE` on `ag_catalog` to `PUBLIC`
+      - `USAGE` on `postbrain` schema to `PUBLIC` (when schema exists)
+    - keeps graph setup best-effort semantics while enabling runtime AGE calls from non-owner application roles.
+  - Added integration regression coverage in `internal/db/age_overlay_integration_test.go`:
+    - `TestEnsureAGEOverlay_GrantsAGESchemaUsage_ForRestrictedRole`
+    - provisions a restricted login role and asserts `db.UpsertEntity` succeeds (including AGE dual-write path) without `permission denied for schema ag_catalog`.
+
+- [x] 2026-04-08: Hardened AGE startup checks to fail fast when AGE is enabled but unusable:
+  - Updated `internal/db/age_overlay.go`:
+    - privilege grants are now strict (no silent NOTICE-only fallback) when AGE extension is present:
+      - `USAGE` on `ag_catalog`
+      - `EXECUTE` on all `ag_catalog` functions
+      - `USAGE` on `ag_catalog.agtype`
+      - `USAGE` on `postbrain` schema when present
+    - added runtime probe (`ag_catalog.cypher('postbrain', 'RETURN 1')`) so startup fails if AGE access is still broken for the current role.
+  - Added integration regression coverage in `internal/db/age_overlay_integration_test.go`:
+    - `TestEnsureAGEOverlay_FailsWhenAGEInstalledButRoleCannotUseAGCatalog`
+    - validates `EnsureAGEOverlay` returns an error for a restricted role after revoking `ag_catalog` permissions.
+
+- [x] 2026-04-08: Relaxed AGE grant step for non-superuser startup roles while keeping strict usability checks:
+  - Updated `internal/db/age_overlay.go`:
+    - `GRANT` operations in `EnsureAGEOverlay` now handle `insufficient_privilege` as NOTICE-only best effort.
+    - retained strict runtime probe (`ag_catalog.cypher(...)`) so startup still fails whenever AGE is actually unusable for the current role.
+  - This avoids false startup failures caused only by inability to administer grants, while preserving fail-fast behavior for broken AGE runtime access.
+
+- [x] 2026-04-08: Fixed AGE cypher execution to use literal dollar-quoted query bodies (no bind param):
+  - Updated AGE execution paths:
+    - `internal/graph/age_query.go`
+    - `internal/graph/age_sync.go`
+    - `internal/db/age_dualwrite.go`
+  - Replaced `ag_catalog.cypher(..., $1)` parameter style with generated SQL that embeds the Cypher body as a safe dollar-quoted literal; AGE expects a literal and otherwise returns `a dollar-quoted string constant is expected` (`SQLSTATE 42601`).
+  - Added unit regression coverage:
+    - `internal/graph/age_query_test.go`
+    - `internal/db/age_dualwrite_test.go`
+    - verifies schema-qualified AGE usage, literal embedding, no `$1` usage, and delimiter-collision handling.
+
+- [x] 2026-04-08: Removed AGE map-pattern dependence and tightened graph-schema usability checks:
+  - Updated `internal/graph/age_query.go`:
+    - scope anchoring now uses `MATCH (n:Entity) ... WHERE n.scope_id = '...'` instead of map-pattern filters that require `agtype @> agtype`.
+  - Updated AGE dual-write sync logic to avoid map-pattern `MERGE` filters:
+    - `internal/graph/age_sync.go`
+    - `internal/db/age_dualwrite.go`
+    - now performs explicit `MATCH ... WHERE ...` update first and falls back to `CREATE` for missing nodes/edges.
+  - Updated `internal/db/age_overlay.go`:
+    - best-effort grant step now also attempts table/sequence grants in schema `postbrain`.
+    - startup fail-fast now explicitly checks `has_schema_privilege(current_user, 'postbrain', 'USAGE')` before probe.
+    - runtime probe now executes a create/delete cycle on `Entity` label to validate writable AGE graph access, not just `RETURN 1`.
+  - Added regression coverage:
+    - `internal/graph/age_query_test.go` now enforces non-map scoped filters.
+    - `internal/db/age_overlay_integration_test.go` adds `TestEnsureAGEOverlay_FailsWhenAGEInstalledButRoleCannotUseGraphSchema`.
+
+- [x] 2026-04-08: Relaxed AGE startup probe back to read-only query for managed DB compatibility:
+  - Updated `internal/db/age_overlay.go`:
+    - reverted `EnsureAGEOverlay` probe from writable `CREATE/DELETE` cypher to read-only `RETURN 1`.
+    - keeps explicit graph-schema `USAGE` privilege check, but avoids owner-only label/table creation paths during startup.
+  - Added regression unit test:
+    - `internal/db/age_overlay_test.go::TestEnsureAGEAccessProbeSQL_IsReadOnly`.
+
+- [x] 2026-04-08: Fixed memory near-duplicate update path to keep graph/AGE links current (TDD-first):
+  - Added regression unit test:
+    - `internal/memory/store_test.go::TestCreate_NearDuplicateFound_StillLinksEntitiesAndRelations`
+    - verifies `Create(...)->action=updated` still upserts entities, links memory entities, and writes `co_occurs_with` relations.
+  - Updated `internal/memory/store.go`:
+    - extracted shared entity/relation linking into `linkEntitiesForMemory(...)`.
+    - duplicate-update branch now invokes the same linking path as create.
+    - duplicate-update branch now runs code-graph extraction for code memories with `file:` source refs, matching create semantics.
+
+- [x] 2026-04-08: Fixed AGE execution path to avoid search_path-dependent `cypher(...)` failures:
+  - Updated AGE SQL call sites to use schema-qualified objects:
+    - `ag_catalog.cypher(... ) AS (result ag_catalog.agtype)` in:
+      - `internal/graph/age_query.go`
+      - `internal/graph/age_sync.go`
+      - `internal/db/age_dualwrite.go`
+    - `ag_catalog.age_pagerank(...)` in `internal/graph/pagerank.go`.
+  - Added regression unit coverage:
+    - `internal/db/age_dualwrite_test.go` verifies dual-write query uses `ag_catalog.cypher` and `ag_catalog.agtype`.
+    - `internal/graph/age_query_test.go` verifies runtime cypher query uses schema-qualified AGE objects.
+    - `internal/graph/pagerank_test.go` verifies schema-qualified `age_pagerank` usage.
+
+- [x] 2026-04-08: Added AGE graph backfill + dual-write integration (TDD-first):
+  - Added optional AGE dual-write on relational graph upserts in `internal/db`:
+    - `db.UpsertEntity` now mirrors to AGE when extension is available.
+    - `db.UpsertRelation` now mirrors to AGE when extension is available.
+    - new helper file: `internal/db/age_dualwrite.go`.
+  - Added `internal/jobs/age_backfill.go`:
+    - new `AGEBackfillJob` to replay existing `entities`/`relations` into AGE via `MERGE` sync.
+    - scheduler wiring: `internal/jobs/scheduler.go` now runs `age_backfill` every hour when `jobs.age_check_enabled=true`.
+  - Updated startup job visibility:
+    - `cmd/postbrain/main.go` `enabledJobNames` now includes `age_backfill` with `age_check`.
+  - Added coverage:
+    - unit: `internal/jobs/age_backfill_test.go`
+    - integration: `internal/db/age_dualwrite_integration_test.go` and `internal/jobs/age_backfill_integration_test.go` (strict AGE checks gated by `POSTBRAIN_TEST_AGE_IMAGE`).
+
+- [x] 2026-04-08: Added strict AGE-available integration coverage for overlay activation (TDD-first):
+  - Added new integration test in `internal/db/age_overlay_integration_test.go`:
+    - `TestEnsureAGEOverlay_AGEImage_ActivatesExtensionAndGraph`
+    - uses `POSTBRAIN_TEST_AGE_IMAGE` to opt into strict validation on an AGE-enabled Postgres image.
+    - asserts `EnsureAGEOverlay` results in both installed `age` extension and existing `postbrain` graph.
+  - Extended integration test helper in `internal/testhelper/container.go`:
+    - added `NewTestPoolWithImage(t, image, customizers...)` to allow image-specific integration coverage while preserving default `NewTestPool` behavior.
+
+- [x] 2026-04-08: Fixed system-admin principal management bypass for memberships and principal-admin checks (TDD-first):
+  - Added integration regressions:
+    - `internal/principals/membership_integration_test.go::TestMembershipStore_SystemAdminBypassesAdminChecks`
+    - `internal/ui/principals_integration_test.go::TestPrincipalsPage_SystemAdminCanAddMembership`
+  - Updated `internal/principals/membership.go`:
+    - `IsPrincipalAdmin`, `IsScopeAdmin`, and `HasAnyAdminRole` now short-circuit for principals with `is_system_admin=true`.
+  - Fixes `principal admin required` denials for system admins when adding team memberships.
+
 - [x] 2026-04-08: Unified CLI semantic-version comparison path:
   - Refactored `cmd/postbrain-cli/main.go` so `codexVersionMeetsMinimum` now uses the shared `compareVersionStrings`/`compareSemver` helpers.
   - Removed duplicate inline semver comparison logic from the Codex minimum-version gate path.
