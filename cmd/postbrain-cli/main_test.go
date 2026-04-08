@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
@@ -37,8 +38,6 @@ func TestParseSkillID_EmptyString_ReturnsError(t *testing.T) {
 }
 
 func TestRootVersionCommand_PrintsBuildVersion(t *testing.T) {
-	t.Parallel()
-
 	old := buildVersion
 	oldRef := buildGitRef
 	oldTime := buildTimestamp
@@ -125,5 +124,74 @@ func TestShouldEnforceCodexVersion_NonWindowsTrue(t *testing.T) {
 	t.Parallel()
 	if !shouldEnforceCodexVersion("linux") {
 		t.Fatal("non-windows should enforce codex version")
+	}
+}
+
+func TestCheckUpdateCommand_UpdateAvailable(t *testing.T) {
+	oldBuild := buildVersion
+	oldFetch := fetchLatestPostbrainVersionFn
+	buildVersion = "0.0.1"
+	fetchLatestPostbrainVersionFn = func(ctx context.Context) (string, error) {
+		return "0.0.3", nil
+	}
+	t.Cleanup(func() { buildVersion = oldBuild })
+	t.Cleanup(func() { fetchLatestPostbrainVersionFn = oldFetch })
+
+	root := newRootCmd()
+	root.SetArgs([]string{"check-update"})
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute check-update command: %v", err)
+	}
+	if !strings.Contains(out.String(), "update available") {
+		t.Fatalf("unexpected output: %q", out.String())
+	}
+}
+
+func TestCheckUpdateCommand_UpToDate(t *testing.T) {
+	oldBuild := buildVersion
+	oldFetch := fetchLatestPostbrainVersionFn
+	buildVersion = "0.0.3"
+	fetchLatestPostbrainVersionFn = func(ctx context.Context) (string, error) {
+		return "0.0.3", nil
+	}
+	t.Cleanup(func() { buildVersion = oldBuild })
+	t.Cleanup(func() { fetchLatestPostbrainVersionFn = oldFetch })
+
+	root := newRootCmd()
+	root.SetArgs([]string{"check-update"})
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute check-update command: %v", err)
+	}
+	if !strings.Contains(out.String(), "up to date") {
+		t.Fatalf("unexpected output: %q", out.String())
+	}
+}
+
+func TestCheckUpdateCommand_DevBuild(t *testing.T) {
+	oldBuild := buildVersion
+	oldFetch := fetchLatestPostbrainVersionFn
+	buildVersion = "dev"
+	fetchLatestPostbrainVersionFn = func(ctx context.Context) (string, error) {
+		return "0.0.3", nil
+	}
+	t.Cleanup(func() { buildVersion = oldBuild })
+	t.Cleanup(func() { fetchLatestPostbrainVersionFn = oldFetch })
+
+	root := newRootCmd()
+	root.SetArgs([]string{"check-update"})
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute check-update command: %v", err)
+	}
+	if !strings.Contains(out.String(), "unable to compare dev build") {
+		t.Fatalf("unexpected output: %q", out.String())
 	}
 }

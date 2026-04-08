@@ -60,6 +60,16 @@
 
 ### Maintenance
 
+- [x] 2026-04-08: Added `postbrain-cli check-update` command for release update checks (TDD-first):
+  - Updated `cmd/postbrain-cli/main.go`:
+    - added `check-update` root subcommand to query latest GitHub release version (`/releases/latest`) and compare against current build version.
+    - reports one of: `update available`, `up to date`, or `unable to compare dev build`.
+    - added reusable semantic-version comparison helpers for current-vs-latest evaluation.
+  - Added CLI unit coverage in `cmd/postbrain-cli/main_test.go`:
+    - `TestCheckUpdateCommand_UpdateAvailable`
+    - `TestCheckUpdateCommand_UpToDate`
+    - `TestCheckUpdateCommand_DevBuild`
+
 - [x] 2026-04-07: Replaced scaffolded Postbrain plugin placeholders with real plugin artifacts:
   - Added concrete plugin payload files under `plugins/postbrain/`:
     - `skills/codex.md`
