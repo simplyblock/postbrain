@@ -54,13 +54,7 @@ $$;
 `
 
 const ensureAGEAccessProbeSQL = `
-SELECT * FROM ag_catalog.cypher('postbrain', $$
-CREATE (n:Entity)
-SET n.id = '__postbrain_age_startup_probe__'
-WITH n
-DELETE n
-RETURN 1
-$$) AS (result ag_catalog.agtype);
+SELECT * FROM ag_catalog.cypher('postbrain', $$ RETURN 1 $$) AS (result ag_catalog.agtype);
 `
 
 // EnsureAGEOverlay is idempotent and best-effort.

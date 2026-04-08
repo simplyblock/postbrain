@@ -114,6 +114,13 @@
     - `internal/graph/age_query_test.go` now enforces non-map scoped filters.
     - `internal/db/age_overlay_integration_test.go` adds `TestEnsureAGEOverlay_FailsWhenAGEInstalledButRoleCannotUseGraphSchema`.
 
+- [x] 2026-04-08: Relaxed AGE startup probe back to read-only query for managed DB compatibility:
+  - Updated `internal/db/age_overlay.go`:
+    - reverted `EnsureAGEOverlay` probe from writable `CREATE/DELETE` cypher to read-only `RETURN 1`.
+    - keeps explicit graph-schema `USAGE` privilege check, but avoids owner-only label/table creation paths during startup.
+  - Added regression unit test:
+    - `internal/db/age_overlay_test.go::TestEnsureAGEAccessProbeSQL_IsReadOnly`.
+
 - [x] 2026-04-08: Fixed memory near-duplicate update path to keep graph/AGE links current (TDD-first):
   - Added regression unit test:
     - `internal/memory/store_test.go::TestCreate_NearDuplicateFound_StillLinksEntitiesAndRelations`
