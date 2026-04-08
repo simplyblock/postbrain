@@ -27,25 +27,25 @@ DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_extension WHERE extname='age') THEN
         BEGIN
-            GRANT USAGE ON SCHEMA ag_catalog TO PUBLIC;
+            EXECUTE 'GRANT USAGE ON SCHEMA ag_catalog TO ' || quote_ident(current_user);
         EXCEPTION WHEN insufficient_privilege THEN
             RAISE NOTICE 'insufficient privilege to grant USAGE on ag_catalog; continuing with runtime probe';
         END;
         BEGIN
-            GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA ag_catalog TO PUBLIC;
+            EXECUTE 'GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA ag_catalog TO ' || quote_ident(current_user);
         EXCEPTION WHEN insufficient_privilege THEN
             RAISE NOTICE 'insufficient privilege to grant EXECUTE on ag_catalog functions; continuing with runtime probe';
         END;
         BEGIN
-            GRANT USAGE ON TYPE ag_catalog.agtype TO PUBLIC;
+            EXECUTE 'GRANT USAGE ON TYPE ag_catalog.agtype TO ' || quote_ident(current_user);
         EXCEPTION WHEN insufficient_privilege THEN
             RAISE NOTICE 'insufficient privilege to grant USAGE on ag_catalog.agtype; continuing with runtime probe';
         END;
         BEGIN
             IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname='postbrain') THEN
-                GRANT USAGE ON SCHEMA postbrain TO PUBLIC;
-                GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA postbrain TO PUBLIC;
-                GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA postbrain TO PUBLIC;
+                EXECUTE 'GRANT USAGE ON SCHEMA postbrain TO ' || quote_ident(current_user);
+                EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA postbrain TO ' || quote_ident(current_user);
+                EXECUTE 'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA postbrain TO ' || quote_ident(current_user);
             END IF;
         EXCEPTION WHEN insufficient_privilege THEN
             RAISE NOTICE 'insufficient privilege to grant USAGE on postbrain schema; continuing with runtime probe';

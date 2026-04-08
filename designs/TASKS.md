@@ -249,6 +249,16 @@
     - `TestEnsureAGEOverlayOnExecutor_AgeInstalledRunsSchemaChecksAndProbe`
     - verifies ordered step execution and AGE-installed probe path through a single executor abstraction.
 
+- [x] 2026-04-08: Narrowed AGE bootstrap grants from `PUBLIC` to runtime role only:
+  - Updated `internal/db/age_overlay.go`:
+    - `ensureAGEPrivilegesSQL` now grants AGE and graph-schema privileges to `quote_ident(current_user)` instead of `PUBLIC`.
+    - keeps insufficient-privilege handling as NOTICE-only best effort.
+  - Added regression unit check:
+    - `internal/db/age_overlay_test.go::TestEnsureAGEPrivilegesSQL_DoesNotGrantToPublic`
+    - enforces no `TO PUBLIC` grants and requires `current_user` targeting.
+  - Updated operations runbook:
+    - `docs/apache-age-usage.md` now documents runtime-role-targeted startup grants and explicit multi-role grant requirement.
+
 - [x] 2026-04-08: Fixed system-admin principal management bypass for memberships and principal-admin checks (TDD-first):
   - Added integration regressions:
     - `internal/principals/membership_integration_test.go::TestMembershipStore_SystemAdminBypassesAdminChecks`
