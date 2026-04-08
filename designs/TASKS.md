@@ -60,6 +60,87 @@
 
 ### Maintenance
 
+- [x] 2026-04-07: Replaced scaffolded Postbrain plugin placeholders with real plugin artifacts:
+  - Added concrete plugin payload files under `plugins/postbrain/`:
+    - `skills/codex.md`
+    - `skills/codex-lite.md`
+    - `skills/claude-code.md`
+    - `hooks.json`
+    - `.mcp.json`
+  - Updated `plugins/postbrain/.codex-plugin/plugin.json`:
+    - replaced `[TODO: ...]` placeholder metadata with concrete values.
+    - configured `skills`, `hooks`, and `mcpServers` to real plugin-local file paths.
+    - set plugin version to current tagged release baseline (`0.0.3`).
+
+- [x] 2026-04-07: Fixed `POSTBRAIN_SCOPE` hook-example double-prefixing in docs:
+  - Updated `docs/getting-started.md` Codex hook command examples:
+    - replaced `--scope project:$POSTBRAIN_SCOPE` with `--scope "$POSTBRAIN_SCOPE"`.
+    - clarified `POSTBRAIN_SCOPE` must contain full `kind:external_id` (for example `project:acme/platform/postbrain`).
+  - Updated `docs/using-with-coding-agents.md` Codex hook command examples:
+    - replaced `--scope project:$POSTBRAIN_SCOPE` with `--scope "$POSTBRAIN_SCOPE"` for consistency.
+
+- [x] 2026-04-07: Hardened hook command scope handling against shell injection (TDD-first):
+  - Added quoting utility and unit coverage:
+    - `internal/postbraincli/shellquote.go`
+    - `internal/postbraincli/shellquote_test.go::TestShellSingleQuote`
+  - Added regression tests for explicit-scope hook command safety:
+    - `internal/postbraincli/codex_skill_installer_test.go::TestInstallCodexHooks_QuotesExplicitScopeInCommands`
+    - `internal/postbraincli/claude_skill_installer_test.go::TestInstallClaudeHooks_QuotesExplicitScopeInCommands`
+  - Updated hook installers:
+    - `internal/postbraincli/codex_skill_installer.go` now shell-quotes non-empty explicit scope values before embedding in hook command strings.
+    - `internal/postbraincli/claude_skill_installer.go` now shell-quotes non-empty explicit scope values before embedding in hook command strings.
+  - Added robustness fix:
+    - `InstallClaudeHooks` now ensures `.claude/` exists before writing `settings.local.json`.
+  - Updated Codex installer platform gating:
+    - `cmd/postbrain-cli/main.go` now skips Codex minimum-version enforcement on Windows (full-skill/no-hook mode) and only enforces the `0.114.0` minimum on non-Windows platforms where hooks are installed.
+    - added unit coverage in `cmd/postbrain-cli/main_test.go`:
+      - `TestShouldEnforceCodexVersion_WindowsFalse`
+      - `TestShouldEnforceCodexVersion_NonWindowsTrue`
+
+- [x] 2026-04-07: Fixed Claude hook installer idempotency for partial settings (TDD-first):
+  - Added regression tests in `internal/postbraincli/claude_skill_installer_test.go`:
+    - `TestInstallClaudeHooks_AddsMissingStopWhenSnapshotExists`
+    - `TestInstallClaudeHooks_AddsMissingSnapshotWhenStopExists`
+    - verifies partially configured `.claude/settings.local.json` is healed by adding only missing Postbrain hooks.
+  - Updated `internal/postbraincli/claude_skill_installer.go`:
+    - removed early-return idempotency check based solely on snapshot presence.
+    - now detects snapshot and summarize hooks independently per event and appends only missing entries.
+    - preserves no-op idempotency when both required hooks are already present.
+
+- [x] 2026-04-07: Fixed Codex hook installer idempotency for partially configured hook files (TDD-first):
+  - Added regression tests in `internal/postbraincli/codex_skill_installer_test.go`:
+    - `TestInstallCodexHooks_AddsMissingStopWhenSnapshotExists`
+    - `TestInstallCodexHooks_AddsMissingSnapshotWhenStopExists`
+    - verifies partial `.codex/hooks.json` configurations are healed without duplicating existing hook entries.
+  - Updated `internal/postbraincli/codex_skill_installer.go`:
+    - removed single boolean early-return based only on snapshot detection.
+    - now detects Postbrain snapshot and summarize commands independently per event (`PostToolUse`, `Stop`) and appends only missing entries.
+    - preserves idempotent no-op behavior when both required hooks are already present.
+
+- [x] 2026-04-07: Added Codex install-time version gating and platform-specific skill profiles (TDD-first):
+  - Added CLI unit coverage in `cmd/postbrain-cli/main_test.go`:
+    - `TestCodexVersionMeetsMinimum`
+    - `TestCodexVersionMeetsMinimum_TooLow`
+    - `TestCodexVersionMeetsMinimum_InvalidVersion`
+    - verifies semantic-version parsing and minimum-version gating behavior for Codex hooks support.
+  - Added installer options regression coverage in `internal/postbraincli/codex_skill_installer_test.go`:
+    - `TestInstallCodexSkillWithOptions_DisablesHookInstall`
+    - verifies Windows-mode installs can skip `.codex/hooks.json` provisioning.
+  - Updated `cmd/postbrain-cli/main.go`:
+    - `install-codex-skill` now runs `codex --version` and rejects versions below `0.114.0`.
+    - non-Windows installs use a new lightweight hooks-enabled Codex skill profile and install hooks/config.
+    - Windows installs emit a warning, use the full Codex skill profile, and skip hook provisioning.
+  - Added `cmd/postbrain-cli/assets/codex-lite.md` as the hooks-enabled lightweight Codex skill variant.
+
+- [x] 2026-04-07: Extended Codex skill installation to provision repo-local hooks (TDD-first):
+  - Added regression coverage in `internal/postbraincli/codex_skill_installer_test.go`:
+    - `TestInstallCodexSkill_NoAgentsFileStillInstallsSkill` now verifies `.codex/hooks.json` is created with `PostToolUse` and `Stop` entries.
+    - `TestInstallCodexSkill_DoesNotDuplicateHooks` verifies idempotent repeated installs do not duplicate Postbrain hook entries.
+  - Updated `internal/postbraincli/codex_skill_installer.go`:
+    - `InstallCodexSkill` now installs Codex hooks in the repo-local `.codex/hooks.json` as part of the skill install flow.
+    - added `InstallCodexHooks` to merge hook commands for `snapshot` and `summarize-session` while preserving existing hook config.
+    - added `existingCodexHooksHavePostbrain` idempotency detection for previously-installed Postbrain hook commands.
+
 - [x] 2026-04-07: Avoided eager graph-augmentation scope fan-out when recall results have no source refs (TDD-first):
   - Added unit regression coverage in `internal/retrieval/orchestrate_test.go`:
     - `TestOrchestrateRecall_DoesNotComputeGraphAugmentationScopesWithoutSourceRefs`
@@ -85,6 +166,15 @@
     - prevents cross-branch/sibling scope memories from appearing in query-playground recall results.
   - Added query-playground regression coverage for sibling scope separation in `internal/ui/handler_query_integration_test.go`:
     - `TestQueryPlayground_SelectedScopeExcludesSiblingMemories`.
+
+- [x] 2026-04-07: Updated docs for Codex hook/plugin parity with Claude workflows:
+  - Updated `docs/using-with-coding-agents.md` to document Codex hook setup, including feature flag and hook command examples.
+  - Documented Codex plugins usage and aligned guidance to use plugin workflows similarly to Claude command workflows.
+  - Updated `docs/getting-started.md` with optional Codex hooks/plugins setup and explicitly noted Windows hook limitation.
+
+- [x] 2026-04-07: Scaffolded repo-local Codex plugin via plugin-creator skill:
+  - Created `plugins/postbrain/.codex-plugin/plugin.json` with normalized plugin name (`postbrain`) and placeholder manifest fields.
+  - Created repo marketplace file `.agents/plugins/marketplace.json` with a `postbrain` plugin entry (`source.path: ./plugins/postbrain`, `installation: AVAILABLE`, `authentication: ON_INSTALL`, `category: Productivity`).
 
 - [x] 2026-04-07: Split `designs/DESIGN.md` into overview + focused design documents:
   - Replaced `designs/DESIGN.md` content with a concise architecture overview and explicit links to detailed design files.

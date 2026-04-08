@@ -1,0 +1,20 @@
+{
+  "name": "Postbrain",
+  "interface": {
+    "displayName": "Postbrain"
+  },
+  "plugins": [
+    {
+      "name": "postbrain",
+      "source": {
+        "source": "local",
+        "path": "./plugins/postbrain"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "name": "postbrain",
+  "version": "0.0.3",
+  "description": "Persistent memory, knowledge, and skill workflows for coding agents.",
+  "author": {
+    "name": "simplyblock",
+    "email": "noreply@simplyblock.io",
+    "url": "https://github.com/simplyblock"
+  },
+  "homepage": "https://github.com/simplyblock/postbrain",
+  "repository": "https://github.com/simplyblock/postbrain",
+  "license": "MIT",
+  "keywords": [
+    "memory",
+    "knowledge",
+    "mcp",
+    "codex"
+  ],
+  "skills": "./skills/",
+  "hooks": "./hooks.json",
+  "mcpServers": "./mcp.json",
+  "interface": {
+    "displayName": "Postbrain",
+    "shortDescription": "Persistent memory and knowledge for engineering workflows.",
+    "longDescription": "Connect coding agents to Postbrain memory, knowledge, and skill workflows using project-scoped hooks and MCP access.",
+    "developerName": "simplyblock",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/simplyblock/postbrain",
+    "privacyPolicyURL": "https://github.com/simplyblock/postbrain",
+    "termsOfServiceURL": "https://github.com/simplyblock/postbrain",
+    "defaultPrompt": [
+      "Load Postbrain context for this task and summarize relevant decisions.",
+      "Recall prior implementation notes for this scope before I start coding.",
+      "Capture this completed change into Postbrain memory with entities."
+    ]
+  }
+}

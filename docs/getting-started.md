@@ -81,6 +81,7 @@ Then set client-side environment variables:
 - `POSTBRAIN_URL` (for example `http://localhost:7433`)
 - `POSTBRAIN_TOKEN` (issued bearer token)
 - optional `POSTBRAIN_SCOPE` for default scope selection
+  - set this to a full `kind:external_id` value (for example `project:acme/platform/postbrain`)
 
 Permission model reference for token design:
 
@@ -107,6 +108,52 @@ postbrain-cli install-claude-skill --target /path/to/project
 ```
 
 If `--target` is omitted, current directory (`.`) is treated as the project root.
+
+### 4.1 Optional: Codex hooks automation (macOS/Linux)
+
+Codex hook support is experimental and currently unavailable on Windows.
+
+Enable hooks in `~/.codex/config.toml`:
+
+```toml
+[features]
+codex_hooks = true
+```
+
+Then add Postbrain commands to `~/.codex/hooks.json` or `<repo>/.codex/hooks.json`:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "postbrain-cli snapshot --scope \"$POSTBRAIN_SCOPE\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "postbrain-cli summarize-session --scope \"$POSTBRAIN_SCOPE\""
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### 4.2 Optional: Codex plugins
+
+Codex supports plugins in app and CLI (`/plugins`). Use plugins for shared reusable integrations and keep Postbrain
+skill files installed in-project for repository-specific behavior.
 
 ## 5. Optional: enable OAuth/social login
 

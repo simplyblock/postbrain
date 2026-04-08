@@ -11,7 +11,11 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
+	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,10 +29,17 @@ import (
 )
 
 //go:embed assets/codex.md
-var embeddedCodexSkill string
+var embeddedCodexSkillFull string
+
+//go:embed assets/codex-lite.md
+var embeddedCodexSkillLight string
 
 //go:embed assets/claude-code.md
 var embeddedClaudeSkill string
+
+const minimumCodexHooksVersion = "0.114.0"
+
+var detectCodexVersionFn = detectCodexVersion
 
 // hookClient is a minimal HTTP client for the Postbrain REST API.
 type hookClient struct {
@@ -461,21 +472,48 @@ func installCodexSkillCmd() *cobra.Command {
 			if strings.TrimSpace(targetDir) == "" {
 				targetDir = "."
 			}
-			installedPath, updatedAgents, err := postbraincli.InstallCodexSkill(
+
+			installHooks := runtime.GOOS != "windows"
+			codexVersion := "not-checked-on-windows"
+			var err error
+			if shouldEnforceCodexVersion(runtime.GOOS) {
+				codexVersion, err = detectCodexVersionFn()
+				if err != nil {
+					return err
+				}
+				ok, err := codexVersionMeetsMinimum(codexVersion, minimumCodexHooksVersion)
+				if err != nil {
+					return err
+				}
+				if !ok {
+					return fmt.Errorf("codex version %q is below required minimum %s", codexVersion, minimumCodexHooksVersion)
+				}
+			}
+			if !installHooks {
+				slog.Warn("Codex hooks are unavailable on Windows; installing full skill without hooks")
+			}
+
+			installedPath, updatedAgents, err := postbraincli.InstallCodexSkillWithOptions(
 				targetDir,
-				embeddedCodexSkill,
+				codexSkillContent(runtime.GOOS),
 				os.Getenv("POSTBRAIN_URL"),
 				os.Getenv("POSTBRAIN_SCOPE"),
+				postbraincli.CodexSkillInstallOptions{InstallHooks: installHooks},
 			)
 			if err != nil {
 				return err
 			}
-			updatedConfig, err := postbraincli.EnableCodexHooks(targetDir)
-			if err != nil {
-				return err
+			updatedConfig := false
+			if installHooks {
+				updatedConfig, err = postbraincli.EnableCodexHooks(targetDir)
+				if err != nil {
+					return err
+				}
 			}
 			slog.Info("install-codex-skill: installed",
 				"path", installedPath,
+				"codex_version", codexVersion,
+				"hooks_installed", installHooks,
 				"agents_updated", updatedAgents,
 				"config_updated", updatedConfig)
 			return nil
@@ -483,6 +521,74 @@ func installCodexSkillCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&targetDir, "target", ".", "target directory")
 	return cmd
+}
+
+func codexSkillContent(goos string) string {
+	if strings.EqualFold(goos, "windows") {
+		return embeddedCodexSkillFull
+	}
+	return embeddedCodexSkillLight
+}
+
+func shouldEnforceCodexVersion(goos string) bool {
+	return !strings.EqualFold(goos, "windows")
+}
+
+func detectCodexVersion() (string, error) {
+	out, err := exec.Command("codex", "--version").CombinedOutput()
+	trimmedOut := strings.TrimSpace(string(out))
+	if err != nil {
+		if trimmedOut != "" {
+			return "", fmt.Errorf("run codex --version: %w (output: %q)", err, trimmedOut)
+		}
+		return "", fmt.Errorf("run codex --version: %w", err)
+	}
+	return trimmedOut, nil
+}
+
+func codexVersionMeetsMinimum(versionOutput, minimum string) (bool, error) {
+	v, err := extractSemver(versionOutput)
+	if err != nil {
+		return false, err
+	}
+	min, err := extractSemver(minimum)
+	if err != nil {
+		return false, err
+	}
+	if v.major != min.major {
+		return v.major > min.major, nil
+	}
+	if v.minor != min.minor {
+		return v.minor > min.minor, nil
+	}
+	return v.patch >= min.patch, nil
+}
+
+type semver struct {
+	major int
+	minor int
+	patch int
+}
+
+func extractSemver(input string) (semver, error) {
+	re := regexp.MustCompile(`(\d+)\.(\d+)\.(\d+)`)
+	matches := re.FindStringSubmatch(input)
+	if len(matches) != 4 {
+		return semver{}, fmt.Errorf("could not parse semantic version from %q", input)
+	}
+	major, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return semver{}, fmt.Errorf("parse major version: %w", err)
+	}
+	minor, err := strconv.Atoi(matches[2])
+	if err != nil {
+		return semver{}, fmt.Errorf("parse minor version: %w", err)
+	}
+	patch, err := strconv.Atoi(matches[3])
+	if err != nil {
+		return semver{}, fmt.Errorf("parse patch version: %w", err)
+	}
+	return semver{major: major, minor: minor, patch: patch}, nil
 }
 
 func installClaudeSkillCmd() *cobra.Command {

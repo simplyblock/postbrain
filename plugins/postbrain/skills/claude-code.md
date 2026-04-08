@@ -2,10 +2,10 @@
 version: 1
 ---
 
-# Postbrain — Persistent Memory & Knowledge for Codex
+# Postbrain — Persistent Memory & Knowledge for Claude Code
 
 Postbrain gives you persistent memory across sessions, a shared knowledge base, and a skill registry. It is exposed as
-an MCP server. This skill tells you how to use it.
+an MCP server. This file tells you how to use it with Claude Code.
 
 This policy applies to all skills and all non-trivial tasks in this repository.
 
@@ -33,10 +33,10 @@ are stored.
 
 At the start of a new session, find a configured project scope in this order:
 
-1. `.codex/postbrain-base.md`
-2. `README.md`
-3. `AGENTS.md`
-4. Other common local docs (`docs/`, `designs/`, `.codex/`) mentioning `POSTBRAIN_SCOPE` or `postbrain scope`
+1. `.claude/postbrain-base.md`
+2. `CLAUDE.md`
+3. `README.md`
+4. Other common local docs (`docs/`, `designs/`, `.claude/`) mentioning `POSTBRAIN_SCOPE` or `postbrain scope`
 
 If a valid scope string is found, use it.
 
@@ -45,13 +45,13 @@ If no defined scope is found, ask the user whether to use Postbrain for this pro
 > Do you want me to use Postbrain memory/knowledge for this project?
 
 - If user says **no**:
-    - Persist that decision to `.codex/postbrain-base.md` for future sessions.
+    - Persist that decision to `.claude/postbrain-base.md` for future sessions.
     - Do not call Postbrain tools in this session unless the user later opts in.
 - If user says **yes**:
-    - Persist opt-in to `.codex/postbrain-base.md`.
+    - Persist opt-in to `.claude/postbrain-base.md`.
     - Ask for the project scope:
       > What Postbrain scope should I use? (e.g. `project:acme/api`)
-    - Persist the provided scope in `.codex/postbrain-base.md`.
+    - Persist the provided scope in `.claude/postbrain-base.md`.
 
 Never invent a scope.
 
@@ -88,7 +88,55 @@ scope.
 
 ---
 
-## 5. Tool reference
+## 5. Hooks integration
+
+When Postbrain is active, two CLI hooks should be configured in `.claude/settings.json`:
+
+**PostToolUse hook** — automatically snapshots episodic memories after every tool call:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "postbrain-cli snapshot --scope $POSTBRAIN_SCOPE"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "postbrain-cli summarize-session --scope $POSTBRAIN_SCOPE"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The `snapshot` command reads the PostToolUse payload from stdin
+(`{"tool_name": "...", "tool_input": {...}, "tool_response": {...}}`), extracts a `source_ref` from any `file_path` or
+`path` field, deduplicates within 60 seconds, and stores an episodic memory.
+
+The `summarize-session` command runs at Stop, reads `CLAUDE_SESSION_ID` from the environment, and consolidates
+episodic memories accumulated during the session into a semantic summary.
+
+These hooks operate silently and do not block tool execution. You do not need to call `remember` for routine file
+edits when the hooks are configured — they handle snapshot recording automatically. Continue to call `remember`
+explicitly for decisions, architectural choices, and any information that benefits from a curated `summary` or
+`entities` list.
+
+---
+
+## 6. Tool reference
 
 ### `remember` — store a memory
 
@@ -136,12 +184,9 @@ Use both `summary` and `content`:
 - `procedural` — how to do something: steps, runbooks, workflows
 - `semantic` — what something is: concepts, architecture, API contracts
 
-Mandatory logging behavior:
-
-- After each tool use or completed sub-task, call `remember`.
-- Prefer frequent, precise `remember` entries over long delayed dumps.
-- Be extensive and specific in entity tagging (technologies, files, services, concepts, decisions, PR/issue IDs,
-  people).
+When hooks are not configured, call `remember` after each tool use or completed sub-task. Prefer frequent, precise
+`remember` entries over long delayed dumps. Be extensive and specific in entity tagging (technologies, files,
+services, concepts, decisions, PR/issue IDs, people).
 
 ---
 
@@ -292,8 +337,8 @@ Combine two or more published artifacts into a single synthesized digest artifac
 | `limit`      | —        |
 | `installed`  | —        |
 
-When a task may benefit from reusable automation, run `skill_search` in Postbrain in addition to local skill discovery.
-If a relevant skill exists, install or update via `skill_install`.
+When a task may benefit from reusable automation, run `skill_search` with `agent_type: "claude-code"` in addition
+to local skill discovery. If a relevant skill exists, install or update via `skill_install`.
 
 ---
 
@@ -309,16 +354,18 @@ Returns the substituted skill body. Pass `session_id` for event correlation.
 | `session_id` | —        |
 | `agent_type` | —        |
 
+Installed skills appear in `.claude/commands/` and are invocable as `/slug` slash commands in Claude Code.
+
 ---
 
 ### `skill_install` — materialise a skill into the agent command directory
 
-| param                | notes              |
-|----------------------|--------------------|
-| `skill_id` or `slug` | identify the skill |
-| `scope`              | —                  |
-| `agent_type`         | —                  |
-| `workdir`            | target directory   |
+| param                | notes                                              |
+|----------------------|----------------------------------------------------|
+| `skill_id` or `slug` | identify the skill                                 |
+| `scope`              | —                                                  |
+| `agent_type`         | use `"claude-code"` to install to `.claude/commands/` |
+| `workdir`            | target directory                                   |
 
 ---
 
@@ -333,46 +380,48 @@ No parameters. Returns all scopes visible to the current token. Use this to disc
 `session_begin(scope)` → `{ session_id, scope, started_at }`
 `session_end(session_id)` → `{ session_id, ended_at }`
 
-Always call `session_end` when the session terminates (in a Stop hook if available).
+`session_end` is called automatically by the Stop hook via `postbrain-cli summarize-session` when hooks are
+configured. Call it manually at session end if hooks are not in use.
 
 ---
 
-## 6. Recommended workflow
+## 7. Recommended workflow
 
 ```
 startup
-  list_scopes                        # verify server + discover scopes
-  resolve scope from local files     # .codex/postbrain-base.md, README.md, AGENTS.md, etc.
-  ask user to opt in/out if missing  # persist decision to .codex/postbrain-base.md
+  list_scopes                           # verify server + discover scopes
+  resolve scope from local files        # .claude/postbrain-base.md, CLAUDE.md, README.md, etc.
+  ask user to opt in/out if missing     # persist decision to .claude/postbrain-base.md
   ask and persist scope if opted in
-  session_begin(scope)               # open session
-  context(scope, query=first_task)   # hydrate with relevant knowledge
+  session_begin(scope)                  # open session
+  context(scope, query=first_task)      # hydrate with relevant knowledge
 
 during work
-  recall(...)                        # before each new task
-  remember(memory_type=working, ...) # temporary notes
-  remember(memory_type=episodic, ...)# after each tool/task step
-  knowledge_detail(artifact_id)      # when summary is insufficient
-  skill_search(...)                  # check for reusable registry skills
-  skill_install(...)                 # install/update useful skills
+  recall(...)                           # before each new task
+  remember(memory_type=working, ...)    # temporary notes
+  remember(memory_type=episodic, ...)   # after each tool/task step (if hooks not configured)
+  knowledge_detail(artifact_id)         # when summary is insufficient
+  skill_search(agent_type="claude-code")# check for reusable registry skills
+  skill_install(agent_type="claude-code")# install/update useful skills to .claude/commands/
 
 wrapping up
-  summarize(scope, topic)            # compress episodic → semantic
-  publish(...) / promote(...)        # long-lived decisions/design docs
-  session_end(session_id)            # close session
+  summarize(scope, topic)               # compress episodic → semantic
+  publish(...) / promote(...)           # long-lived decisions/design docs
+  session_end(session_id)               # close session (automatic via Stop hook)
 ```
 
 ---
 
-## 7. Environment variables
+## 8. Environment variables
 
-| variable          | default                 | purpose                                             |
-|-------------------|-------------------------|-----------------------------------------------------|
-| `POSTBRAIN_URL`   | `http://localhost:7433` | MCP server base URL                                 |
-| `POSTBRAIN_TOKEN` | —                       | Bearer auth token                                   |
-| `POSTBRAIN_SCOPE` | —                       | Default scope (set in AGENTS.md to skip the prompt) |
+| variable          | default                 | purpose                                                    |
+|-------------------|-------------------------|------------------------------------------------------------|
+| `POSTBRAIN_URL`   | `http://localhost:7433` | MCP server base URL                                        |
+| `POSTBRAIN_TOKEN` | —                       | Bearer auth token                                          |
+| `POSTBRAIN_SCOPE` | —                       | Default scope (set in CLAUDE.md to skip the scope prompt)  |
+| `CLAUDE_SESSION_ID` | —                     | Injected by Claude Code; used by the Stop hook             |
 
-`.codex/postbrain-base.md` convention (recommended):
+`.claude/postbrain-base.md` convention (recommended):
 
 - `postbrain_enabled: yes|no`
 - `postbrain_scope: kind:external_id` (when enabled)

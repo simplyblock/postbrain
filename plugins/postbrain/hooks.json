@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$POSTBRAIN_SCOPE\" ] && postbrain-cli snapshot --scope \"$POSTBRAIN_SCOPE\" || true"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$POSTBRAIN_SCOPE\" ] && postbrain-cli summarize-session --scope \"$POSTBRAIN_SCOPE\" || true"
+          }
+        ]
+      }
+    ]
+  }
+}
