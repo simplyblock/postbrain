@@ -155,6 +155,10 @@ func checkUpdateCmd() *cobra.Command {
 				_, err := fmt.Fprintf(cmd.OutOrStdout(), "update available: current=%s latest=%s\n", current, latest)
 				return err
 			}
+			if cmp < 0 {
+				_, err := fmt.Fprintf(cmd.OutOrStdout(), "current version is ahead of latest release: current=%s latest=%s\n", current, latest)
+				return err
+			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "up to date: current=%s latest=%s\n", current, latest)
 			return err
 		},
