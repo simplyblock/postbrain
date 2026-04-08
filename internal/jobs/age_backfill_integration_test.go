@@ -4,14 +4,18 @@ package jobs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/testcontainers/testcontainers-go"
 
+	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
@@ -160,5 +164,34 @@ func TestAGEBackfillJob_Run_EnsuresOverlayBeforeDetectAndBackfills(t *testing.T)
 	}
 	if edgeCount != 1 {
 		t.Fatalf("AGE relation count = %d, want 1", edgeCount)
+	}
+}
+
+func TestAGEBackfillJob_Run_MaxOneConnection_DoesNotSelfDeadlock(t *testing.T) {
+	basePool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+
+	connCfg := basePool.Config().ConnConfig
+	dbURL := "postgres://" + connCfg.User + ":" + connCfg.Password + "@" + connCfg.Host + ":" + strconv.Itoa(int(connCfg.Port)) + "/" + connCfg.Database + "?sslmode=disable"
+	smallPool, err := db.NewPool(ctx, &config.DatabaseConfig{
+		URL:            dbURL,
+		MaxOpen:        1,
+		MaxIdle:        1,
+		ConnectTimeout: 10 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("create small pool: %v", err)
+	}
+	defer smallPool.Close()
+
+	j := NewAGEBackfillJob(smallPool, 10)
+	runCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	err = j.Run(runCtx)
+	if err == nil {
+		return
+	}
+	if errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "context deadline exceeded") {
+		t.Fatalf("Run should not deadlock with max-open=1 pool: %v", err)
 	}
 }

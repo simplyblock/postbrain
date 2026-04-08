@@ -300,6 +300,14 @@
     - `TestReleaseAGEBackfillLockWithTimeout_UsesDeadlineContext`
     - verifies unlock path uses a context with deadline.
 
+- [x] 2026-04-08: Avoided AGE backfill self-deadlock with small DB pools:
+  - Updated `internal/jobs/age_backfill.go`:
+    - moved `EnsureAGEOverlay` + `DetectAGE` checks before advisory-lock connection acquisition.
+    - prevents holding one pool connection for lock while trying to acquire another for overlay setup.
+  - Added integration regression coverage in `internal/jobs/age_backfill_integration_test.go`:
+    - `TestAGEBackfillJob_Run_MaxOneConnection_DoesNotSelfDeadlock`
+    - validates backfill no longer times out with `MaxOpen=1` pool due to lock/overlay connection contention.
+
 - [x] 2026-04-08: Fixed system-admin principal management bypass for memberships and principal-admin checks (TDD-first):
   - Added integration regressions:
     - `internal/principals/membership_integration_test.go::TestMembershipStore_SystemAdminBypassesAdminChecks`
