@@ -25,6 +25,20 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-09: Added focused design for cross-scope verification retrieval:
+  - New design doc `designs/DESIGN_CROSS_SCOPE_VERIFICATION.md` defining a dedicated
+    `verify_context` MCP tool for baseline-vs-comparison scope analysis.
+  - Documented architecture and implementation details for MCP handler, retrieval
+    orchestration, scope authz handling, strict-scope memory semantics, and
+    provenance-first output contracts.
+  - Documented required database implications:
+    - phase-1 correctness without schema changes
+    - phase-1.1 performance indexes for time-windowed recall
+    - optional phase-2 `release_markers` model for server-resolved
+      `since_release` anchors.
+  - Updated `docs/index.md` design map and routing hints to include this new
+    design entry.
+
 - [x] 2026-04-09: Kept Codex hooks command strings readable and canonical in installer output (TDD-first):
   - Added regression test `internal/postbraincli/codex_skill_installer_test.go::TestInstallCodexHooks_UsesCanonicalEnvScopeCommands` to enforce:
     - literal `&&` in `.codex/hooks.json` command strings (no `\u0026\u0026` escaping)
