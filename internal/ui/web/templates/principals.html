@@ -9,18 +9,15 @@
     align-items: center;
     gap: 0.35rem;
   }
-  .scope-grant-adv {
-    margin: 0;
-  }
   .scope-grant-toggle {
     display: inline-block;
     cursor: pointer;
-    margin: 0;
-    list-style: none;
+    margin: 0 0 0 0.15rem;
+    border: 0;
+    background: transparent;
+    padding: 0;
     user-select: none;
-  }
-  .scope-grant-toggle::-webkit-details-marker {
-    display: none;
+    color: inherit;
   }
   .scope-grant-toggle::before {
     content: "▸";
@@ -30,7 +27,7 @@
     font-size: 0.9rem;
     line-height: 1;
   }
-  .scope-grant-adv[open] > .scope-grant-toggle::before {
+  .scope-grant-toggle[aria-expanded="true"]::before {
     transform: rotate(90deg);
   }
   .scope-grant-ops-inline {
@@ -248,17 +245,21 @@
             <input type="checkbox" name="permissions_basic" value="{{.Resource}}" data-scope-grant-basic="{{.Resource}}">
             <span class="mono">{{.Resource}}</span>
           </label>
-          <details class="scope-grant-adv">
-            <summary class="scope-grant-toggle" title="Toggle operations"></summary>
-            <div class="scope-grant-ops-inline">
-              {{range .Operations}}
-              <label>
-                <input type="checkbox" name="permissions_adv" value="{{$resource}}:{{.}}" data-scope-grant-adv="{{$resource}}">
-                <span class="mono">{{.}}</span>
-              </label>
-              {{end}}
-            </div>
-          </details>
+          <button
+            type="button"
+            class="scope-grant-toggle"
+            title="Toggle operations"
+            data-scope-grant-toggle="{{$resource}}"
+            aria-expanded="false"
+          ></button>
+        </div>
+        <div class="scope-grant-ops-inline" data-scope-grant-ops="{{$resource}}" hidden>
+          {{range .Operations}}
+          <label>
+            <input type="checkbox" name="permissions_adv" value="{{$resource}}:{{.}}" data-scope-grant-adv="{{$resource}}">
+            <span class="mono">{{.}}</span>
+          </label>
+          {{end}}
         </div>
       </div>
       {{end}}
@@ -308,6 +309,22 @@
       });
       advanced.forEach(function (item) {
         item.addEventListener('change', syncBasicFromAdvanced);
+      });
+    });
+  })();
+
+  (function wireScopeGrantToggles() {
+    var toggles = document.querySelectorAll('[data-scope-grant-toggle]');
+    toggles.forEach(function (toggle) {
+      var resource = toggle.getAttribute('data-scope-grant-toggle');
+      var ops = document.querySelector('[data-scope-grant-ops="' + resource + '"]');
+      if (!ops) {
+        return;
+      }
+      toggle.addEventListener('click', function () {
+        var open = toggle.getAttribute('aria-expanded') === 'true';
+        toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+        ops.hidden = open;
       });
     });
   })();

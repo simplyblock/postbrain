@@ -81,6 +81,13 @@
   - Updated render test in `internal/ui/handler_principals_test.go`:
     - `TestHandlePrincipals_ScopeGrantPicker_UsesToggleAndInlineExpansionHooks`.
 
+- [x] 2026-04-09: Replaced `details/summary` advanced toggles with explicit row toggles for stable alignment:
+  - Updated `internal/ui/web/templates/principals.html`:
+    - advanced toggle is now a dedicated button beside each resource row
+    - operations block is shown/hidden via `hidden` in normal flow directly below the row
+    - prevents misplaced/overlapping arrow and checkbox rendering artifacts from mixed `summary` layout behavior
+  - Added toggle wiring script (`wireScopeGrantToggles`) for deterministic expand/collapse behavior.
+
 - [x] 2026-04-06: Fixed `internal/authz` security and design-alignment gaps raised by regression tests:
   - Fixed `TokenResolver` scope restriction path to avoid unsafe resolver type assertion panic:
     - `internal/authz/token_resolver.go` now safely unwraps DB-backed resolvers and returns an explicit error when scope checks cannot be evaluated, instead of panicking.
