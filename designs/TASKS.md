@@ -52,6 +52,14 @@
     - `TestParseScopeGrantPermissionsInput_RejectsUnknownResource`
     - `TestHandlePrincipals_RendersScopeGrantGroupedPermissions`.
 
+- [x] 2026-04-09: Refined scope grant dialog UX to remove explicit "Advanced" labels:
+  - Updated `internal/ui/web/templates/principals.html`:
+    - kept resource-level checkbox as primary control
+    - moved expand/collapse affordance inline next to resource name
+    - removed repeated "Advanced" text rows to reduce visual noise
+  - Added render regression in `internal/ui/handler_principals_test.go`:
+    - `TestHandlePrincipals_ScopeGrantPicker_HidesAdvancedLabel`.
+
 - [x] 2026-04-06: Fixed `internal/authz` security and design-alignment gaps raised by regression tests:
   - Fixed `TokenResolver` scope restriction path to avoid unsafe resolver type assertion panic:
     - `internal/authz/token_resolver.go` now safely unwraps DB-backed resolvers and returns an explicit error when scope checks cannot be evaluated, instead of panicking.

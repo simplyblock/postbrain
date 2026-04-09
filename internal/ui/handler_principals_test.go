@@ -153,3 +153,20 @@ func TestHandlePrincipals_RendersScopeGrantGroupedPermissions(t *testing.T) {
 		t.Fatal("expected basic resource permission checkboxes")
 	}
 }
+
+func TestHandlePrincipals_ScopeGrantPicker_HidesAdvancedLabel(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/ui/principals", nil)
+	w := httptest.NewRecorder()
+
+	h.handlePrincipals(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+	body := w.Body.String()
+	if strings.Contains(body, ">Advanced<") {
+		t.Fatal("did not expect explicit Advanced label in scope grant picker")
+	}
+}
