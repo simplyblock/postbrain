@@ -599,6 +599,16 @@ func vecPtr(vec []float32) *pgvector.Vector {
 	return &v
 }
 
+func nilIfZeroUUID(id *uuid.UUID) *uuid.UUID {
+	if id == nil {
+		return nil
+	}
+	if *id == uuid.Nil {
+		return nil
+	}
+	return id
+}
+
 // CreateMemory inserts a new memory record.
 func CreateMemory(ctx context.Context, pool *pgxpool.Pool, m *Memory) (*Memory, error) {
 	if m.Meta == nil {
@@ -1258,14 +1268,14 @@ func CreateArtifact(ctx context.Context, pool *pgxpool.Pool, a *KnowledgeArtifac
 		EmbeddingModelID: a.EmbeddingModelID,
 		Meta:             a.Meta,
 		Version:          a.Version,
-		Column17:         a.PreviousVersion,
-		Column18:         a.SourceMemoryID,
+		PreviousVersion:  nilIfZeroUUID(a.PreviousVersion),
+		SourceMemoryID:   nilIfZeroUUID(a.SourceMemoryID),
 		SourceRef:        a.SourceRef,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("db: create artifact: %w", err)
 	}
-	return result, nil
+	return knowledgeArtifactFromCreateArtifactRow(result), nil
 }
 
 // GetArtifact retrieves a knowledge artifact by ID. Returns nil, nil if not found.
@@ -1278,7 +1288,7 @@ func GetArtifact(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*Knowle
 	if err != nil {
 		return nil, fmt.Errorf("db: get artifact: %w", err)
 	}
-	return a, nil
+	return knowledgeArtifactFromGetArtifactRow(a), nil
 }
 
 // UpdateArtifact updates title, content, summary, embedding, and bumps version.
@@ -1298,7 +1308,7 @@ func UpdateArtifact(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, title
 	if err != nil {
 		return nil, fmt.Errorf("db: update artifact: %w", err)
 	}
-	return a, nil
+	return knowledgeArtifactFromUpdateArtifactRow(a), nil
 }
 
 // UpdateArtifactStatus updates status, published_at, and deprecated_at.
@@ -1374,35 +1384,59 @@ func GetEndorsementByEndorser(ctx context.Context, pool *pgxpool.Pool, artifactI
 // A zero scopeID means no scope filter.
 func SearchArtifacts(ctx context.Context, pool *pgxpool.Pool, query, status string, scopeID uuid.UUID, limit, offset int) ([]*KnowledgeArtifact, error) {
 	q := New(pool)
-	return q.SearchArtifacts(ctx, SearchArtifactsParams{
+	rows, err := q.SearchArtifacts(ctx, SearchArtifactsParams{
 		Title:   "%" + query + "%",
 		Column2: status,
 		Column3: scopeID,
 		Limit:   int32(limit),
 		Offset:  int32(offset),
 	})
+	if err != nil {
+		return nil, fmt.Errorf("db: search artifacts: %w", err)
+	}
+	out := make([]*KnowledgeArtifact, len(rows))
+	for i, r := range rows {
+		out[i] = knowledgeArtifactFromSearchArtifactsRow(r)
+	}
+	return out, nil
 }
 
 // ListArtifactsByStatus returns artifacts filtered by status and optional scope.
 // A zero scopeID means no scope filter.
 func ListArtifactsByStatus(ctx context.Context, pool *pgxpool.Pool, status string, scopeID uuid.UUID, limit, offset int) ([]*KnowledgeArtifact, error) {
 	q := New(pool)
-	return q.ListArtifactsByStatus(ctx, ListArtifactsByStatusParams{
+	rows, err := q.ListArtifactsByStatus(ctx, ListArtifactsByStatusParams{
 		Status:  status,
 		Column2: scopeID,
 		Limit:   int32(limit),
 		Offset:  int32(offset),
 	})
+	if err != nil {
+		return nil, fmt.Errorf("db: list artifacts by status: %w", err)
+	}
+	out := make([]*KnowledgeArtifact, len(rows))
+	for i, r := range rows {
+		out[i] = knowledgeArtifactFromListArtifactsByStatusRow(r)
+	}
+	return out, nil
 }
 
 // ListAllArtifacts returns artifacts for the given scope (zero scopeID = all scopes, admin view).
 func ListAllArtifacts(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, limit, offset int) ([]*KnowledgeArtifact, error) {
 	q := New(pool)
-	return q.ListAllArtifacts(ctx, ListAllArtifactsParams{
+	rows, err := q.ListAllArtifacts(ctx, ListAllArtifactsParams{
 		Column1: scopeID,
 		Limit:   int32(limit),
 		Offset:  int32(offset),
 	})
+	if err != nil {
+		return nil, fmt.Errorf("db: list all artifacts: %w", err)
+	}
+	out := make([]*KnowledgeArtifact, len(rows))
+	for i, r := range rows {
+		out[i] = knowledgeArtifactFromListAllArtifactsRow(r)
+	}
+	return out, nil
 }
 
 // ListVisibleArtifacts returns published artifacts visible to the given scope IDs.
@@ -1416,7 +1450,11 @@ func ListVisibleArtifacts(ctx context.Context, pool *pgxpool.Pool, callerScopeID
 	if err != nil {
 		return nil, err
 	}
-	return as, nil
+	out := make([]*KnowledgeArtifact, len(as))
+	for i, r := range as {
+		out[i] = knowledgeArtifactFromListVisibleArtifactsRow(r)
+	}
+	return out, nil
 }
 
 // RecallArtifactsByVector retrieves published artifacts by vector similarity,
@@ -1598,7 +1636,11 @@ func ListCollectionItems(ctx context.Context, pool *pgxpool.Pool, collectionID u
 	if err != nil {
 		return nil, err
 	}
-	return as, nil
+	out := make([]*KnowledgeArtifact, len(as))
+	for i, r := range as {
+		out[i] = knowledgeArtifactFromListCollectionItemsRow(r)
+	}
+	return out, nil
 }
 
 // ── Staleness flags ───────────────────────────────────────────────────────────
@@ -2383,6 +2425,254 @@ func memoryFromRecallByFTSRow(r *RecallMemoriesByFTSRow) *Memory {
 		ParentMemoryID:       r.ParentMemoryID,
 		CreatedAt:            r.CreatedAt,
 		UpdatedAt:            r.UpdatedAt,
+	}
+}
+
+// knowledgeArtifactFromCreateArtifactRow converts a CreateArtifactRow to a *KnowledgeArtifact.
+func knowledgeArtifactFromCreateArtifactRow(r *CreateArtifactRow) *KnowledgeArtifact {
+	return &KnowledgeArtifact{
+		ID:               r.ID,
+		KnowledgeType:    r.KnowledgeType,
+		OwnerScopeID:     r.OwnerScopeID,
+		AuthorID:         r.AuthorID,
+		Visibility:       r.Visibility,
+		Status:           r.Status,
+		PublishedAt:      r.PublishedAt,
+		DeprecatedAt:     r.DeprecatedAt,
+		ReviewRequired:   r.ReviewRequired,
+		Title:            r.Title,
+		Content:          r.Content,
+		Summary:          r.Summary,
+		Embedding:        r.Embedding,
+		EmbeddingModelID: r.EmbeddingModelID,
+		Meta:             r.Meta,
+		EndorsementCount: r.EndorsementCount,
+		AccessCount:      r.AccessCount,
+		LastAccessed:     r.LastAccessed,
+		Version:          r.Version,
+		PreviousVersion:  r.PreviousVersion,
+		SourceMemoryID:   r.SourceMemoryID,
+		SourceRef:        r.SourceRef,
+		CreatedAt:        r.CreatedAt,
+		UpdatedAt:        r.UpdatedAt,
+		ArtifactKind:     r.ArtifactKind,
+	}
+}
+
+// knowledgeArtifactFromGetArtifactRow converts a GetArtifactRow to a *KnowledgeArtifact.
+func knowledgeArtifactFromGetArtifactRow(r *GetArtifactRow) *KnowledgeArtifact {
+	return &KnowledgeArtifact{
+		ID:               r.ID,
+		KnowledgeType:    r.KnowledgeType,
+		OwnerScopeID:     r.OwnerScopeID,
+		AuthorID:         r.AuthorID,
+		Visibility:       r.Visibility,
+		Status:           r.Status,
+		PublishedAt:      r.PublishedAt,
+		DeprecatedAt:     r.DeprecatedAt,
+		ReviewRequired:   r.ReviewRequired,
+		Title:            r.Title,
+		Content:          r.Content,
+		Summary:          r.Summary,
+		Embedding:        r.Embedding,
+		EmbeddingModelID: r.EmbeddingModelID,
+		Meta:             r.Meta,
+		EndorsementCount: r.EndorsementCount,
+		AccessCount:      r.AccessCount,
+		LastAccessed:     r.LastAccessed,
+		Version:          r.Version,
+		PreviousVersion:  r.PreviousVersion,
+		SourceMemoryID:   r.SourceMemoryID,
+		SourceRef:        r.SourceRef,
+		CreatedAt:        r.CreatedAt,
+		UpdatedAt:        r.UpdatedAt,
+		ArtifactKind:     r.ArtifactKind,
+	}
+}
+
+// knowledgeArtifactFromUpdateArtifactRow converts an UpdateArtifactRow to a *KnowledgeArtifact.
+func knowledgeArtifactFromUpdateArtifactRow(r *UpdateArtifactRow) *KnowledgeArtifact {
+	return &KnowledgeArtifact{
+		ID:               r.ID,
+		KnowledgeType:    r.KnowledgeType,
+		OwnerScopeID:     r.OwnerScopeID,
+		AuthorID:         r.AuthorID,
+		Visibility:       r.Visibility,
+		Status:           r.Status,
+		PublishedAt:      r.PublishedAt,
+		DeprecatedAt:     r.DeprecatedAt,
+		ReviewRequired:   r.ReviewRequired,
+		Title:            r.Title,
+		Content:          r.Content,
+		Summary:          r.Summary,
+		Embedding:        r.Embedding,
+		EmbeddingModelID: r.EmbeddingModelID,
+		Meta:             r.Meta,
+		EndorsementCount: r.EndorsementCount,
+		AccessCount:      r.AccessCount,
+		LastAccessed:     r.LastAccessed,
+		Version:          r.Version,
+		PreviousVersion:  r.PreviousVersion,
+		SourceMemoryID:   r.SourceMemoryID,
+		SourceRef:        r.SourceRef,
+		CreatedAt:        r.CreatedAt,
+		UpdatedAt:        r.UpdatedAt,
+		ArtifactKind:     r.ArtifactKind,
+	}
+}
+
+// knowledgeArtifactFromSearchArtifactsRow converts a SearchArtifactsRow to a *KnowledgeArtifact.
+func knowledgeArtifactFromSearchArtifactsRow(r *SearchArtifactsRow) *KnowledgeArtifact {
+	return &KnowledgeArtifact{
+		ID:               r.ID,
+		KnowledgeType:    r.KnowledgeType,
+		OwnerScopeID:     r.OwnerScopeID,
+		AuthorID:         r.AuthorID,
+		Visibility:       r.Visibility,
+		Status:           r.Status,
+		PublishedAt:      r.PublishedAt,
+		DeprecatedAt:     r.DeprecatedAt,
+		ReviewRequired:   r.ReviewRequired,
+		Title:            r.Title,
+		Content:          r.Content,
+		Summary:          r.Summary,
+		Embedding:        r.Embedding,
+		EmbeddingModelID: r.EmbeddingModelID,
+		Meta:             r.Meta,
+		EndorsementCount: r.EndorsementCount,
+		AccessCount:      r.AccessCount,
+		LastAccessed:     r.LastAccessed,
+		Version:          r.Version,
+		PreviousVersion:  r.PreviousVersion,
+		SourceMemoryID:   r.SourceMemoryID,
+		SourceRef:        r.SourceRef,
+		CreatedAt:        r.CreatedAt,
+		UpdatedAt:        r.UpdatedAt,
+		ArtifactKind:     r.ArtifactKind,
+	}
+}
+
+// knowledgeArtifactFromListArtifactsByStatusRow converts a ListArtifactsByStatusRow to a *KnowledgeArtifact.
+func knowledgeArtifactFromListArtifactsByStatusRow(r *ListArtifactsByStatusRow) *KnowledgeArtifact {
+	return &KnowledgeArtifact{
+		ID:               r.ID,
+		KnowledgeType:    r.KnowledgeType,
+		OwnerScopeID:     r.OwnerScopeID,
+		AuthorID:         r.AuthorID,
+		Visibility:       r.Visibility,
+		Status:           r.Status,
+		PublishedAt:      r.PublishedAt,
+		DeprecatedAt:     r.DeprecatedAt,
+		ReviewRequired:   r.ReviewRequired,
+		Title:            r.Title,
+		Content:          r.Content,
+		Summary:          r.Summary,
+		Embedding:        r.Embedding,
+		EmbeddingModelID: r.EmbeddingModelID,
+		Meta:             r.Meta,
+		EndorsementCount: r.EndorsementCount,
+		AccessCount:      r.AccessCount,
+		LastAccessed:     r.LastAccessed,
+		Version:          r.Version,
+		PreviousVersion:  r.PreviousVersion,
+		SourceMemoryID:   r.SourceMemoryID,
+		SourceRef:        r.SourceRef,
+		CreatedAt:        r.CreatedAt,
+		UpdatedAt:        r.UpdatedAt,
+		ArtifactKind:     r.ArtifactKind,
+	}
+}
+
+// knowledgeArtifactFromListAllArtifactsRow converts a ListAllArtifactsRow to a *KnowledgeArtifact.
+func knowledgeArtifactFromListAllArtifactsRow(r *ListAllArtifactsRow) *KnowledgeArtifact {
+	return &KnowledgeArtifact{
+		ID:               r.ID,
+		KnowledgeType:    r.KnowledgeType,
+		OwnerScopeID:     r.OwnerScopeID,
+		AuthorID:         r.AuthorID,
+		Visibility:       r.Visibility,
+		Status:           r.Status,
+		PublishedAt:      r.PublishedAt,
+		DeprecatedAt:     r.DeprecatedAt,
+		ReviewRequired:   r.ReviewRequired,
+		Title:            r.Title,
+		Content:          r.Content,
+		Summary:          r.Summary,
+		Embedding:        r.Embedding,
+		EmbeddingModelID: r.EmbeddingModelID,
+		Meta:             r.Meta,
+		EndorsementCount: r.EndorsementCount,
+		AccessCount:      r.AccessCount,
+		LastAccessed:     r.LastAccessed,
+		Version:          r.Version,
+		PreviousVersion:  r.PreviousVersion,
+		SourceMemoryID:   r.SourceMemoryID,
+		SourceRef:        r.SourceRef,
+		CreatedAt:        r.CreatedAt,
+		UpdatedAt:        r.UpdatedAt,
+		ArtifactKind:     r.ArtifactKind,
+	}
+}
+
+// knowledgeArtifactFromListVisibleArtifactsRow converts a ListVisibleArtifactsRow to a *KnowledgeArtifact.
+func knowledgeArtifactFromListVisibleArtifactsRow(r *ListVisibleArtifactsRow) *KnowledgeArtifact {
+	return &KnowledgeArtifact{
+		ID:               r.ID,
+		KnowledgeType:    r.KnowledgeType,
+		OwnerScopeID:     r.OwnerScopeID,
+		AuthorID:         r.AuthorID,
+		Visibility:       r.Visibility,
+		Status:           r.Status,
+		PublishedAt:      r.PublishedAt,
+		DeprecatedAt:     r.DeprecatedAt,
+		ReviewRequired:   r.ReviewRequired,
+		Title:            r.Title,
+		Content:          r.Content,
+		Summary:          r.Summary,
+		Embedding:        r.Embedding,
+		EmbeddingModelID: r.EmbeddingModelID,
+		Meta:             r.Meta,
+		EndorsementCount: r.EndorsementCount,
+		AccessCount:      r.AccessCount,
+		LastAccessed:     r.LastAccessed,
+		Version:          r.Version,
+		PreviousVersion:  r.PreviousVersion,
+		SourceMemoryID:   r.SourceMemoryID,
+		SourceRef:        r.SourceRef,
+		CreatedAt:        r.CreatedAt,
+		UpdatedAt:        r.UpdatedAt,
+		ArtifactKind:     r.ArtifactKind,
+	}
+}
+
+// knowledgeArtifactFromListCollectionItemsRow converts a ListCollectionItemsRow to a *KnowledgeArtifact.
+func knowledgeArtifactFromListCollectionItemsRow(r *ListCollectionItemsRow) *KnowledgeArtifact {
+	return &KnowledgeArtifact{
+		ID:               r.ID,
+		KnowledgeType:    r.KnowledgeType,
+		OwnerScopeID:     r.OwnerScopeID,
+		AuthorID:         r.AuthorID,
+		Visibility:       r.Visibility,
+		Status:           r.Status,
+		PublishedAt:      r.PublishedAt,
+		DeprecatedAt:     r.DeprecatedAt,
+		ReviewRequired:   r.ReviewRequired,
+		Title:            r.Title,
+		Content:          r.Content,
+		Summary:          r.Summary,
+		Embedding:        r.Embedding,
+		EmbeddingModelID: r.EmbeddingModelID,
+		Meta:             r.Meta,
+		EndorsementCount: r.EndorsementCount,
+		AccessCount:      r.AccessCount,
+		LastAccessed:     r.LastAccessed,
+		Version:          r.Version,
+		PreviousVersion:  r.PreviousVersion,
+		SourceMemoryID:   r.SourceMemoryID,
+		SourceRef:        r.SourceRef,
+		CreatedAt:        r.CreatedAt,
+		UpdatedAt:        r.UpdatedAt,
+		ArtifactKind:     r.ArtifactKind,
 	}
 }
 

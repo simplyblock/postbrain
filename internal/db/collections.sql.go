@@ -7,8 +7,10 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
+	pgvector_go "github.com/pgvector/pgvector-go"
 )
 
 const addCollectionItem = `-- name: AddCollectionItem :exec
@@ -133,15 +135,43 @@ WHERE kci.collection_id = $1
 ORDER BY kci.position, kci.added_at
 `
 
-func (q *Queries) ListCollectionItems(ctx context.Context, collectionID uuid.UUID) ([]*KnowledgeArtifact, error) {
+type ListCollectionItemsRow struct {
+	ID               uuid.UUID
+	KnowledgeType    string
+	OwnerScopeID     uuid.UUID
+	AuthorID         uuid.UUID
+	Visibility       string
+	Status           string
+	PublishedAt      *time.Time
+	DeprecatedAt     *time.Time
+	ReviewRequired   int32
+	Title            string
+	Content          string
+	Summary          *string
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
+	Meta             []byte
+	EndorsementCount int32
+	AccessCount      int32
+	LastAccessed     *time.Time
+	Version          int32
+	PreviousVersion  *uuid.UUID
+	SourceMemoryID   *uuid.UUID
+	SourceRef        *string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	ArtifactKind     string
+}
+
+func (q *Queries) ListCollectionItems(ctx context.Context, collectionID uuid.UUID) ([]*ListCollectionItemsRow, error) {
 	rows, err := q.db.Query(ctx, listCollectionItems, collectionID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []*KnowledgeArtifact{}
+	items := []*ListCollectionItemsRow{}
 	for rows.Next() {
-		var i KnowledgeArtifact
+		var i ListCollectionItemsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.KnowledgeType,

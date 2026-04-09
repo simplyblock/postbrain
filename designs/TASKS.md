@@ -25,6 +25,14 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-09: Fixed sqlc type inference for artifact create optional UUID params and restored typed compat mappings (TDD-first):
+  - Updated `internal/db/queries/knowledge.sql` `CreateArtifact` insert placeholders to pass `$17/$18` directly, avoiding `NULLIF`-driven anonymous sqlc param fields.
+  - Added regression test `internal/db/knowledge_sqlc_params_test.go::TestCreateArtifactParams_UsesTypedVersionAndSourceIDs` to enforce:
+    - `CreateArtifactParams.PreviousVersion` and `CreateArtifactParams.SourceMemoryID` are typed `*uuid.UUID`
+    - no anonymous `Column17`/`Column18` fields are generated
+  - Updated `internal/db/compat.go` artifact query wrappers to map generated row structs back to `*KnowledgeArtifact` for create/get/update/list/search/visibility/collection item paths.
+  - Normalized zero UUID pointers in `CreateArtifact` via `nilIfZeroUUID(...)` for `PreviousVersion`/`SourceMemoryID` so callers can keep zero-value UUID semantics while DB receives `NULL`.
+
 - [x] 2026-04-09: Added predefined knowledge artifact kinds with DB persistence and API/MCP support (TDD-first):
   - Added `artifact_kind` taxonomy in `internal/knowledge/artifact_kind.go`:
     - allowed values: `general`, `decision`, `meeting_note`, `retrospective`, `spec`, `design_doc`, `research`

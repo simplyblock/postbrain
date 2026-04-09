@@ -5,8 +5,8 @@ INSERT INTO knowledge_artifacts
  title, content, summary, embedding, embedding_model_id, meta,
  version, previous_version, source_memory_id, source_ref)
 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
-        NULLIF($17, '00000000-0000-0000-0000-000000000000'::uuid),
-        NULLIF($18, '00000000-0000-0000-0000-000000000000'::uuid),
+        $17,
+        $18,
         $19)
 RETURNING id, knowledge_type, owner_scope_id, author_id,
     visibility, status, published_at, deprecated_at, review_required,
