@@ -25,6 +25,14 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-09: Kept Codex hooks command strings readable and canonical in installer output (TDD-first):
+  - Added regression test `internal/postbraincli/codex_skill_installer_test.go::TestInstallCodexHooks_UsesCanonicalEnvScopeCommands` to enforce:
+    - literal `&&` in `.codex/hooks.json` command strings (no `\u0026\u0026` escaping)
+    - canonical `postbrain-cli` command path (no `./postbrain-cli`).
+  - Updated `internal/postbraincli/codex_skill_installer.go`:
+    - replaced `json.MarshalIndent` with `json.Encoder` (`SetIndent`, `SetEscapeHTML(false)`) when writing `.codex/hooks.json`.
+    - preserves pretty JSON formatting while preventing HTML-escape rewriting of shell operators.
+
 - [x] 2026-04-09: Fixed sqlc type inference for artifact create optional UUID params and restored typed compat mappings (TDD-first):
   - Updated `internal/db/queries/knowledge.sql` `CreateArtifact` insert placeholders to pass `$17/$18` directly, avoiding `NULLIF`-driven anonymous sqlc param fields.
   - Added regression test `internal/db/knowledge_sqlc_params_test.go::TestCreateArtifactParams_UsesTypedVersionAndSourceIDs` to enforce:

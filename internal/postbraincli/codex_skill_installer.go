@@ -1,6 +1,7 @@
 package postbraincli
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -170,11 +171,14 @@ func InstallCodexHooks(targetDir, scope string) (bool, error) {
 		return false, nil
 	}
 
-	out, err := json.MarshalIndent(root, "", "  ")
-	if err != nil {
+	var out bytes.Buffer
+	enc := json.NewEncoder(&out)
+	enc.SetIndent("", "  ")
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(root); err != nil {
 		return false, fmt.Errorf("marshal hooks.json: %w", err)
 	}
-	if err := os.WriteFile(hooksPath, append(out, '\n'), 0o644); err != nil {
+	if err := os.WriteFile(hooksPath, out.Bytes(), 0o644); err != nil {
 		return false, fmt.Errorf("write hooks.json: %w", err)
 	}
 	return true, nil
