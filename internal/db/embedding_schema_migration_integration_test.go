@@ -28,22 +28,6 @@ func assertColumnExists(t *testing.T, ctx context.Context, pool *pgxpool.Pool, t
 	}
 }
 
-func assertIndexExists(t *testing.T, ctx context.Context, pool *pgxpool.Pool, indexName string, want bool) {
-	t.Helper()
-	var exists bool
-	err := pool.QueryRow(ctx,
-		`SELECT EXISTS (
-			SELECT 1 FROM pg_indexes WHERE indexname = $1
-		)`, indexName,
-	).Scan(&exists)
-	if err != nil {
-		t.Fatalf("index %q: query error: %v", indexName, err)
-	}
-	if exists != want {
-		t.Fatalf("index %q existence: got=%v want=%v", indexName, exists, want)
-	}
-}
-
 // TestEmbeddingIndexTableExists verifies the embedding_index table is created
 // with the correct columns and primary key.
 func TestEmbeddingIndexTableExists(t *testing.T) {

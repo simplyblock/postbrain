@@ -28,25 +28,6 @@ func assertTableExists(t *testing.T, ctx context.Context, pool *pgxpool.Pool, ta
 	}
 }
 
-func assertIndexExistsInMigrateTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool, index string, want bool) {
-	t.Helper()
-
-	var exists bool
-	err := pool.QueryRow(ctx, `
-		SELECT EXISTS (
-			SELECT 1
-			FROM pg_indexes
-			WHERE schemaname = 'public' AND indexname = $1
-		)
-	`, index).Scan(&exists)
-	if err != nil {
-		t.Fatalf("index %q: query error: %v", index, err)
-	}
-	if exists != want {
-		t.Fatalf("index %q existence mismatch: got=%v want=%v", index, exists, want)
-	}
-}
-
 func TestMigrationsApplyCleanly(t *testing.T) {
 	pool := testhelper.NewTestPool(t)
 	ctx := context.Background()
@@ -352,7 +333,7 @@ func TestMigration000018_TimeWindowRecallIndexes(t *testing.T) {
 	}
 
 	for _, idx := range indexes {
-		assertIndexExistsInMigrateTest(t, ctx, pool, idx, true)
+		assertIndexExists(t, ctx, pool, idx, true)
 	}
 
 	downSQL, err := os.ReadFile("migrations/000018_cross_scope_time_window_indexes.down.sql")
@@ -363,7 +344,7 @@ func TestMigration000018_TimeWindowRecallIndexes(t *testing.T) {
 		t.Fatalf("apply 000018 down migration: %v", err)
 	}
 	for _, idx := range indexes {
-		assertIndexExistsInMigrateTest(t, ctx, pool, idx, false)
+		assertIndexExists(t, ctx, pool, idx, false)
 	}
 
 	upSQL, err := os.ReadFile("migrations/000018_cross_scope_time_window_indexes.up.sql")
@@ -374,6 +355,6 @@ func TestMigration000018_TimeWindowRecallIndexes(t *testing.T) {
 		t.Fatalf("apply 000018 up migration: %v", err)
 	}
 	for _, idx := range indexes {
-		assertIndexExistsInMigrateTest(t, ctx, pool, idx, true)
+		assertIndexExists(t, ctx, pool, idx, true)
 	}
 }
