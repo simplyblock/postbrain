@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -247,11 +248,11 @@ func isModelTableUnavailableErr(err error) bool {
 }
 
 func artifactKindQueryBoost(query, artifactKind string) float64 {
-	q := strings.ToLower(query)
-	decisionIntent := strings.Contains(q, "why") || strings.Contains(q, "decision") || strings.Contains(q, "rationale")
-	implementationIntent := strings.Contains(q, "how") || strings.Contains(q, "implement") || strings.Contains(q, "design") || strings.Contains(q, "spec")
-	meetingIntent := strings.Contains(q, "meeting") || strings.Contains(q, "notes") || strings.Contains(q, "yesterday") || strings.Contains(q, "last week")
-	researchIntent := strings.Contains(q, "research") || strings.Contains(q, "benchmark") || strings.Contains(q, "evaluate")
+	tokens := queryTokens(query)
+	decisionIntent := hasAnyToken(tokens, "why", "decision", "rationale")
+	implementationIntent := hasAnyToken(tokens, "how", "implement", "design", "spec")
+	meetingIntent := hasAnyToken(tokens, "meeting", "notes", "yesterday") || hasPhrase(tokens, "last", "week")
+	researchIntent := hasAnyToken(tokens, "research", "benchmark", "evaluate")
 
 	boost := 0.0
 	switch artifactKind {
@@ -273,6 +274,54 @@ func artifactKindQueryBoost(query, artifactKind string) float64 {
 		}
 	}
 	return boost
+}
+
+func queryTokens(query string) []string {
+	parts := strings.FieldsFunc(strings.ToLower(query), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func hasAnyToken(tokens []string, targets ...string) bool {
+	if len(tokens) == 0 || len(targets) == 0 {
+		return false
+	}
+	lookup := make(map[string]struct{}, len(tokens))
+	for _, t := range tokens {
+		lookup[t] = struct{}{}
+	}
+	for _, target := range targets {
+		if _, ok := lookup[target]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func hasPhrase(tokens []string, phrase ...string) bool {
+	if len(tokens) == 0 || len(phrase) == 0 || len(tokens) < len(phrase) {
+		return false
+	}
+	for i := 0; i <= len(tokens)-len(phrase); i++ {
+		match := true
+		for j := range phrase {
+			if tokens[i+j] != phrase[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return true
+		}
+	}
+	return false
 }
 
 func artifactRecencyScore(now time.Time, occurredAt *time.Time, createdAt time.Time, artifactKind string) float64 {

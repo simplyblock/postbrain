@@ -61,3 +61,11 @@ func TestArtifactRecencyScore_MeetingNotesDecayFasterThanDecisions(t *testing.T)
 		t.Fatalf("meeting recency (%v) must be lower than decision recency (%v) at equal age", meeting, decision)
 	}
 }
+
+func TestArtifactKindQueryBoost_DoesNotMatchHowInsideShow(t *testing.T) {
+	t.Parallel()
+	boost := artifactKindQueryBoost("show me status", ArtifactKindSpec)
+	if boost != 0 {
+		t.Fatalf("expected no implementation boost from 'show', got %v", boost)
+	}
+}
