@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -121,10 +122,14 @@ func activeRetrievalLayersForScope(allLayers map[string]bool, denied map[string]
 func asCrossScopeResultJSON(results []*retrieval.Result) []map[string]any {
 	out := make([]map[string]any, 0, len(results))
 	for _, r := range results {
+		score := r.Score
+		if math.IsNaN(score) || math.IsInf(score, 0) {
+			score = 0
+		}
 		item := map[string]any{
 			"layer":                  string(r.Layer),
 			"id":                     r.ID.String(),
-			"score":                  r.Score,
+			"score":                  score,
 			"content":                r.Content,
 			"title":                  r.Title,
 			"memory_type":            r.MemoryType,
@@ -247,6 +252,8 @@ func (s *Server) handleCrossScopeContext(ctx context.Context, req mcpgo.CallTool
 		MinScore:           minScore,
 		GraphDepth:         graphDepth,
 		ActiveLayers:       activeRetrievalLayersForScope(layers, map[string]bool{}),
+		Since:              since,
+		Until:              until,
 	})
 	if err != nil {
 		return mcpgo.NewToolResultError(fmt.Sprintf("cross_scope_context: baseline retrieval failed: %v", err)), nil
@@ -299,6 +306,8 @@ func (s *Server) handleCrossScopeContext(ctx context.Context, req mcpgo.CallTool
 			MinScore:           minScore,
 			GraphDepth:         graphDepth,
 			ActiveLayers:       activeLayers,
+			Since:              since,
+			Until:              until,
 		})
 		if err != nil {
 			return mcpgo.NewToolResultError(fmt.Sprintf("cross_scope_context: comparison retrieval failed: %v", err)), nil
@@ -309,12 +318,15 @@ func (s *Server) handleCrossScopeContext(ctx context.Context, req mcpgo.CallTool
 		})
 	}
 
-	payload, _ := json.Marshal(map[string]any{
+	payload, err := json.Marshal(map[string]any{
 		"query":            query,
 		"baseline_scope":   baselineScope,
 		"baseline_results": asCrossScopeResultJSON(baselineResults),
 		"scope_contexts":   scopeContexts,
 		"skipped_scopes":   skippedScopes,
 	})
+	if err != nil {
+		return mcpgo.NewToolResultError(fmt.Sprintf("cross_scope_context: marshal response: %v", err)), nil
+	}
 	return mcpgo.NewToolResultText(string(payload)), nil
 }

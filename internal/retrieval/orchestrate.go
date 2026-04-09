@@ -3,6 +3,7 @@ package retrieval
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -44,6 +45,8 @@ type OrchestrateInput struct {
 	ActiveLayers       map[Layer]bool
 	Workdir            string
 	StrictScope        bool
+	Since              *time.Time
+	Until              *time.Time
 }
 
 // OrchestrateRecall performs shared multi-layer recall and optional graph augmentation.
@@ -217,6 +220,8 @@ func orchestrateMemoryRecall(ctx context.Context, deps OrchestrateDeps, input Or
 		Limit:              input.Limit * 2,
 		MinScore:           input.MinScore,
 		StrictScope:        input.StrictScope,
+		Since:              input.Since,
+		Until:              input.Until,
 	})
 }
 
@@ -226,6 +231,8 @@ func orchestrateKnowledgeRecall(ctx context.Context, deps OrchestrateDeps, input
 		ScopeID:  input.ScopeID,
 		Limit:    input.Limit * 2,
 		MinScore: input.MinScore,
+		Since:    input.Since,
+		Until:    input.Until,
 	})
 }
 

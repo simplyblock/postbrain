@@ -372,3 +372,65 @@ func TestRecall_EmptyIntersectionSkipsDBQueries(t *testing.T) {
 		t.Fatalf("expected no DB recall calls, got vec=%d fts=%d trgm=%d code=%d", rdb.vecCalled, rdb.ftsCalled, rdb.trgmCalled, rdb.codeCalled)
 	}
 }
+
+func TestRecall_TimeWindowSinceFiltersOlderMemories(t *testing.T) {
+	now := time.Now().UTC()
+	oldID := uuid.New()
+	newID := uuid.New()
+	rdb := &mockRecallDB{
+		vecResults: []db.MemoryScore{
+			{Memory: &db.Memory{ID: oldID, MemoryType: "semantic", Importance: 0.8, CreatedAt: now.Add(-48 * time.Hour)}, VecScore: 0.9},
+			{Memory: &db.Memory{ID: newID, MemoryType: "semantic", Importance: 0.8, CreatedAt: now.Add(-2 * time.Hour)}, VecScore: 0.9},
+		},
+	}
+	s := newTestRecallStore(rdb)
+	since := now.Add(-24 * time.Hour)
+
+	results, err := s.Recall(context.Background(), RecallInput{
+		Query:      "time window",
+		ScopeID:    uuid.New(),
+		SearchMode: "text",
+		Limit:      10,
+		Since:      &since,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("len(results)=%d, want 1", len(results))
+	}
+	if results[0].Memory.ID != newID {
+		t.Fatalf("got memory %s, want %s", results[0].Memory.ID, newID)
+	}
+}
+
+func TestRecall_TimeWindowUntilFiltersNewerMemories(t *testing.T) {
+	now := time.Now().UTC()
+	earlyID := uuid.New()
+	lateID := uuid.New()
+	rdb := &mockRecallDB{
+		vecResults: []db.MemoryScore{
+			{Memory: &db.Memory{ID: earlyID, MemoryType: "semantic", Importance: 0.8, CreatedAt: now.Add(-48 * time.Hour)}, VecScore: 0.9},
+			{Memory: &db.Memory{ID: lateID, MemoryType: "semantic", Importance: 0.8, CreatedAt: now.Add(-2 * time.Hour)}, VecScore: 0.9},
+		},
+	}
+	s := newTestRecallStore(rdb)
+	until := now.Add(-24 * time.Hour)
+
+	results, err := s.Recall(context.Background(), RecallInput{
+		Query:      "time window",
+		ScopeID:    uuid.New(),
+		SearchMode: "text",
+		Limit:      10,
+		Until:      &until,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("len(results)=%d, want 1", len(results))
+	}
+	if results[0].Memory.ID != earlyID {
+		t.Fatalf("got memory %s, want %s", results[0].Memory.ID, earlyID)
+	}
+}

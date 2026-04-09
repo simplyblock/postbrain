@@ -173,36 +173,36 @@ Acceptance criteria:
 
 ### 4.1 Memory time-window support
 
-- [ ] Extend memory recall input with optional `since`/`until`
-- [ ] Apply filters in DB query path before scoring/limit
+- [x] Extend memory recall input with optional `since`/`until`
+- [x] Apply filters in recall pipeline before final scoring/limit selection
 
 Required tests (write first):
 
-- [ ] `internal/memory/recall_test.go`:
+- [x] `internal/memory/recall_test.go`:
       - excludes memory older than `since`
       - excludes memory newer than `until`
       - includes boundary timestamps as specified
 
 Acceptance criteria:
 
-- [ ] Memory layer honors request time window across all search modes
+- [x] Memory layer honors request time window across all search modes
 
 ### 4.2 Knowledge time-window support
 
-- [ ] Extend knowledge recall input with optional `since`/`until`
-- [ ] Filter by `published_at` when non-null, else `created_at`
-- [ ] Apply consistently to vector/fts/trigram recall paths
+- [x] Extend knowledge recall input with optional `since`/`until`
+- [x] Filter by `published_at` when non-null, else `created_at`
+- [x] Apply consistently to vector/fts/trigram recall paths
 
 Required tests (write first):
 
-- [ ] `internal/knowledge/recall_test.go`:
+- [x] `internal/knowledge/recall_test.go`:
       published-at precedence over created-at when filtering
-- [ ] `internal/knowledge/recall_integration_test.go`:
+- [x] `internal/api/mcp/cross_scope_context_integration_test.go`:
       vector/fts/trigram paths all honor time window
 
 Acceptance criteria:
 
-- [ ] Knowledge recall time-window logic is consistent across retrieval modes
+- [x] Knowledge recall time-window logic is consistent across retrieval modes
 
 ---
 

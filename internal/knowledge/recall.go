@@ -21,6 +21,8 @@ type RecallInput struct {
 	ScopeID  uuid.UUID // visibility fan-out is resolved in SQL via the scope's ltree path
 	Limit    int
 	MinScore float64
+	Since    *time.Time
+	Until    *time.Time
 }
 
 // ArtifactResult pairs a knowledge artifact with its retrieval scores.
@@ -122,6 +124,9 @@ func (s *Store) Recall(ctx context.Context, pool *pgxpool.Pool, input RecallInpu
 	var results []*ArtifactResult
 	now := time.Now().UTC()
 	for _, r := range merged {
+		if !artifactWithinWindow(r.Artifact, input.Since, input.Until) {
+			continue
+		}
 		imp := normalizeEndorsements(int(r.Artifact.EndorsementCount))
 		recency := artifactRecencyScore(now, nil, r.Artifact.CreatedAt, r.Artifact.ArtifactKind)
 		r.Score = knowledgeCombinedScore(r.VecScore, r.BM25Score, r.TrgmScore, imp, recency) +
@@ -149,6 +154,30 @@ func (s *Store) Recall(ctx context.Context, pool *pgxpool.Pool, input RecallInpu
 	}
 
 	return results, nil
+}
+
+func artifactWindowTimestamp(a *db.KnowledgeArtifact) time.Time {
+	if a == nil {
+		return time.Time{}
+	}
+	if a.PublishedAt != nil {
+		return a.PublishedAt.UTC()
+	}
+	return a.CreatedAt.UTC()
+}
+
+func artifactWithinWindow(a *db.KnowledgeArtifact, since, until *time.Time) bool {
+	if a == nil {
+		return false
+	}
+	ts := artifactWindowTimestamp(a)
+	if since != nil && ts.Before(since.UTC()) {
+		return false
+	}
+	if until != nil && ts.After(until.UTC()) {
+		return false
+	}
+	return true
 }
 
 // suppressDigestSources removes source artifacts from results when a published

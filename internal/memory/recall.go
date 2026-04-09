@@ -24,6 +24,8 @@ type RecallInput struct {
 	MinScore           float64     // default 0.0
 	MaxScopeDepth      int
 	StrictScope        bool
+	Since              *time.Time
+	Until              *time.Time
 }
 
 // MemoryResult is a single recall result with its combined score.
@@ -228,6 +230,9 @@ func (s *Store) Recall(ctx context.Context, input RecallInput) ([]*MemoryResult,
 	var results []*MemoryResult
 	for _, ms := range merged {
 		m := ms.Memory
+		if !memoryWithinWindow(m, input.Since, input.Until) {
+			continue
+		}
 
 		// 5. Apply MemoryTypes filter.
 		if len(input.MemoryTypes) > 0 && !containsString(input.MemoryTypes, m.MemoryType) {
@@ -277,6 +282,20 @@ func (s *Store) Recall(ctx context.Context, input RecallInput) ([]*MemoryResult,
 	}
 
 	return results, nil
+}
+
+func memoryWithinWindow(m *db.Memory, since, until *time.Time) bool {
+	if m == nil {
+		return false
+	}
+	ts := m.CreatedAt.UTC()
+	if since != nil && ts.Before(since.UTC()) {
+		return false
+	}
+	if until != nil && ts.After(until.UTC()) {
+		return false
+	}
+	return true
 }
 
 func (s *Store) getActiveEmbeddingModelID(ctx context.Context, contentType string) (uuid.UUID, bool) {

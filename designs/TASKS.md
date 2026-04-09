@@ -25,6 +25,24 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-09: Completed cross-scope verification Phase 4 time-window filtering (TDD-first):
+  - Extended retrieval plumbing to carry optional `since`/`until` through:
+    - `internal/retrieval/orchestrate.go` (`OrchestrateInput`)
+    - `internal/memory/recall.go` (`RecallInput`)
+    - `internal/knowledge/recall.go` (`RecallInput`)
+    - `internal/api/mcp/cross_scope_context.go` request handling and orchestration calls
+  - Implemented memory time-window filtering on `memories.created_at`.
+  - Implemented knowledge time-window filtering using `published_at` when
+    present, otherwise `created_at`.
+  - Added scoring/payload robustness in cross-scope response serialization:
+    - non-finite scores are normalized to `0` to avoid JSON marshal failures
+      when vector backends return NaN/Inf.
+  - Added/updated coverage:
+    - `internal/memory/recall_test.go` (since/until filters)
+    - `internal/knowledge/recall_test.go` (published-at precedence + fallback)
+    - `internal/api/mcp/cross_scope_context_integration_test.go` (memory and
+      knowledge since-window behavior).
+
 - [x] 2026-04-09: Completed cross-scope verification Phase 3 orchestration and strict-scope retrieval (TDD-first):
   - Added `internal/retrieval/orchestrate_cross_scope.go` with
     `OrchestrateCrossScopeContext(...)`:
