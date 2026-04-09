@@ -16,6 +16,9 @@ import (
 )
 
 var graphAugmentationScopeSetFn = graphAugmentationScopeSet
+var orchestrateMemoryRecallFn = orchestrateMemoryRecall
+var orchestrateKnowledgeRecallFn = orchestrateKnowledgeRecall
+var orchestrateSkillRecallFn = orchestrateSkillRecall
 
 // OrchestrateDeps wires concrete stores used by OrchestrateRecall.
 type OrchestrateDeps struct {
@@ -40,6 +43,7 @@ type OrchestrateInput struct {
 	GraphDepth         int
 	ActiveLayers       map[Layer]bool
 	Workdir            string
+	StrictScope        bool
 }
 
 // OrchestrateRecall performs shared multi-layer recall and optional graph augmentation.
@@ -61,16 +65,7 @@ func OrchestrateRecall(ctx context.Context, deps OrchestrateDeps, input Orchestr
 	var allResults []*Result
 
 	if input.ActiveLayers[LayerMemory] && deps.MemStore != nil {
-		mems, err := deps.MemStore.Recall(ctx, memory.RecallInput{
-			Query:              input.Query,
-			ScopeID:            input.ScopeID,
-			PrincipalID:        input.PrincipalID,
-			AuthorizedScopeIDs: input.AuthorizedScopeIDs,
-			MemoryTypes:        input.MemoryTypes,
-			SearchMode:         input.SearchMode,
-			Limit:              input.Limit * 2,
-			MinScore:           input.MinScore,
-		})
+		mems, err := orchestrateMemoryRecallFn(ctx, deps, input)
 		if err != nil {
 			return nil, fmt.Errorf("memory recall failed: %w", err)
 		}
@@ -95,12 +90,7 @@ func OrchestrateRecall(ctx context.Context, deps OrchestrateDeps, input Orchestr
 	}
 
 	if input.ActiveLayers[LayerKnowledge] && deps.KnwStore != nil && deps.Pool != nil {
-		arts, err := deps.KnwStore.Recall(ctx, deps.Pool, knowledge.RecallInput{
-			Query:    input.Query,
-			ScopeID:  input.ScopeID,
-			Limit:    input.Limit * 2,
-			MinScore: input.MinScore,
-		})
+		arts, err := orchestrateKnowledgeRecallFn(ctx, deps, input)
 		if err != nil {
 			return nil, fmt.Errorf("knowledge recall failed: %w", err)
 		}
@@ -130,18 +120,7 @@ func OrchestrateRecall(ctx context.Context, deps OrchestrateDeps, input Orchestr
 	}
 
 	if input.ActiveLayers[LayerSkill] && deps.Pool != nil && deps.Svc != nil {
-		sklStore := deps.SklStore
-		if sklStore == nil {
-			sklStore = skills.NewStore(deps.Pool, nil)
-		}
-		skls, err := sklStore.Recall(ctx, deps.Svc, skills.RecallInput{
-			Query:     input.Query,
-			ScopeIDs:  []uuid.UUID{input.ScopeID},
-			AgentType: input.AgentType,
-			Limit:     input.Limit * 2,
-			MinScore:  input.MinScore,
-			Workdir:   input.Workdir,
-		})
+		skls, err := orchestrateSkillRecallFn(ctx, deps, input)
 		if err != nil {
 			return nil, fmt.Errorf("skill recall failed: %w", err)
 		}
@@ -225,6 +204,44 @@ func OrchestrateRecall(ctx context.Context, deps OrchestrateDeps, input Orchestr
 		}
 	}
 	return append(merged, graphExtra...), nil
+}
+
+func orchestrateMemoryRecall(ctx context.Context, deps OrchestrateDeps, input OrchestrateInput) ([]*memory.MemoryResult, error) {
+	return deps.MemStore.Recall(ctx, memory.RecallInput{
+		Query:              input.Query,
+		ScopeID:            input.ScopeID,
+		PrincipalID:        input.PrincipalID,
+		AuthorizedScopeIDs: input.AuthorizedScopeIDs,
+		MemoryTypes:        input.MemoryTypes,
+		SearchMode:         input.SearchMode,
+		Limit:              input.Limit * 2,
+		MinScore:           input.MinScore,
+		StrictScope:        input.StrictScope,
+	})
+}
+
+func orchestrateKnowledgeRecall(ctx context.Context, deps OrchestrateDeps, input OrchestrateInput) ([]*knowledge.ArtifactResult, error) {
+	return deps.KnwStore.Recall(ctx, deps.Pool, knowledge.RecallInput{
+		Query:    input.Query,
+		ScopeID:  input.ScopeID,
+		Limit:    input.Limit * 2,
+		MinScore: input.MinScore,
+	})
+}
+
+func orchestrateSkillRecall(ctx context.Context, deps OrchestrateDeps, input OrchestrateInput) ([]*skills.SkillResult, error) {
+	sklStore := deps.SklStore
+	if sklStore == nil {
+		sklStore = skills.NewStore(deps.Pool, nil)
+	}
+	return sklStore.Recall(ctx, deps.Svc, skills.RecallInput{
+		Query:     input.Query,
+		ScopeIDs:  []uuid.UUID{input.ScopeID},
+		AgentType: input.AgentType,
+		Limit:     input.Limit * 2,
+		MinScore:  input.MinScore,
+		Workdir:   input.Workdir,
+	})
 }
 
 func graphAugmentationScopeSet(

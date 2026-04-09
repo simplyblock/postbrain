@@ -135,37 +135,37 @@ Acceptance criteria:
 
 ### 3.1 Add verification orchestration entrypoint
 
-- [ ] Add cross-scope orchestration function in `internal/retrieval`
-- [ ] Execute retrieval per authorized scope and requested layers
-- [ ] Keep `OrchestrateRecall` unchanged
+- [x] Add cross-scope orchestration function in `internal/retrieval`
+- [x] Execute retrieval per authorized scope and requested layers
+- [x] Keep `OrchestrateRecall` unchanged
 
 Required tests (write first):
 
-- [ ] `internal/retrieval/orchestrate_cross_scope_test.go`:
+- [x] `internal/retrieval/orchestrate_cross_scope_test.go`:
       - per-scope grouping is stable and deterministic
       - layer filtering works (`memory` only, `knowledge` only, both)
       - no regressions in existing `OrchestrateRecall` tests
 
 Acceptance criteria:
 
-- [ ] New path is additive
-- [ ] Existing recall orchestration behavior remains intact
+- [x] New path is additive
+- [x] Existing recall orchestration behavior remains intact
 
 ### 3.2 Strict-scope memory behavior
 
-- [ ] Enforce strict memory retrieval (no ancestor/personal fan-out) for
+- [x] Enforce strict memory retrieval (no ancestor/personal fan-out) for
       `cross_scope_context`
 
 Required tests (write first):
 
-- [ ] `internal/memory/recall_test.go`:
+- [x] `internal/memory/recall_test.go`:
       strict mode uses only anchor scope
-- [ ] `internal/api/mcp/cross_scope_context_integration_test.go`:
+- [x] `internal/api/mcp/cross_scope_context_integration_test.go`:
       ancestor-only memories are excluded in cross-scope mode
 
 Acceptance criteria:
 
-- [ ] Cross-scope memory results come only from explicitly requested scopes
+- [x] Cross-scope memory results come only from explicitly requested scopes
 
 ---
 

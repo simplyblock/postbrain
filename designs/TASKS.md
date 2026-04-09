@@ -25,6 +25,25 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-09: Completed cross-scope verification Phase 3 orchestration and strict-scope retrieval (TDD-first):
+  - Added `internal/retrieval/orchestrate_cross_scope.go` with
+    `OrchestrateCrossScopeContext(...)`:
+    - additive retrieval entrypoint for explicit scope anchors
+    - defaults to memory+knowledge layers
+    - enforces strict-scope memory behavior via orchestration input.
+  - Updated `internal/retrieval/orchestrate.go`:
+    - added `StrictScope` plumbing on `OrchestrateInput` into memory recall.
+    - refactored layer recall paths behind function vars for targeted unit
+      verification without changing default behavior.
+  - Wired `internal/api/mcp/cross_scope_context.go` to execute retrieval:
+    - baseline scope retrieval plus per-comparison-scope retrieval groups
+    - requested-layer filtering per scope after authz outcomes
+    - comparison skips retained in `skipped_scopes`.
+  - Added/updated coverage:
+    - `internal/retrieval/orchestrate_cross_scope_test.go`
+    - `internal/api/mcp/cross_scope_context_integration_test.go`
+    - existing MCP/unit/integration cross-scope authz tests kept green.
+
 - [x] 2026-04-09: Completed cross-scope verification Phase 2 authz semantics (TDD-first):
   - Updated `internal/api/mcp/cross_scope_context.go` to enforce per-layer,
     per-scope read authorization:

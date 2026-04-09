@@ -11,8 +11,10 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
 	scopeauthapi "github.com/simplyblock/postbrain/internal/api/scopeauth"
+	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/retrieval"
 )
 
 func normalizeAndDeduplicateScopes(raw []any) ([]string, error) {
@@ -101,6 +103,56 @@ func requiredPermissionForLayer(layer string) authz.Permission {
 	}
 }
 
+func activeRetrievalLayersForScope(allLayers map[string]bool, denied map[string]bool) map[retrieval.Layer]bool {
+	active := map[retrieval.Layer]bool{
+		retrieval.LayerMemory:    false,
+		retrieval.LayerKnowledge: false,
+		retrieval.LayerSkill:     false,
+	}
+	if allLayers["memory"] && !denied["memory"] {
+		active[retrieval.LayerMemory] = true
+	}
+	if allLayers["knowledge"] && !denied["knowledge"] {
+		active[retrieval.LayerKnowledge] = true
+	}
+	return active
+}
+
+func asCrossScopeResultJSON(results []*retrieval.Result) []map[string]any {
+	out := make([]map[string]any, 0, len(results))
+	for _, r := range results {
+		item := map[string]any{
+			"layer":                  string(r.Layer),
+			"id":                     r.ID.String(),
+			"score":                  r.Score,
+			"content":                r.Content,
+			"title":                  r.Title,
+			"memory_type":            r.MemoryType,
+			"knowledge_type":         r.KnowledgeType,
+			"artifact_kind":          r.ArtifactKind,
+			"source_ref":             r.SourceRef,
+			"visibility":             r.Visibility,
+			"status":                 r.Status,
+			"endorsements":           r.Endorsements,
+			"full_content_available": r.FullContentAvailable,
+			"slug":                   r.Slug,
+			"name":                   r.Name,
+			"description":            r.Description,
+			"agent_types":            r.AgentTypes,
+			"invocation_count":       r.InvocationCount,
+			"installed":              r.Installed,
+			"graph_context":          r.GraphContext,
+		}
+		if !r.CreatedAt.IsZero() {
+			item["created_at"] = r.CreatedAt.UTC().Format(time.RFC3339)
+		} else {
+			item["created_at"] = nil
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
 // handleCrossScopeContext validates cross-scope context request arguments.
 // Retrieval orchestration is implemented in subsequent phases.
 func (s *Server) handleCrossScopeContext(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
@@ -146,9 +198,23 @@ func (s *Server) handleCrossScopeContext(ctx context.Context, req mcpgo.CallTool
 	if limit <= 0 {
 		return mcpgo.NewToolResultError("cross_scope_context: 'limit_per_scope' must be > 0"), nil
 	}
+	minScore := 0.0
+	if v, ok := args["min_score"].(float64); ok {
+		minScore = v
+	}
+	searchMode := "hybrid"
+	if v, ok := args["search_mode"].(string); ok && v != "" {
+		searchMode = v
+	}
+	graphDepth := parseGraphDepth(args)
 
 	if s.pool == nil {
 		return mcpgo.NewToolResultError("cross_scope_context: server not configured (no database connection)"), nil
+	}
+	principalID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
+	authorizedScopeIDs, err := s.effectiveScopeIDsForRequest(ctx)
+	if err != nil {
+		return mcpgo.NewToolResultError("cross_scope_context: scope authorization failed"), nil
 	}
 
 	baselineScopeID, err := resolveScopeID(ctx, s.pool, baselineScope)
@@ -165,22 +231,46 @@ func (s *Server) handleCrossScopeContext(ctx context.Context, req mcpgo.CallTool
 		}
 	}
 
+	baselineResults, err := retrieval.OrchestrateCrossScopeContext(ctx, retrieval.OrchestrateDeps{
+		Pool:     s.pool,
+		MemStore: s.memStore,
+		KnwStore: s.knwStore,
+		SklStore: s.sklStore,
+		Svc:      s.svc,
+	}, retrieval.OrchestrateInput{
+		Query:              query,
+		ScopeID:            baselineScopeID,
+		PrincipalID:        principalID,
+		AuthorizedScopeIDs: authorizedScopeIDs,
+		SearchMode:         searchMode,
+		Limit:              limit,
+		MinScore:           minScore,
+		GraphDepth:         graphDepth,
+		ActiveLayers:       activeRetrievalLayersForScope(layers, map[string]bool{}),
+	})
+	if err != nil {
+		return mcpgo.NewToolResultError(fmt.Sprintf("cross_scope_context: baseline retrieval failed: %v", err)), nil
+	}
+
 	comparisonScopes, err := normalizeAndDeduplicateScopes(comparisonRaw)
 	if err != nil {
 		return mcpgo.NewToolResultError(fmt.Sprintf("cross_scope_context: invalid comparison_scopes: %v", err)), nil
 	}
 	skippedScopes := make([]map[string]any, 0)
+	scopeContexts := make([]map[string]any, 0, len(comparisonScopes))
 	for _, scopeStr := range comparisonScopes {
 		scopeID, err := resolveScopeID(ctx, s.pool, scopeStr)
 		if err != nil {
 			return mcpgo.NewToolResultError(fmt.Sprintf("cross_scope_context: comparison scope lookup: %v", err)), nil
 		}
+		deniedLayers := map[string]bool{}
 		for layer := range layers {
 			perm := requiredPermissionForLayer(layer)
 			if perm == "" {
 				continue
 			}
 			if err := scopeauthapi.AuthorizeContextScope(ctx, scopeID, perm); err != nil {
+				deniedLayers[layer] = true
 				skippedScopes = append(skippedScopes, map[string]any{
 					"scope":  scopeStr,
 					"layer":  layer,
@@ -188,13 +278,42 @@ func (s *Server) handleCrossScopeContext(ctx context.Context, req mcpgo.CallTool
 				})
 			}
 		}
+
+		activeLayers := activeRetrievalLayersForScope(layers, deniedLayers)
+		if !activeLayers[retrieval.LayerMemory] && !activeLayers[retrieval.LayerKnowledge] {
+			continue
+		}
+		results, err := retrieval.OrchestrateCrossScopeContext(ctx, retrieval.OrchestrateDeps{
+			Pool:     s.pool,
+			MemStore: s.memStore,
+			KnwStore: s.knwStore,
+			SklStore: s.sklStore,
+			Svc:      s.svc,
+		}, retrieval.OrchestrateInput{
+			Query:              query,
+			ScopeID:            scopeID,
+			PrincipalID:        principalID,
+			AuthorizedScopeIDs: authorizedScopeIDs,
+			SearchMode:         searchMode,
+			Limit:              limit,
+			MinScore:           minScore,
+			GraphDepth:         graphDepth,
+			ActiveLayers:       activeLayers,
+		})
+		if err != nil {
+			return mcpgo.NewToolResultError(fmt.Sprintf("cross_scope_context: comparison retrieval failed: %v", err)), nil
+		}
+		scopeContexts = append(scopeContexts, map[string]any{
+			"scope":   scopeStr,
+			"results": asCrossScopeResultJSON(results),
+		})
 	}
 
 	payload, _ := json.Marshal(map[string]any{
 		"query":            query,
 		"baseline_scope":   baselineScope,
-		"baseline_results": []any{},
-		"scope_contexts":   []any{},
+		"baseline_results": asCrossScopeResultJSON(baselineResults),
+		"scope_contexts":   scopeContexts,
 		"skipped_scopes":   skippedScopes,
 	})
 	return mcpgo.NewToolResultText(string(payload)), nil
