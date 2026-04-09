@@ -233,20 +233,20 @@ Acceptance criteria:
 
 ### 6.1 Add additive indexes for time-bounded recall
 
-- [ ] Migration: `memories(scope_id, is_active, created_at DESC)`
-- [ ] Migration: `knowledge_artifacts(owner_scope_id, status, published_at DESC)`
-- [ ] Migration: `knowledge_artifacts(owner_scope_id, status, created_at DESC)`
+- [x] Migration: `memories(scope_id, is_active, created_at DESC)`
+- [x] Migration: `knowledge_artifacts(owner_scope_id, status, published_at DESC)`
+- [x] Migration: `knowledge_artifacts(owner_scope_id, status, created_at DESC)`
 
 Required tests (write first):
 
-- [ ] `internal/db/migrations/migration_test.go`:
+- [x] `internal/db/migrate_integration_test.go`:
       new indexes exist after migration
-- [ ] down migration removes new indexes cleanly
+- [x] down migration removes new indexes cleanly
 
 Acceptance criteria:
 
-- [ ] Migrations are idempotent and reversible
-- [ ] Existing migration chain remains valid
+- [x] Migrations are idempotent and reversible
+- [x] Existing migration chain remains valid
 
 ---
 

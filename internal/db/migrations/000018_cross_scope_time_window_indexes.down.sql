@@ -1,0 +1,3 @@
+DROP INDEX IF EXISTS knowledge_owner_status_created_at_idx;
+DROP INDEX IF EXISTS knowledge_owner_status_published_at_idx;
+DROP INDEX IF EXISTS memories_scope_active_created_at_idx;

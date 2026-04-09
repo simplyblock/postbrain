@@ -25,6 +25,18 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-09: Completed cross-scope verification Phase 6 DB index migration (TDD-first):
+  - Added migration `000018_cross_scope_time_window_indexes`:
+    - `memories(scope_id, is_active, created_at DESC)`
+    - `knowledge_artifacts(owner_scope_id, status, published_at DESC)`
+    - `knowledge_artifacts(owner_scope_id, status, created_at DESC)`
+  - Added reversible down migration dropping all three indexes.
+  - Added integration migration coverage in
+    `internal/db/migrate_integration_test.go::TestMigration000018_TimeWindowRecallIndexes`:
+    - verifies indexes exist after migration chain
+    - verifies down migration removes them
+    - verifies up migration recreates them.
+
 - [x] 2026-04-09: Completed cross-scope verification Phase 5 response contract + provenance normalization (TDD-first):
   - Normalized `cross_scope_context` top-level response contract in
     `internal/api/mcp/cross_scope_context.go`:

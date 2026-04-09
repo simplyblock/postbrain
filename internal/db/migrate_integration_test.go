@@ -28,6 +28,25 @@ func assertTableExists(t *testing.T, ctx context.Context, pool *pgxpool.Pool, ta
 	}
 }
 
+func assertIndexExistsInMigrateTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool, index string, want bool) {
+	t.Helper()
+
+	var exists bool
+	err := pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM pg_indexes
+			WHERE schemaname = 'public' AND indexname = $1
+		)
+	`, index).Scan(&exists)
+	if err != nil {
+		t.Fatalf("index %q: query error: %v", index, err)
+	}
+	if exists != want {
+		t.Fatalf("index %q existence mismatch: got=%v want=%v", index, exists, want)
+	}
+}
+
 func TestMigrationsApplyCleanly(t *testing.T) {
 	pool := testhelper.NewTestPool(t)
 	ctx := context.Background()
@@ -319,5 +338,42 @@ func TestMigration000017_KnowledgeArtifactColumnsAndConstraints(t *testing.T) {
 	`, scope.ID, author.ID)
 	if err == nil {
 		t.Fatal("expected supersedes_artifact_id FK violation, got nil")
+	}
+}
+
+func TestMigration000018_TimeWindowRecallIndexes(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+
+	indexes := []string{
+		"memories_scope_active_created_at_idx",
+		"knowledge_owner_status_published_at_idx",
+		"knowledge_owner_status_created_at_idx",
+	}
+
+	for _, idx := range indexes {
+		assertIndexExistsInMigrateTest(t, ctx, pool, idx, true)
+	}
+
+	downSQL, err := os.ReadFile("migrations/000018_cross_scope_time_window_indexes.down.sql")
+	if err != nil {
+		t.Fatalf("read 000018 down migration: %v", err)
+	}
+	if _, err := pool.Exec(ctx, string(downSQL)); err != nil {
+		t.Fatalf("apply 000018 down migration: %v", err)
+	}
+	for _, idx := range indexes {
+		assertIndexExistsInMigrateTest(t, ctx, pool, idx, false)
+	}
+
+	upSQL, err := os.ReadFile("migrations/000018_cross_scope_time_window_indexes.up.sql")
+	if err != nil {
+		t.Fatalf("read 000018 up migration: %v", err)
+	}
+	if _, err := pool.Exec(ctx, string(upSQL)); err != nil {
+		t.Fatalf("apply 000018 up migration: %v", err)
+	}
+	for _, idx := range indexes {
+		assertIndexExistsInMigrateTest(t, ctx, pool, idx, true)
 	}
 }
