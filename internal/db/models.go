@@ -83,30 +83,34 @@ type Event struct {
 }
 
 type KnowledgeArtifact struct {
-	ID               uuid.UUID
-	KnowledgeType    string
-	OwnerScopeID     uuid.UUID
-	AuthorID         uuid.UUID
-	Visibility       string
-	Status           string
-	PublishedAt      *time.Time
-	DeprecatedAt     *time.Time
-	ReviewRequired   int32
-	Title            string
-	Content          string
-	Summary          *string
-	Embedding        *pgvector_go.Vector
-	EmbeddingModelID *uuid.UUID
-	Meta             []byte
-	EndorsementCount int32
-	AccessCount      int32
-	LastAccessed     *time.Time
-	Version          int32
-	PreviousVersion  *uuid.UUID
-	SourceMemoryID   *uuid.UUID
-	SourceRef        *string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	ID                   uuid.UUID
+	KnowledgeType        string
+	OwnerScopeID         uuid.UUID
+	AuthorID             uuid.UUID
+	Visibility           string
+	Status               string
+	PublishedAt          *time.Time
+	DeprecatedAt         *time.Time
+	ReviewRequired       int32
+	Title                string
+	Content              string
+	Summary              *string
+	Embedding            *pgvector_go.Vector
+	EmbeddingModelID     *uuid.UUID
+	Meta                 []byte
+	EndorsementCount     int32
+	AccessCount          int32
+	LastAccessed         *time.Time
+	Version              int32
+	PreviousVersion      *uuid.UUID
+	SourceMemoryID       *uuid.UUID
+	SourceRef            *string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+	ArtifactKind         string
+	ArtifactMeta         []byte
+	OccurredAt           *time.Time
+	SupersedesArtifactID *uuid.UUID
 }
 
 type KnowledgeCollection struct {

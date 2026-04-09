@@ -3,8 +3,11 @@ package knowledge
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
+	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -117,9 +120,12 @@ func (s *Store) Recall(ctx context.Context, pool *pgxpool.Pool, input RecallInpu
 
 	// Score and filter.
 	var results []*ArtifactResult
+	now := time.Now().UTC()
 	for _, r := range merged {
 		imp := normalizeEndorsements(int(r.Artifact.EndorsementCount))
-		r.Score = knowledgeCombinedScore(r.VecScore, r.BM25Score, r.TrgmScore, imp, 1.0)
+		recency := artifactRecencyScore(now, nil, r.Artifact.CreatedAt, r.Artifact.ArtifactKind)
+		r.Score = knowledgeCombinedScore(r.VecScore, r.BM25Score, r.TrgmScore, imp, recency) +
+			artifactKindQueryBoost(input.Query, r.Artifact.ArtifactKind)
 		if r.Score < input.MinScore {
 			continue
 		}
@@ -240,4 +246,109 @@ func isModelTableUnavailableErr(err error) bool {
 	}
 	msg := err.Error()
 	return strings.Contains(msg, "model") && (strings.Contains(msg, "not ready") || strings.Contains(msg, "not found"))
+}
+
+func artifactKindQueryBoost(query, artifactKind string) float64 {
+	tokens := queryTokens(query)
+	decisionIntent := hasAnyToken(tokens, "why", "decision", "rationale")
+	implementationIntent := hasAnyToken(tokens, "how", "implement", "design", "spec")
+	meetingIntent := hasAnyToken(tokens, "meeting", "notes", "yesterday") || hasPhrase(tokens, "last", "week")
+	researchIntent := hasAnyToken(tokens, "research", "benchmark", "evaluate")
+
+	boost := 0.0
+	switch artifactKind {
+	case ArtifactKindDecision:
+		if decisionIntent {
+			boost += 0.08
+		}
+	case ArtifactKindSpec, ArtifactKindDesignDoc:
+		if implementationIntent {
+			boost += 0.08
+		}
+	case ArtifactKindMeetingNote:
+		if meetingIntent {
+			boost += 0.08
+		}
+	case ArtifactKindResearch:
+		if researchIntent {
+			boost += 0.06
+		}
+	}
+	return boost
+}
+
+func queryTokens(query string) []string {
+	parts := strings.FieldsFunc(strings.ToLower(query), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func hasAnyToken(tokens []string, targets ...string) bool {
+	if len(tokens) == 0 || len(targets) == 0 {
+		return false
+	}
+	lookup := make(map[string]struct{}, len(tokens))
+	for _, t := range tokens {
+		lookup[t] = struct{}{}
+	}
+	for _, target := range targets {
+		if _, ok := lookup[target]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func hasPhrase(tokens []string, phrase ...string) bool {
+	if len(tokens) == 0 || len(phrase) == 0 || len(tokens) < len(phrase) {
+		return false
+	}
+	for i := 0; i <= len(tokens)-len(phrase); i++ {
+		match := true
+		for j := range phrase {
+			if tokens[i+j] != phrase[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return true
+		}
+	}
+	return false
+}
+
+func artifactRecencyScore(now time.Time, occurredAt *time.Time, createdAt time.Time, artifactKind string) float64 {
+	ts := createdAt
+	if occurredAt != nil && !occurredAt.IsZero() {
+		ts = *occurredAt
+	}
+	if now.Before(ts) {
+		return 1.0
+	}
+	ageDays := now.Sub(ts).Hours() / 24.0
+	halfLifeDays := 30.0
+	switch artifactKind {
+	case ArtifactKindMeetingNote:
+		halfLifeDays = 7.0
+	case ArtifactKindRetro:
+		halfLifeDays = 14.0
+	case ArtifactKindDecision:
+		halfLifeDays = 90.0
+	case ArtifactKindSpec, ArtifactKindDesignDoc:
+		halfLifeDays = 60.0
+	case ArtifactKindResearch:
+		halfLifeDays = 45.0
+	}
+	if halfLifeDays <= 0 {
+		return 1.0
+	}
+	return math.Exp(-math.Ln2 * ageDays / halfLifeDays)
 }

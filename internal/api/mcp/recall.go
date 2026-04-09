@@ -146,6 +146,7 @@ func (s *Server) handleRecall(ctx context.Context, req mcpgo.CallToolRequest) (*
 		Title                string   `json:"title,omitempty"`
 		MemoryType           string   `json:"memory_type,omitempty"`
 		KnowledgeType        string   `json:"knowledge_type,omitempty"`
+		ArtifactKind         string   `json:"artifact_kind,omitempty"`
 		SourceRef            string   `json:"source_ref,omitempty"`
 		Visibility           string   `json:"visibility,omitempty"`
 		Status               string   `json:"status,omitempty"`
@@ -170,6 +171,7 @@ func (s *Server) handleRecall(ctx context.Context, req mcpgo.CallToolRequest) (*
 			Title:                r.Title,
 			MemoryType:           r.MemoryType,
 			KnowledgeType:        r.KnowledgeType,
+			ArtifactKind:         r.ArtifactKind,
 			SourceRef:            r.SourceRef,
 			Visibility:           r.Visibility,
 			Status:               r.Status,

@@ -7,8 +7,10 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
+	pgvector_go "github.com/pgvector/pgvector-go"
 )
 
 const addCollectionItem = `-- name: AddCollectionItem :exec
@@ -126,22 +128,50 @@ SELECT ka.id, ka.knowledge_type, ka.owner_scope_id, ka.author_id,
     ka.title, ka.content, ka.summary, ka.embedding, ka.embedding_model_id, ka.meta,
     ka.endorsement_count, ka.access_count, ka.last_accessed,
     ka.version, ka.previous_version, ka.source_memory_id, ka.source_ref,
-    ka.created_at, ka.updated_at
+    ka.created_at, ka.updated_at, ka.artifact_kind
 FROM knowledge_artifacts ka
 JOIN knowledge_collection_items kci ON kci.artifact_id = ka.id
 WHERE kci.collection_id = $1
 ORDER BY kci.position, kci.added_at
 `
 
-func (q *Queries) ListCollectionItems(ctx context.Context, collectionID uuid.UUID) ([]*KnowledgeArtifact, error) {
+type ListCollectionItemsRow struct {
+	ID               uuid.UUID
+	KnowledgeType    string
+	OwnerScopeID     uuid.UUID
+	AuthorID         uuid.UUID
+	Visibility       string
+	Status           string
+	PublishedAt      *time.Time
+	DeprecatedAt     *time.Time
+	ReviewRequired   int32
+	Title            string
+	Content          string
+	Summary          *string
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
+	Meta             []byte
+	EndorsementCount int32
+	AccessCount      int32
+	LastAccessed     *time.Time
+	Version          int32
+	PreviousVersion  *uuid.UUID
+	SourceMemoryID   *uuid.UUID
+	SourceRef        *string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	ArtifactKind     string
+}
+
+func (q *Queries) ListCollectionItems(ctx context.Context, collectionID uuid.UUID) ([]*ListCollectionItemsRow, error) {
 	rows, err := q.db.Query(ctx, listCollectionItems, collectionID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []*KnowledgeArtifact{}
+	items := []*ListCollectionItemsRow{}
 	for rows.Next() {
-		var i KnowledgeArtifact
+		var i ListCollectionItemsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.KnowledgeType,
@@ -167,6 +197,7 @@ func (q *Queries) ListCollectionItems(ctx context.Context, collectionID uuid.UUI
 			&i.SourceRef,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArtifactKind,
 		); err != nil {
 			return nil, err
 		}

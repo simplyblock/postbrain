@@ -15,24 +15,25 @@ import (
 
 const createArtifact = `-- name: CreateArtifact :one
 INSERT INTO knowledge_artifacts
-(knowledge_type, owner_scope_id, author_id, visibility, status,
+(knowledge_type, artifact_kind, owner_scope_id, author_id, visibility, status,
  published_at, deprecated_at, review_required,
  title, content, summary, embedding, embedding_model_id, meta,
  version, previous_version, source_memory_id, source_ref)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
-        NULLIF($16, '00000000-0000-0000-0000-000000000000'::uuid),
-        NULLIF($17, '00000000-0000-0000-0000-000000000000'::uuid),
-        $18)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
+        $17,
+        $18,
+        $19)
 RETURNING id, knowledge_type, owner_scope_id, author_id,
     visibility, status, published_at, deprecated_at, review_required,
     title, content, summary, embedding, embedding_model_id, meta,
     endorsement_count, access_count, last_accessed,
     version, previous_version, source_memory_id, source_ref,
-    created_at, updated_at
+    created_at, updated_at, artifact_kind
 `
 
 type CreateArtifactParams struct {
 	KnowledgeType    string
+	ArtifactKind     string
 	OwnerScopeID     uuid.UUID
 	AuthorID         uuid.UUID
 	Visibility       string
@@ -47,14 +48,43 @@ type CreateArtifactParams struct {
 	EmbeddingModelID *uuid.UUID
 	Meta             []byte
 	Version          int32
-	Column16         interface{}
-	Column17         interface{}
+	PreviousVersion  *uuid.UUID
+	SourceMemoryID   *uuid.UUID
 	SourceRef        *string
 }
 
-func (q *Queries) CreateArtifact(ctx context.Context, arg CreateArtifactParams) (*KnowledgeArtifact, error) {
+type CreateArtifactRow struct {
+	ID               uuid.UUID
+	KnowledgeType    string
+	OwnerScopeID     uuid.UUID
+	AuthorID         uuid.UUID
+	Visibility       string
+	Status           string
+	PublishedAt      *time.Time
+	DeprecatedAt     *time.Time
+	ReviewRequired   int32
+	Title            string
+	Content          string
+	Summary          *string
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
+	Meta             []byte
+	EndorsementCount int32
+	AccessCount      int32
+	LastAccessed     *time.Time
+	Version          int32
+	PreviousVersion  *uuid.UUID
+	SourceMemoryID   *uuid.UUID
+	SourceRef        *string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	ArtifactKind     string
+}
+
+func (q *Queries) CreateArtifact(ctx context.Context, arg CreateArtifactParams) (*CreateArtifactRow, error) {
 	row := q.db.QueryRow(ctx, createArtifact,
 		arg.KnowledgeType,
+		arg.ArtifactKind,
 		arg.OwnerScopeID,
 		arg.AuthorID,
 		arg.Visibility,
@@ -69,11 +99,11 @@ func (q *Queries) CreateArtifact(ctx context.Context, arg CreateArtifactParams) 
 		arg.EmbeddingModelID,
 		arg.Meta,
 		arg.Version,
-		arg.Column16,
-		arg.Column17,
+		arg.PreviousVersion,
+		arg.SourceMemoryID,
 		arg.SourceRef,
 	)
-	var i KnowledgeArtifact
+	var i CreateArtifactRow
 	err := row.Scan(
 		&i.ID,
 		&i.KnowledgeType,
@@ -99,6 +129,7 @@ func (q *Queries) CreateArtifact(ctx context.Context, arg CreateArtifactParams) 
 		&i.SourceRef,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArtifactKind,
 	)
 	return &i, err
 }
@@ -143,13 +174,41 @@ SELECT id, knowledge_type, owner_scope_id, author_id,
     title, content, summary, embedding, embedding_model_id, meta,
     endorsement_count, access_count, last_accessed,
     version, previous_version, source_memory_id, source_ref,
-    created_at, updated_at
+    created_at, updated_at, artifact_kind
 FROM knowledge_artifacts WHERE id = $1
 `
 
-func (q *Queries) GetArtifact(ctx context.Context, id uuid.UUID) (*KnowledgeArtifact, error) {
+type GetArtifactRow struct {
+	ID               uuid.UUID
+	KnowledgeType    string
+	OwnerScopeID     uuid.UUID
+	AuthorID         uuid.UUID
+	Visibility       string
+	Status           string
+	PublishedAt      *time.Time
+	DeprecatedAt     *time.Time
+	ReviewRequired   int32
+	Title            string
+	Content          string
+	Summary          *string
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
+	Meta             []byte
+	EndorsementCount int32
+	AccessCount      int32
+	LastAccessed     *time.Time
+	Version          int32
+	PreviousVersion  *uuid.UUID
+	SourceMemoryID   *uuid.UUID
+	SourceRef        *string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	ArtifactKind     string
+}
+
+func (q *Queries) GetArtifact(ctx context.Context, id uuid.UUID) (*GetArtifactRow, error) {
 	row := q.db.QueryRow(ctx, getArtifact, id)
-	var i KnowledgeArtifact
+	var i GetArtifactRow
 	err := row.Scan(
 		&i.ID,
 		&i.KnowledgeType,
@@ -175,6 +234,7 @@ func (q *Queries) GetArtifact(ctx context.Context, id uuid.UUID) (*KnowledgeArti
 		&i.SourceRef,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArtifactKind,
 	)
 	return &i, err
 }
@@ -262,7 +322,7 @@ SELECT id, knowledge_type, owner_scope_id, author_id,
     title, content, summary, embedding, embedding_model_id, meta,
     endorsement_count, access_count, last_accessed,
     version, previous_version, source_memory_id, source_ref,
-    created_at, updated_at
+    created_at, updated_at, artifact_kind
 FROM knowledge_artifacts
 WHERE ($1::uuid = '00000000-0000-0000-0000-000000000000' OR owner_scope_id = $1)
 ORDER BY created_at DESC
@@ -275,16 +335,44 @@ type ListAllArtifactsParams struct {
 	Offset  int32
 }
 
+type ListAllArtifactsRow struct {
+	ID               uuid.UUID
+	KnowledgeType    string
+	OwnerScopeID     uuid.UUID
+	AuthorID         uuid.UUID
+	Visibility       string
+	Status           string
+	PublishedAt      *time.Time
+	DeprecatedAt     *time.Time
+	ReviewRequired   int32
+	Title            string
+	Content          string
+	Summary          *string
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
+	Meta             []byte
+	EndorsementCount int32
+	AccessCount      int32
+	LastAccessed     *time.Time
+	Version          int32
+	PreviousVersion  *uuid.UUID
+	SourceMemoryID   *uuid.UUID
+	SourceRef        *string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	ArtifactKind     string
+}
+
 // $1 = scope_id (zero UUID = all scopes), $2 = limit, $3 = offset
-func (q *Queries) ListAllArtifacts(ctx context.Context, arg ListAllArtifactsParams) ([]*KnowledgeArtifact, error) {
+func (q *Queries) ListAllArtifacts(ctx context.Context, arg ListAllArtifactsParams) ([]*ListAllArtifactsRow, error) {
 	rows, err := q.db.Query(ctx, listAllArtifacts, arg.Column1, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []*KnowledgeArtifact{}
+	items := []*ListAllArtifactsRow{}
 	for rows.Next() {
-		var i KnowledgeArtifact
+		var i ListAllArtifactsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.KnowledgeType,
@@ -310,6 +398,7 @@ func (q *Queries) ListAllArtifacts(ctx context.Context, arg ListAllArtifactsPara
 			&i.SourceRef,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArtifactKind,
 		); err != nil {
 			return nil, err
 		}
@@ -327,7 +416,7 @@ SELECT id, knowledge_type, owner_scope_id, author_id,
     title, content, summary, embedding, embedding_model_id, meta,
     endorsement_count, access_count, last_accessed,
     version, previous_version, source_memory_id, source_ref,
-    created_at, updated_at
+    created_at, updated_at, artifact_kind
 FROM knowledge_artifacts
 WHERE status = $1
   AND ($2::uuid = '00000000-0000-0000-0000-000000000000' OR owner_scope_id = $2)
@@ -342,8 +431,36 @@ type ListArtifactsByStatusParams struct {
 	Offset  int32
 }
 
+type ListArtifactsByStatusRow struct {
+	ID               uuid.UUID
+	KnowledgeType    string
+	OwnerScopeID     uuid.UUID
+	AuthorID         uuid.UUID
+	Visibility       string
+	Status           string
+	PublishedAt      *time.Time
+	DeprecatedAt     *time.Time
+	ReviewRequired   int32
+	Title            string
+	Content          string
+	Summary          *string
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
+	Meta             []byte
+	EndorsementCount int32
+	AccessCount      int32
+	LastAccessed     *time.Time
+	Version          int32
+	PreviousVersion  *uuid.UUID
+	SourceMemoryID   *uuid.UUID
+	SourceRef        *string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	ArtifactKind     string
+}
+
 // $1 = status, $2 = scope_id (zero = all), $3 = limit, $4 = offset
-func (q *Queries) ListArtifactsByStatus(ctx context.Context, arg ListArtifactsByStatusParams) ([]*KnowledgeArtifact, error) {
+func (q *Queries) ListArtifactsByStatus(ctx context.Context, arg ListArtifactsByStatusParams) ([]*ListArtifactsByStatusRow, error) {
 	rows, err := q.db.Query(ctx, listArtifactsByStatus,
 		arg.Status,
 		arg.Column2,
@@ -354,9 +471,9 @@ func (q *Queries) ListArtifactsByStatus(ctx context.Context, arg ListArtifactsBy
 		return nil, err
 	}
 	defer rows.Close()
-	items := []*KnowledgeArtifact{}
+	items := []*ListArtifactsByStatusRow{}
 	for rows.Next() {
-		var i KnowledgeArtifact
+		var i ListArtifactsByStatusRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.KnowledgeType,
@@ -382,6 +499,7 @@ func (q *Queries) ListArtifactsByStatus(ctx context.Context, arg ListArtifactsBy
 			&i.SourceRef,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArtifactKind,
 		); err != nil {
 			return nil, err
 		}
@@ -399,7 +517,7 @@ SELECT id, knowledge_type, owner_scope_id, author_id,
     title, content, summary, embedding, embedding_model_id, meta,
     endorsement_count, access_count, last_accessed,
     version, previous_version, source_memory_id, source_ref,
-    created_at, updated_at
+    created_at, updated_at, artifact_kind
 FROM knowledge_artifacts
 WHERE status = 'published'
   AND (owner_scope_id = ANY($1::uuid[]) OR visibility = 'company')
@@ -413,15 +531,43 @@ type ListVisibleArtifactsParams struct {
 	Offset  int32
 }
 
-func (q *Queries) ListVisibleArtifacts(ctx context.Context, arg ListVisibleArtifactsParams) ([]*KnowledgeArtifact, error) {
+type ListVisibleArtifactsRow struct {
+	ID               uuid.UUID
+	KnowledgeType    string
+	OwnerScopeID     uuid.UUID
+	AuthorID         uuid.UUID
+	Visibility       string
+	Status           string
+	PublishedAt      *time.Time
+	DeprecatedAt     *time.Time
+	ReviewRequired   int32
+	Title            string
+	Content          string
+	Summary          *string
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
+	Meta             []byte
+	EndorsementCount int32
+	AccessCount      int32
+	LastAccessed     *time.Time
+	Version          int32
+	PreviousVersion  *uuid.UUID
+	SourceMemoryID   *uuid.UUID
+	SourceRef        *string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	ArtifactKind     string
+}
+
+func (q *Queries) ListVisibleArtifacts(ctx context.Context, arg ListVisibleArtifactsParams) ([]*ListVisibleArtifactsRow, error) {
 	rows, err := q.db.Query(ctx, listVisibleArtifacts, arg.Column1, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []*KnowledgeArtifact{}
+	items := []*ListVisibleArtifactsRow{}
 	for rows.Next() {
-		var i KnowledgeArtifact
+		var i ListVisibleArtifactsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.KnowledgeType,
@@ -447,6 +593,7 @@ func (q *Queries) ListVisibleArtifacts(ctx context.Context, arg ListVisibleArtif
 			&i.SourceRef,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArtifactKind,
 		); err != nil {
 			return nil, err
 		}
@@ -483,7 +630,7 @@ SELECT ka.id, ka.knowledge_type, ka.owner_scope_id, ka.author_id,
     ka.title, ka.content, ka.summary, ka.embedding, ka.embedding_model_id, ka.meta,
     ka.endorsement_count, ka.access_count, ka.last_accessed,
     ka.version, ka.previous_version, ka.source_memory_id, ka.source_ref,
-    ka.created_at, ka.updated_at,
+    ka.created_at, ka.updated_at, ka.artifact_kind,
     ts_rank_cd(to_tsvector('postbrain_fts', ka.content),
                plainto_tsquery('postbrain_fts', $3)) AS bm25_score
 FROM knowledge_artifacts ka
@@ -537,6 +684,7 @@ type RecallArtifactsByFTSRow struct {
 	SourceRef        *string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+	ArtifactKind     string
 	Bm25Score        float32
 }
 
@@ -575,6 +723,7 @@ func (q *Queries) RecallArtifactsByFTS(ctx context.Context, arg RecallArtifactsB
 			&i.SourceRef,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArtifactKind,
 			&i.Bm25Score,
 		); err != nil {
 			return nil, err
@@ -594,7 +743,7 @@ SELECT ka.id, ka.knowledge_type, ka.owner_scope_id, ka.author_id,
     ka.title, ka.content, ka.summary, ka.embedding, ka.embedding_model_id, ka.meta,
     ka.endorsement_count, ka.access_count, ka.last_accessed,
     ka.version, ka.previous_version, ka.source_memory_id, ka.source_ref,
-    ka.created_at, ka.updated_at,
+    ka.created_at, ka.updated_at, ka.artifact_kind,
     similarity(ka.content, $3) AS trgm_score
 FROM knowledge_artifacts ka
 JOIN scopes s ON ka.owner_scope_id = s.id, qs
@@ -647,6 +796,7 @@ type RecallArtifactsByTrigramRow struct {
 	SourceRef        *string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+	ArtifactKind     string
 	TrgmScore        float32
 }
 
@@ -685,6 +835,7 @@ func (q *Queries) RecallArtifactsByTrigram(ctx context.Context, arg RecallArtifa
 			&i.SourceRef,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArtifactKind,
 			&i.TrgmScore,
 		); err != nil {
 			return nil, err
@@ -704,7 +855,7 @@ SELECT ka.id, ka.knowledge_type, ka.owner_scope_id, ka.author_id,
     ka.title, ka.content, ka.summary, ka.embedding, ka.embedding_model_id, ka.meta,
     ka.endorsement_count, ka.access_count, ka.last_accessed,
     ka.version, ka.previous_version, ka.source_memory_id, ka.source_ref,
-    ka.created_at, ka.updated_at,
+    ka.created_at, ka.updated_at, ka.artifact_kind,
     (1 - (ka.embedding <=> $3))::float4 AS vec_score
 FROM knowledge_artifacts ka
 JOIN scopes s ON ka.owner_scope_id = s.id, qs
@@ -756,6 +907,7 @@ type RecallArtifactsByVectorRow struct {
 	SourceRef        *string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+	ArtifactKind     string
 	VecScore         float32
 }
 
@@ -794,6 +946,7 @@ func (q *Queries) RecallArtifactsByVector(ctx context.Context, arg RecallArtifac
 			&i.SourceRef,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArtifactKind,
 			&i.VecScore,
 		); err != nil {
 			return nil, err
@@ -821,7 +974,7 @@ SELECT id, knowledge_type, owner_scope_id, author_id,
     title, content, summary, embedding, embedding_model_id, meta,
     endorsement_count, access_count, last_accessed,
     version, previous_version, source_memory_id, source_ref,
-    created_at, updated_at
+    created_at, updated_at, artifact_kind
 FROM knowledge_artifacts
 WHERE (title ILIKE $1 OR content ILIKE $1)
   AND ($2 = '' OR status = $2)
@@ -838,8 +991,36 @@ type SearchArtifactsParams struct {
 	Offset  int32
 }
 
+type SearchArtifactsRow struct {
+	ID               uuid.UUID
+	KnowledgeType    string
+	OwnerScopeID     uuid.UUID
+	AuthorID         uuid.UUID
+	Visibility       string
+	Status           string
+	PublishedAt      *time.Time
+	DeprecatedAt     *time.Time
+	ReviewRequired   int32
+	Title            string
+	Content          string
+	Summary          *string
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
+	Meta             []byte
+	EndorsementCount int32
+	AccessCount      int32
+	LastAccessed     *time.Time
+	Version          int32
+	PreviousVersion  *uuid.UUID
+	SourceMemoryID   *uuid.UUID
+	SourceRef        *string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	ArtifactKind     string
+}
+
 // $1 = query (wrapped in %...% by caller), $2 = status filter (” = all), $3 = scope_id (zero = all), $4 = limit, $5 = offset
-func (q *Queries) SearchArtifacts(ctx context.Context, arg SearchArtifactsParams) ([]*KnowledgeArtifact, error) {
+func (q *Queries) SearchArtifacts(ctx context.Context, arg SearchArtifactsParams) ([]*SearchArtifactsRow, error) {
 	rows, err := q.db.Query(ctx, searchArtifacts,
 		arg.Title,
 		arg.Column2,
@@ -851,9 +1032,9 @@ func (q *Queries) SearchArtifacts(ctx context.Context, arg SearchArtifactsParams
 		return nil, err
 	}
 	defer rows.Close()
-	items := []*KnowledgeArtifact{}
+	items := []*SearchArtifactsRow{}
 	for rows.Next() {
-		var i KnowledgeArtifact
+		var i SearchArtifactsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.KnowledgeType,
@@ -879,6 +1060,7 @@ func (q *Queries) SearchArtifacts(ctx context.Context, arg SearchArtifactsParams
 			&i.SourceRef,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArtifactKind,
 		); err != nil {
 			return nil, err
 		}
@@ -927,7 +1109,7 @@ RETURNING id, knowledge_type, owner_scope_id, author_id,
     title, content, summary, embedding, embedding_model_id, meta,
     endorsement_count, access_count, last_accessed,
     version, previous_version, source_memory_id, source_ref,
-    created_at, updated_at
+    created_at, updated_at, artifact_kind
 `
 
 type UpdateArtifactParams struct {
@@ -939,7 +1121,35 @@ type UpdateArtifactParams struct {
 	EmbeddingModelID *uuid.UUID
 }
 
-func (q *Queries) UpdateArtifact(ctx context.Context, arg UpdateArtifactParams) (*KnowledgeArtifact, error) {
+type UpdateArtifactRow struct {
+	ID               uuid.UUID
+	KnowledgeType    string
+	OwnerScopeID     uuid.UUID
+	AuthorID         uuid.UUID
+	Visibility       string
+	Status           string
+	PublishedAt      *time.Time
+	DeprecatedAt     *time.Time
+	ReviewRequired   int32
+	Title            string
+	Content          string
+	Summary          *string
+	Embedding        *pgvector_go.Vector
+	EmbeddingModelID *uuid.UUID
+	Meta             []byte
+	EndorsementCount int32
+	AccessCount      int32
+	LastAccessed     *time.Time
+	Version          int32
+	PreviousVersion  *uuid.UUID
+	SourceMemoryID   *uuid.UUID
+	SourceRef        *string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	ArtifactKind     string
+}
+
+func (q *Queries) UpdateArtifact(ctx context.Context, arg UpdateArtifactParams) (*UpdateArtifactRow, error) {
 	row := q.db.QueryRow(ctx, updateArtifact,
 		arg.ID,
 		arg.Title,
@@ -948,7 +1158,7 @@ func (q *Queries) UpdateArtifact(ctx context.Context, arg UpdateArtifactParams) 
 		arg.Embedding,
 		arg.EmbeddingModelID,
 	)
-	var i KnowledgeArtifact
+	var i UpdateArtifactRow
 	err := row.Scan(
 		&i.ID,
 		&i.KnowledgeType,
@@ -974,6 +1184,7 @@ func (q *Queries) UpdateArtifact(ctx context.Context, arg UpdateArtifactParams) 
 		&i.SourceRef,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArtifactKind,
 	)
 	return &i, err
 }

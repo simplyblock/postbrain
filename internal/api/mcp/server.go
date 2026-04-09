@@ -152,6 +152,7 @@ func (s *Server) registerTools() {
 		mcpgo.WithString("title", mcpgo.Required(), mcpgo.Description("Artifact title")),
 		mcpgo.WithString("content", mcpgo.Required(), mcpgo.Description("Artifact content")),
 		mcpgo.WithString("knowledge_type", mcpgo.Required(), mcpgo.Description("semantic|episodic|procedural|reference")),
+		mcpgo.WithString("artifact_kind", mcpgo.Description("general|decision|meeting_note|retrospective|spec|design_doc|research (default: general)")),
 		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Owner scope as kind:external_id")),
 		mcpgo.WithString("visibility", mcpgo.Description("private|project|team|department|company (default: team)")),
 		mcpgo.WithString("summary", mcpgo.Description("Short summary")),

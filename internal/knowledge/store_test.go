@@ -184,6 +184,44 @@ func TestCreate_AutoPublish_SetsPublishedStatusAndTimestamp(t *testing.T) {
 	}
 }
 
+func TestCreate_DefaultArtifactKind(t *testing.T) {
+	t.Parallel()
+	s, creator := newTestStore()
+
+	_, err := s.Create(context.Background(), CreateInput{
+		KnowledgeType: "semantic",
+		OwnerScopeID:  uuid.New(),
+		AuthorID:      uuid.New(),
+		Visibility:    "team",
+		Title:         "Default Kind",
+		Content:       "some content",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if creator.created.ArtifactKind != ArtifactKindGeneral {
+		t.Errorf("artifact kind = %q, want %q", creator.created.ArtifactKind, ArtifactKindGeneral)
+	}
+}
+
+func TestCreate_InvalidArtifactKindReturnsError(t *testing.T) {
+	t.Parallel()
+	s, _ := newTestStore()
+
+	_, err := s.Create(context.Background(), CreateInput{
+		KnowledgeType: "semantic",
+		ArtifactKind:  "banana",
+		OwnerScopeID:  uuid.New(),
+		AuthorID:      uuid.New(),
+		Visibility:    "team",
+		Title:         "Bad Kind",
+		Content:       "some content",
+	})
+	if !errors.Is(err, ErrInvalidArtifactKind) {
+		t.Fatalf("expected ErrInvalidArtifactKind, got %v", err)
+	}
+}
+
 func TestCreate_EmbedErrorPropagated(t *testing.T) {
 	t.Parallel()
 	creator := &fakeArtifactCreator{}

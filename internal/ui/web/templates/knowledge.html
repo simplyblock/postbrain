@@ -50,6 +50,13 @@
         <option value="procedural">procedural</option>
       </select>
     </label>
+    <label>Artifact kind
+      <select name="artifact_kind">
+        {{range .ArtifactKinds}}
+        <option value="{{.}}">{{.}}</option>
+        {{end}}
+      </select>
+    </label>
     <label>After upload
       <select name="workflow">
         <option value="draft">Save as draft</option>

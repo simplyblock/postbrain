@@ -25,7 +25,105 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-09: Fixed sqlc type inference for artifact create optional UUID params and restored typed compat mappings (TDD-first):
+  - Updated `internal/db/queries/knowledge.sql` `CreateArtifact` insert placeholders to pass `$17/$18` directly, avoiding `NULLIF`-driven anonymous sqlc param fields.
+  - Added regression test `internal/db/knowledge_sqlc_params_test.go::TestCreateArtifactParams_UsesTypedVersionAndSourceIDs` to enforce:
+    - `CreateArtifactParams.PreviousVersion` and `CreateArtifactParams.SourceMemoryID` are typed `*uuid.UUID`
+    - no anonymous `Column17`/`Column18` fields are generated
+  - Updated `internal/db/compat.go` artifact query wrappers to map generated row structs back to `*KnowledgeArtifact` for create/get/update/list/search/visibility/collection item paths.
+  - Normalized zero UUID pointers in `CreateArtifact` via `nilIfZeroUUID(...)` for `PreviousVersion`/`SourceMemoryID` so callers can keep zero-value UUID semantics while DB receives `NULL`.
+
+- [x] 2026-04-09: Added predefined knowledge artifact kinds with DB persistence and API/MCP support (TDD-first):
+  - Added `artifact_kind` taxonomy in `internal/knowledge/artifact_kind.go`:
+    - allowed values: `general`, `decision`, `meeting_note`, `retrospective`, `spec`, `design_doc`, `research`
+    - empty input defaults to `general`; invalid values are rejected
+  - Updated knowledge create path:
+    - `internal/knowledge/store.go` now normalizes/validates `CreateInput.ArtifactKind`
+    - `internal/knowledge/store_test.go` added red/green tests for defaulting and invalid-kind rejection
+  - Extended API surfaces:
+    - REST `POST /v1/knowledge` accepts optional `artifact_kind` (`internal/api/rest/knowledge.go`)
+    - MCP `publish` accepts optional `artifact_kind` with validation (`internal/api/mcp/publish.go`, `internal/api/mcp/server.go`, `internal/api/mcp/handlers_unit_test.go`)
+  - Added DB migration and query/model wiring:
+    - migration `internal/db/migrations/000017_artifact_kind.{up,down}.sql` adds `knowledge_artifacts.artifact_kind` with CHECK constraint and index
+    - updated sqlc queries and regenerated db types (`internal/db/queries/*.sql`, `internal/db/*sql.go`, `internal/db/models.go`)
+    - `internal/db/compat.go` now defaults empty artifact kind to `general` for direct DB callers.
+
+- [x] 2026-04-09: Wired artifact-kind retrieval surfaces and ranking behavior (TDD-first):
+  - Added recall-ranking unit coverage in `internal/knowledge/recall_test.go`:
+    - decision-intent query boosts `decision` artifacts over `meeting_note`
+    - `meeting_note` recency decays faster than `decision` at equal age
+  - Updated knowledge recall scoring in `internal/knowledge/recall.go`:
+    - dynamic recency decay by artifact kind (`meeting_note`/`retrospective` decay faster; `decision` slower)
+    - query-intent artifact-kind boosts (`decision`, `spec`, `design_doc`, `meeting_note`, `research`)
+  - Wired `artifact_kind` into retrieval outputs:
+    - unified retrieval result model (`internal/retrieval/merge.go`, `internal/retrieval/orchestrate.go`)
+    - MCP `recall` payload includes `artifact_kind` (`internal/api/mcp/recall.go`)
+    - MCP/REST `context` knowledge blocks include `artifact_kind` (`internal/api/mcp/context.go`, `internal/api/rest/context.go`)
+    - Web UI query playground renders artifact kind (`internal/ui/handler.go`, `internal/ui/web/templates/query.html`)
+    - Web UI knowledge/collection/detail views surface artifact kind badges/fields.
+
 ### Permissions Redesign
+
+- [x] 2026-04-08: Added Web UI management for direct scope grants in Principals section (TDD-first):
+  - Added principals-page scope grant CRUD wiring in `internal/ui/handler.go`:
+    - new UI handlers: `POST /ui/scope-grants` and `POST /ui/scope-grants/delete`
+    - scope-grant operations enforce `sharing:write`/`sharing:delete` on the target scope
+    - anti-escalation check for non-system-admin callers: cannot grant permissions beyond caller's effective token permissions on the scope
+    - principals page rendering now includes readable scope grants (`sharing:read`) and available grantable scopes
+  - Updated principals template `internal/ui/web/templates/principals.html`:
+    - added "Scope Grants" table with remove actions
+    - added "Add Scope Grant" dialog with scope/principal selectors and permission checkboxes
+  - Added integration coverage in `internal/ui/principals_integration_test.go`:
+    - `TestPrincipalsPage_SystemAdminCanManageScopeGrants` validates create + revoke flow via Web UI endpoints.
+
+- [x] 2026-04-08: Improved Web UI scope grant permission picker with basic and advanced resource selection:
+  - Updated principals scope-grant dialog in `internal/ui/web/templates/principals.html`:
+    - basic checkbox per resource (e.g. `collections`, `skills`, `memories`)
+    - expandable advanced operation checkboxes (`read`, `write`, `edit`, `delete`) per resource
+    - basic/advanced sync behavior in template JS
+  - Updated `internal/ui/handler.go`:
+    - added `parseScopeGrantPermissionsInput(...)` to accept both resource-level and `resource:operation` inputs
+    - `handleCreateScopeGrant` now reads `permissions_basic` and `permissions_adv` (plus backward-compatible `permissions`)
+  - Added unit regression coverage in `internal/ui/handler_principals_test.go`:
+    - `TestParseScopeGrantPermissionsInput_ResourceAndAdvanced`
+    - `TestParseScopeGrantPermissionsInput_RejectsUnknownResource`
+    - `TestHandlePrincipals_RendersScopeGrantGroupedPermissions`.
+
+- [x] 2026-04-09: Refined scope grant dialog UX to remove explicit "Advanced" labels:
+  - Updated `internal/ui/web/templates/principals.html`:
+    - kept resource-level checkbox as primary control
+    - moved expand/collapse affordance inline next to resource name
+    - removed repeated "Advanced" text rows to reduce visual noise
+  - Added render regression in `internal/ui/handler_principals_test.go`:
+    - `TestHandlePrincipals_ScopeGrantPicker_HidesAdvancedLabel`.
+
+- [x] 2026-04-09: Improved scope grant expander affordance and popover positioning:
+  - Updated `internal/ui/web/templates/principals.html`:
+    - resource-row chevron now rotates between collapsed/expanded states
+    - operations chooser opens as a centered popover relative to the resource row (not only downward)
+  - Added render regression in `internal/ui/handler_principals_test.go`:
+    - `TestHandlePrincipals_ScopeGrantPicker_UsesToggleAndCenteredPopoverHooks`.
+
+- [x] 2026-04-09: Kept scope grant operation popover centered while preventing header overlap:
+  - Updated `internal/ui/web/templates/principals.html`:
+    - added bounded popover shift logic so expanded operation panels auto-adjust to stay within permissions fieldset
+    - retained centered-by-default expansion while avoiding clipping into the fieldset legend/header area
+  - Extended render hook test in `internal/ui/handler_principals_test.go` to assert permissions-container hook presence.
+
+- [x] 2026-04-09: Switched scope grant advanced operations from overlay popover to inline expansion:
+  - Updated `internal/ui/web/templates/principals.html`:
+    - removed absolute-positioned operation popover and boundary-shift JS
+    - advanced operations now expand inline under the selected resource row in normal document flow
+    - opening a resource pushes subsequent resources downward (no overlap)
+  - Updated render test in `internal/ui/handler_principals_test.go`:
+    - `TestHandlePrincipals_ScopeGrantPicker_UsesToggleAndInlineExpansionHooks`.
+
+- [x] 2026-04-09: Replaced `details/summary` advanced toggles with explicit row toggles for stable alignment:
+  - Updated `internal/ui/web/templates/principals.html`:
+    - advanced toggle is now a dedicated button beside each resource row
+    - operations block is shown/hidden via `hidden` in normal flow directly below the row
+    - prevents misplaced/overlapping arrow and checkbox rendering artifacts from mixed `summary` layout behavior
+  - Added toggle wiring script (`wireScopeGrantToggles`) for deterministic expand/collapse behavior.
 
 - [x] 2026-04-06: Fixed `internal/authz` security and design-alignment gaps raised by regression tests:
   - Fixed `TokenResolver` scope restriction path to avoid unsafe resolver type assertion panic:

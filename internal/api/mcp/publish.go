@@ -49,6 +49,15 @@ func (s *Server) handlePublish(ctx context.Context, req mcpgo.CallToolRequest) (
 		autoReview = v
 	}
 
+	artifactKind := ""
+	if v, ok := args["artifact_kind"].(string); ok {
+		artifactKind = v
+	}
+	normalizedArtifactKind, err := knowledge.NormalizeArtifactKind(artifactKind)
+	if err != nil {
+		return mcpgo.NewToolResultError(fmt.Sprintf("publish: invalid artifact_kind: %v", err)), nil
+	}
+
 	collectionSlug := ""
 	if v, ok := args["collection_slug"].(string); ok {
 		collectionSlug = v
@@ -77,6 +86,7 @@ func (s *Server) handlePublish(ctx context.Context, req mcpgo.CallToolRequest) (
 
 	artifact, err := s.knwStore.Create(ctx, knowledge.CreateInput{
 		KnowledgeType: knowledgeType,
+		ArtifactKind:  normalizedArtifactKind,
 		OwnerScopeID:  scope.ID,
 		AuthorID:      authorID,
 		Visibility:    visibility,

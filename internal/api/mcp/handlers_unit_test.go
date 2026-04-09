@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -29,6 +30,18 @@ func assertToolError(t *testing.T, result *mcpgo.CallToolResult) {
 	if !result.IsError {
 		t.Errorf("expected tool error (IsError=true), got IsError=false")
 	}
+}
+
+// toolErrorText extracts the first text payload from a tool result.
+func toolErrorText(t *testing.T, result *mcpgo.CallToolResult) string {
+	t.Helper()
+	if result == nil || len(result.Content) == 0 {
+		return ""
+	}
+	if tc, ok := result.Content[0].(mcpgo.TextContent); ok {
+		return tc.Text
+	}
+	return ""
 }
 
 // ── handleRecall ─────────────────────────────────────────────────────────────
@@ -105,6 +118,22 @@ func TestHandlePublish_MissingScope_ReturnsToolError(t *testing.T) {
 		// scope intentionally omitted
 	}, s.handlePublish)
 	assertToolError(t, result)
+}
+
+func TestHandlePublish_InvalidArtifactKind_ReturnsToolError(t *testing.T) {
+	s := &Server{}
+	result := callTool(t, map[string]any{
+		"title":          "My Doc",
+		"content":        "some content",
+		"knowledge_type": "note",
+		"scope":          "project:acme/api",
+		"artifact_kind":  "banana",
+	}, s.handlePublish)
+	assertToolError(t, result)
+	msg := strings.ToLower(toolErrorText(t, result))
+	if !strings.Contains(msg, "invalid artifact_kind") {
+		t.Fatalf("expected invalid artifact_kind error, got %q", msg)
+	}
 }
 
 // ── handleSummarize ───────────────────────────────────────────────────────────

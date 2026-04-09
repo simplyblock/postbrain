@@ -7,6 +7,7 @@
     <td>
       <a href="/ui/knowledge/{{.ID}}">{{.Title}}</a>
       {{if eq .KnowledgeType "digest"}}<span class="badge badge-info" style="margin-left:0.4rem;font-size:0.7rem">digest</span>{{end}}
+      {{if .ArtifactKind}}<span class="badge badge-secondary" style="margin-left:0.4rem;font-size:0.7rem">{{.ArtifactKind}}</span>{{end}}
     </td>
     <td><span class="badge {{statusBadge .Status}}">{{.Status}}</span></td>
     <td>{{.EndorsementCount}}</td>

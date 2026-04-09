@@ -5,16 +5,22 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"html/template"
 	"io"
 	"io/fs"
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/auth"
@@ -264,6 +270,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleAddMembership(w, r)
 	case r.URL.Path == "/ui/memberships/delete" && r.Method == http.MethodPost:
 		h.handleDeleteMembership(w, r)
+	case r.URL.Path == "/ui/scope-grants" && r.Method == http.MethodPost:
+		h.handleCreateScopeGrant(w, r)
+	case r.URL.Path == "/ui/scope-grants/delete" && r.Method == http.MethodPost:
+		h.handleDeleteScopeGrant(w, r)
 	case r.URL.Path == "/ui/tokens" && r.Method == http.MethodPost:
 		h.handleCreateToken(w, r)
 	case strings.HasSuffix(r.URL.Path, "/scopes") && strings.HasPrefix(r.URL.Path, "/ui/tokens/") && r.Method == http.MethodPost:
@@ -376,7 +386,8 @@ func requiresPrincipalAdminSection(r *http.Request) bool {
 	if strings.HasPrefix(r.URL.Path, "/ui/principals") {
 		return true
 	}
-	return r.URL.Path == "/ui/memberships" || r.URL.Path == "/ui/memberships/delete"
+	return r.URL.Path == "/ui/memberships" || r.URL.Path == "/ui/memberships/delete" ||
+		r.URL.Path == "/ui/scope-grants" || r.URL.Path == "/ui/scope-grants/delete"
 }
 
 // handleOverview serves GET /ui — server health and schema version.
@@ -505,22 +516,24 @@ func (h *Handler) handleKnowledge(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := struct {
-		Query       string
-		Status      string
-		ScopeID     uuid.UUID
-		Artifacts   []*db.KnowledgeArtifact
-		Scopes      []*db.Scope
-		UploadError string
-		PrevCursor  int
-		NextCursor  int
-		HasPrev     bool
-		HasNext     bool
+		Query         string
+		Status        string
+		ScopeID       uuid.UUID
+		Artifacts     []*db.KnowledgeArtifact
+		Scopes        []*db.Scope
+		ArtifactKinds []string
+		UploadError   string
+		PrevCursor    int
+		NextCursor    int
+		HasPrev       bool
+		HasNext       bool
 	}{
-		Query:      q,
-		Status:     status,
-		ScopeID:    scopeID,
-		PrevCursor: cursor - knowledgePageSize,
-		HasPrev:    cursor > 0,
+		Query:         q,
+		Status:        status,
+		ScopeID:       scopeID,
+		ArtifactKinds: knowledge.ArtifactKinds(),
+		PrevCursor:    cursor - knowledgePageSize,
+		HasPrev:       cursor > 0,
 	}
 
 	if h.pool != nil {
@@ -1038,7 +1051,7 @@ func (h *Handler) handleSkillHistory(w http.ResponseWriter, r *http.Request) {
 
 // handlePrincipals serves GET /ui/principals.
 func (h *Handler) handlePrincipals(w http.ResponseWriter, r *http.Request) {
-	h.renderPrincipals(w, r, "", "", "")
+	h.renderPrincipals(w, r, "", "", "", "")
 }
 
 // handleScopes serves GET /ui/scopes.
@@ -1099,17 +1112,60 @@ func (h *Handler) renderScopes(w http.ResponseWriter, r *http.Request, scopeErr 
 }
 
 // renderPrincipals renders the principals page with optional form errors.
-func (h *Handler) renderPrincipals(w http.ResponseWriter, r *http.Request, principalErr, principalEditErr, membershipErr string) {
+type scopeGrantRow struct {
+	ID               uuid.UUID
+	PrincipalID      uuid.UUID
+	PrincipalSlug    string
+	PrincipalName    string
+	ScopeID          uuid.UUID
+	ScopeDisplayName string
+	Permissions      []string
+	ExpiresAt        *time.Time
+	CreatedAt        time.Time
+	CanDelete        bool
+}
+
+type scopeGrantScopeOption struct {
+	ID          uuid.UUID
+	DisplayName string
+}
+
+type scopeGrantResourceOption struct {
+	Resource   string
+	Operations []string
+}
+
+func (h *Handler) renderPrincipals(
+	w http.ResponseWriter,
+	r *http.Request,
+	principalErr, principalEditErr, membershipErr, scopeGrantErr string,
+) {
 	data := struct {
 		Principals          []*db.Principal
 		Memberships         []*db.MembershipRow
 		PrincipalFormError  string
 		PrincipalEditError  string
 		MembershipFormError string
+		ScopeGrantFormError string
+		ScopeGrantRows      []scopeGrantRow
+		ScopeGrantScopes    []scopeGrantScopeOption
+		ScopeGrantResources []scopeGrantResourceOption
 	}{
 		PrincipalFormError:  principalErr,
 		PrincipalEditError:  principalEditErr,
 		MembershipFormError: membershipErr,
+		ScopeGrantFormError: scopeGrantErr,
+	}
+	for _, resource := range authz.AllResources() {
+		ops := authz.ValidOperations(resource)
+		option := scopeGrantResourceOption{
+			Resource:   string(resource),
+			Operations: make([]string, 0, len(ops)),
+		}
+		for _, op := range ops {
+			option.Operations = append(option.Operations, string(op))
+		}
+		data.ScopeGrantResources = append(data.ScopeGrantResources, option)
 	}
 
 	if h.pool != nil {
@@ -1148,6 +1204,64 @@ func (h *Handler) renderPrincipals(w http.ResponseWriter, r *http.Request, princ
 				data.Memberships = filtered
 			}
 		}
+
+		granteeNameByID := make(map[uuid.UUID]string, len(data.Principals))
+		granteeSlugByID := make(map[uuid.UUID]string, len(data.Principals))
+		for _, p := range data.Principals {
+			granteeNameByID[p.ID] = p.DisplayName
+			granteeSlugByID[p.ID] = p.Slug
+		}
+
+		scopes, _ := h.authorizedScopesForRequest(r.Context(), r)
+		scopeDisplayByID := make(map[uuid.UUID]string, len(scopes))
+		q := db.New(h.pool)
+		for _, scope := range scopes {
+			scopeDisplay := scope.Name + " (" + scope.ExternalID + ")"
+			scopeDisplayByID[scope.ID] = scopeDisplay
+			if h.hasScopePermission(r.Context(), r, scope.ID,
+				authz.NewPermission(authz.ResourceSharing, authz.OperationWrite)) {
+				data.ScopeGrantScopes = append(data.ScopeGrantScopes, scopeGrantScopeOption{
+					ID:          scope.ID,
+					DisplayName: scopeDisplay,
+				})
+			}
+			if !h.hasScopePermission(r.Context(), r, scope.ID,
+				authz.NewPermission(authz.ResourceSharing, authz.OperationRead)) {
+				continue
+			}
+			grants, err := q.ListScopeGrantsByScope(r.Context(), scope.ID)
+			if err != nil {
+				continue
+			}
+			canDelete := h.hasScopePermission(r.Context(), r, scope.ID,
+				authz.NewPermission(authz.ResourceSharing, authz.OperationDelete))
+			for _, g := range grants {
+				name := granteeNameByID[g.PrincipalID]
+				if name == "" {
+					name = g.PrincipalID.String()
+				}
+				slug := granteeSlugByID[g.PrincipalID]
+				row := scopeGrantRow{
+					ID:               g.ID,
+					PrincipalID:      g.PrincipalID,
+					PrincipalSlug:    slug,
+					PrincipalName:    name,
+					ScopeID:          g.ScopeID,
+					ScopeDisplayName: scopeDisplayByID[g.ScopeID],
+					Permissions:      slices.Clone(g.Permissions),
+					ExpiresAt:        g.ExpiresAt,
+					CreatedAt:        g.CreatedAt,
+					CanDelete:        canDelete,
+				}
+				data.ScopeGrantRows = append(data.ScopeGrantRows, row)
+			}
+		}
+		sort.Slice(data.ScopeGrantRows, func(i, j int) bool {
+			return data.ScopeGrantRows[i].CreatedAt.After(data.ScopeGrantRows[j].CreatedAt)
+		})
+		sort.Slice(data.ScopeGrantScopes, func(i, j int) bool {
+			return data.ScopeGrantScopes[i].DisplayName < data.ScopeGrantScopes[j].DisplayName
+		})
 	}
 
 	h.render(w, r, "principals", "Principals", data)
@@ -1227,27 +1341,27 @@ func (h *Handler) handleSetScopeOwner(w http.ResponseWriter, r *http.Request) {
 // handleCreatePrincipal serves POST /ui/principals.
 func (h *Handler) handleCreatePrincipal(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		h.renderPrincipals(w, r, "bad form data", "", "")
+		h.renderPrincipals(w, r, "bad form data", "", "", "")
 		return
 	}
 	kind := r.FormValue("kind")
 	slug := r.FormValue("slug")
 	displayName := r.FormValue("display_name")
 	if kind == "" || slug == "" || displayName == "" {
-		h.renderPrincipals(w, r, "kind, slug and display_name are required", "", "")
+		h.renderPrincipals(w, r, "kind, slug and display_name are required", "", "", "")
 		return
 	}
 	if h.pool == nil {
-		h.renderPrincipals(w, r, "service unavailable", "", "")
+		h.renderPrincipals(w, r, "service unavailable", "", "", "")
 		return
 	}
 	if !h.hasAnyPrincipalAdminRole(r.Context(), r) {
-		h.renderPrincipals(w, r, "principal admin required", "", "")
+		h.renderPrincipals(w, r, "principal admin required", "", "", "")
 		return
 	}
 	ps := principals.NewStore(h.pool)
 	if _, err := ps.Create(r.Context(), kind, slug, displayName, nil); err != nil {
-		h.renderPrincipals(w, r, err.Error(), "", "")
+		h.renderPrincipals(w, r, err.Error(), "", "", "")
 		return
 	}
 	http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
@@ -1258,30 +1372,30 @@ func (h *Handler) handleUpdatePrincipal(w http.ResponseWriter, r *http.Request) 
 	idStr := strings.TrimPrefix(r.URL.Path, "/ui/principals/")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		h.renderPrincipals(w, r, "", "invalid principal id", "")
+		h.renderPrincipals(w, r, "", "invalid principal id", "", "")
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		h.renderPrincipals(w, r, "", "bad form data", "")
+		h.renderPrincipals(w, r, "", "bad form data", "", "")
 		return
 	}
 	slug := r.FormValue("slug")
 	displayName := r.FormValue("display_name")
 	if slug == "" || displayName == "" {
-		h.renderPrincipals(w, r, "", "slug and display_name are required", "")
+		h.renderPrincipals(w, r, "", "slug and display_name are required", "", "")
 		return
 	}
 	if h.pool == nil {
-		h.renderPrincipals(w, r, "", "service unavailable", "")
+		h.renderPrincipals(w, r, "", "service unavailable", "", "")
 		return
 	}
 	if !h.hasPrincipalAdminAccess(r.Context(), r, id) {
-		h.renderPrincipals(w, r, "", "principal admin required", "")
+		h.renderPrincipals(w, r, "", "principal admin required", "", "")
 		return
 	}
 	ps := principals.NewStore(h.pool)
 	if _, err := ps.UpdateProfile(r.Context(), id, slug, displayName); err != nil {
-		h.renderPrincipals(w, r, "", err.Error(), "")
+		h.renderPrincipals(w, r, "", err.Error(), "", "")
 		return
 	}
 	http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
@@ -1434,32 +1548,32 @@ func (h *Handler) handleSyncStatus(w http.ResponseWriter, r *http.Request) {
 // handleAddMembership serves POST /ui/memberships.
 func (h *Handler) handleAddMembership(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		h.renderPrincipals(w, r, "", "", "bad form data")
+		h.renderPrincipals(w, r, "", "", "bad form data", "")
 		return
 	}
 	memberIDStr := r.FormValue("member_id")
 	parentIDStr := r.FormValue("parent_id")
 	role := r.FormValue("role")
 	if memberIDStr == "" || parentIDStr == "" || role == "" {
-		h.renderPrincipals(w, r, "", "", "member, parent and role are required")
+		h.renderPrincipals(w, r, "", "", "member, parent and role are required", "")
 		return
 	}
 	memberID, err := uuid.Parse(memberIDStr)
 	if err != nil {
-		h.renderPrincipals(w, r, "", "", "invalid member id")
+		h.renderPrincipals(w, r, "", "", "invalid member id", "")
 		return
 	}
 	parentID, err := uuid.Parse(parentIDStr)
 	if err != nil {
-		h.renderPrincipals(w, r, "", "", "invalid parent id")
+		h.renderPrincipals(w, r, "", "", "invalid parent id", "")
 		return
 	}
 	if h.pool == nil {
-		h.renderPrincipals(w, r, "", "", "service unavailable")
+		h.renderPrincipals(w, r, "", "", "service unavailable", "")
 		return
 	}
 	if !h.hasPrincipalAdminAccess(r.Context(), r, parentID) {
-		h.renderPrincipals(w, r, "", "", "principal admin required")
+		h.renderPrincipals(w, r, "", "", "principal admin required", "")
 		return
 	}
 	grantedBy := h.principalFromCookie(r)
@@ -1469,7 +1583,7 @@ func (h *Handler) handleAddMembership(w http.ResponseWriter, r *http.Request) {
 	}
 	ms := principals.NewMembershipStore(h.pool)
 	if err := ms.AddMembership(r.Context(), memberID, parentID, role, grantedByPtr); err != nil {
-		h.renderPrincipals(w, r, "", "", err.Error())
+		h.renderPrincipals(w, r, "", "", err.Error(), "")
 		return
 	}
 	http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
@@ -1478,31 +1592,186 @@ func (h *Handler) handleAddMembership(w http.ResponseWriter, r *http.Request) {
 // handleDeleteMembership serves POST /ui/memberships/delete.
 func (h *Handler) handleDeleteMembership(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		h.renderPrincipals(w, r, "", "", "bad form data")
+		h.renderPrincipals(w, r, "", "", "bad form data", "")
 		return
 	}
 	memberIDStr := r.FormValue("member_id")
 	parentIDStr := r.FormValue("parent_id")
 	memberID, err := uuid.Parse(memberIDStr)
 	if err != nil {
-		h.renderPrincipals(w, r, "", "", "invalid member id")
+		h.renderPrincipals(w, r, "", "", "invalid member id", "")
 		return
 	}
 	parentID, err := uuid.Parse(parentIDStr)
 	if err != nil {
-		h.renderPrincipals(w, r, "", "", "invalid parent id")
+		h.renderPrincipals(w, r, "", "", "invalid parent id", "")
 		return
 	}
 	if h.pool == nil {
-		h.renderPrincipals(w, r, "", "", "service unavailable")
+		h.renderPrincipals(w, r, "", "", "service unavailable", "")
 		return
 	}
 	if !h.hasPrincipalAdminAccess(r.Context(), r, parentID) {
-		h.renderPrincipals(w, r, "", "", "principal admin required")
+		h.renderPrincipals(w, r, "", "", "principal admin required", "")
 		return
 	}
 	if err := db.DeleteMembership(r.Context(), h.pool, memberID, parentID); err != nil {
-		h.renderPrincipals(w, r, "", "", err.Error())
+		h.renderPrincipals(w, r, "", "", err.Error(), "")
+		return
+	}
+	http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
+}
+
+// handleCreateScopeGrant serves POST /ui/scope-grants.
+func (h *Handler) handleCreateScopeGrant(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		h.renderPrincipals(w, r, "", "", "", "bad form data")
+		return
+	}
+	scopeID, err := uuid.Parse(r.FormValue("scope_id"))
+	if err != nil {
+		h.renderPrincipals(w, r, "", "", "", "invalid scope id")
+		return
+	}
+	granteeID, err := uuid.Parse(r.FormValue("principal_id"))
+	if err != nil {
+		h.renderPrincipals(w, r, "", "", "", "invalid principal id")
+		return
+	}
+	rawPerms := append([]string{}, r.Form["permissions_basic"]...)
+	rawPerms = append(rawPerms, r.Form["permissions_adv"]...)
+	// Backward compatibility for older forms/tests.
+	rawPerms = append(rawPerms, r.Form["permissions"]...)
+	if len(rawPerms) == 0 {
+		h.renderPrincipals(w, r, "", "", "", "at least one permission is required")
+		return
+	}
+	perms, err := parseScopeGrantPermissionsInput(rawPerms)
+	if err != nil {
+		h.renderPrincipals(w, r, "", "", "", "invalid permissions: "+err.Error())
+		return
+	}
+	if h.pool == nil {
+		h.renderPrincipals(w, r, "", "", "", "service unavailable")
+		return
+	}
+	if !h.hasScopePermission(r.Context(), r, scopeID, authz.NewPermission(authz.ResourceSharing, authz.OperationWrite)) {
+		h.renderPrincipals(w, r, "", "", "", "sharing write required on scope")
+		return
+	}
+	callerToken := h.tokenFromCookie(r)
+	if callerToken == nil {
+		h.renderPrincipals(w, r, "", "", "", "service unavailable")
+		return
+	}
+	callerPrincipal, err := db.GetPrincipalByID(r.Context(), h.pool, callerToken.PrincipalID)
+	if err != nil {
+		h.renderPrincipals(w, r, "", "", "", err.Error())
+		return
+	}
+	if callerPrincipal == nil || !callerPrincipal.IsSystemAdmin {
+		tokenResolver := authz.NewTokenResolver(authz.NewDBResolver(h.pool))
+		effective, err := tokenResolver.EffectiveTokenPermissions(r.Context(), callerToken, scopeID)
+		if err != nil {
+			h.renderPrincipals(w, r, "", "", "", "failed to resolve caller permissions")
+			return
+		}
+		for _, p := range perms.Permissions() {
+			if !effective.Contains(p) {
+				h.renderPrincipals(w, r, "", "", "", "cannot grant permission "+string(p))
+				return
+			}
+		}
+	}
+
+	grantedBy := h.principalFromCookie(r)
+	var grantedByPtr *uuid.UUID
+	if grantedBy != uuid.Nil {
+		grantedByPtr = &grantedBy
+	}
+	canonicalPerms := make([]string, 0, len(perms.Permissions()))
+	for _, p := range perms.Permissions() {
+		canonicalPerms = append(canonicalPerms, string(p))
+	}
+	sort.Strings(canonicalPerms)
+
+	q := db.New(h.pool)
+	_, err = q.CreateScopeGrant(r.Context(), db.CreateScopeGrantParams{
+		PrincipalID: granteeID,
+		ScopeID:     scopeID,
+		Permissions: canonicalPerms,
+		GrantedBy:   grantedByPtr,
+	})
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			_, err = q.UpdateScopeGrantPermissions(r.Context(), db.UpdateScopeGrantPermissionsParams{
+				PrincipalID: granteeID,
+				ScopeID:     scopeID,
+				Permissions: canonicalPerms,
+			})
+		}
+		if err != nil {
+			h.renderPrincipals(w, r, "", "", "", err.Error())
+			return
+		}
+	}
+	http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
+}
+
+func parseScopeGrantPermissionsInput(raw []string) (authz.PermissionSet, error) {
+	expanded := make([]string, 0, len(raw))
+	for _, entry := range raw {
+		value := strings.TrimSpace(entry)
+		if value == "" {
+			continue
+		}
+		if strings.Contains(value, ":") {
+			expanded = append(expanded, value)
+			continue
+		}
+		resource := authz.Resource(value)
+		ops := authz.ValidOperations(resource)
+		if len(ops) == 0 {
+			return authz.PermissionSet{}, fmt.Errorf("unknown resource %q", value)
+		}
+		for _, op := range ops {
+			expanded = append(expanded, string(authz.NewPermission(resource, op)))
+		}
+	}
+	return authz.ParseTokenPermissions(expanded)
+}
+
+// handleDeleteScopeGrant serves POST /ui/scope-grants/delete.
+func (h *Handler) handleDeleteScopeGrant(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		h.renderPrincipals(w, r, "", "", "", "bad form data")
+		return
+	}
+	scopeID, err := uuid.Parse(r.FormValue("scope_id"))
+	if err != nil {
+		h.renderPrincipals(w, r, "", "", "", "invalid scope id")
+		return
+	}
+	grantID, err := uuid.Parse(r.FormValue("grant_id"))
+	if err != nil {
+		h.renderPrincipals(w, r, "", "", "", "invalid grant id")
+		return
+	}
+	if h.pool == nil {
+		h.renderPrincipals(w, r, "", "", "", "service unavailable")
+		return
+	}
+	if !h.hasScopePermission(r.Context(), r, scopeID, authz.NewPermission(authz.ResourceSharing, authz.OperationDelete)) {
+		h.renderPrincipals(w, r, "", "", "", "sharing delete required on scope")
+		return
+	}
+	q := db.New(h.pool)
+	if err := q.DeleteScopeGrantByIDAndScope(r.Context(), db.DeleteScopeGrantByIDAndScopeParams{
+		ID:      grantID,
+		ScopeID: scopeID,
+	}); err != nil {
+		h.renderPrincipals(w, r, "", "", "", err.Error())
 		return
 	}
 	http.Redirect(w, r, "/ui/principals", http.StatusSeeOther)
@@ -1534,6 +1803,10 @@ func (h *Handler) tokenFromCookie(r *http.Request) *db.Token {
 }
 
 func (h *Handler) hasScopeAdminAccess(ctx context.Context, r *http.Request, scopeID uuid.UUID) bool {
+	return h.hasScopePermission(ctx, r, scopeID, authz.NewPermission(authz.ResourceScopes, authz.OperationEdit))
+}
+
+func (h *Handler) hasScopePermission(ctx context.Context, r *http.Request, scopeID uuid.UUID, permission authz.Permission) bool {
 	if h.pool == nil {
 		return false
 	}
@@ -1541,20 +1814,8 @@ func (h *Handler) hasScopeAdminAccess(ctx context.Context, r *http.Request, scop
 	if token == nil || token.PrincipalID == uuid.Nil {
 		return false
 	}
-	if token.ScopeIds != nil {
-		allowed := false
-		for _, id := range token.ScopeIds {
-			if id == scopeID {
-				allowed = true
-				break
-			}
-		}
-		if !allowed {
-			return false
-		}
-	}
-	ok, err := authz.NewDBResolver(h.pool).HasPermission(ctx, token.PrincipalID, scopeID,
-		authz.NewPermission(authz.ResourceScopes, authz.OperationEdit))
+	tokenResolver := authz.NewTokenResolver(authz.NewDBResolver(h.pool))
+	ok, err := tokenResolver.HasTokenPermission(ctx, token, scopeID, permission)
 	return err == nil && ok
 }
 
@@ -1819,9 +2080,10 @@ func (h *Handler) handleKnowledgeNew(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) renderKnowledgeNew(w http.ResponseWriter, r *http.Request, formError string) {
 	data := struct {
-		FormError string
-		Scopes    []*db.Scope
-	}{FormError: formError}
+		FormError     string
+		Scopes        []*db.Scope
+		ArtifactKinds []string
+	}{FormError: formError, ArtifactKinds: knowledge.ArtifactKinds()}
 	if h.pool != nil {
 		scopes, _ := h.authorizedScopesForRequest(r.Context(), r)
 		data.Scopes = scopes
@@ -1838,6 +2100,11 @@ func (h *Handler) handleCreateKnowledge(w http.ResponseWriter, r *http.Request) 
 	title := strings.TrimSpace(r.FormValue("title"))
 	if title == "" {
 		h.renderKnowledgeNew(w, r, "title is required")
+		return
+	}
+	artifactKind, err := knowledge.NormalizeArtifactKind(r.FormValue("artifact_kind"))
+	if err != nil {
+		h.renderKnowledgeNew(w, r, "invalid artifact kind")
 		return
 	}
 	scopeStr := strings.TrimSpace(r.FormValue("scope_id"))
@@ -1867,6 +2134,7 @@ func (h *Handler) handleCreateKnowledge(w http.ResponseWriter, r *http.Request) 
 	authorID := h.principalFromCookie(r)
 	art, err := h.knwStore.Create(r.Context(), knowledge.CreateInput{
 		KnowledgeType: "semantic",
+		ArtifactKind:  artifactKind,
 		OwnerScopeID:  scopeID,
 		AuthorID:      authorID,
 		Visibility:    visibility,
@@ -1985,6 +2253,7 @@ func (h *Handler) handleQuery(w http.ResponseWriter, r *http.Request) {
 		Content       string
 		MemoryType    string
 		KnowledgeType string
+		ArtifactKind  string
 		SourceRef     string
 		Status        string
 		Visibility    string
@@ -2092,6 +2361,7 @@ func (h *Handler) handleQuery(w http.ResponseWriter, r *http.Request) {
 				Content:       content,
 				MemoryType:    res.MemoryType,
 				KnowledgeType: res.KnowledgeType,
+				ArtifactKind:  res.ArtifactKind,
 				SourceRef:     res.SourceRef,
 				Status:        res.Status,
 				Visibility:    res.Visibility,
@@ -2170,12 +2440,18 @@ func (h *Handler) handleUploadKnowledge(w http.ResponseWriter, r *http.Request) 
 	if knowledgeType == "" {
 		knowledgeType = "reference"
 	}
+	artifactKind, err := knowledge.NormalizeArtifactKind(r.FormValue("artifact_kind"))
+	if err != nil {
+		http.Error(w, "invalid artifact kind", http.StatusBadRequest)
+		return
+	}
 
 	authorID := h.principalFromCookie(r)
 
 	workflow := r.FormValue("workflow")
 	_, err = h.knwStore.Create(r.Context(), knowledge.CreateInput{
 		KnowledgeType: knowledgeType,
+		ArtifactKind:  artifactKind,
 		OwnerScopeID:  scope.ID,
 		AuthorID:      authorID,
 		Visibility:    "team",

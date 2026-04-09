@@ -246,3 +246,78 @@ func TestMigration000016_TokenPermissionsV2(t *testing.T) {
 		t.Errorf("expected tokens_no_admin_permission constraint error, got: %v", err)
 	}
 }
+
+func TestMigration000017_KnowledgeArtifactColumnsAndConstraints(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+
+	owner := testhelper.CreateTestPrincipal(t, pool, "user", "migration017-owner-"+t.Name())
+	author := testhelper.CreateTestPrincipal(t, pool, "user", "migration017-author-"+t.Name())
+	scope := testhelper.CreateTestScope(t, pool, "project", "migration017-scope-"+t.Name(), nil, owner.ID)
+
+	var (
+		artifactKind string
+		artifactMeta []byte
+		occurredAt   *string
+	)
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO knowledge_artifacts (
+			knowledge_type, owner_scope_id, author_id, visibility, status, title, content
+		) VALUES (
+			'semantic', $1, $2, 'team', 'draft', 'migration017', 'body'
+		)
+		RETURNING artifact_kind, artifact_meta, occurred_at::text
+	`, scope.ID, author.ID).Scan(&artifactKind, &artifactMeta, &occurredAt); err != nil {
+		t.Fatalf("insert artifact with defaults: %v", err)
+	}
+	if artifactKind != "general" {
+		t.Fatalf("artifact_kind default = %q, want %q", artifactKind, "general")
+	}
+	if string(artifactMeta) != "{}" {
+		t.Fatalf("artifact_meta default = %q, want %q", string(artifactMeta), "{}")
+	}
+	if occurredAt != nil {
+		t.Fatalf("occurred_at default = %v, want nil", *occurredAt)
+	}
+
+	oldArtifact := testhelper.CreateTestArtifact(t, pool, scope.ID, author.ID, "migration017-old")
+	var supersededID string
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO knowledge_artifacts (
+			knowledge_type, artifact_kind, owner_scope_id, author_id, visibility, status, title, content, supersedes_artifact_id
+		) VALUES (
+			'semantic', 'decision', $1, $2, 'team', 'draft', 'migration017-new', 'body', $3
+		)
+		RETURNING supersedes_artifact_id::text
+	`, scope.ID, author.ID, oldArtifact.ID).Scan(&supersededID); err != nil {
+		t.Fatalf("insert artifact with supersedes_artifact_id: %v", err)
+	}
+	if supersededID != oldArtifact.ID.String() {
+		t.Fatalf("supersedes_artifact_id = %q, want %q", supersededID, oldArtifact.ID.String())
+	}
+
+	_, err := pool.Exec(ctx, `
+		INSERT INTO knowledge_artifacts (
+			knowledge_type, artifact_kind, owner_scope_id, author_id, visibility, status, title, content
+		) VALUES (
+			'semantic', 'not-a-kind', $1, $2, 'team', 'draft', 'bad-kind', 'body'
+		)
+	`, scope.ID, author.ID)
+	if err == nil {
+		t.Fatal("expected artifact_kind CHECK violation, got nil")
+	}
+	if !strings.Contains(err.Error(), "knowledge_artifacts_artifact_kind_check") {
+		t.Fatalf("expected artifact_kind constraint error, got: %v", err)
+	}
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO knowledge_artifacts (
+			knowledge_type, artifact_kind, owner_scope_id, author_id, visibility, status, title, content, supersedes_artifact_id
+		) VALUES (
+			'semantic', 'decision', $1, $2, 'team', 'draft', 'bad-supersedes', 'body', '00000000-0000-0000-0000-000000000123'
+		)
+	`, scope.ID, author.ID)
+	if err == nil {
+		t.Fatal("expected supersedes_artifact_id FK violation, got nil")
+	}
+}
