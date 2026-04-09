@@ -186,8 +186,17 @@ func TestHandlePrincipals_ScopeGrantPicker_UsesToggleAndInlineExpansionHooks(t *
 	if !strings.Contains(body, "class=\"scope-grant-toggle\"") {
 		t.Fatal("expected scope-grant toggle class for open/close indicator")
 	}
+	if !strings.Contains(body, "aria-label=\"Toggle collections operations\"") {
+		t.Fatal("expected scope-grant toggle aria-label for accessibility")
+	}
+	if !strings.Contains(body, "aria-controls=\"scope-grant-ops-collections\"") {
+		t.Fatal("expected scope-grant toggle aria-controls for accessibility")
+	}
 	if !strings.Contains(body, "class=\"scope-grant-ops-inline\"") {
 		t.Fatal("expected scope-grant inline expansion class")
+	}
+	if !strings.Contains(body, "id=\"scope-grant-ops-collections\"") {
+		t.Fatal("expected scope-grant ops container id for aria-controls target")
 	}
 	if !strings.Contains(body, "class=\"scope-grant-permissions\"") {
 		t.Fatal("expected scope-grant permissions container class")
