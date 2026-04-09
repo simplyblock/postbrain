@@ -200,6 +200,7 @@ Use when a memory or finding should be preserved and shared beyond this session.
 | `title`           | yes      |                                                                             |
 | `content`         | yes      | Full artifact content                                                       |
 | `knowledge_type`  | yes      | `semantic` · `episodic` · `procedural` · `reference`                        |
+| `artifact_kind`   | —        | `general` · `decision` · `meeting_note` · `retrospective` · `spec` · `design_doc` · `research` (default: `general`) |
 | `scope`           | yes      | Owner scope                                                                 |
 | `visibility`      | —        | `private` · `project` · `team` · `department` · `company` (default: `team`) |
 | `summary`         | —        | Short summary shown in recall results                                       |
@@ -207,6 +208,15 @@ Use when a memory or finding should be preserved and shared beyond this session.
 | `collection_slug` | —        | Add to this collection after creation                                       |
 
 Use artifacts for long-lasting decisions and designs; use memories for in-task iteration and transient progress.
+
+`artifact_kind` guidance:
+- `decision`: architecture/implementation choices and rationale.
+- `meeting_note`: meeting captures, updates, discussion notes.
+- `retrospective`: postmortems and retrospective outcomes.
+- `spec`: implementation specs and executable requirements.
+- `design_doc`: broader design docs and system proposals.
+- `research`: evaluations, benchmarks, and external research findings.
+- `general`: fallback when no specific kind fits.
 
 ---
 
