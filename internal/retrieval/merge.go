@@ -35,6 +35,7 @@ type Result struct {
 	// Knowledge fields (Layer == LayerKnowledge)
 	Title                string
 	KnowledgeType        string
+	ArtifactKind         string
 	Visibility           string
 	Status               string
 	Endorsements         int

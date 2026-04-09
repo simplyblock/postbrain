@@ -107,6 +107,7 @@ type KnowledgeArtifact struct {
 	SourceRef        *string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+	ArtifactKind     string
 }
 
 type KnowledgeCollection struct {

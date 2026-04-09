@@ -24,8 +24,9 @@ import (
 
 // Sentinel errors for the knowledge store.
 var (
-	ErrNotEditable = errors.New("knowledge: artifact cannot be edited in current status")
-	ErrNotFound    = errors.New("knowledge: artifact not found")
+	ErrNotEditable         = errors.New("knowledge: artifact cannot be edited in current status")
+	ErrNotFound            = errors.New("knowledge: artifact not found")
+	ErrInvalidArtifactKind = errors.New("knowledge: invalid artifact kind")
 )
 
 // embeddingService is the subset of embedding.EmbeddingService used by this package.
@@ -142,6 +143,7 @@ func NewStore(pool *pgxpool.Pool, svc *embedding.EmbeddingService) *Store {
 // CreateInput holds the fields required to create a new knowledge artifact.
 type CreateInput struct {
 	KnowledgeType  string
+	ArtifactKind   string
 	OwnerScopeID   uuid.UUID
 	AuthorID       uuid.UUID
 	Visibility     string
@@ -159,6 +161,11 @@ type CreateInput struct {
 // If input.Summary is nil and the content exceeds 150 words, an extractive
 // summary is generated automatically.
 func (s *Store) Create(ctx context.Context, input CreateInput) (*db.KnowledgeArtifact, error) {
+	artifactKind, err := NormalizeArtifactKind(input.ArtifactKind)
+	if err != nil {
+		return nil, ErrInvalidArtifactKind
+	}
+
 	if input.ReviewRequired == 0 {
 		input.ReviewRequired = 1
 	}
@@ -189,6 +196,7 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.KnowledgeArt
 	embVec := pgvector.NewVector(embeddingVec)
 	artifact := &db.KnowledgeArtifact{
 		KnowledgeType:    input.KnowledgeType,
+		ArtifactKind:     artifactKind,
 		OwnerScopeID:     input.OwnerScopeID,
 		AuthorID:         input.AuthorID,
 		Visibility:       input.Visibility,

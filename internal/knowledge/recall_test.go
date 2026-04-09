@@ -3,6 +3,7 @@ package knowledge
 import (
 	"math"
 	"testing"
+	"time"
 )
 
 func TestRecallScore_KnowledgeBoost(t *testing.T) {
@@ -37,5 +38,26 @@ func TestNormalizeEndorsements(t *testing.T) {
 		if math.Abs(got-tt.expected) > 1e-9 {
 			t.Fatalf("normalizeEndorsements(%d) = %v, want %v", tt.count, got, tt.expected)
 		}
+	}
+}
+
+func TestArtifactKindQueryBoost_DecisionIntentPrefersDecisionArtifacts(t *testing.T) {
+	t.Parallel()
+	query := "why did we choose this architecture?"
+	decisionBoost := artifactKindQueryBoost(query, ArtifactKindDecision)
+	meetingBoost := artifactKindQueryBoost(query, ArtifactKindMeetingNote)
+	if decisionBoost <= meetingBoost {
+		t.Fatalf("decision boost (%v) must be greater than meeting note boost (%v)", decisionBoost, meetingBoost)
+	}
+}
+
+func TestArtifactRecencyScore_MeetingNotesDecayFasterThanDecisions(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC)
+	tenDaysAgo := now.Add(-10 * 24 * time.Hour)
+	meeting := artifactRecencyScore(now, nil, tenDaysAgo, ArtifactKindMeetingNote)
+	decision := artifactRecencyScore(now, nil, tenDaysAgo, ArtifactKindDecision)
+	if meeting >= decision {
+		t.Fatalf("meeting recency (%v) must be lower than decision recency (%v) at equal age", meeting, decision)
 	}
 }

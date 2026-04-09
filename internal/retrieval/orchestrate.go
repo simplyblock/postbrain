@@ -113,6 +113,7 @@ func OrchestrateRecall(ctx context.Context, deps OrchestrateDeps, input Orchestr
 				Score:         a.Score,
 				Title:         a.Artifact.Title,
 				KnowledgeType: a.Artifact.KnowledgeType,
+				ArtifactKind:  a.Artifact.ArtifactKind,
 				Visibility:    a.Artifact.Visibility,
 				Status:        a.Artifact.Status,
 				Endorsements:  int(a.Artifact.EndorsementCount),

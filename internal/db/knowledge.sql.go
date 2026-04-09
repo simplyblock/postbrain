@@ -15,24 +15,25 @@ import (
 
 const createArtifact = `-- name: CreateArtifact :one
 INSERT INTO knowledge_artifacts
-(knowledge_type, owner_scope_id, author_id, visibility, status,
+(knowledge_type, artifact_kind, owner_scope_id, author_id, visibility, status,
  published_at, deprecated_at, review_required,
  title, content, summary, embedding, embedding_model_id, meta,
  version, previous_version, source_memory_id, source_ref)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
-        NULLIF($16, '00000000-0000-0000-0000-000000000000'::uuid),
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
         NULLIF($17, '00000000-0000-0000-0000-000000000000'::uuid),
-        $18)
+        NULLIF($18, '00000000-0000-0000-0000-000000000000'::uuid),
+        $19)
 RETURNING id, knowledge_type, owner_scope_id, author_id,
     visibility, status, published_at, deprecated_at, review_required,
     title, content, summary, embedding, embedding_model_id, meta,
     endorsement_count, access_count, last_accessed,
     version, previous_version, source_memory_id, source_ref,
-    created_at, updated_at
+    created_at, updated_at, artifact_kind
 `
 
 type CreateArtifactParams struct {
 	KnowledgeType    string
+	ArtifactKind     string
 	OwnerScopeID     uuid.UUID
 	AuthorID         uuid.UUID
 	Visibility       string
@@ -47,14 +48,15 @@ type CreateArtifactParams struct {
 	EmbeddingModelID *uuid.UUID
 	Meta             []byte
 	Version          int32
-	Column16         interface{}
 	Column17         interface{}
+	Column18         interface{}
 	SourceRef        *string
 }
 
 func (q *Queries) CreateArtifact(ctx context.Context, arg CreateArtifactParams) (*KnowledgeArtifact, error) {
 	row := q.db.QueryRow(ctx, createArtifact,
 		arg.KnowledgeType,
+		arg.ArtifactKind,
 		arg.OwnerScopeID,
 		arg.AuthorID,
 		arg.Visibility,
@@ -69,8 +71,8 @@ func (q *Queries) CreateArtifact(ctx context.Context, arg CreateArtifactParams) 
 		arg.EmbeddingModelID,
 		arg.Meta,
 		arg.Version,
-		arg.Column16,
 		arg.Column17,
+		arg.Column18,
 		arg.SourceRef,
 	)
 	var i KnowledgeArtifact
@@ -99,6 +101,7 @@ func (q *Queries) CreateArtifact(ctx context.Context, arg CreateArtifactParams) 
 		&i.SourceRef,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArtifactKind,
 	)
 	return &i, err
 }
@@ -143,7 +146,7 @@ SELECT id, knowledge_type, owner_scope_id, author_id,
     title, content, summary, embedding, embedding_model_id, meta,
     endorsement_count, access_count, last_accessed,
     version, previous_version, source_memory_id, source_ref,
-    created_at, updated_at
+    created_at, updated_at, artifact_kind
 FROM knowledge_artifacts WHERE id = $1
 `
 
@@ -175,6 +178,7 @@ func (q *Queries) GetArtifact(ctx context.Context, id uuid.UUID) (*KnowledgeArti
 		&i.SourceRef,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArtifactKind,
 	)
 	return &i, err
 }
@@ -262,7 +266,7 @@ SELECT id, knowledge_type, owner_scope_id, author_id,
     title, content, summary, embedding, embedding_model_id, meta,
     endorsement_count, access_count, last_accessed,
     version, previous_version, source_memory_id, source_ref,
-    created_at, updated_at
+    created_at, updated_at, artifact_kind
 FROM knowledge_artifacts
 WHERE ($1::uuid = '00000000-0000-0000-0000-000000000000' OR owner_scope_id = $1)
 ORDER BY created_at DESC
@@ -310,6 +314,7 @@ func (q *Queries) ListAllArtifacts(ctx context.Context, arg ListAllArtifactsPara
 			&i.SourceRef,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArtifactKind,
 		); err != nil {
 			return nil, err
 		}
@@ -327,7 +332,7 @@ SELECT id, knowledge_type, owner_scope_id, author_id,
     title, content, summary, embedding, embedding_model_id, meta,
     endorsement_count, access_count, last_accessed,
     version, previous_version, source_memory_id, source_ref,
-    created_at, updated_at
+    created_at, updated_at, artifact_kind
 FROM knowledge_artifacts
 WHERE status = $1
   AND ($2::uuid = '00000000-0000-0000-0000-000000000000' OR owner_scope_id = $2)
@@ -382,6 +387,7 @@ func (q *Queries) ListArtifactsByStatus(ctx context.Context, arg ListArtifactsBy
 			&i.SourceRef,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArtifactKind,
 		); err != nil {
 			return nil, err
 		}
@@ -399,7 +405,7 @@ SELECT id, knowledge_type, owner_scope_id, author_id,
     title, content, summary, embedding, embedding_model_id, meta,
     endorsement_count, access_count, last_accessed,
     version, previous_version, source_memory_id, source_ref,
-    created_at, updated_at
+    created_at, updated_at, artifact_kind
 FROM knowledge_artifacts
 WHERE status = 'published'
   AND (owner_scope_id = ANY($1::uuid[]) OR visibility = 'company')
@@ -447,6 +453,7 @@ func (q *Queries) ListVisibleArtifacts(ctx context.Context, arg ListVisibleArtif
 			&i.SourceRef,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArtifactKind,
 		); err != nil {
 			return nil, err
 		}
@@ -483,7 +490,7 @@ SELECT ka.id, ka.knowledge_type, ka.owner_scope_id, ka.author_id,
     ka.title, ka.content, ka.summary, ka.embedding, ka.embedding_model_id, ka.meta,
     ka.endorsement_count, ka.access_count, ka.last_accessed,
     ka.version, ka.previous_version, ka.source_memory_id, ka.source_ref,
-    ka.created_at, ka.updated_at,
+    ka.created_at, ka.updated_at, ka.artifact_kind,
     ts_rank_cd(to_tsvector('postbrain_fts', ka.content),
                plainto_tsquery('postbrain_fts', $3)) AS bm25_score
 FROM knowledge_artifacts ka
@@ -537,6 +544,7 @@ type RecallArtifactsByFTSRow struct {
 	SourceRef        *string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+	ArtifactKind     string
 	Bm25Score        float32
 }
 
@@ -575,6 +583,7 @@ func (q *Queries) RecallArtifactsByFTS(ctx context.Context, arg RecallArtifactsB
 			&i.SourceRef,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArtifactKind,
 			&i.Bm25Score,
 		); err != nil {
 			return nil, err
@@ -594,7 +603,7 @@ SELECT ka.id, ka.knowledge_type, ka.owner_scope_id, ka.author_id,
     ka.title, ka.content, ka.summary, ka.embedding, ka.embedding_model_id, ka.meta,
     ka.endorsement_count, ka.access_count, ka.last_accessed,
     ka.version, ka.previous_version, ka.source_memory_id, ka.source_ref,
-    ka.created_at, ka.updated_at,
+    ka.created_at, ka.updated_at, ka.artifact_kind,
     similarity(ka.content, $3) AS trgm_score
 FROM knowledge_artifacts ka
 JOIN scopes s ON ka.owner_scope_id = s.id, qs
@@ -647,6 +656,7 @@ type RecallArtifactsByTrigramRow struct {
 	SourceRef        *string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+	ArtifactKind     string
 	TrgmScore        float32
 }
 
@@ -685,6 +695,7 @@ func (q *Queries) RecallArtifactsByTrigram(ctx context.Context, arg RecallArtifa
 			&i.SourceRef,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArtifactKind,
 			&i.TrgmScore,
 		); err != nil {
 			return nil, err
@@ -704,7 +715,7 @@ SELECT ka.id, ka.knowledge_type, ka.owner_scope_id, ka.author_id,
     ka.title, ka.content, ka.summary, ka.embedding, ka.embedding_model_id, ka.meta,
     ka.endorsement_count, ka.access_count, ka.last_accessed,
     ka.version, ka.previous_version, ka.source_memory_id, ka.source_ref,
-    ka.created_at, ka.updated_at,
+    ka.created_at, ka.updated_at, ka.artifact_kind,
     (1 - (ka.embedding <=> $3))::float4 AS vec_score
 FROM knowledge_artifacts ka
 JOIN scopes s ON ka.owner_scope_id = s.id, qs
@@ -756,6 +767,7 @@ type RecallArtifactsByVectorRow struct {
 	SourceRef        *string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+	ArtifactKind     string
 	VecScore         float32
 }
 
@@ -794,6 +806,7 @@ func (q *Queries) RecallArtifactsByVector(ctx context.Context, arg RecallArtifac
 			&i.SourceRef,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArtifactKind,
 			&i.VecScore,
 		); err != nil {
 			return nil, err
@@ -821,7 +834,7 @@ SELECT id, knowledge_type, owner_scope_id, author_id,
     title, content, summary, embedding, embedding_model_id, meta,
     endorsement_count, access_count, last_accessed,
     version, previous_version, source_memory_id, source_ref,
-    created_at, updated_at
+    created_at, updated_at, artifact_kind
 FROM knowledge_artifacts
 WHERE (title ILIKE $1 OR content ILIKE $1)
   AND ($2 = '' OR status = $2)
@@ -879,6 +892,7 @@ func (q *Queries) SearchArtifacts(ctx context.Context, arg SearchArtifactsParams
 			&i.SourceRef,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArtifactKind,
 		); err != nil {
 			return nil, err
 		}
@@ -927,7 +941,7 @@ RETURNING id, knowledge_type, owner_scope_id, author_id,
     title, content, summary, embedding, embedding_model_id, meta,
     endorsement_count, access_count, last_accessed,
     version, previous_version, source_memory_id, source_ref,
-    created_at, updated_at
+    created_at, updated_at, artifact_kind
 `
 
 type UpdateArtifactParams struct {
@@ -974,6 +988,7 @@ func (q *Queries) UpdateArtifact(ctx context.Context, arg UpdateArtifactParams) 
 		&i.SourceRef,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArtifactKind,
 	)
 	return &i, err
 }

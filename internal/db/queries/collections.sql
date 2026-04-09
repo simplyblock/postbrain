@@ -28,7 +28,7 @@ SELECT ka.id, ka.knowledge_type, ka.owner_scope_id, ka.author_id,
     ka.title, ka.content, ka.summary, ka.embedding, ka.embedding_model_id, ka.meta,
     ka.endorsement_count, ka.access_count, ka.last_accessed,
     ka.version, ka.previous_version, ka.source_memory_id, ka.source_ref,
-    ka.created_at, ka.updated_at
+    ka.created_at, ka.updated_at, ka.artifact_kind
 FROM knowledge_artifacts ka
 JOIN knowledge_collection_items kci ON kci.artifact_id = ka.id
 WHERE kci.collection_id = $1

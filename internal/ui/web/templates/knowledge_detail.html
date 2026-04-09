@@ -36,6 +36,7 @@
 <table>
   <tr><th>Status</th><td><span class="badge {{statusBadge .Artifact.Status}}">{{.Artifact.Status}}</span></td></tr>
   <tr><th>Type</th><td>{{.Artifact.KnowledgeType}}</td></tr>
+  <tr><th>Kind</th><td>{{.Artifact.ArtifactKind}}</td></tr>
   <tr><th>Visibility</th><td>{{.Artifact.Visibility}}</td></tr>
   <tr><th>Endorsements</th><td>{{.Artifact.EndorsementCount}} / {{.Artifact.ReviewRequired}} required</td></tr>
   <tr><th>Published</th><td>{{derefTime .Artifact.PublishedAt}}</td></tr>

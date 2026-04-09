@@ -64,6 +64,9 @@ func TestHandleKnowledge_QueryAndStatus_Renders200(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", w.Code)
 	}
+	if !strings.Contains(w.Body.String(), "name=\"artifact_kind\"") {
+		t.Error("expected upload dialog to include artifact_kind field")
+	}
 }
 
 // ── handleKnowledgeNew ────────────────────────────────────────────────────────
@@ -81,6 +84,9 @@ func TestHandleKnowledgeNew_Renders200(t *testing.T) {
 	}
 	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
 		t.Errorf("Content-Type = %q, want text/html", ct)
+	}
+	if !strings.Contains(w.Body.String(), "name=\"artifact_kind\"") {
+		t.Error("expected create form to include artifact_kind field")
 	}
 }
 
@@ -153,6 +159,24 @@ func TestHandleCreateKnowledge_InvalidScopeID_RendersFormError(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "scope") {
 		t.Error("expected form error mentioning 'scope'")
+	}
+}
+
+func TestHandleCreateKnowledge_InvalidArtifactKind_RendersFormError(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	req := httptest.NewRequest(http.MethodPost, "/ui/knowledge",
+		strings.NewReader("title=My+Article&scope_id="+uuid.New().String()+"&artifact_kind=banana"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	h.handleCreateKnowledge(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if !strings.Contains(w.Body.String(), "invalid artifact kind") {
+		t.Error("expected form error mentioning invalid artifact kind")
 	}
 }
 

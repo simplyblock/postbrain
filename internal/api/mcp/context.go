@@ -61,6 +61,7 @@ func (s *Server) handleContext(ctx context.Context, req mcpgo.CallToolRequest) (
 	type contextBlock struct {
 		Layer                string `json:"layer"`
 		Type                 string `json:"type,omitempty"`
+		ArtifactKind         string `json:"artifact_kind,omitempty"`
 		Title                string `json:"title,omitempty"`
 		Content              string `json:"content"`
 		ID                   string `json:"id,omitempty"`
@@ -104,6 +105,7 @@ func (s *Server) handleContext(ctx context.Context, req mcpgo.CallToolRequest) (
 				blocks = append(blocks, contextBlock{
 					Layer:                "knowledge",
 					Type:                 a.Artifact.KnowledgeType,
+					ArtifactKind:         a.Artifact.ArtifactKind,
 					Title:                a.Artifact.Title,
 					Content:              content,
 					ID:                   a.Artifact.ID.String(),

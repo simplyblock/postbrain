@@ -1,19 +1,19 @@
 -- name: CreateArtifact :one
 INSERT INTO knowledge_artifacts
-(knowledge_type, owner_scope_id, author_id, visibility, status,
+(knowledge_type, artifact_kind, owner_scope_id, author_id, visibility, status,
  published_at, deprecated_at, review_required,
  title, content, summary, embedding, embedding_model_id, meta,
  version, previous_version, source_memory_id, source_ref)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
-        NULLIF($16, '00000000-0000-0000-0000-000000000000'::uuid),
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
         NULLIF($17, '00000000-0000-0000-0000-000000000000'::uuid),
-        $18)
+        NULLIF($18, '00000000-0000-0000-0000-000000000000'::uuid),
+        $19)
 RETURNING id, knowledge_type, owner_scope_id, author_id,
     visibility, status, published_at, deprecated_at, review_required,
     title, content, summary, embedding, embedding_model_id, meta,
     endorsement_count, access_count, last_accessed,
     version, previous_version, source_memory_id, source_ref,
-    created_at, updated_at;
+    created_at, updated_at, artifact_kind;
 
 -- name: GetArtifact :one
 SELECT id, knowledge_type, owner_scope_id, author_id,
@@ -21,7 +21,7 @@ SELECT id, knowledge_type, owner_scope_id, author_id,
     title, content, summary, embedding, embedding_model_id, meta,
     endorsement_count, access_count, last_accessed,
     version, previous_version, source_memory_id, source_ref,
-    created_at, updated_at
+    created_at, updated_at, artifact_kind
 FROM knowledge_artifacts WHERE id = $1;
 
 -- name: UpdateArtifact :one
@@ -34,7 +34,7 @@ RETURNING id, knowledge_type, owner_scope_id, author_id,
     title, content, summary, embedding, embedding_model_id, meta,
     endorsement_count, access_count, last_accessed,
     version, previous_version, source_memory_id, source_ref,
-    created_at, updated_at;
+    created_at, updated_at, artifact_kind;
 
 -- name: UpdateArtifactStatus :exec
 UPDATE knowledge_artifacts
@@ -68,7 +68,7 @@ SELECT id, knowledge_type, owner_scope_id, author_id,
     title, content, summary, embedding, embedding_model_id, meta,
     endorsement_count, access_count, last_accessed,
     version, previous_version, source_memory_id, source_ref,
-    created_at, updated_at
+    created_at, updated_at, artifact_kind
 FROM knowledge_artifacts
 WHERE ($1::uuid = '00000000-0000-0000-0000-000000000000' OR owner_scope_id = $1)
 ORDER BY created_at DESC
@@ -81,7 +81,7 @@ SELECT id, knowledge_type, owner_scope_id, author_id,
     title, content, summary, embedding, embedding_model_id, meta,
     endorsement_count, access_count, last_accessed,
     version, previous_version, source_memory_id, source_ref,
-    created_at, updated_at
+    created_at, updated_at, artifact_kind
 FROM knowledge_artifacts
 WHERE (title ILIKE $1 OR content ILIKE $1)
   AND ($2 = '' OR status = $2)
@@ -96,7 +96,7 @@ SELECT id, knowledge_type, owner_scope_id, author_id,
     title, content, summary, embedding, embedding_model_id, meta,
     endorsement_count, access_count, last_accessed,
     version, previous_version, source_memory_id, source_ref,
-    created_at, updated_at
+    created_at, updated_at, artifact_kind
 FROM knowledge_artifacts
 WHERE status = $1
   AND ($2::uuid = '00000000-0000-0000-0000-000000000000' OR owner_scope_id = $2)
@@ -109,7 +109,7 @@ SELECT id, knowledge_type, owner_scope_id, author_id,
     title, content, summary, embedding, embedding_model_id, meta,
     endorsement_count, access_count, last_accessed,
     version, previous_version, source_memory_id, source_ref,
-    created_at, updated_at
+    created_at, updated_at, artifact_kind
 FROM knowledge_artifacts
 WHERE status = 'published'
   AND (owner_scope_id = ANY($1::uuid[]) OR visibility = 'company')
@@ -124,7 +124,7 @@ SELECT ka.id, ka.knowledge_type, ka.owner_scope_id, ka.author_id,
     ka.title, ka.content, ka.summary, ka.embedding, ka.embedding_model_id, ka.meta,
     ka.endorsement_count, ka.access_count, ka.last_accessed,
     ka.version, ka.previous_version, ka.source_memory_id, ka.source_ref,
-    ka.created_at, ka.updated_at,
+    ka.created_at, ka.updated_at, ka.artifact_kind,
     (1 - (ka.embedding <=> $3))::float4 AS vec_score
 FROM knowledge_artifacts ka
 JOIN scopes s ON ka.owner_scope_id = s.id, qs
@@ -158,7 +158,7 @@ SELECT ka.id, ka.knowledge_type, ka.owner_scope_id, ka.author_id,
     ka.title, ka.content, ka.summary, ka.embedding, ka.embedding_model_id, ka.meta,
     ka.endorsement_count, ka.access_count, ka.last_accessed,
     ka.version, ka.previous_version, ka.source_memory_id, ka.source_ref,
-    ka.created_at, ka.updated_at,
+    ka.created_at, ka.updated_at, ka.artifact_kind,
     ts_rank_cd(to_tsvector('postbrain_fts', ka.content),
                plainto_tsquery('postbrain_fts', $3)) AS bm25_score
 FROM knowledge_artifacts ka
@@ -200,7 +200,7 @@ SELECT ka.id, ka.knowledge_type, ka.owner_scope_id, ka.author_id,
     ka.title, ka.content, ka.summary, ka.embedding, ka.embedding_model_id, ka.meta,
     ka.endorsement_count, ka.access_count, ka.last_accessed,
     ka.version, ka.previous_version, ka.source_memory_id, ka.source_ref,
-    ka.created_at, ka.updated_at,
+    ka.created_at, ka.updated_at, ka.artifact_kind,
     similarity(ka.content, $3) AS trgm_score
 FROM knowledge_artifacts ka
 JOIN scopes s ON ka.owner_scope_id = s.id, qs

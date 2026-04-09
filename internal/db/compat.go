@@ -1237,9 +1237,13 @@ func CreateArtifact(ctx context.Context, pool *pgxpool.Pool, a *KnowledgeArtifac
 	if a.Meta == nil {
 		a.Meta = []byte("{}")
 	}
+	if a.ArtifactKind == "" {
+		a.ArtifactKind = "general"
+	}
 	q := New(pool)
 	result, err := q.CreateArtifact(ctx, CreateArtifactParams{
 		KnowledgeType:    a.KnowledgeType,
+		ArtifactKind:     a.ArtifactKind,
 		OwnerScopeID:     a.OwnerScopeID,
 		AuthorID:         a.AuthorID,
 		Visibility:       a.Visibility,
@@ -1254,8 +1258,8 @@ func CreateArtifact(ctx context.Context, pool *pgxpool.Pool, a *KnowledgeArtifac
 		EmbeddingModelID: a.EmbeddingModelID,
 		Meta:             a.Meta,
 		Version:          a.Version,
-		Column16:         a.PreviousVersion,
-		Column17:         a.SourceMemoryID,
+		Column17:         a.PreviousVersion,
+		Column18:         a.SourceMemoryID,
 		SourceRef:        a.SourceRef,
 	})
 	if err != nil {

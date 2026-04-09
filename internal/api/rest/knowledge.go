@@ -14,6 +14,7 @@ type createArtifactRequest struct {
 	Title          string  `json:"title"`
 	Content        string  `json:"content"`
 	KnowledgeType  string  `json:"knowledge_type"`
+	ArtifactKind   string  `json:"artifact_kind"`
 	Scope          string  `json:"scope"`
 	Visibility     string  `json:"visibility"`
 	Summary        *string `json:"summary"`
@@ -52,9 +53,15 @@ func (ro *Router) createArtifact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	authorID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
+	artifactKind, err := knowledge.NormalizeArtifactKind(body.ArtifactKind)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	artifact, err := ro.knwStore.Create(r.Context(), knowledge.CreateInput{
 		KnowledgeType: body.KnowledgeType,
+		ArtifactKind:  artifactKind,
 		OwnerScopeID:  scope.ID,
 		AuthorID:      authorID,
 		Visibility:    visibility,

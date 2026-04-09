@@ -107,6 +107,18 @@ func TestHandlePublish_MissingScope_ReturnsToolError(t *testing.T) {
 	assertToolError(t, result)
 }
 
+func TestHandlePublish_InvalidArtifactKind_ReturnsToolError(t *testing.T) {
+	s := &Server{}
+	result := callTool(t, map[string]any{
+		"title":          "My Doc",
+		"content":        "some content",
+		"knowledge_type": "note",
+		"scope":          "project:acme/api",
+		"artifact_kind":  "banana",
+	}, s.handlePublish)
+	assertToolError(t, result)
+}
+
 // ── handleSummarize ───────────────────────────────────────────────────────────
 
 func TestHandleSummarize_MissingScope_ReturnsToolError(t *testing.T) {

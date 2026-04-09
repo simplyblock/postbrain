@@ -21,6 +21,14 @@
     </select>
   </label>
   <br><br>
+  <label>Artifact Kind<br>
+    <select name="artifact_kind">
+      {{range .ArtifactKinds}}
+      <option value="{{.}}">{{.}}</option>
+      {{end}}
+    </select>
+  </label>
+  <br><br>
   <label>Content<br>
     <textarea name="content" rows="12" style="width:100%;max-width:60rem"></textarea>
   </label>

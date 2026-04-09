@@ -3,8 +3,10 @@ package knowledge
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -119,7 +121,9 @@ func (s *Store) Recall(ctx context.Context, pool *pgxpool.Pool, input RecallInpu
 	var results []*ArtifactResult
 	for _, r := range merged {
 		imp := normalizeEndorsements(int(r.Artifact.EndorsementCount))
-		r.Score = knowledgeCombinedScore(r.VecScore, r.BM25Score, r.TrgmScore, imp, 1.0)
+		recency := artifactRecencyScore(time.Now().UTC(), nil, r.Artifact.CreatedAt, r.Artifact.ArtifactKind)
+		r.Score = knowledgeCombinedScore(r.VecScore, r.BM25Score, r.TrgmScore, imp, recency) +
+			artifactKindQueryBoost(input.Query, r.Artifact.ArtifactKind)
 		if r.Score < input.MinScore {
 			continue
 		}
@@ -240,4 +244,61 @@ func isModelTableUnavailableErr(err error) bool {
 	}
 	msg := err.Error()
 	return strings.Contains(msg, "model") && (strings.Contains(msg, "not ready") || strings.Contains(msg, "not found"))
+}
+
+func artifactKindQueryBoost(query, artifactKind string) float64 {
+	q := strings.ToLower(query)
+	decisionIntent := strings.Contains(q, "why") || strings.Contains(q, "decision") || strings.Contains(q, "rationale")
+	implementationIntent := strings.Contains(q, "how") || strings.Contains(q, "implement") || strings.Contains(q, "design") || strings.Contains(q, "spec")
+	meetingIntent := strings.Contains(q, "meeting") || strings.Contains(q, "notes") || strings.Contains(q, "yesterday") || strings.Contains(q, "last week")
+	researchIntent := strings.Contains(q, "research") || strings.Contains(q, "benchmark") || strings.Contains(q, "evaluate")
+
+	boost := 0.0
+	switch artifactKind {
+	case ArtifactKindDecision:
+		if decisionIntent {
+			boost += 0.08
+		}
+	case ArtifactKindSpec, ArtifactKindDesignDoc:
+		if implementationIntent {
+			boost += 0.08
+		}
+	case ArtifactKindMeetingNote:
+		if meetingIntent {
+			boost += 0.08
+		}
+	case ArtifactKindResearch:
+		if researchIntent {
+			boost += 0.06
+		}
+	}
+	return boost
+}
+
+func artifactRecencyScore(now time.Time, occurredAt *time.Time, createdAt time.Time, artifactKind string) float64 {
+	ts := createdAt
+	if occurredAt != nil && !occurredAt.IsZero() {
+		ts = *occurredAt
+	}
+	if now.Before(ts) {
+		return 1.0
+	}
+	ageDays := now.Sub(ts).Hours() / 24.0
+	halfLifeDays := 30.0
+	switch artifactKind {
+	case ArtifactKindMeetingNote:
+		halfLifeDays = 7.0
+	case ArtifactKindRetro:
+		halfLifeDays = 14.0
+	case ArtifactKindDecision:
+		halfLifeDays = 90.0
+	case ArtifactKindSpec, ArtifactKindDesignDoc:
+		halfLifeDays = 60.0
+	case ArtifactKindResearch:
+		halfLifeDays = 45.0
+	}
+	if halfLifeDays <= 0 {
+		return 1.0
+	}
+	return math.Exp(-math.Ln2 * ageDays / halfLifeDays)
 }

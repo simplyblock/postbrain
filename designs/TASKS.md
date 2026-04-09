@@ -25,6 +25,35 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-09: Added predefined knowledge artifact kinds with DB persistence and API/MCP support (TDD-first):
+  - Added `artifact_kind` taxonomy in `internal/knowledge/artifact_kind.go`:
+    - allowed values: `general`, `decision`, `meeting_note`, `retrospective`, `spec`, `design_doc`, `research`
+    - empty input defaults to `general`; invalid values are rejected
+  - Updated knowledge create path:
+    - `internal/knowledge/store.go` now normalizes/validates `CreateInput.ArtifactKind`
+    - `internal/knowledge/store_test.go` added red/green tests for defaulting and invalid-kind rejection
+  - Extended API surfaces:
+    - REST `POST /v1/knowledge` accepts optional `artifact_kind` (`internal/api/rest/knowledge.go`)
+    - MCP `publish` accepts optional `artifact_kind` with validation (`internal/api/mcp/publish.go`, `internal/api/mcp/server.go`, `internal/api/mcp/handlers_unit_test.go`)
+  - Added DB migration and query/model wiring:
+    - migration `internal/db/migrations/000017_artifact_kind.{up,down}.sql` adds `knowledge_artifacts.artifact_kind` with CHECK constraint and index
+    - updated sqlc queries and regenerated db types (`internal/db/queries/*.sql`, `internal/db/*sql.go`, `internal/db/models.go`)
+    - `internal/db/compat.go` now defaults empty artifact kind to `general` for direct DB callers.
+
+- [x] 2026-04-09: Wired artifact-kind retrieval surfaces and ranking behavior (TDD-first):
+  - Added recall-ranking unit coverage in `internal/knowledge/recall_test.go`:
+    - decision-intent query boosts `decision` artifacts over `meeting_note`
+    - `meeting_note` recency decays faster than `decision` at equal age
+  - Updated knowledge recall scoring in `internal/knowledge/recall.go`:
+    - dynamic recency decay by artifact kind (`meeting_note`/`retrospective` decay faster; `decision` slower)
+    - query-intent artifact-kind boosts (`decision`, `spec`, `design_doc`, `meeting_note`, `research`)
+  - Wired `artifact_kind` into retrieval outputs:
+    - unified retrieval result model (`internal/retrieval/merge.go`, `internal/retrieval/orchestrate.go`)
+    - MCP `recall` payload includes `artifact_kind` (`internal/api/mcp/recall.go`)
+    - MCP/REST `context` knowledge blocks include `artifact_kind` (`internal/api/mcp/context.go`, `internal/api/rest/context.go`)
+    - Web UI query playground renders artifact kind (`internal/ui/handler.go`, `internal/ui/web/templates/query.html`)
+    - Web UI knowledge/collection/detail views surface artifact kind badges/fields.
+
 ### Permissions Redesign
 
 - [x] 2026-04-08: Added Web UI management for direct scope grants in Principals section (TDD-first):

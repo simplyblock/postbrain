@@ -51,10 +51,11 @@ func (ro *Router) getContext(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type contextBlock struct {
-		Layer   string `json:"layer"`
-		Type    string `json:"type,omitempty"`
-		Title   string `json:"title,omitempty"`
-		Content string `json:"content"`
+		Layer        string `json:"layer"`
+		Type         string `json:"type,omitempty"`
+		ArtifactKind string `json:"artifact_kind,omitempty"`
+		Title        string `json:"title,omitempty"`
+		Content      string `json:"content"`
 	}
 
 	var blocks []contextBlock
@@ -74,10 +75,11 @@ func (ro *Router) getContext(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				blocks = append(blocks, contextBlock{
-					Layer:   "knowledge",
-					Type:    a.Artifact.KnowledgeType,
-					Title:   a.Artifact.Title,
-					Content: a.Artifact.Content,
+					Layer:        "knowledge",
+					Type:         a.Artifact.KnowledgeType,
+					ArtifactKind: a.Artifact.ArtifactKind,
+					Title:        a.Artifact.Title,
+					Content:      a.Artifact.Content,
 				})
 				totalTokens += tokens
 			}

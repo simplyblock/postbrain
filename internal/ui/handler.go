@@ -516,22 +516,24 @@ func (h *Handler) handleKnowledge(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := struct {
-		Query       string
-		Status      string
-		ScopeID     uuid.UUID
-		Artifacts   []*db.KnowledgeArtifact
-		Scopes      []*db.Scope
-		UploadError string
-		PrevCursor  int
-		NextCursor  int
-		HasPrev     bool
-		HasNext     bool
+		Query         string
+		Status        string
+		ScopeID       uuid.UUID
+		Artifacts     []*db.KnowledgeArtifact
+		Scopes        []*db.Scope
+		ArtifactKinds []string
+		UploadError   string
+		PrevCursor    int
+		NextCursor    int
+		HasPrev       bool
+		HasNext       bool
 	}{
-		Query:      q,
-		Status:     status,
-		ScopeID:    scopeID,
-		PrevCursor: cursor - knowledgePageSize,
-		HasPrev:    cursor > 0,
+		Query:         q,
+		Status:        status,
+		ScopeID:       scopeID,
+		ArtifactKinds: knowledge.ArtifactKinds(),
+		PrevCursor:    cursor - knowledgePageSize,
+		HasPrev:       cursor > 0,
 	}
 
 	if h.pool != nil {
@@ -2078,9 +2080,10 @@ func (h *Handler) handleKnowledgeNew(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) renderKnowledgeNew(w http.ResponseWriter, r *http.Request, formError string) {
 	data := struct {
-		FormError string
-		Scopes    []*db.Scope
-	}{FormError: formError}
+		FormError     string
+		Scopes        []*db.Scope
+		ArtifactKinds []string
+	}{FormError: formError, ArtifactKinds: knowledge.ArtifactKinds()}
 	if h.pool != nil {
 		scopes, _ := h.authorizedScopesForRequest(r.Context(), r)
 		data.Scopes = scopes
@@ -2097,6 +2100,11 @@ func (h *Handler) handleCreateKnowledge(w http.ResponseWriter, r *http.Request) 
 	title := strings.TrimSpace(r.FormValue("title"))
 	if title == "" {
 		h.renderKnowledgeNew(w, r, "title is required")
+		return
+	}
+	artifactKind, err := knowledge.NormalizeArtifactKind(r.FormValue("artifact_kind"))
+	if err != nil {
+		h.renderKnowledgeNew(w, r, "invalid artifact kind")
 		return
 	}
 	scopeStr := strings.TrimSpace(r.FormValue("scope_id"))
@@ -2126,6 +2134,7 @@ func (h *Handler) handleCreateKnowledge(w http.ResponseWriter, r *http.Request) 
 	authorID := h.principalFromCookie(r)
 	art, err := h.knwStore.Create(r.Context(), knowledge.CreateInput{
 		KnowledgeType: "semantic",
+		ArtifactKind:  artifactKind,
 		OwnerScopeID:  scopeID,
 		AuthorID:      authorID,
 		Visibility:    visibility,
@@ -2244,6 +2253,7 @@ func (h *Handler) handleQuery(w http.ResponseWriter, r *http.Request) {
 		Content       string
 		MemoryType    string
 		KnowledgeType string
+		ArtifactKind  string
 		SourceRef     string
 		Status        string
 		Visibility    string
@@ -2351,6 +2361,7 @@ func (h *Handler) handleQuery(w http.ResponseWriter, r *http.Request) {
 				Content:       content,
 				MemoryType:    res.MemoryType,
 				KnowledgeType: res.KnowledgeType,
+				ArtifactKind:  res.ArtifactKind,
 				SourceRef:     res.SourceRef,
 				Status:        res.Status,
 				Visibility:    res.Visibility,
@@ -2429,12 +2440,18 @@ func (h *Handler) handleUploadKnowledge(w http.ResponseWriter, r *http.Request) 
 	if knowledgeType == "" {
 		knowledgeType = "reference"
 	}
+	artifactKind, err := knowledge.NormalizeArtifactKind(r.FormValue("artifact_kind"))
+	if err != nil {
+		http.Error(w, "invalid artifact kind", http.StatusBadRequest)
+		return
+	}
 
 	authorID := h.principalFromCookie(r)
 
 	workflow := r.FormValue("workflow")
 	_, err = h.knwStore.Create(r.Context(), knowledge.CreateInput{
 		KnowledgeType: knowledgeType,
+		ArtifactKind:  artifactKind,
 		OwnerScopeID:  scope.ID,
 		AuthorID:      authorID,
 		Visibility:    "team",

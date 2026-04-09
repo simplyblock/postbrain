@@ -12,7 +12,7 @@
   {{range .Artifacts}}
   <tr>
     <td><a href="/ui/knowledge/{{.ID}}">{{.Title}}</a></td>
-    <td>{{.KnowledgeType}}</td>
+    <td>{{.KnowledgeType}}{{if .ArtifactKind}} / {{.ArtifactKind}}{{end}}</td>
     <td>{{statusBadge .Status}}</td>
     <td>{{.Visibility}}</td>
     <td>{{timeAgo .CreatedAt}}</td>
