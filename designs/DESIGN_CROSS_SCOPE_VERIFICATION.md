@@ -40,14 +40,15 @@ client code, which causes inconsistent behavior across tools.
 - Automatically deciding "truth" or "resolution" between conflicting evidence.
 - Introducing cross-scope write behavior.
 - Building a release-management system in phase 1.
+- Reading skills from multiple scopes.
 
 ## API surface
 
 ### New MCP tool
 
-- Name: `verify_context` (preferred) or `cross_scope_recall` (acceptable alias)
+- Name: `cross_scope_context`
 - Family: retrieval/analysis
-- Permission baseline: `memories:read`
+- Permission baseline: per-layer (`memories:read` for memory, `knowledge:read` for knowledge)
 
 ### Request shape
 
@@ -56,7 +57,7 @@ client code, which causes inconsistent behavior across tools.
   "query": "string (required)",
   "baseline_scope": "kind:external_id (required)",
   "comparison_scopes": ["kind:external_id", "kind:external_id"],
-  "layers": ["memory", "knowledge", "skill"],
+  "layers": ["memory", "knowledge"],
   "search_mode": "text|code|hybrid",
   "since": "RFC3339 timestamp (optional)",
   "until": "RFC3339 timestamp (optional)",
@@ -73,7 +74,7 @@ client code, which causes inconsistent behavior across tools.
   "query": "...",
   "time_window": { "since": "...", "until": "..." },
   "baseline_scope": "project:docs/repo",
-  "comparisons": [
+  "scope_contexts": [
     {
       "scope": "project:source/repo",
       "results": [
@@ -111,14 +112,10 @@ client code, which causes inconsistent behavior across tools.
 ### Layer behavior by scope
 
 - Memory layer:
-  - default behavior in `verify_context` is strict per-scope memory retrieval.
-  - no implicit ancestor/personal fan-out in phase 1 for deterministic
-    comparisons.
+  - default behavior in `cross_scope_context` is strict per-scope memory retrieval.
+  - no implicit ancestor/personal fan-out for deterministic comparisons.
 - Knowledge layer:
-  - visibility rules still apply from each scope anchor
-    (`project/team/department/company/grants`).
-- Skill layer:
-  - scoped to the explicitly requested scope.
+  - visibility rules still apply from each scope anchor (`project/team/department/company/grants`).
 
 ### Time-window behavior
 
@@ -127,7 +124,6 @@ client code, which causes inconsistent behavior across tools.
 - Knowledge window key:
   - prefer `knowledge_artifacts.published_at` when non-null
   - fallback to `knowledge_artifacts.created_at`.
-- Skills window key: `skills.created_at`.
 - Invalid window (`since > until`) is a validation error.
 
 ### Provenance guarantees
@@ -161,8 +157,8 @@ explicit `null` in JSON for stable clients.
 ### Server layer changes (`internal/api/mcp`)
 
 - `server.go`
-  - register `verify_context` tool and argument schema.
-- `verify_context.go` (new)
+  - register `cross_scope_context` tool and argument schema.
+- `cross_scope_context.go` (new)
   - implement handler with per-scope orchestration and output grouping.
 - `scopeauth.go`
   - no semantic changes required; reuse `authorizeRequestedScope`.
@@ -204,7 +200,6 @@ Existing columns are sufficient for semantics:
 - `memories.created_at`
 - `knowledge_artifacts.created_at`
 - `knowledge_artifacts.published_at`
-- `skills.created_at`
 
 ## Required for performance and scale (phase 1.1)
 
@@ -213,7 +208,6 @@ Add targeted indexes to keep time-window queries bounded:
 - `memories(scope_id, is_active, created_at DESC)`
 - `knowledge_artifacts(owner_scope_id, status, published_at DESC)`
 - `knowledge_artifacts(owner_scope_id, status, created_at DESC)` (fallback path)
-- `skills(scope_id, status, created_at DESC)`
 
 These indexes are additive and non-breaking.
 
@@ -227,7 +221,7 @@ If "since last release" should be server-resolved instead of client-provided
     `created_at`
   - unique `(scope_id, version)`
 - helper MCP tool `mark_release` (write path) or REST endpoint for CI.
-- `verify_context` optional `since_release` parameter that resolves to
+- `cross_scope_context` optional `since_release` parameter that resolves to
   `released_at`.
 
 This phase is optional and can be deferred.
@@ -236,8 +230,18 @@ This phase is optional and can be deferred.
 
 - No new authz model is introduced.
 - Existing token permission and scope restrictions remain authoritative.
-- Tool-level permission remains read-only.
+- Tool-level behavior is read-only.
 - No implicit broadening of accessible scopes from the request payload.
+- Authorization is evaluated per requested layer and per requested scope.
+- If `layers` includes `memory`, caller must hold `memories:read` for each
+  queried scope.
+- If `layers` includes `knowledge`, caller must hold `knowledge:read` for each
+  queried scope.
+- Baseline scope authorization is fatal for any requested layer that is denied.
+- Comparison scope authorization is non-fatal; denied layers/scopes are skipped
+  and reported in `skipped_scopes`.
+- Partial execution is allowed when at least one requested layer+scope pair is
+  authorized.
 
 ## Error handling
 
@@ -282,7 +286,7 @@ This phase is optional and can be deferred.
 
 - Backward compatible by design.
 - No required client changes for existing `recall` users.
-- New clients can incrementally adopt `verify_context`.
+- New clients can incrementally adopt `cross_scope_context`.
 
 ## Open questions
 
