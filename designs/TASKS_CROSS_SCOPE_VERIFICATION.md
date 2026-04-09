@@ -254,32 +254,32 @@ Acceptance criteria:
 
 ### 7.1 End-to-end cross-scope verification flow
 
-- [ ] Add integration test covering:
+- [x] Add integration test covering:
       baseline docs scope + source scope + unauthorized scope
       with mixed layers and time window
 
 Required tests (write first):
 
-- [ ] `internal/api/mcp/cross_scope_context_end_to_end_integration_test.go`
+- [x] `internal/api/mcp/cross_scope_context_end_to_end_integration_test.go`
 
 Acceptance criteria:
 
-- [ ] End-to-end behavior matches design semantics for authz, grouping, and
+- [x] End-to-end behavior matches design semantics for authz, grouping, and
       provenance
 
 ### 7.2 Recall non-regression
 
-- [ ] Ensure existing `recall` API and behavior remain unchanged
+- [x] Ensure existing `recall` API and behavior remain unchanged
 
 Required tests:
 
-- [ ] Existing `internal/api/mcp/recall*_test.go` suites remain green
-- [ ] Existing `internal/retrieval` and `internal/memory` recall suites remain
+- [x] Existing `internal/api/mcp/recall*_test.go` suites remain green
+- [x] Existing `internal/retrieval` and `internal/memory` recall suites remain
       green
 
 Acceptance criteria:
 
-- [ ] No breaking changes in `recall` request/response semantics
+- [x] No breaking changes in `recall` request/response semantics
 
 ---
 

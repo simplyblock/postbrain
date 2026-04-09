@@ -25,6 +25,21 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-09: Completed cross-scope verification Phase 7 end-to-end and recall non-regression checks (TDD-first):
+  - Added end-to-end integration coverage in
+    `internal/api/mcp/cross_scope_context_end_to_end_integration_test.go`
+    for:
+    - baseline docs scope + source comparison scope + unauthorized comparison
+      scope
+    - mixed `memory` + `knowledge` retrieval in one request
+    - explicit `since`/`until` time window filtering across both layers
+    - grouped output validation (`baseline_results`, `scope_contexts`,
+      `skipped_scopes`) and provenance key completeness.
+  - Ran recall non-regression suites and confirmed behavior remains intact:
+    - `go test ./internal/api/mcp -run Recall -count=1`
+    - `go test ./internal/retrieval -run Recall -count=1`
+    - `go test ./internal/memory -run Recall -count=1`
+
 - [x] 2026-04-09: Completed cross-scope verification Phase 6 DB index migration (TDD-first):
   - Added migration `000018_cross_scope_time_window_indexes`:
     - `memories(scope_id, is_active, created_at DESC)`
