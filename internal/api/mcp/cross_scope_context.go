@@ -6,7 +6,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
+
+	scopeauthapi "github.com/simplyblock/postbrain/internal/api/scopeauth"
+	"github.com/simplyblock/postbrain/internal/authz"
+	"github.com/simplyblock/postbrain/internal/db"
 )
 
 func normalizeAndDeduplicateScopes(raw []any) ([]string, error) {
@@ -69,9 +75,35 @@ func parseCrossScopeLayers(args map[string]any) (map[string]bool, error) {
 	return active, nil
 }
 
+func resolveScopeID(ctx context.Context, pool *pgxpool.Pool, scopeStr string) (uuid.UUID, error) {
+	kind, externalID, err := parseScopeString(scopeStr)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	scope, err := db.GetScopeByExternalID(ctx, pool, kind, externalID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	if scope == nil {
+		return uuid.Nil, fmt.Errorf("scope '%s' not found", scopeStr)
+	}
+	return scope.ID, nil
+}
+
+func requiredPermissionForLayer(layer string) authz.Permission {
+	switch layer {
+	case "memory":
+		return "memories:read"
+	case "knowledge":
+		return "knowledge:read"
+	default:
+		return ""
+	}
+}
+
 // handleCrossScopeContext validates cross-scope context request arguments.
 // Retrieval orchestration is implemented in subsequent phases.
-func (s *Server) handleCrossScopeContext(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+func (s *Server) handleCrossScopeContext(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
 
 	query, _ := args["query"].(string)
@@ -86,15 +118,13 @@ func (s *Server) handleCrossScopeContext(_ context.Context, req mcpgo.CallToolRe
 		return mcpgo.NewToolResultError(fmt.Sprintf("cross_scope_context: invalid baseline_scope: %v", err)), nil
 	}
 
-	if _, err := parseCrossScopeLayers(args); err != nil {
+	layers, err := parseCrossScopeLayers(args)
+	if err != nil {
 		return mcpgo.NewToolResultError(err.Error()), nil
 	}
 	var comparisonRaw []any
 	if v, ok := args["comparison_scopes"].([]any); ok {
 		comparisonRaw = v
-	}
-	if _, err := normalizeAndDeduplicateScopes(comparisonRaw); err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("cross_scope_context: invalid comparison_scopes: %v", err)), nil
 	}
 
 	since, err := parseRFC3339Arg(args, "since")
@@ -117,12 +147,55 @@ func (s *Server) handleCrossScopeContext(_ context.Context, req mcpgo.CallToolRe
 		return mcpgo.NewToolResultError("cross_scope_context: 'limit_per_scope' must be > 0"), nil
 	}
 
+	if s.pool == nil {
+		return mcpgo.NewToolResultError("cross_scope_context: server not configured (no database connection)"), nil
+	}
+
+	baselineScopeID, err := resolveScopeID(ctx, s.pool, baselineScope)
+	if err != nil {
+		return mcpgo.NewToolResultError(fmt.Sprintf("cross_scope_context: baseline scope lookup: %v", err)), nil
+	}
+	for layer := range layers {
+		perm := requiredPermissionForLayer(layer)
+		if perm == "" {
+			continue
+		}
+		if err := scopeauthapi.AuthorizeContextScope(ctx, baselineScopeID, perm); err != nil {
+			return scopeAuthzToolError(ctx, "cross_scope_context", baselineScopeID, err), nil
+		}
+	}
+
+	comparisonScopes, err := normalizeAndDeduplicateScopes(comparisonRaw)
+	if err != nil {
+		return mcpgo.NewToolResultError(fmt.Sprintf("cross_scope_context: invalid comparison_scopes: %v", err)), nil
+	}
+	skippedScopes := make([]map[string]any, 0)
+	for _, scopeStr := range comparisonScopes {
+		scopeID, err := resolveScopeID(ctx, s.pool, scopeStr)
+		if err != nil {
+			return mcpgo.NewToolResultError(fmt.Sprintf("cross_scope_context: comparison scope lookup: %v", err)), nil
+		}
+		for layer := range layers {
+			perm := requiredPermissionForLayer(layer)
+			if perm == "" {
+				continue
+			}
+			if err := scopeauthapi.AuthorizeContextScope(ctx, scopeID, perm); err != nil {
+				skippedScopes = append(skippedScopes, map[string]any{
+					"scope":  scopeStr,
+					"layer":  layer,
+					"reason": "forbidden",
+				})
+			}
+		}
+	}
+
 	payload, _ := json.Marshal(map[string]any{
 		"query":            query,
 		"baseline_scope":   baselineScope,
 		"baseline_results": []any{},
 		"scope_contexts":   []any{},
-		"skipped_scopes":   []any{},
+		"skipped_scopes":   skippedScopes,
 	})
 	return mcpgo.NewToolResultText(string(payload)), nil
 }

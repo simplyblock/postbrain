@@ -93,41 +93,41 @@ Acceptance criteria:
 
 ### 2.1 Implement per-layer permission checks
 
-- [ ] Enforce `memories:read` only for requested `memory` layer
-- [ ] Enforce `knowledge:read` only for requested `knowledge` layer
-- [ ] Use existing scope authz path (`authorizeRequestedScope`) with
+- [x] Enforce `memories:read` only for requested `memory` layer
+- [x] Enforce `knowledge:read` only for requested `knowledge` layer
+- [x] Use existing scope authz path (`authorizeRequestedScope`) with
       layer-specific required permission wiring
 
 Required tests (write first):
 
-- [ ] `internal/api/mcp/permission_authz_integration_test.go`:
+- [x] `internal/api/mcp/cross_scope_context_authz_integration_test.go`:
       - `layers=["memory"]` succeeds with only `memories:read`
       - `layers=["knowledge"]` succeeds with only `knowledge:read`
       - mixed layers require both when both requested
 
 Acceptance criteria:
 
-- [ ] Requested layers are independently authorized
-- [ ] No over-restriction for single-layer requests
+- [x] Requested layers are independently authorized
+- [x] No over-restriction for single-layer requests
 
 ### 2.2 Baseline fatal vs comparison non-fatal behavior
 
-- [ ] Fail request when baseline scope lacks authorization for any requested
+- [x] Fail request when baseline scope lacks authorization for any requested
       layer
-- [ ] Skip unauthorized comparison scope/layer pairs and append structured
+- [x] Skip unauthorized comparison scope/layer pairs and append structured
       `skipped_scopes` entries
 
 Required tests (write first):
 
-- [ ] `internal/api/mcp/cross_scope_context_authz_integration_test.go`:
+- [x] `internal/api/mcp/cross_scope_context_authz_integration_test.go`:
       - baseline denied -> tool returns forbidden error
       - comparison denied -> tool succeeds and reports skip
       - mixed comparison permissions -> partial results + skips
 
 Acceptance criteria:
 
-- [ ] Baseline denial is fatal
-- [ ] Comparison denial is non-fatal and observable in payload
+- [x] Baseline denial is fatal
+- [x] Comparison denial is non-fatal and observable in payload
 
 ---
 

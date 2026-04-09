@@ -25,6 +25,21 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-09: Completed cross-scope verification Phase 2 authz semantics (TDD-first):
+  - Updated `internal/api/mcp/cross_scope_context.go` to enforce per-layer,
+    per-scope read authorization:
+    - `memory` layer requires `memories:read`
+    - `knowledge` layer requires `knowledge:read`
+  - Implemented baseline/comparison behavior:
+    - baseline scope denial is fatal (`forbidden: scope access denied`)
+    - comparison scope/layer denial is non-fatal and reported in
+      `skipped_scopes` entries with `scope`, `layer`, `reason`.
+  - Added integration coverage in
+    `internal/api/mcp/cross_scope_context_authz_integration_test.go`:
+    - per-layer permission success/denial matrix
+    - mixed-layer denial when one required permission is missing
+    - comparison-scope denied-by-token path returns success with skip metadata.
+
 - [x] 2026-04-09: Started cross-scope verification Phase 1 MCP surface (TDD-first):
   - Added new MCP tool registration `cross_scope_context` in
     `internal/api/mcp/server.go` with arguments:
