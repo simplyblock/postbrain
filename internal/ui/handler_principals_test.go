@@ -171,7 +171,7 @@ func TestHandlePrincipals_ScopeGrantPicker_HidesAdvancedLabel(t *testing.T) {
 	}
 }
 
-func TestHandlePrincipals_ScopeGrantPicker_UsesToggleAndCenteredPopoverHooks(t *testing.T) {
+func TestHandlePrincipals_ScopeGrantPicker_UsesToggleAndInlineExpansionHooks(t *testing.T) {
 	t.Parallel()
 	h := newTestHandler(t)
 	req := httptest.NewRequest(http.MethodGet, "/ui/principals", nil)
@@ -186,8 +186,8 @@ func TestHandlePrincipals_ScopeGrantPicker_UsesToggleAndCenteredPopoverHooks(t *
 	if !strings.Contains(body, "class=\"scope-grant-toggle\"") {
 		t.Fatal("expected scope-grant toggle class for open/close indicator")
 	}
-	if !strings.Contains(body, "class=\"scope-grant-ops-popover\"") {
-		t.Fatal("expected scope-grant centered popover class")
+	if !strings.Contains(body, "class=\"scope-grant-ops-inline\"") {
+		t.Fatal("expected scope-grant inline expansion class")
 	}
 	if !strings.Contains(body, "class=\"scope-grant-permissions\"") {
 		t.Fatal("expected scope-grant permissions container class")

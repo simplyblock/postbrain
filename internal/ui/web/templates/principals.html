@@ -10,7 +10,6 @@
     gap: 0.35rem;
   }
   .scope-grant-adv {
-    position: relative;
     margin: 0;
   }
   .scope-grant-toggle {
@@ -34,22 +33,14 @@
   .scope-grant-adv[open] > .scope-grant-toggle::before {
     transform: rotate(90deg);
   }
-  .scope-grant-ops-popover {
-    position: absolute;
-    top: 50%;
-    left: calc(100% + 0.5rem);
-    transform: translateY(calc(-50% + var(--scope-grant-popover-shift, 0px)));
-    z-index: 10;
-    min-width: 8rem;
-    padding: 0.4rem 0.55rem;
-    border: 1px solid var(--pico-muted-border-color);
-    border-radius: var(--pico-border-radius);
-    background: var(--pico-card-background-color);
-    box-shadow: var(--pico-card-box-shadow);
+  .scope-grant-ops-inline {
+    margin: 0.2rem 0 0.45rem 2.3rem;
+    padding: 0.2rem 0 0.2rem 0.55rem;
+    border-left: 2px solid var(--pico-muted-border-color);
   }
-  .scope-grant-ops-popover label {
+  .scope-grant-ops-inline label {
     display: block;
-    margin: 0.12rem 0;
+    margin: 0.15rem 0;
   }
 </style>
 
@@ -259,7 +250,7 @@
           </label>
           <details class="scope-grant-adv">
             <summary class="scope-grant-toggle" title="Toggle operations"></summary>
-            <div class="scope-grant-ops-popover">
+            <div class="scope-grant-ops-inline">
               {{range .Operations}}
               <label>
                 <input type="checkbox" name="permissions_adv" value="{{$resource}}:{{.}}" data-scope-grant-adv="{{$resource}}">
@@ -318,41 +309,6 @@
       advanced.forEach(function (item) {
         item.addEventListener('change', syncBasicFromAdvanced);
       });
-    });
-  })();
-
-  (function keepScopeGrantPopoverInBounds() {
-    var container = document.querySelector('.scope-grant-permissions');
-    if (!container) {
-      return;
-    }
-    var detailsNodes = container.querySelectorAll('.scope-grant-adv');
-    function reposition(details) {
-      var pop = details.querySelector('.scope-grant-ops-popover');
-      if (!pop || !details.open) {
-        return;
-      }
-      pop.style.setProperty('--scope-grant-popover-shift', '0px');
-      var containerRect = container.getBoundingClientRect();
-      var popRect = pop.getBoundingClientRect();
-      var topGap = (containerRect.top + 8) - popRect.top;
-      var bottomGap = popRect.bottom - (containerRect.bottom - 8);
-      var shift = 0;
-      if (topGap > 0) {
-        shift += topGap;
-      }
-      if (bottomGap > 0) {
-        shift -= bottomGap;
-      }
-      pop.style.setProperty('--scope-grant-popover-shift', shift.toFixed(0) + 'px');
-    }
-    detailsNodes.forEach(function (details) {
-      details.addEventListener('toggle', function () {
-        reposition(details);
-      });
-    });
-    window.addEventListener('resize', function () {
-      detailsNodes.forEach(function (details) { reposition(details); });
     });
   })();
 </script>

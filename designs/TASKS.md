@@ -73,6 +73,14 @@
     - retained centered-by-default expansion while avoiding clipping into the fieldset legend/header area
   - Extended render hook test in `internal/ui/handler_principals_test.go` to assert permissions-container hook presence.
 
+- [x] 2026-04-09: Switched scope grant advanced operations from overlay popover to inline expansion:
+  - Updated `internal/ui/web/templates/principals.html`:
+    - removed absolute-positioned operation popover and boundary-shift JS
+    - advanced operations now expand inline under the selected resource row in normal document flow
+    - opening a resource pushes subsequent resources downward (no overlap)
+  - Updated render test in `internal/ui/handler_principals_test.go`:
+    - `TestHandlePrincipals_ScopeGrantPicker_UsesToggleAndInlineExpansionHooks`.
+
 - [x] 2026-04-06: Fixed `internal/authz` security and design-alignment gaps raised by regression tests:
   - Fixed `TokenResolver` scope restriction path to avoid unsafe resolver type assertion panic:
     - `internal/authz/token_resolver.go` now safely unwraps DB-backed resolvers and returns an explicit error when scope checks cannot be evaluated, instead of panicking.
