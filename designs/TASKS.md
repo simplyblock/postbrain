@@ -60,6 +60,13 @@
   - Added render regression in `internal/ui/handler_principals_test.go`:
     - `TestHandlePrincipals_ScopeGrantPicker_HidesAdvancedLabel`.
 
+- [x] 2026-04-09: Improved scope grant expander affordance and popover positioning:
+  - Updated `internal/ui/web/templates/principals.html`:
+    - resource-row chevron now rotates between collapsed/expanded states
+    - operations chooser opens as a centered popover relative to the resource row (not only downward)
+  - Added render regression in `internal/ui/handler_principals_test.go`:
+    - `TestHandlePrincipals_ScopeGrantPicker_UsesToggleAndCenteredPopoverHooks`.
+
 - [x] 2026-04-06: Fixed `internal/authz` security and design-alignment gaps raised by regression tests:
   - Fixed `TokenResolver` scope restriction path to avoid unsafe resolver type assertion panic:
     - `internal/authz/token_resolver.go` now safely unwraps DB-backed resolvers and returns an explicit error when scope checks cannot be evaluated, instead of panicking.
