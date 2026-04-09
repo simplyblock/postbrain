@@ -119,14 +119,21 @@ func activeRetrievalLayersForScope(allLayers map[string]bool, denied map[string]
 	return active
 }
 
-func asCrossScopeResultJSON(results []*retrieval.Result) []map[string]any {
+func asCrossScopeResultJSON(scope string, results []*retrieval.Result) []map[string]any {
 	out := make([]map[string]any, 0, len(results))
 	for _, r := range results {
 		score := r.Score
 		if math.IsNaN(score) || math.IsInf(score, 0) {
 			score = 0
 		}
+		var sourceRef any
+		if r.SourceRef != "" {
+			sourceRef = r.SourceRef
+		} else {
+			sourceRef = nil
+		}
 		item := map[string]any{
+			"scope":                  scope,
 			"layer":                  string(r.Layer),
 			"id":                     r.ID.String(),
 			"score":                  score,
@@ -135,7 +142,7 @@ func asCrossScopeResultJSON(results []*retrieval.Result) []map[string]any {
 			"memory_type":            r.MemoryType,
 			"knowledge_type":         r.KnowledgeType,
 			"artifact_kind":          r.ArtifactKind,
-			"source_ref":             r.SourceRef,
+			"source_ref":             sourceRef,
 			"visibility":             r.Visibility,
 			"status":                 r.Status,
 			"endorsements":           r.Endorsements,
@@ -152,6 +159,11 @@ func asCrossScopeResultJSON(results []*retrieval.Result) []map[string]any {
 			item["created_at"] = r.CreatedAt.UTC().Format(time.RFC3339)
 		} else {
 			item["created_at"] = nil
+		}
+		if !r.UpdatedAt.IsZero() {
+			item["updated_at"] = r.UpdatedAt.UTC().Format(time.RFC3339)
+		} else {
+			item["updated_at"] = nil
 		}
 		out = append(out, item)
 	}
@@ -314,14 +326,24 @@ func (s *Server) handleCrossScopeContext(ctx context.Context, req mcpgo.CallTool
 		}
 		scopeContexts = append(scopeContexts, map[string]any{
 			"scope":   scopeStr,
-			"results": asCrossScopeResultJSON(results),
+			"results": asCrossScopeResultJSON(scopeStr, results),
 		})
+	}
+
+	var sinceOut any
+	if since != nil {
+		sinceOut = since.UTC().Format(time.RFC3339)
+	}
+	var untilOut any
+	if until != nil {
+		untilOut = until.UTC().Format(time.RFC3339)
 	}
 
 	payload, err := json.Marshal(map[string]any{
 		"query":            query,
+		"time_window":      map[string]any{"since": sinceOut, "until": untilOut},
 		"baseline_scope":   baselineScope,
-		"baseline_results": asCrossScopeResultJSON(baselineResults),
+		"baseline_results": asCrossScopeResultJSON(baselineScope, baselineResults),
 		"scope_contexts":   scopeContexts,
 		"skipped_scopes":   skippedScopes,
 	})

@@ -25,6 +25,22 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-09: Completed cross-scope verification Phase 5 response contract + provenance normalization (TDD-first):
+  - Normalized `cross_scope_context` top-level response contract in
+    `internal/api/mcp/cross_scope_context.go`:
+    - `query`, `time_window`, `baseline_scope`, `baseline_results`,
+      `scope_contexts`, `skipped_scopes`
+  - Enforced per-item provenance keys for serialized results:
+    - `scope`, `layer`, `id`, `score`, `source_ref`, `created_at`, `updated_at`
+    - explicit `null` values for unavailable provenance fields.
+  - Added response robustness:
+    - sanitize non-finite scores (`NaN`/`Inf`) before JSON serialization
+    - explicit marshal error handling.
+  - Added/updated tests:
+    - `internal/api/mcp/cross_scope_context_response_test.go`
+    - `internal/api/mcp/cross_scope_context_integration_test.go` top-level key
+      contract coverage.
+
 - [x] 2026-04-09: Completed cross-scope verification Phase 4 time-window filtering (TDD-first):
   - Extended retrieval plumbing to carry optional `since`/`until` through:
     - `internal/retrieval/orchestrate.go` (`OrchestrateInput`)

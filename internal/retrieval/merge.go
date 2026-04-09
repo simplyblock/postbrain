@@ -31,6 +31,7 @@ type Result struct {
 	SourceRef  string
 	Importance float64
 	CreatedAt  time.Time
+	UpdatedAt  time.Time
 
 	// Knowledge fields (Layer == LayerKnowledge)
 	Title                string

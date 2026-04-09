@@ -210,22 +210,22 @@ Acceptance criteria:
 
 ### 5.1 Normalize result schema
 
-- [ ] Return `query`, `time_window`, `baseline_scope`, `baseline_results`,
+- [x] Return `query`, `time_window`, `baseline_scope`, `baseline_results`,
       `scope_contexts`, `skipped_scopes`
-- [ ] Include mandatory per-item provenance:
+- [x] Include mandatory per-item provenance:
       `scope`, `layer`, `id`, `score`, `source_ref`, `created_at`, `updated_at`
-- [ ] Emit explicit `null` for unavailable optional provenance fields
+- [x] Emit explicit `null` for unavailable optional provenance fields
 
 Required tests (write first):
 
-- [ ] `internal/api/mcp/cross_scope_context_response_test.go`:
+- [x] `internal/api/mcp/cross_scope_context_response_test.go`:
       payload keys and JSON shape
-- [ ] ensure provenance keys always exist in serialized output
+- [x] ensure provenance keys always exist in serialized output
 
 Acceptance criteria:
 
-- [ ] Payload contract is stable and deterministic
-- [ ] Provenance completeness is enforced by tests
+- [x] Payload contract is stable and deterministic
+- [x] Provenance completeness is enforced by tests
 
 ---
 

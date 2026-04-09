@@ -231,6 +231,49 @@ func TestMCP_CrossScopeContext_TimeWindowSince_UsesKnowledgePublishedAt(t *testi
 	}
 }
 
+func TestMCP_CrossScopeContext_ResponseIncludesTopLevelContractKeys(t *testing.T) {
+	ctx := context.Background()
+	pool := testhelper.NewTestPool(t)
+	svc := testhelper.NewMockEmbeddingService()
+	cfg := &config.Config{}
+
+	principal := testhelper.CreateTestPrincipal(t, pool, "user", "mcp-csc-contract-user-"+uuid.NewString())
+	scope := testhelper.CreateTestScope(t, pool, "project", "mcp-csc-contract-scope-"+uuid.NewString(), nil, principal.ID)
+	testhelper.CreateTestEmbeddingModel(t, pool)
+
+	srv := mcpapi.NewServer(pool, svc, cfg).MCPServer()
+	tool := srv.GetTool("cross_scope_context")
+	if tool == nil {
+		t.Fatal("cross_scope_context tool not registered")
+	}
+
+	ctxRead := withAuthContextPerms(ctx, pool, principal.ID, scope.ID, []string{"memories:read"})
+	req := mcpgo.CallToolRequest{}
+	req.Params.Name = "cross_scope_context"
+	req.Params.Arguments = map[string]any{
+		"query":          "contract check",
+		"baseline_scope": "project:" + scope.ExternalID,
+		"layers":         []any{"memory"},
+	}
+	result, err := tool.Handler(ctxRead, req)
+	if err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if result == nil || result.IsError {
+		t.Fatalf("expected success, got %+v", result)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(crossScopeResultText(t, result)), &payload); err != nil {
+		t.Fatalf("unmarshal result: %v", err)
+	}
+	required := []string{"query", "time_window", "baseline_scope", "baseline_results", "scope_contexts", "skipped_scopes"}
+	for _, key := range required {
+		if _, ok := payload[key]; !ok {
+			t.Fatalf("missing top-level key %q", key)
+		}
+	}
+}
+
 func crossScopeResultText(t *testing.T, result *mcpgo.CallToolResult) string {
 	t.Helper()
 	if result == nil {

@@ -81,6 +81,7 @@ func OrchestrateRecall(ctx context.Context, deps OrchestrateDeps, input Orchestr
 				MemoryType: m.Memory.MemoryType,
 				Importance: m.Memory.Importance,
 				CreatedAt:  m.Memory.CreatedAt,
+				UpdatedAt:  m.Memory.UpdatedAt,
 			}
 			if m.Memory.SourceRef != nil {
 				r.SourceRef = *m.Memory.SourceRef
@@ -110,6 +111,8 @@ func OrchestrateRecall(ctx context.Context, deps OrchestrateDeps, input Orchestr
 				Visibility:    a.Artifact.Visibility,
 				Status:        a.Artifact.Status,
 				Endorsements:  int(a.Artifact.EndorsementCount),
+				CreatedAt:     a.Artifact.CreatedAt,
+				UpdatedAt:     a.Artifact.UpdatedAt,
 			}
 			if a.Artifact.Summary != nil && *a.Artifact.Summary != "" {
 				r.Content = *a.Artifact.Summary
@@ -197,6 +200,7 @@ func OrchestrateRecall(ctx context.Context, deps OrchestrateDeps, input Orchestr
 					MemoryType:   m.MemoryType,
 					Importance:   m.Importance,
 					CreatedAt:    m.CreatedAt,
+					UpdatedAt:    m.UpdatedAt,
 					GraphContext: true,
 				}
 				if m.SourceRef != nil {
