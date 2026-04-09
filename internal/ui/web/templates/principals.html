@@ -38,7 +38,7 @@
     position: absolute;
     top: 50%;
     left: calc(100% + 0.5rem);
-    transform: translateY(-50%);
+    transform: translateY(calc(-50% + var(--scope-grant-popover-shift, 0px)));
     z-index: 10;
     min-width: 8rem;
     padding: 0.4rem 0.55rem;
@@ -247,7 +247,7 @@
         {{end}}
       </select>
     </label>
-    <fieldset>
+    <fieldset class="scope-grant-permissions">
       <legend>Permissions</legend>
       {{range .ScopeGrantResources}}
       {{$resource := .Resource}}
@@ -318,6 +318,41 @@
       advanced.forEach(function (item) {
         item.addEventListener('change', syncBasicFromAdvanced);
       });
+    });
+  })();
+
+  (function keepScopeGrantPopoverInBounds() {
+    var container = document.querySelector('.scope-grant-permissions');
+    if (!container) {
+      return;
+    }
+    var detailsNodes = container.querySelectorAll('.scope-grant-adv');
+    function reposition(details) {
+      var pop = details.querySelector('.scope-grant-ops-popover');
+      if (!pop || !details.open) {
+        return;
+      }
+      pop.style.setProperty('--scope-grant-popover-shift', '0px');
+      var containerRect = container.getBoundingClientRect();
+      var popRect = pop.getBoundingClientRect();
+      var topGap = (containerRect.top + 8) - popRect.top;
+      var bottomGap = popRect.bottom - (containerRect.bottom - 8);
+      var shift = 0;
+      if (topGap > 0) {
+        shift += topGap;
+      }
+      if (bottomGap > 0) {
+        shift -= bottomGap;
+      }
+      pop.style.setProperty('--scope-grant-popover-shift', shift.toFixed(0) + 'px');
+    }
+    detailsNodes.forEach(function (details) {
+      details.addEventListener('toggle', function () {
+        reposition(details);
+      });
+    });
+    window.addEventListener('resize', function () {
+      detailsNodes.forEach(function (details) { reposition(details); });
     });
   })();
 </script>

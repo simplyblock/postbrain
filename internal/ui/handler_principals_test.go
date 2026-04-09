@@ -189,4 +189,7 @@ func TestHandlePrincipals_ScopeGrantPicker_UsesToggleAndCenteredPopoverHooks(t *
 	if !strings.Contains(body, "class=\"scope-grant-ops-popover\"") {
 		t.Fatal("expected scope-grant centered popover class")
 	}
+	if !strings.Contains(body, "class=\"scope-grant-permissions\"") {
+		t.Fatal("expected scope-grant permissions container class")
+	}
 }
