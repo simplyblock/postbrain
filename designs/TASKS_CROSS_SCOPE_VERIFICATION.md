@@ -287,6 +287,10 @@ Acceptance criteria:
 
 - [ ] New/updated tests written first (red observed)
 - [ ] `go test ./...` passes
+- [ ] Integration tests policy applied:
+      - docs-only changes: integration tests optional
+      - behavior/authz/retrieval/schema changes: run targeted integration tests
+      - substantial backend merge point: run full `make test-integration`
 - [ ] `gofmt -w .` applied
 - [ ] `make lint` passes
 - [ ] `designs/TASKS.md` updated with completed iteration notes
