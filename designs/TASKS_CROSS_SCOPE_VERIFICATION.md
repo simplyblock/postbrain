@@ -47,45 +47,45 @@ Acceptance criteria:
 
 ### 1.1 Register MCP tool schema
 
-- [ ] Add `cross_scope_context` tool registration in
+- [x] Add `cross_scope_context` tool registration in
       `internal/api/mcp/server.go`
-- [ ] Define arguments:
+- [x] Define arguments:
       `query`, `baseline_scope`, `comparison_scopes`, `layers`,
       `search_mode`, `since`, `until`, `limit_per_scope`, `min_score`,
       `graph_depth`
-- [ ] Restrict `layers` to `memory|knowledge`
+- [x] Restrict `layers` to `memory|knowledge`
 
 Required tests (write first):
 
-- [ ] `internal/api/mcp/server_test.go`: tool exists and schema exposes expected
+- [x] `internal/api/mcp/server_test.go`: tool exists and schema exposes expected
       arguments
-- [ ] `internal/api/mcp/handlers_unit_test.go`: unknown layer is rejected
+- [x] `internal/api/mcp/handlers_unit_test.go`: unknown layer is rejected
 
 Acceptance criteria:
 
-- [ ] Tool is registered and callable
-- [ ] Argument validation rejects malformed `layers` and missing required fields
+- [x] Tool is registered and callable
+- [x] Argument validation rejects malformed `layers` and missing required fields
 
 ### 1.2 Add handler skeleton and validation
 
-- [ ] Create `internal/api/mcp/cross_scope_context.go`
-- [ ] Validate:
+- [x] Create `internal/api/mcp/cross_scope_context.go`
+- [x] Validate:
       required `query`, required `baseline_scope`, timestamp parsing,
       `since <= until`, positive `limit_per_scope`
-- [ ] Normalize and deduplicate scope inputs in stable order
+- [x] Normalize and deduplicate scope inputs in stable order
 
 Required tests (write first):
 
-- [ ] `internal/api/mcp/cross_scope_context_test.go`:
+- [x] `internal/api/mcp/handlers_unit_test.go`:
       missing required args fail with deterministic error text
-- [ ] invalid scope format fails
-- [ ] invalid timestamp fails
-- [ ] `since > until` fails
-- [ ] duplicate scopes deduplicate while preserving first-seen order
+- [x] invalid scope format fails
+- [x] invalid timestamp fails
+- [x] `since > until` fails
+- [x] duplicate scopes deduplicate while preserving first-seen order
 
 Acceptance criteria:
 
-- [ ] Validation behavior is deterministic and fully covered by unit tests
+- [x] Validation behavior is deterministic and fully covered by unit tests
 
 ---
 

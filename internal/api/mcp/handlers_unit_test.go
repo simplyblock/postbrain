@@ -64,6 +64,101 @@ func TestHandleRecall_EmptyQuery_ReturnsToolError(t *testing.T) {
 	assertToolError(t, result)
 }
 
+// ── handleCrossScopeContext ──────────────────────────────────────────────────
+
+func TestHandleCrossScopeContext_MissingQuery_ReturnsToolError(t *testing.T) {
+	s := &Server{}
+	result := callTool(t, map[string]any{
+		"baseline_scope": "project:acme/docs",
+	}, s.handleCrossScopeContext)
+	assertToolError(t, result)
+}
+
+func TestHandleCrossScopeContext_MissingBaselineScope_ReturnsToolError(t *testing.T) {
+	s := &Server{}
+	result := callTool(t, map[string]any{
+		"query": "check docs consistency",
+	}, s.handleCrossScopeContext)
+	assertToolError(t, result)
+}
+
+func TestHandleCrossScopeContext_InvalidLayer_ReturnsToolError(t *testing.T) {
+	s := &Server{}
+	result := callTool(t, map[string]any{
+		"query":          "check docs consistency",
+		"baseline_scope": "project:acme/docs",
+		"layers":         []any{"memory", "skill"},
+	}, s.handleCrossScopeContext)
+	assertToolError(t, result)
+}
+
+func TestHandleCrossScopeContext_InvalidSince_ReturnsToolError(t *testing.T) {
+	s := &Server{}
+	result := callTool(t, map[string]any{
+		"query":          "check docs consistency",
+		"baseline_scope": "project:acme/docs",
+		"since":          "yesterday",
+	}, s.handleCrossScopeContext)
+	assertToolError(t, result)
+}
+
+func TestHandleCrossScopeContext_SinceAfterUntil_ReturnsToolError(t *testing.T) {
+	s := &Server{}
+	result := callTool(t, map[string]any{
+		"query":          "check docs consistency",
+		"baseline_scope": "project:acme/docs",
+		"since":          "2026-04-09T12:00:00Z",
+		"until":          "2026-04-08T12:00:00Z",
+	}, s.handleCrossScopeContext)
+	assertToolError(t, result)
+}
+
+func TestHandleCrossScopeContext_InvalidBaselineScope_ReturnsToolError(t *testing.T) {
+	s := &Server{}
+	result := callTool(t, map[string]any{
+		"query":          "check docs consistency",
+		"baseline_scope": "invalid-scope-format",
+	}, s.handleCrossScopeContext)
+	assertToolError(t, result)
+}
+
+func TestHandleCrossScopeContext_NonPositiveLimitPerScope_ReturnsToolError(t *testing.T) {
+	s := &Server{}
+	result := callTool(t, map[string]any{
+		"query":           "check docs consistency",
+		"baseline_scope":  "project:acme/docs",
+		"limit_per_scope": float64(0),
+	}, s.handleCrossScopeContext)
+	assertToolError(t, result)
+}
+
+func TestNormalizeAndDeduplicateScopes_StableOrder(t *testing.T) {
+	in := []any{
+		"project:acme/source",
+		"project:acme/source",
+		"project:acme/session",
+		"project:acme/source",
+		"project:acme/knowledge",
+	}
+	got, err := normalizeAndDeduplicateScopes(in)
+	if err != nil {
+		t.Fatalf("normalizeAndDeduplicateScopes error: %v", err)
+	}
+	want := []string{
+		"project:acme/source",
+		"project:acme/session",
+		"project:acme/knowledge",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("len(got)=%d, len(want)=%d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got[%d]=%q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
 // ── handleRemember ────────────────────────────────────────────────────────────
 
 // Note: TestHandleRemember_MissingContent and TestHandleRemember_MissingScope

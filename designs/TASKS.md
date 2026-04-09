@@ -25,6 +25,24 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-09: Started cross-scope verification Phase 1 MCP surface (TDD-first):
+  - Added new MCP tool registration `cross_scope_context` in
+    `internal/api/mcp/server.go` with arguments:
+    `query`, `baseline_scope`, `comparison_scopes`, `layers`, `search_mode`,
+    `since`, `until`, `limit_per_scope`, `min_score`, `graph_depth`.
+  - Added new handler skeleton `internal/api/mcp/cross_scope_context.go` with
+    deterministic validation for:
+    - required `query` and `baseline_scope`
+    - baseline scope format
+    - allowed layers (`memory|knowledge`)
+    - RFC3339 timestamp parsing for `since`/`until`
+    - time-window ordering (`since <= until`)
+    - positive `limit_per_scope`
+    - stable-order deduplication for `comparison_scopes`
+  - Added unit coverage in `internal/api/mcp/server_test.go` and
+    `internal/api/mcp/handlers_unit_test.go` for tool registration and
+    cross-scope validation/error cases.
+
 - [x] 2026-04-09: Added dedicated task tracker for cross-scope verification design work:
   - New task file `designs/TASKS_CROSS_SCOPE_VERIFICATION.md` with phased,
     TDD-first implementation steps, required test coverage, and explicit

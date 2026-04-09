@@ -134,3 +134,13 @@ func TestNewServer_NoPool_DoesNotRegisterGraphQuery(t *testing.T) {
 		t.Fatal("graph_query must not be registered when database/AGE is unavailable")
 	}
 }
+
+func TestNewServer_RegistersCrossScopeContextTool(t *testing.T) {
+	s := NewServer(nil, nil, nil)
+	if s == nil {
+		t.Fatal("expected non-nil server")
+	}
+	if tool := s.MCPServer().GetTool("cross_scope_context"); tool == nil {
+		t.Fatal("cross_scope_context tool must be registered")
+	}
+}
