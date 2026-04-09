@@ -120,9 +120,10 @@ func (s *Store) Recall(ctx context.Context, pool *pgxpool.Pool, input RecallInpu
 
 	// Score and filter.
 	var results []*ArtifactResult
+	now := time.Now().UTC()
 	for _, r := range merged {
 		imp := normalizeEndorsements(int(r.Artifact.EndorsementCount))
-		recency := artifactRecencyScore(time.Now().UTC(), nil, r.Artifact.CreatedAt, r.Artifact.ArtifactKind)
+		recency := artifactRecencyScore(now, nil, r.Artifact.CreatedAt, r.Artifact.ArtifactKind)
 		r.Score = knowledgeCombinedScore(r.VecScore, r.BM25Score, r.TrgmScore, imp, recency) +
 			artifactKindQueryBoost(input.Query, r.Artifact.ArtifactKind)
 		if r.Score < input.MinScore {
