@@ -25,6 +25,19 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-09: Added dedicated task tracker for cross-scope verification design work:
+  - New task file `designs/TASKS_CROSS_SCOPE_VERIFICATION.md` with phased,
+    TDD-first implementation steps, required test coverage, and explicit
+    acceptance criteria for:
+    - MCP tool/schema and validation
+    - per-layer/per-scope authz behavior
+    - retrieval orchestration and strict-scope semantics
+    - time-window filtering, provenance contract, and migration indexes
+  - Updated `docs/index.md` to pair
+    `designs/DESIGN_CROSS_SCOPE_VERIFICATION.md` with the new task file.
+  - Updated `designs/DESIGN_CROSS_SCOPE_VERIFICATION.md` related-doc reference
+    to `designs/TASKS_CROSS_SCOPE_VERIFICATION.md`.
+
 - [x] 2026-04-09: Added focused design for cross-scope verification retrieval:
   - New design doc `designs/DESIGN_CROSS_SCOPE_VERIFICATION.md` defining a dedicated
     `verify_context` MCP tool for baseline-vs-comparison scope analysis.

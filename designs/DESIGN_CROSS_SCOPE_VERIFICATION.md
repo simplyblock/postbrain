@@ -303,4 +303,4 @@ This phase is optional and can be deferred.
 - `designs/DESIGN_RETRIEVAL_AND_LIFECYCLE.md`
 - `designs/DESIGN_DATA_MODEL.md`
 - `designs/DESIGN_PERMISSIONS.md`
-- `designs/TASKS.md`
+- `designs/TASKS_CROSS_SCOPE_VERIFICATION.md`
