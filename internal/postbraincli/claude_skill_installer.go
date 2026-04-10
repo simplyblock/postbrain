@@ -105,13 +105,16 @@ func InstallClaudeHooks(targetDir, scope string) (bool, error) {
 	}
 
 	var snapshotCmd, summarizeCmd string
+	if strings.TrimSpace(scope) == "" {
+		scope = ResolveScopeFromBaseFiles(targetDir)
+	}
 	if strings.TrimSpace(scope) != "" {
 		quotedScope := shellSingleQuote(scope)
 		snapshotCmd = "postbrain-cli snapshot --scope " + quotedScope
 		summarizeCmd = "postbrain-cli summarize-session --scope " + quotedScope
 	} else {
-		snapshotCmd = `[ -n "$POSTBRAIN_SCOPE" ] && postbrain-cli snapshot --scope "$POSTBRAIN_SCOPE" || true`
-		summarizeCmd = `[ -n "$POSTBRAIN_SCOPE" ] && postbrain-cli summarize-session --scope "$POSTBRAIN_SCOPE" || true`
+		snapshotCmd = "postbrain-cli snapshot"
+		summarizeCmd = "postbrain-cli summarize-session"
 	}
 
 	// Ensure the hooks map exists.

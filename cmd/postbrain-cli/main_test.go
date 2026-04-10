@@ -276,3 +276,46 @@ func TestResolveScopeForInstall_FallsBackToClaudeThenAgents(t *testing.T) {
 		t.Fatalf("resolveScopeForInstall() = %q, want agents scope", got)
 	}
 }
+
+func TestResolveScopeForRuntime_PrefersScopeFlag(t *testing.T) {
+	prev := scopeFlag
+	scopeFlag = "project:from-flag"
+	t.Cleanup(func() { scopeFlag = prev })
+	t.Setenv("POSTBRAIN_SCOPE", "project:from-env")
+
+	if got := resolveScopeForRuntime(); got != "project:from-flag" {
+		t.Fatalf("resolveScopeForRuntime() = %q, want project:from-flag", got)
+	}
+}
+
+func TestResolveScopeForRuntime_FallsBackToCwdPostbrainBase(t *testing.T) {
+	prevFlag := scopeFlag
+	scopeFlag = ""
+	t.Cleanup(func() { scopeFlag = prevFlag })
+	t.Setenv("POSTBRAIN_SCOPE", "")
+
+	targetDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(targetDir, ".codex"), 0o755); err != nil {
+		t.Fatalf("mkdir .codex: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(targetDir, ".codex", "postbrain-base.md"), []byte("POSTBRAIN_SCOPE=project:from-cwd\n"), 0o644); err != nil {
+		t.Fatalf("write postbrain-base.md: %v", err)
+	}
+
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(targetDir); err != nil {
+		t.Fatalf("chdir temp dir: %v", err)
+	}
+	t.Cleanup(func() {
+		if chdirErr := os.Chdir(oldWd); chdirErr != nil {
+			t.Fatalf("restore cwd: %v", chdirErr)
+		}
+	})
+
+	if got := resolveScopeForRuntime(); got != "project:from-cwd" {
+		t.Fatalf("resolveScopeForRuntime() = %q, want project:from-cwd", got)
+	}
+}

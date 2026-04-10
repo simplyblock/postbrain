@@ -176,6 +176,11 @@ func snapshotCmd() *cobra.Command {
 func runSnapshot(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	client := newHookClient()
+	scope := resolveScopeForRuntime()
+	if scope == "" {
+		slog.Info("snapshot: no scope configured, skipping")
+		return nil
+	}
 
 	// Read tool output JSON from stdin.
 	stdinBytes, err := io.ReadAll(os.Stdin)
@@ -213,7 +218,7 @@ func runSnapshot(cmd *cobra.Command, args []string) error {
 	// 60s dedup check: query recent memories with same source_ref.
 	if sourceRef != "" {
 		resp, err := client.get(ctx, fmt.Sprintf("/v1/memories/recall?query=%s&scope=%s&limit=1&min_score=0.99",
-			sourceRef, scopeFlag))
+			sourceRef, scope))
 		if err == nil {
 			defer closeutil.Log(resp.Body, "snapshot dedup response body")
 			var result struct {
@@ -232,7 +237,7 @@ func runSnapshot(cmd *cobra.Command, args []string) error {
 	body := map[string]any{
 		"content":     desc,
 		"memory_type": "episodic",
-		"scope":       scopeFlag,
+		"scope":       scope,
 	}
 	if sourceRef != "" {
 		body["source_ref"] = sourceRef
@@ -265,10 +270,15 @@ func runSummarizeSession(ctx context.Context, sessionID string) error {
 		ctx = context.Background()
 	}
 	client := newHookClient()
+	scope := resolveScopeForRuntime()
+	if scope == "" {
+		slog.Info("summarize-session: no scope configured, skipping")
+		return nil
+	}
 
 	// Fetch episodic memories for this session.
 	resp, err := client.get(ctx, fmt.Sprintf(
-		"/v1/memories/recall?scope=%s&memory_types=episodic&limit=100&min_score=0.0", scopeFlag))
+		"/v1/memories/recall?scope=%s&memory_types=episodic&limit=100&min_score=0.0", scope))
 	if err != nil {
 		return fmt.Errorf("summarize-session: list memories: %w", err)
 	}
@@ -290,7 +300,7 @@ func runSummarizeSession(ctx context.Context, sessionID string) error {
 
 	// Call POST /v1/memories/summarize (REST endpoint that proxies consolidation logic).
 	summarizeResp, err := client.post(ctx, "/v1/memories/summarize", map[string]any{
-		"scope":   scopeFlag,
+		"scope":   scope,
 		"topic":   "session summary for " + sessionID,
 		"dry_run": false,
 	})
@@ -298,7 +308,7 @@ func runSummarizeSession(ctx context.Context, sessionID string) error {
 		return fmt.Errorf("summarize-session: summarize: %w", err)
 	}
 	defer closeutil.Log(summarizeResp.Body, "summarize session response body")
-	slog.Info("summarize-session: session summarized", "scope", scopeFlag)
+	slog.Info("summarize-session: session summarized", "scope", scope)
 	return nil
 }
 
@@ -727,36 +737,19 @@ func resolveScopeForInstall(targetDir string) string {
 	if scope := strings.TrimSpace(os.Getenv("POSTBRAIN_SCOPE")); scope != "" {
 		return scope
 	}
-	if strings.TrimSpace(targetDir) == "" {
-		targetDir = "."
-	}
-	candidates := []string{
-		filepath.Join(targetDir, ".codex", "postbrain-base.md"),
-		filepath.Join(targetDir, ".claude", "postbrain-base.md"),
-		filepath.Join(targetDir, ".agents", "postbrain-base.md"),
-	}
-	for _, path := range candidates {
-		if scope := readScopeFromPostbrainBase(path); scope != "" {
-			return scope
-		}
-	}
-	return ""
+	return postbraincli.ResolveScopeFromBaseFiles(targetDir)
 }
 
-func readScopeFromPostbrainBase(path string) string {
-	data, err := os.ReadFile(path)
+func resolveScopeForRuntime() string {
+	if strings.TrimSpace(scopeFlag) != "" {
+		return strings.TrimSpace(scopeFlag)
+	}
+	if scope := strings.TrimSpace(os.Getenv("POSTBRAIN_SCOPE")); scope != "" {
+		return scope
+	}
+	cwd, err := os.Getwd()
 	if err != nil {
 		return ""
 	}
-	const key = "POSTBRAIN_SCOPE="
-	for _, line := range strings.Split(string(data), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-		if strings.HasPrefix(trimmed, key) {
-			return strings.TrimSpace(strings.TrimPrefix(trimmed, key))
-		}
-	}
-	return ""
+	return postbraincli.ResolveScopeFromBaseFiles(cwd)
 }

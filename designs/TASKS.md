@@ -25,6 +25,27 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-10: Updated hook installers and hook runtime scope behavior to remove env-var dependency (TDD-first):
+  - Updated hook installer generation in `internal/postbraincli`:
+    - `InstallCodexHooks` and `InstallClaudeHooks` now resolve scope from
+      `postbrain-base.md` files when explicit scope is empty, in this order:
+      `.codex`, `.claude`, `.agents`.
+    - when no scope can be resolved, generated hook commands now call
+      `postbrain-cli snapshot` / `postbrain-cli summarize-session` directly
+      (no `$POSTBRAIN_SCOPE` shell dependency).
+  - Added shared resolver in `internal/postbraincli/scope_resolver.go` and
+    coverage in `internal/postbraincli/scope_resolver_test.go`.
+  - Updated installer tests:
+    - codex/claude no-scope commands now assert runtime-resolution command
+      shape (no env var references),
+    - codex/claude resolve scope from local `postbrain-base.md` when present.
+  - Updated CLI runtime in `cmd/postbrain-cli/main.go`:
+    - `snapshot` and `summarize-session` now auto-resolve scope at runtime:
+      `--scope` flag → `POSTBRAIN_SCOPE` env fallback → CWD
+      `postbrain-base.md` resolution (`.codex` → `.claude` → `.agents`).
+    - commands now skip gracefully when no scope is configured.
+  - Added runtime resolver tests in `cmd/postbrain-cli/main_test.go`.
+
 - [x] 2026-04-10: Added install-time scope fallback resolution for `postbrain-cli` skill installers (TDD-first):
   - Added scope resolver in `cmd/postbrain-cli/main.go` used by both
     `install-codex-skill` and `install-claude-skill`:
