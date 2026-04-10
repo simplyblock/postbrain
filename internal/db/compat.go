@@ -64,6 +64,20 @@ type SkillScore struct {
 	Score float64
 }
 
+var maxRecallTime = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
+
+func normalizeRecallWindowBounds(since, until *time.Time) (time.Time, time.Time) {
+	lower := time.Time{}
+	upper := maxRecallTime
+	if since != nil {
+		lower = since.UTC()
+	}
+	if until != nil {
+		upper = until.UTC()
+	}
+	return lower, upper
+}
+
 // ExportFloat32SliceToVector formats a []float32 as a pg_vector literal string.
 // Kept for backward compatibility with callers that build raw SQL.
 func ExportFloat32SliceToVector(v []float32) string { return float32SliceToVector(v) }
@@ -730,12 +744,15 @@ func FindNearDuplicates(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UU
 }
 
 // RecallMemoriesByVector performs ANN search.
-func RecallMemoriesByVector(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, queryVec []float32, limit int) ([]MemoryScore, error) {
+func RecallMemoriesByVector(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, queryVec []float32, limit int, since, until *time.Time) ([]MemoryScore, error) {
 	q := New(pool)
+	lower, upper := normalizeRecallWindowBounds(since, until)
 	rows, err := q.RecallMemoriesByVector(ctx, RecallMemoriesByVectorParams{
 		Column1:   scopeIDs,
 		Limit:     int32(limit),
 		Embedding: vecPtr(queryVec),
+		Column4:   lower,
+		Column5:   upper,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("db: recall memories by vector: %w", err)
@@ -752,12 +769,15 @@ func RecallMemoriesByVector(ctx context.Context, pool *pgxpool.Pool, scopeIDs []
 }
 
 // RecallMemoriesByCodeVector performs ANN on embedding_code.
-func RecallMemoriesByCodeVector(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, queryVec []float32, limit int) ([]MemoryScore, error) {
+func RecallMemoriesByCodeVector(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, queryVec []float32, limit int, since, until *time.Time) ([]MemoryScore, error) {
 	q := New(pool)
+	lower, upper := normalizeRecallWindowBounds(since, until)
 	rows, err := q.RecallMemoriesByCodeVector(ctx, RecallMemoriesByCodeVectorParams{
 		Column1:       scopeIDs,
 		Limit:         int32(limit),
 		EmbeddingCode: vecPtr(queryVec),
+		Column4:       lower,
+		Column5:       upper,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("db: recall memories by code vector: %w", err)
@@ -774,12 +794,15 @@ func RecallMemoriesByCodeVector(ctx context.Context, pool *pgxpool.Pool, scopeID
 }
 
 // RecallMemoriesByFTS performs BM25 full-text search.
-func RecallMemoriesByFTS(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, query string, limit int) ([]MemoryScore, error) {
+func RecallMemoriesByFTS(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, query string, limit int, since, until *time.Time) ([]MemoryScore, error) {
 	q := New(pool)
+	lower, upper := normalizeRecallWindowBounds(since, until)
 	rows, err := q.RecallMemoriesByFTS(ctx, RecallMemoriesByFTSParams{
 		Column1:        scopeIDs,
 		Limit:          int32(limit),
 		PlaintoTsquery: query,
+		Column4:        lower,
+		Column5:        upper,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("db: recall memories by fts: %w", err)
@@ -796,12 +819,15 @@ func RecallMemoriesByFTS(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uui
 }
 
 // RecallMemoriesByTrigram performs trigram similarity recall.
-func RecallMemoriesByTrigram(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, query string, limit int) ([]MemoryScore, error) {
+func RecallMemoriesByTrigram(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, query string, limit int, since, until *time.Time) ([]MemoryScore, error) {
 	q := New(pool)
+	lower, upper := normalizeRecallWindowBounds(since, until)
 	rows, err := q.RecallMemoriesByTrigram(ctx, RecallMemoriesByTrigramParams{
 		Column1:    scopeIDs,
 		Limit:      int32(limit),
 		Similarity: query,
+		Column4:    lower,
+		Column5:    upper,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("db: recall memories by trigram: %w", err)
@@ -1459,12 +1485,15 @@ func ListVisibleArtifacts(ctx context.Context, pool *pgxpool.Pool, callerScopeID
 
 // RecallArtifactsByVector retrieves published artifacts by vector similarity,
 // resolving visibility (project/team/department/company/grants) from scopeID.
-func RecallArtifactsByVector(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, queryVec []float32, limit int) ([]ArtifactScore, error) {
+func RecallArtifactsByVector(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, queryVec []float32, limit int, since, until *time.Time) ([]ArtifactScore, error) {
 	q := New(pool)
+	lower, upper := normalizeRecallWindowBounds(since, until)
 	rows, err := q.RecallArtifactsByVector(ctx, RecallArtifactsByVectorParams{
 		OwnerScopeID: scopeID,
 		Limit:        int32(limit),
 		Embedding:    vecPtr(queryVec),
+		Column4:      lower,
+		Column5:      upper,
 	})
 	if err != nil {
 		return nil, err
@@ -1482,12 +1511,15 @@ func RecallArtifactsByVector(ctx context.Context, pool *pgxpool.Pool, scopeID uu
 
 // RecallArtifactsByFTS retrieves published artifacts via full-text search,
 // resolving visibility (project/team/department/company/grants) from scopeID.
-func RecallArtifactsByFTS(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, query string, limit int) ([]ArtifactScore, error) {
+func RecallArtifactsByFTS(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, query string, limit int, since, until *time.Time) ([]ArtifactScore, error) {
 	q := New(pool)
+	lower, upper := normalizeRecallWindowBounds(since, until)
 	rows, err := q.RecallArtifactsByFTS(ctx, RecallArtifactsByFTSParams{
 		OwnerScopeID:   scopeID,
 		Limit:          int32(limit),
 		PlaintoTsquery: query,
+		Column4:        lower,
+		Column5:        upper,
 	})
 	if err != nil {
 		return nil, err
@@ -1505,12 +1537,15 @@ func RecallArtifactsByFTS(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.
 
 // RecallArtifactsByTrigram retrieves published artifacts via trigram similarity,
 // resolving visibility (project/team/department/company/grants) from scopeID.
-func RecallArtifactsByTrigram(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, query string, limit int) ([]ArtifactScore, error) {
+func RecallArtifactsByTrigram(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, query string, limit int, since, until *time.Time) ([]ArtifactScore, error) {
 	q := New(pool)
+	lower, upper := normalizeRecallWindowBounds(since, until)
 	rows, err := q.RecallArtifactsByTrigram(ctx, RecallArtifactsByTrigramParams{
 		OwnerScopeID: scopeID,
 		Limit:        int32(limit),
 		Similarity:   query,
+		Column4:      lower,
+		Column5:      upper,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("db: recall artifacts by trigram: %w", err)

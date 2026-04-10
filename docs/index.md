@@ -23,6 +23,7 @@ Use it to decide which `designs/` files you must read in full for a task.
 | `designs/DESIGN_PERMISSIONS.md` | `designs/TASKS_PERMISSIONS.md` | Full authorization model: resource:operation permissions, role derivation, scope inheritance, token downscoping, and cross-surface authz enforcement. | You touch auth middleware, token handling, scope access, role logic, REST/MCP/WebUI authorization checks, or permission wording in docs. |
 | `designs/DESIGN_OAUTH.md` | `designs/TASKS_OAUTH.md` | OAuth design for two modes: social login (Postbrain as OAuth client) and MCP/OAuth server flows (Authorization Code + PKCE), including schema/config requirements. | You change login, session/cookie auth, OAuth endpoints, provider config, token exchange, or OAuth-related DB objects. |
 | `designs/DESIGN_CODE_GRAPH.md` | `designs/TASKS_CODE_GRAPH.md` | Code graph extraction/indexing design: entity/relation model, extraction pipeline, resolution strategies (heuristic/import-aware/LSP), repo indexing, and graph retrieval integration. | You touch `internal/codegraph`, graph relations/traversal, repo sync/indexing behavior, or graph-augmented recall. |
+| `designs/DESIGN_CROSS_SCOPE_VERIFICATION.md` | `designs/TASKS_CROSS_SCOPE_VERIFICATION.md` | Dedicated cross-scope verification retrieval flow for comparing baseline scope claims (for example docs) against evidence in source/session/knowledge scopes with strict provenance and time-window filters. | You add or change `cross_scope_context` behavior, per-scope comparison semantics, provenance output contracts, or time-windowed verification logic. |
 
 ## Additional task trackers without a dedicated design doc
 
@@ -36,4 +37,5 @@ Use it to decide which `designs/` files you must read in full for a task.
 - Working in `internal/authz`, `internal/auth`, `internal/api/scopeauth`, REST/MCP permission middleware: start with `DESIGN_PERMISSIONS.md`.
 - Working in `internal/oauth` or UI login/session/auth callbacks: start with `DESIGN_OAUTH.md`.
 - Working in `internal/codegraph`, `internal/graph`, scope repo sync/index endpoints: start with `DESIGN_CODE_GRAPH.md`.
+- Working on cross-scope verification retrieval or docs-vs-code/session consistency checks: start with `DESIGN_CROSS_SCOPE_VERIFICATION.md`.
 - Unsure or touching multiple layers: start with `DESIGN.md`, then drill down using this index.

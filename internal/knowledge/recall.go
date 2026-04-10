@@ -21,6 +21,8 @@ type RecallInput struct {
 	ScopeID  uuid.UUID // visibility fan-out is resolved in SQL via the scope's ltree path
 	Limit    int
 	MinScore float64
+	Since    *time.Time
+	Until    *time.Time
 }
 
 // ArtifactResult pairs a knowledge artifact with its retrieval scores.
@@ -67,13 +69,13 @@ func (s *Store) Recall(ctx context.Context, pool *pgxpool.Pool, input RecallInpu
 	if len(embeddingVec) > 0 {
 		vecRows := make([]db.ArtifactScore, 0)
 		if modelID, ok := activeTextModelID(ctx, pool); ok {
-			vecRows, err = s.recallArtifactsByModelTable(ctx, pool, modelID, input.ScopeID, embeddingVec, input.Limit*2)
+			vecRows, err = s.recallArtifactsByModelTable(ctx, pool, modelID, input.ScopeID, embeddingVec, input.Limit*2, input.Since, input.Until)
 			if err != nil {
 				return nil, fmt.Errorf("knowledge: recall by model table: %w", err)
 			}
 		}
 		if len(vecRows) == 0 {
-			vecRows, err = db.RecallArtifactsByVector(ctx, pool, input.ScopeID, embeddingVec, input.Limit*2)
+			vecRows, err = db.RecallArtifactsByVector(ctx, pool, input.ScopeID, embeddingVec, input.Limit*2, input.Since, input.Until)
 			if err != nil {
 				return nil, fmt.Errorf("knowledge: recall by vector: %w", err)
 			}
@@ -87,7 +89,7 @@ func (s *Store) Recall(ctx context.Context, pool *pgxpool.Pool, input RecallInpu
 	}
 
 	// FTS recall.
-	ftsRows, err := db.RecallArtifactsByFTS(ctx, pool, input.ScopeID, input.Query, input.Limit*2)
+	ftsRows, err := db.RecallArtifactsByFTS(ctx, pool, input.ScopeID, input.Query, input.Limit*2, input.Since, input.Until)
 	if err != nil {
 		return nil, fmt.Errorf("knowledge: recall by fts: %w", err)
 	}
@@ -103,7 +105,7 @@ func (s *Store) Recall(ctx context.Context, pool *pgxpool.Pool, input RecallInpu
 	}
 
 	// Trigram recall.
-	trgmRows, err := db.RecallArtifactsByTrigram(ctx, pool, input.ScopeID, input.Query, input.Limit*2)
+	trgmRows, err := db.RecallArtifactsByTrigram(ctx, pool, input.ScopeID, input.Query, input.Limit*2, input.Since, input.Until)
 	if err != nil {
 		return nil, fmt.Errorf("knowledge: recall by trigram: %w", err)
 	}
@@ -122,6 +124,9 @@ func (s *Store) Recall(ctx context.Context, pool *pgxpool.Pool, input RecallInpu
 	var results []*ArtifactResult
 	now := time.Now().UTC()
 	for _, r := range merged {
+		if !artifactWithinWindow(r.Artifact, input.Since, input.Until) {
+			continue
+		}
 		imp := normalizeEndorsements(int(r.Artifact.EndorsementCount))
 		recency := artifactRecencyScore(now, nil, r.Artifact.CreatedAt, r.Artifact.ArtifactKind)
 		r.Score = knowledgeCombinedScore(r.VecScore, r.BM25Score, r.TrgmScore, imp, recency) +
@@ -149,6 +154,30 @@ func (s *Store) Recall(ctx context.Context, pool *pgxpool.Pool, input RecallInpu
 	}
 
 	return results, nil
+}
+
+func artifactWindowTimestamp(a *db.KnowledgeArtifact) time.Time {
+	if a == nil {
+		return time.Time{}
+	}
+	if a.PublishedAt != nil {
+		return a.PublishedAt.UTC()
+	}
+	return a.CreatedAt.UTC()
+}
+
+func artifactWithinWindow(a *db.KnowledgeArtifact, since, until *time.Time) bool {
+	if a == nil {
+		return false
+	}
+	ts := artifactWindowTimestamp(a)
+	if since != nil && ts.Before(since.UTC()) {
+		return false
+	}
+	if until != nil && ts.After(until.UTC()) {
+		return false
+	}
+	return true
 }
 
 // suppressDigestSources removes source artifacts from results when a published
@@ -186,6 +215,8 @@ func (s *Store) recallArtifactsByModelTable(
 	scopeID uuid.UUID,
 	queryVec []float32,
 	limit int,
+	since *time.Time,
+	until *time.Time,
 ) ([]db.ArtifactScore, error) {
 	if s.repo == nil || pool == nil || len(queryVec) == 0 {
 		return nil, nil
@@ -197,11 +228,15 @@ func (s *Store) recallArtifactsByModelTable(
 	if scope == nil {
 		return nil, nil
 	}
+	hitLimit := limit
+	if since != nil || until != nil {
+		hitLimit = limit * 4
+	}
 	hits, err := s.repo.QuerySimilar(ctx, db.EmbeddingQuery{
 		ModelID:    modelID,
 		ObjectType: "knowledge_artifact",
 		Embedding:  queryVec,
-		Limit:      limit,
+		Limit:      hitLimit,
 		Scope: &db.ScopeFilter{
 			ScopePath: scope.Path,
 		},
@@ -219,6 +254,9 @@ func (s *Store) recallArtifactsByModelTable(
 			return nil, err
 		}
 		if art == nil || art.Status != "published" {
+			continue
+		}
+		if !artifactWithinWindow(art, since, until) {
 			continue
 		}
 		rows = append(rows, db.ArtifactScore{

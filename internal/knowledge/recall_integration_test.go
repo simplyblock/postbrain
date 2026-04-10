@@ -5,6 +5,7 @@ package knowledge_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -255,5 +256,57 @@ func TestRecall_UsesModelTableWhenLegacyEmbeddingMissing(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected artifact %s in results", artifact.ID)
+	}
+}
+
+func TestRecall_TimeWindowAppliedBeforeLimitForKnowledgeQueries(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	svc := testhelper.NewMockEmbeddingService()
+	ctx := context.Background()
+
+	principal := testhelper.CreateTestPrincipal(t, pool, "user", "recall-time-cap-"+uuid.New().String())
+	scope := testhelper.CreateTestScope(t, pool, "project", "recall-time-cap-"+uuid.New().String(), nil, principal.ID)
+	store := knowledge.NewStore(pool, svc)
+
+	query := "knowledge window cap token alpha beta gamma"
+	var oldIDs []uuid.UUID
+	for i := 0; i < 3; i++ {
+		a := makePublished(t, ctx, store, scope.ID, principal.ID, "semantic", query)
+		oldIDs = append(oldIDs, a.ID)
+	}
+	newArtifact := makePublished(t, ctx, store, scope.ID, principal.ID, "semantic", "knowledge window cap token alpha beta")
+
+	if _, err := pool.Exec(ctx, `
+		UPDATE knowledge_artifacts
+		SET published_at = now() - interval '72 hours',
+		    created_at = now() - interval '2 hours'
+		WHERE id = ANY($1::uuid[])
+	`, oldIDs); err != nil {
+		t.Fatalf("set old artifact timestamps: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		UPDATE knowledge_artifacts
+		SET published_at = now() - interval '2 hours',
+		    created_at = now() - interval '72 hours'
+		WHERE id = $1
+	`, newArtifact.ID); err != nil {
+		t.Fatalf("set new artifact timestamps: %v", err)
+	}
+
+	since := time.Now().UTC().Add(-24 * time.Hour)
+	results, err := store.Recall(ctx, pool, knowledge.RecallInput{
+		Query:   query,
+		ScopeID: scope.ID,
+		Limit:   1,
+		Since:   &since,
+	})
+	if err != nil {
+		t.Fatalf("Recall: %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatal("expected at least one in-window result; out-of-window artifacts should not consume recall limit")
+	}
+	if results[0].Artifact.ID != newArtifact.ID {
+		t.Fatalf("got artifact %s, want in-window artifact %s", results[0].Artifact.ID, newArtifact.ID)
 	}
 }

@@ -321,3 +321,40 @@ func TestMigration000017_KnowledgeArtifactColumnsAndConstraints(t *testing.T) {
 		t.Fatal("expected supersedes_artifact_id FK violation, got nil")
 	}
 }
+
+func TestMigration000018_TimeWindowRecallIndexes(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+
+	indexes := []string{
+		"memories_scope_active_created_at_idx",
+		"knowledge_owner_status_published_at_idx",
+		"knowledge_owner_status_created_at_idx",
+	}
+
+	for _, idx := range indexes {
+		assertIndexExists(t, ctx, pool, idx, true)
+	}
+
+	downSQL, err := os.ReadFile("migrations/000018_cross_scope_time_window_indexes.down.sql")
+	if err != nil {
+		t.Fatalf("read 000018 down migration: %v", err)
+	}
+	if _, err := pool.Exec(ctx, string(downSQL)); err != nil {
+		t.Fatalf("apply 000018 down migration: %v", err)
+	}
+	for _, idx := range indexes {
+		assertIndexExists(t, ctx, pool, idx, false)
+	}
+
+	upSQL, err := os.ReadFile("migrations/000018_cross_scope_time_window_indexes.up.sql")
+	if err != nil {
+		t.Fatalf("read 000018 up migration: %v", err)
+	}
+	if _, err := pool.Exec(ctx, string(upSQL)); err != nil {
+		t.Fatalf("apply 000018 up migration: %v", err)
+	}
+	for _, idx := range indexes {
+		assertIndexExists(t, ctx, pool, idx, true)
+	}
+}

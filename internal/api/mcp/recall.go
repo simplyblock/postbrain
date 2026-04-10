@@ -14,9 +14,10 @@ import (
 )
 
 const defaultRecallGraphDepth = 1
+const defaultCrossScopeGraphDepth = 0
 
-func parseGraphDepth(args map[string]any) int {
-	graphDepth := defaultRecallGraphDepth
+func parseGraphDepthWithDefault(args map[string]any, defaultDepth int) int {
+	graphDepth := defaultDepth
 	if v, ok := args["graph_depth"].(float64); ok {
 		graphDepth = int(v)
 		if graphDepth < 0 {
@@ -27,6 +28,10 @@ func parseGraphDepth(args map[string]any) int {
 		graphDepth = 2 // cap to avoid fanout explosion
 	}
 	return graphDepth
+}
+
+func parseGraphDepth(args map[string]any) int {
+	return parseGraphDepthWithDefault(args, defaultRecallGraphDepth)
 }
 
 // handleRecall retrieves memories and knowledge relevant to a query.

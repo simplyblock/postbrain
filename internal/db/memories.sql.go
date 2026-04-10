@@ -683,6 +683,8 @@ SELECT id, memory_type, scope_id, author_id,
     (1 - (embedding_code <=> $3))::float4 AS vec_score
 FROM memories
 WHERE is_active = true AND scope_id = ANY($1::uuid[]) AND embedding_code IS NOT NULL
+  AND created_at >= $4::timestamptz
+  AND created_at <= $5::timestamptz
 ORDER BY embedding_code <=> $3
 LIMIT $2
 `
@@ -691,6 +693,8 @@ type RecallMemoriesByCodeVectorParams struct {
 	Column1       []uuid.UUID
 	Limit         int32
 	EmbeddingCode *pgvector_go.Vector
+	Column4       time.Time
+	Column5       time.Time
 }
 
 type RecallMemoriesByCodeVectorRow struct {
@@ -723,7 +727,13 @@ type RecallMemoriesByCodeVectorRow struct {
 }
 
 func (q *Queries) RecallMemoriesByCodeVector(ctx context.Context, arg RecallMemoriesByCodeVectorParams) ([]*RecallMemoriesByCodeVectorRow, error) {
-	rows, err := q.db.Query(ctx, recallMemoriesByCodeVector, arg.Column1, arg.Limit, arg.EmbeddingCode)
+	rows, err := q.db.Query(ctx, recallMemoriesByCodeVector,
+		arg.Column1,
+		arg.Limit,
+		arg.EmbeddingCode,
+		arg.Column4,
+		arg.Column5,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -778,6 +788,8 @@ SELECT id, memory_type, scope_id, author_id,
     ts_rank_cd(to_tsvector('postbrain_fts', content), plainto_tsquery('postbrain_fts', $3)) AS bm25_score
 FROM memories
 WHERE is_active = true AND scope_id = ANY($1::uuid[])
+  AND created_at >= $4::timestamptz
+  AND created_at <= $5::timestamptz
   AND to_tsvector('postbrain_fts', content) @@ plainto_tsquery('postbrain_fts', $3)
 ORDER BY bm25_score DESC
 LIMIT $2
@@ -787,6 +799,8 @@ type RecallMemoriesByFTSParams struct {
 	Column1        []uuid.UUID
 	Limit          int32
 	PlaintoTsquery string
+	Column4        time.Time
+	Column5        time.Time
 }
 
 type RecallMemoriesByFTSRow struct {
@@ -819,7 +833,13 @@ type RecallMemoriesByFTSRow struct {
 }
 
 func (q *Queries) RecallMemoriesByFTS(ctx context.Context, arg RecallMemoriesByFTSParams) ([]*RecallMemoriesByFTSRow, error) {
-	rows, err := q.db.Query(ctx, recallMemoriesByFTS, arg.Column1, arg.Limit, arg.PlaintoTsquery)
+	rows, err := q.db.Query(ctx, recallMemoriesByFTS,
+		arg.Column1,
+		arg.Limit,
+		arg.PlaintoTsquery,
+		arg.Column4,
+		arg.Column5,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -874,6 +894,8 @@ SELECT id, memory_type, scope_id, author_id,
     similarity(content, $3) AS trgm_score
 FROM memories
 WHERE is_active = true AND scope_id = ANY($1::uuid[])
+  AND created_at >= $4::timestamptz
+  AND created_at <= $5::timestamptz
   AND similarity(content, $3) > 0.1
 ORDER BY trgm_score DESC
 LIMIT $2
@@ -883,6 +905,8 @@ type RecallMemoriesByTrigramParams struct {
 	Column1    []uuid.UUID
 	Limit      int32
 	Similarity string
+	Column4    time.Time
+	Column5    time.Time
 }
 
 type RecallMemoriesByTrigramRow struct {
@@ -915,7 +939,13 @@ type RecallMemoriesByTrigramRow struct {
 }
 
 func (q *Queries) RecallMemoriesByTrigram(ctx context.Context, arg RecallMemoriesByTrigramParams) ([]*RecallMemoriesByTrigramRow, error) {
-	rows, err := q.db.Query(ctx, recallMemoriesByTrigram, arg.Column1, arg.Limit, arg.Similarity)
+	rows, err := q.db.Query(ctx, recallMemoriesByTrigram,
+		arg.Column1,
+		arg.Limit,
+		arg.Similarity,
+		arg.Column4,
+		arg.Column5,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -970,6 +1000,8 @@ SELECT id, memory_type, scope_id, author_id,
     (1 - (embedding <=> $3))::float4 AS vec_score
 FROM memories
 WHERE is_active = true AND scope_id = ANY($1::uuid[])
+  AND created_at >= $4::timestamptz
+  AND created_at <= $5::timestamptz
 ORDER BY embedding <=> $3
 LIMIT $2
 `
@@ -978,6 +1010,8 @@ type RecallMemoriesByVectorParams struct {
 	Column1   []uuid.UUID
 	Limit     int32
 	Embedding *pgvector_go.Vector
+	Column4   time.Time
+	Column5   time.Time
 }
 
 type RecallMemoriesByVectorRow struct {
@@ -1010,7 +1044,13 @@ type RecallMemoriesByVectorRow struct {
 }
 
 func (q *Queries) RecallMemoriesByVector(ctx context.Context, arg RecallMemoriesByVectorParams) ([]*RecallMemoriesByVectorRow, error) {
-	rows, err := q.db.Query(ctx, recallMemoriesByVector, arg.Column1, arg.Limit, arg.Embedding)
+	rows, err := q.db.Query(ctx, recallMemoriesByVector,
+		arg.Column1,
+		arg.Limit,
+		arg.Embedding,
+		arg.Column4,
+		arg.Column5,
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -66,29 +66,39 @@ type mockRecallDB struct {
 	trgmCalled   int
 	codeCalled   int
 	lastScopeIDs []uuid.UUID
+	lastSince    *time.Time
+	lastUntil    *time.Time
 }
 
-func (m *mockRecallDB) RecallMemoriesByVector(_ context.Context, scopeIDs []uuid.UUID, _ []float32, _ int) ([]db.MemoryScore, error) {
+func (m *mockRecallDB) RecallMemoriesByVector(_ context.Context, scopeIDs []uuid.UUID, _ []float32, _ int, since, until *time.Time) ([]db.MemoryScore, error) {
 	m.vecCalled++
 	m.lastScopeIDs = append([]uuid.UUID(nil), scopeIDs...)
+	m.lastSince = since
+	m.lastUntil = until
 	return m.vecResults, nil
 }
 
-func (m *mockRecallDB) RecallMemoriesByFTS(_ context.Context, scopeIDs []uuid.UUID, _ string, _ int) ([]db.MemoryScore, error) {
+func (m *mockRecallDB) RecallMemoriesByFTS(_ context.Context, scopeIDs []uuid.UUID, _ string, _ int, since, until *time.Time) ([]db.MemoryScore, error) {
 	m.ftsCalled++
 	m.lastScopeIDs = append([]uuid.UUID(nil), scopeIDs...)
+	m.lastSince = since
+	m.lastUntil = until
 	return m.ftsResults, nil
 }
 
-func (m *mockRecallDB) RecallMemoriesByTrigram(_ context.Context, scopeIDs []uuid.UUID, _ string, _ int) ([]db.MemoryScore, error) {
+func (m *mockRecallDB) RecallMemoriesByTrigram(_ context.Context, scopeIDs []uuid.UUID, _ string, _ int, since, until *time.Time) ([]db.MemoryScore, error) {
 	m.trgmCalled++
 	m.lastScopeIDs = append([]uuid.UUID(nil), scopeIDs...)
+	m.lastSince = since
+	m.lastUntil = until
 	return m.trgmResults, nil
 }
 
-func (m *mockRecallDB) RecallMemoriesByCodeVector(_ context.Context, scopeIDs []uuid.UUID, _ []float32, _ int) ([]db.MemoryScore, error) {
+func (m *mockRecallDB) RecallMemoriesByCodeVector(_ context.Context, scopeIDs []uuid.UUID, _ []float32, _ int, since, until *time.Time) ([]db.MemoryScore, error) {
 	m.codeCalled++
 	m.lastScopeIDs = append([]uuid.UUID(nil), scopeIDs...)
+	m.lastSince = since
+	m.lastUntil = until
 	return m.codeResults, nil
 }
 
@@ -370,5 +380,107 @@ func TestRecall_EmptyIntersectionSkipsDBQueries(t *testing.T) {
 	}
 	if rdb.vecCalled != 0 || rdb.ftsCalled != 0 || rdb.trgmCalled != 0 || rdb.codeCalled != 0 {
 		t.Fatalf("expected no DB recall calls, got vec=%d fts=%d trgm=%d code=%d", rdb.vecCalled, rdb.ftsCalled, rdb.trgmCalled, rdb.codeCalled)
+	}
+}
+
+func TestRecall_TimeWindowSinceFiltersOlderMemories(t *testing.T) {
+	now := time.Now().UTC()
+	oldID := uuid.New()
+	newID := uuid.New()
+	rdb := &mockRecallDB{
+		vecResults: []db.MemoryScore{
+			{Memory: &db.Memory{ID: oldID, MemoryType: "semantic", Importance: 0.8, CreatedAt: now.Add(-48 * time.Hour)}, VecScore: 0.9},
+			{Memory: &db.Memory{ID: newID, MemoryType: "semantic", Importance: 0.8, CreatedAt: now.Add(-2 * time.Hour)}, VecScore: 0.9},
+		},
+	}
+	s := newTestRecallStore(rdb)
+	since := now.Add(-24 * time.Hour)
+
+	results, err := s.Recall(context.Background(), RecallInput{
+		Query:      "time window",
+		ScopeID:    uuid.New(),
+		SearchMode: "text",
+		Limit:      10,
+		Since:      &since,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("len(results)=%d, want 1", len(results))
+	}
+	if results[0].Memory.ID != newID {
+		t.Fatalf("got memory %s, want %s", results[0].Memory.ID, newID)
+	}
+}
+
+func TestRecall_TimeWindowUntilFiltersNewerMemories(t *testing.T) {
+	now := time.Now().UTC()
+	earlyID := uuid.New()
+	lateID := uuid.New()
+	rdb := &mockRecallDB{
+		vecResults: []db.MemoryScore{
+			{Memory: &db.Memory{ID: earlyID, MemoryType: "semantic", Importance: 0.8, CreatedAt: now.Add(-48 * time.Hour)}, VecScore: 0.9},
+			{Memory: &db.Memory{ID: lateID, MemoryType: "semantic", Importance: 0.8, CreatedAt: now.Add(-2 * time.Hour)}, VecScore: 0.9},
+		},
+	}
+	s := newTestRecallStore(rdb)
+	until := now.Add(-24 * time.Hour)
+
+	results, err := s.Recall(context.Background(), RecallInput{
+		Query:      "time window",
+		ScopeID:    uuid.New(),
+		SearchMode: "text",
+		Limit:      10,
+		Until:      &until,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("len(results)=%d, want 1", len(results))
+	}
+	if results[0].Memory.ID != earlyID {
+		t.Fatalf("got memory %s, want %s", results[0].Memory.ID, earlyID)
+	}
+}
+
+func TestRecall_TimeWindowForwardsToDBQueries(t *testing.T) {
+	now := time.Now().UTC()
+	since := now.Add(-48 * time.Hour)
+	until := now.Add(-1 * time.Hour)
+	rdb := &mockRecallDB{
+		vecResults: []db.MemoryScore{
+			{Memory: &db.Memory{ID: uuid.New(), MemoryType: "semantic", Importance: 0.8, CreatedAt: now.Add(-2 * time.Hour)}, VecScore: 0.9},
+		},
+		ftsResults: []db.MemoryScore{
+			{Memory: &db.Memory{ID: uuid.New(), MemoryType: "semantic", Importance: 0.8, CreatedAt: now.Add(-2 * time.Hour)}, BM25Score: 0.9},
+		},
+		trgmResults: []db.MemoryScore{
+			{Memory: &db.Memory{ID: uuid.New(), MemoryType: "semantic", Importance: 0.8, CreatedAt: now.Add(-2 * time.Hour)}, TrgmScore: 0.9},
+		},
+	}
+	s := newTestRecallStore(rdb)
+
+	_, err := s.Recall(context.Background(), RecallInput{
+		Query:      "time window forwarding",
+		ScopeID:    uuid.New(),
+		SearchMode: "hybrid",
+		Limit:      10,
+		Since:      &since,
+		Until:      &until,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if rdb.vecCalled == 0 || rdb.ftsCalled == 0 || rdb.trgmCalled == 0 {
+		t.Fatalf("expected hybrid recall paths called, got vec=%d fts=%d trgm=%d", rdb.vecCalled, rdb.ftsCalled, rdb.trgmCalled)
+	}
+	if rdb.lastSince == nil || !rdb.lastSince.Equal(since) {
+		t.Fatalf("lastSince=%v, want %v", rdb.lastSince, since)
+	}
+	if rdb.lastUntil == nil || !rdb.lastUntil.Equal(until) {
+		t.Fatalf("lastUntil=%v, want %v", rdb.lastUntil, until)
 	}
 }

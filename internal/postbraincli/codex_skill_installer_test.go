@@ -310,6 +310,37 @@ func TestInstallCodexHooks_QuotesExplicitScopeInCommands(t *testing.T) {
 	}
 }
 
+func TestInstallCodexHooks_UsesCanonicalEnvScopeCommands(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+
+	updated, err := InstallCodexHooks(targetDir, "")
+	if err != nil {
+		t.Fatalf("InstallCodexHooks: %v", err)
+	}
+	if !updated {
+		t.Fatal("updated = false, want true")
+	}
+
+	data, err := os.ReadFile(filepath.Join(targetDir, ".codex", "hooks.json"))
+	if err != nil {
+		t.Fatalf("read hooks.json: %v", err)
+	}
+	content := string(data)
+	if strings.Contains(content, `\u0026\u0026`) {
+		t.Fatalf("hooks.json should use literal &&, got escaped form: %s", content)
+	}
+	if !strings.Contains(content, `[ -n \"$POSTBRAIN_SCOPE\" ] && postbrain-cli snapshot --scope \"$POSTBRAIN_SCOPE\" || true`) {
+		t.Fatalf("hooks.json missing canonical snapshot command: %s", content)
+	}
+	if !strings.Contains(content, `[ -n \"$POSTBRAIN_SCOPE\" ] && postbrain-cli summarize-session --scope \"$POSTBRAIN_SCOPE\" || true`) {
+		t.Fatalf("hooks.json missing canonical summarize command: %s", content)
+	}
+	if strings.Contains(content, "./postbrain-cli") {
+		t.Fatalf("hooks.json should not use relative postbrain-cli path: %s", content)
+	}
+}
+
 func TestEnableCodexHooks_CreatesConfigWhenMissing(t *testing.T) {
 	t.Parallel()
 	targetDir := t.TempDir()

@@ -25,6 +25,210 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-10: Pushed knowledge recall time-window filtering into SQL recall paths:
+  - Updated knowledge recall SQL (`internal/db/queries/knowledge.sql`) to apply
+    `since`/`until` predicates using `COALESCE(published_at, created_at)` for
+    vector/FTS/trigram retrieval queries.
+  - Regenerated sqlc artifacts and updated DB compatibility wrappers
+    (`internal/db/compat.go`) to accept optional time-window pointers and pass
+    normalized bounds to generated query params.
+  - Updated knowledge recall orchestration (`internal/knowledge/recall.go`) to
+    pass `Since`/`Until` into DB recall paths.
+  - Added a red/green integration regression
+    (`internal/knowledge/recall_integration_test.go`) proving that
+    out-of-window artifacts no longer starve in-window results under low limit
+    (`limit=1` cap starvation scenario).
+  - Added model-table parity safeguards by applying window filtering before
+    materializing model-table hits and over-fetching candidates when a time
+    window is present.
+
+- [x] 2026-04-10: Pushed memory recall time-window filtering into DB queries:
+  - Updated memory recall DB interfaces and call sites to pass `since`/`until`
+    for vector/code-vector/FTS/trigram retrieval paths.
+  - Extended memory recall SQL predicates (`internal/db/queries/memories.sql`)
+    to apply `created_at` lower/upper bounds in-query before ranking/limit.
+  - Updated DB compatibility wrappers (`internal/db/compat.go`) to normalize
+    optional windows into concrete bounds and pass them to generated query
+    params.
+  - Kept model-table fallback safe by applying window filtering before
+    materializing results and increasing candidate fetch size when a window is
+    present.
+  - Added recall unit coverage to assert time-window values are forwarded to DB
+    queries (`internal/memory/recall_test.go`).
+
+- [x] 2026-04-10: Made `cross_scope_context` layer authorization iteration deterministic:
+  - Added canonical layer-order helper in
+    `internal/api/mcp/cross_scope_context.go` to iterate requested layers in a
+    stable order (`memory`, then `knowledge`) instead of ranging over a map.
+  - Applied stable iteration for:
+    - baseline scope per-layer authorization checks
+    - comparison scope per-layer authorization checks and `skipped_scopes`
+      construction.
+  - Added coverage:
+    - unit test `TestOrderedRequestedCrossScopeLayers_StableCanonicalOrder`
+    - integration test
+      `TestMCP_CrossScopeContext_ComparisonScopeDeniedIsSkipped_StableLayerOrder`
+      to lock deterministic `skipped_scopes` ordering.
+
+- [x] 2026-04-10: Fixed `cross_scope_context` graph-depth default semantics and removed parser duplication:
+  - Replaced duplicated graph-depth parsing logic with a shared helper:
+    `parseGraphDepthWithDefault(args, defaultDepth)` in
+    `internal/api/mcp/recall.go`.
+  - Kept tool-specific defaults while sharing clamping/cap behavior:
+    - `recall` default remains `1`
+    - `cross_scope_context` default is `0` (matching tool contract).
+  - Updated cross-scope tests in
+    `internal/api/mcp/cross_scope_context_test.go` to verify default/cap/clamp
+    behavior through the shared parser.
+
+- [x] 2026-04-09: Completed cross-scope verification Phase 7 end-to-end and recall non-regression checks (TDD-first):
+  - Added end-to-end integration coverage in
+    `internal/api/mcp/cross_scope_context_end_to_end_integration_test.go`
+    for:
+    - baseline docs scope + source comparison scope + unauthorized comparison
+      scope
+    - mixed `memory` + `knowledge` retrieval in one request
+    - explicit `since`/`until` time window filtering across both layers
+    - grouped output validation (`baseline_results`, `scope_contexts`,
+      `skipped_scopes`) and provenance key completeness.
+  - Ran recall non-regression suites and confirmed behavior remains intact:
+    - `go test ./internal/api/mcp -run Recall -count=1`
+    - `go test ./internal/retrieval -run Recall -count=1`
+    - `go test ./internal/memory -run Recall -count=1`
+
+- [x] 2026-04-09: Completed cross-scope verification Phase 6 DB index migration (TDD-first):
+  - Added migration `000018_cross_scope_time_window_indexes`:
+    - `memories(scope_id, is_active, created_at DESC)`
+    - `knowledge_artifacts(owner_scope_id, status, published_at DESC)`
+    - `knowledge_artifacts(owner_scope_id, status, created_at DESC)`
+  - Added reversible down migration dropping all three indexes.
+  - Added integration migration coverage in
+    `internal/db/migrate_integration_test.go::TestMigration000018_TimeWindowRecallIndexes`:
+    - verifies indexes exist after migration chain
+    - verifies down migration removes them
+    - verifies up migration recreates them.
+
+- [x] 2026-04-09: Completed cross-scope verification Phase 5 response contract + provenance normalization (TDD-first):
+  - Normalized `cross_scope_context` top-level response contract in
+    `internal/api/mcp/cross_scope_context.go`:
+    - `query`, `time_window`, `baseline_scope`, `baseline_results`,
+      `scope_contexts`, `skipped_scopes`
+  - Enforced per-item provenance keys for serialized results:
+    - `scope`, `layer`, `id`, `score`, `source_ref`, `created_at`, `updated_at`
+    - explicit `null` values for unavailable provenance fields.
+  - Added response robustness:
+    - sanitize non-finite scores (`NaN`/`Inf`) before JSON serialization
+    - explicit marshal error handling.
+  - Added/updated tests:
+    - `internal/api/mcp/cross_scope_context_response_test.go`
+    - `internal/api/mcp/cross_scope_context_integration_test.go` top-level key
+      contract coverage.
+
+- [x] 2026-04-09: Completed cross-scope verification Phase 4 time-window filtering (TDD-first):
+  - Extended retrieval plumbing to carry optional `since`/`until` through:
+    - `internal/retrieval/orchestrate.go` (`OrchestrateInput`)
+    - `internal/memory/recall.go` (`RecallInput`)
+    - `internal/knowledge/recall.go` (`RecallInput`)
+    - `internal/api/mcp/cross_scope_context.go` request handling and orchestration calls
+  - Implemented memory time-window filtering on `memories.created_at`.
+  - Implemented knowledge time-window filtering using `published_at` when
+    present, otherwise `created_at`.
+  - Added scoring/payload robustness in cross-scope response serialization:
+    - non-finite scores are normalized to `0` to avoid JSON marshal failures
+      when vector backends return NaN/Inf.
+  - Added/updated coverage:
+    - `internal/memory/recall_test.go` (since/until filters)
+    - `internal/knowledge/recall_test.go` (published-at precedence + fallback)
+    - `internal/api/mcp/cross_scope_context_integration_test.go` (memory and
+      knowledge since-window behavior).
+
+- [x] 2026-04-09: Completed cross-scope verification Phase 3 orchestration and strict-scope retrieval (TDD-first):
+  - Added `internal/retrieval/orchestrate_cross_scope.go` with
+    `OrchestrateCrossScopeContext(...)`:
+    - additive retrieval entrypoint for explicit scope anchors
+    - defaults to memory+knowledge layers
+    - enforces strict-scope memory behavior via orchestration input.
+  - Updated `internal/retrieval/orchestrate.go`:
+    - added `StrictScope` plumbing on `OrchestrateInput` into memory recall.
+    - refactored layer recall paths behind function vars for targeted unit
+      verification without changing default behavior.
+  - Wired `internal/api/mcp/cross_scope_context.go` to execute retrieval:
+    - baseline scope retrieval plus per-comparison-scope retrieval groups
+    - requested-layer filtering per scope after authz outcomes
+    - comparison skips retained in `skipped_scopes`.
+  - Added/updated coverage:
+    - `internal/retrieval/orchestrate_cross_scope_test.go`
+    - `internal/api/mcp/cross_scope_context_integration_test.go`
+    - existing MCP/unit/integration cross-scope authz tests kept green.
+
+- [x] 2026-04-09: Completed cross-scope verification Phase 2 authz semantics (TDD-first):
+  - Updated `internal/api/mcp/cross_scope_context.go` to enforce per-layer,
+    per-scope read authorization:
+    - `memory` layer requires `memories:read`
+    - `knowledge` layer requires `knowledge:read`
+  - Implemented baseline/comparison behavior:
+    - baseline scope denial is fatal (`forbidden: scope access denied`)
+    - comparison scope/layer denial is non-fatal and reported in
+      `skipped_scopes` entries with `scope`, `layer`, `reason`.
+  - Added integration coverage in
+    `internal/api/mcp/cross_scope_context_authz_integration_test.go`:
+    - per-layer permission success/denial matrix
+    - mixed-layer denial when one required permission is missing
+    - comparison-scope denied-by-token path returns success with skip metadata.
+
+- [x] 2026-04-09: Started cross-scope verification Phase 1 MCP surface (TDD-first):
+  - Added new MCP tool registration `cross_scope_context` in
+    `internal/api/mcp/server.go` with arguments:
+    `query`, `baseline_scope`, `comparison_scopes`, `layers`, `search_mode`,
+    `since`, `until`, `limit_per_scope`, `min_score`, `graph_depth`.
+  - Added new handler skeleton `internal/api/mcp/cross_scope_context.go` with
+    deterministic validation for:
+    - required `query` and `baseline_scope`
+    - baseline scope format
+    - allowed layers (`memory|knowledge`)
+    - RFC3339 timestamp parsing for `since`/`until`
+    - time-window ordering (`since <= until`)
+    - positive `limit_per_scope`
+    - stable-order deduplication for `comparison_scopes`
+  - Added unit coverage in `internal/api/mcp/server_test.go` and
+    `internal/api/mcp/handlers_unit_test.go` for tool registration and
+    cross-scope validation/error cases.
+
+- [x] 2026-04-09: Added dedicated task tracker for cross-scope verification design work:
+  - New task file `designs/TASKS_CROSS_SCOPE_VERIFICATION.md` with phased,
+    TDD-first implementation steps, required test coverage, and explicit
+    acceptance criteria for:
+    - MCP tool/schema and validation
+    - per-layer/per-scope authz behavior
+    - retrieval orchestration and strict-scope semantics
+    - time-window filtering, provenance contract, and migration indexes
+  - Updated `docs/index.md` to pair
+    `designs/DESIGN_CROSS_SCOPE_VERIFICATION.md` with the new task file.
+  - Updated `designs/DESIGN_CROSS_SCOPE_VERIFICATION.md` related-doc reference
+    to `designs/TASKS_CROSS_SCOPE_VERIFICATION.md`.
+
+- [x] 2026-04-09: Added focused design for cross-scope verification retrieval:
+  - New design doc `designs/DESIGN_CROSS_SCOPE_VERIFICATION.md` defining a dedicated
+    `verify_context` MCP tool for baseline-vs-comparison scope analysis.
+  - Documented architecture and implementation details for MCP handler, retrieval
+    orchestration, scope authz handling, strict-scope memory semantics, and
+    provenance-first output contracts.
+  - Documented required database implications:
+    - phase-1 correctness without schema changes
+    - phase-1.1 performance indexes for time-windowed recall
+    - optional phase-2 `release_markers` model for server-resolved
+      `since_release` anchors.
+  - Updated `docs/index.md` design map and routing hints to include this new
+    design entry.
+
+- [x] 2026-04-09: Kept Codex hooks command strings readable and canonical in installer output (TDD-first):
+  - Added regression test `internal/postbraincli/codex_skill_installer_test.go::TestInstallCodexHooks_UsesCanonicalEnvScopeCommands` to enforce:
+    - literal `&&` in `.codex/hooks.json` command strings (no `\u0026\u0026` escaping)
+    - canonical `postbrain-cli` command path (no `./postbrain-cli`).
+  - Updated `internal/postbraincli/codex_skill_installer.go`:
+    - replaced `json.MarshalIndent` with `json.Encoder` (`SetIndent`, `SetEscapeHTML(false)`) when writing `.codex/hooks.json`.
+    - preserves pretty JSON formatting while preventing HTML-escape rewriting of shell operators.
+
 - [x] 2026-04-09: Fixed sqlc type inference for artifact create optional UUID params and restored typed compat mappings (TDD-first):
   - Updated `internal/db/queries/knowledge.sql` `CreateArtifact` insert placeholders to pass `$17/$18` directly, avoiding `NULLIF`-driven anonymous sqlc param fields.
   - Added regression test `internal/db/knowledge_sqlc_params_test.go::TestCreateArtifactParams_UsesTypedVersionAndSourceIDs` to enforce:

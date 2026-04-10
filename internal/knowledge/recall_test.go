@@ -4,6 +4,10 @@ import (
 	"math"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/simplyblock/postbrain/internal/db"
 )
 
 func TestRecallScore_KnowledgeBoost(t *testing.T) {
@@ -67,5 +71,48 @@ func TestArtifactKindQueryBoost_DoesNotMatchHowInsideShow(t *testing.T) {
 	boost := artifactKindQueryBoost("show me status", ArtifactKindSpec)
 	if boost != 0 {
 		t.Fatalf("expected no implementation boost from 'show', got %v", boost)
+	}
+}
+
+func TestArtifactWindowTimestamp_PrefersPublishedAt(t *testing.T) {
+	t.Parallel()
+	created := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)
+	published := time.Date(2026, 4, 7, 11, 0, 0, 0, time.UTC)
+	a := &db.KnowledgeArtifact{
+		ID:          uuid.New(),
+		CreatedAt:   created,
+		PublishedAt: &published,
+	}
+	got := artifactWindowTimestamp(a)
+	if !got.Equal(published) {
+		t.Fatalf("artifactWindowTimestamp=%s, want %s", got, published)
+	}
+}
+
+func TestArtifactWithinWindow_UsesPublishedAtWhenPresent(t *testing.T) {
+	t.Parallel()
+	created := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)
+	published := time.Date(2026, 4, 7, 11, 0, 0, 0, time.UTC)
+	a := &db.KnowledgeArtifact{
+		ID:          uuid.New(),
+		CreatedAt:   created,
+		PublishedAt: &published,
+	}
+	since := time.Date(2026, 4, 5, 0, 0, 0, 0, time.UTC)
+	if !artifactWithinWindow(a, &since, nil) {
+		t.Fatal("expected artifact to pass since-window using published_at")
+	}
+}
+
+func TestArtifactWithinWindow_FallsBackToCreatedAtWhenUnpublished(t *testing.T) {
+	t.Parallel()
+	created := time.Date(2026, 4, 1, 10, 0, 0, 0, time.UTC)
+	a := &db.KnowledgeArtifact{
+		ID:        uuid.New(),
+		CreatedAt: created,
+	}
+	since := time.Date(2026, 4, 5, 0, 0, 0, 0, time.UTC)
+	if artifactWithinWindow(a, &since, nil) {
+		t.Fatal("expected artifact to fail since-window using created_at fallback")
 	}
 }
