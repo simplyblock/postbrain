@@ -25,6 +25,20 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-10: Made `cross_scope_context` layer authorization iteration deterministic:
+  - Added canonical layer-order helper in
+    `internal/api/mcp/cross_scope_context.go` to iterate requested layers in a
+    stable order (`memory`, then `knowledge`) instead of ranging over a map.
+  - Applied stable iteration for:
+    - baseline scope per-layer authorization checks
+    - comparison scope per-layer authorization checks and `skipped_scopes`
+      construction.
+  - Added coverage:
+    - unit test `TestOrderedRequestedCrossScopeLayers_StableCanonicalOrder`
+    - integration test
+      `TestMCP_CrossScopeContext_ComparisonScopeDeniedIsSkipped_StableLayerOrder`
+      to lock deterministic `skipped_scopes` ordering.
+
 - [x] 2026-04-10: Fixed `cross_scope_context` graph-depth default semantics and removed parser duplication:
   - Replaced duplicated graph-depth parsing logic with a shared helper:
     `parseGraphDepthWithDefault(args, defaultDepth)` in

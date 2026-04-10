@@ -18,6 +18,18 @@ import (
 	"github.com/simplyblock/postbrain/internal/retrieval"
 )
 
+var crossScopeLayerOrder = []string{"memory", "knowledge"}
+
+func orderedRequestedCrossScopeLayers(active map[string]bool) []string {
+	ordered := make([]string, 0, len(crossScopeLayerOrder))
+	for _, layer := range crossScopeLayerOrder {
+		if active[layer] {
+			ordered = append(ordered, layer)
+		}
+	}
+	return ordered
+}
+
 func normalizeAndDeduplicateScopes(raw []any) ([]string, error) {
 	if len(raw) == 0 {
 		return nil, nil
@@ -238,7 +250,7 @@ func (s *Server) handleCrossScopeContext(ctx context.Context, req mcpgo.CallTool
 	if err != nil {
 		return mcpgo.NewToolResultError(fmt.Sprintf("cross_scope_context: baseline scope lookup: %v", err)), nil
 	}
-	for layer := range layers {
+	for _, layer := range orderedRequestedCrossScopeLayers(layers) {
 		perm := requiredPermissionForLayer(layer)
 		if perm == "" {
 			continue
@@ -283,7 +295,7 @@ func (s *Server) handleCrossScopeContext(ctx context.Context, req mcpgo.CallTool
 			return mcpgo.NewToolResultError(fmt.Sprintf("cross_scope_context: comparison scope lookup: %v", err)), nil
 		}
 		deniedLayers := map[string]bool{}
-		for layer := range layers {
+		for _, layer := range orderedRequestedCrossScopeLayers(layers) {
 			perm := requiredPermissionForLayer(layer)
 			if perm == "" {
 				continue

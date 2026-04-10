@@ -168,3 +168,63 @@ func TestMCP_CrossScopeContext_ComparisonScopeDeniedIsSkipped(t *testing.T) {
 		t.Fatalf("skipped reason = %q, want forbidden", payload.SkippedScopes[0].Reason)
 	}
 }
+
+func TestMCP_CrossScopeContext_ComparisonScopeDeniedIsSkipped_StableLayerOrder(t *testing.T) {
+	ctx := context.Background()
+	pool := testhelper.NewTestPool(t)
+	svc := testhelper.NewMockEmbeddingService()
+	cfg := &config.Config{}
+
+	principal := testhelper.CreateTestPrincipal(t, pool, "user", "mcp-csc-skip-order-user-"+uuid.NewString())
+	baseline := testhelper.CreateTestScope(t, pool, "project", "mcp-csc-skip-order-baseline-"+uuid.NewString(), nil, principal.ID)
+	comparisonBlocked := testhelper.CreateTestScope(t, pool, "project", "mcp-csc-skip-order-blocked-"+uuid.NewString(), nil, principal.ID)
+	testhelper.CreateTestEmbeddingModel(t, pool)
+
+	tool := mcpapi.NewServer(pool, svc, cfg).MCPServer().GetTool("cross_scope_context")
+	if tool == nil {
+		t.Fatal("cross_scope_context tool not registered")
+	}
+
+	ctxBaselineOnly := withAuthContextPerms(ctx, pool, principal.ID, baseline.ID, []string{"memories:read", "knowledge:read"})
+
+	req := mcpgo.CallToolRequest{}
+	req.Params.Name = "cross_scope_context"
+	req.Params.Arguments = map[string]any{
+		"query":             "docs consistency",
+		"baseline_scope":    "project:" + baseline.ExternalID,
+		"comparison_scopes": []any{"project:" + comparisonBlocked.ExternalID},
+		"layers":            []any{"knowledge", "memory"},
+	}
+	result, err := tool.Handler(ctxBaselineOnly, req)
+	if err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if result == nil || result.IsError {
+		t.Fatalf("expected success, got %+v", result)
+	}
+
+	var payload struct {
+		SkippedScopes []struct {
+			Scope  string `json:"scope"`
+			Layer  string `json:"layer"`
+			Reason string `json:"reason"`
+		} `json:"skipped_scopes"`
+	}
+	if err := json.Unmarshal([]byte(firstToolText(result)), &payload); err != nil {
+		t.Fatalf("unmarshal result: %v", err)
+	}
+	if len(payload.SkippedScopes) != 2 {
+		t.Fatalf("len(skipped_scopes)=%d, want 2", len(payload.SkippedScopes))
+	}
+	if payload.SkippedScopes[0].Layer != "memory" || payload.SkippedScopes[1].Layer != "knowledge" {
+		t.Fatalf("skipped layer order = [%q, %q], want [memory, knowledge]", payload.SkippedScopes[0].Layer, payload.SkippedScopes[1].Layer)
+	}
+	for _, skipped := range payload.SkippedScopes {
+		if skipped.Scope != "project:"+comparisonBlocked.ExternalID {
+			t.Fatalf("skipped scope = %q, want %q", skipped.Scope, "project:"+comparisonBlocked.ExternalID)
+		}
+		if skipped.Reason != "forbidden" {
+			t.Fatalf("skipped reason = %q, want forbidden", skipped.Reason)
+		}
+	}
+}
