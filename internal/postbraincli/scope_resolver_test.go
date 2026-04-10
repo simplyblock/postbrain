@@ -3,6 +3,7 @@ package postbraincli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -46,5 +47,25 @@ func TestResolveScopeFromBaseFiles_IgnoreComments(t *testing.T) {
 	}
 	if got := ResolveScopeFromBaseFiles(targetDir); got != "project:active" {
 		t.Fatalf("ResolveScopeFromBaseFiles() = %q, want project:active", got)
+	}
+}
+
+func TestResolveScopeFromBaseFiles_SupportsDocumentedPostbrainScopeKey(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(targetDir, ".agents"), 0o755); err != nil {
+		t.Fatalf("mkdir .agents: %v", err)
+	}
+	content := strings.Join([]string{
+		"postbrain_enabled: true",
+		"  PostBrain_Scope   :   project:documented-format  ",
+		"",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(targetDir, ".agents", "postbrain-base.md"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	if got := ResolveScopeFromBaseFiles(targetDir); got != "project:documented-format" {
+		t.Fatalf("ResolveScopeFromBaseFiles() = %q, want project:documented-format", got)
 	}
 }

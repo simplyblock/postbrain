@@ -30,15 +30,37 @@ func readScopeFromPostbrainBase(path string) string {
 	if err != nil {
 		return ""
 	}
-	const key = "POSTBRAIN_SCOPE="
 	for _, line := range strings.Split(string(data), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-		if strings.HasPrefix(trimmed, key) {
-			return strings.TrimSpace(strings.TrimPrefix(trimmed, key))
+		if scope := parseScopeLine(line); scope != "" {
+			return scope
 		}
 	}
 	return ""
+}
+
+func parseScopeLine(line string) string {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+		return ""
+	}
+
+	const envKey = "POSTBRAIN_SCOPE="
+	if strings.HasPrefix(trimmed, envKey) {
+		return strings.TrimSpace(strings.TrimPrefix(trimmed, envKey))
+	}
+
+	// Support documented markdown/yaml-style key: postbrain_scope: kind:external_id
+	// Accept ':' or '=' separators and case-insensitive key matching.
+	keyValue := strings.SplitN(trimmed, ":", 2)
+	if len(keyValue) != 2 {
+		keyValue = strings.SplitN(trimmed, "=", 2)
+	}
+	if len(keyValue) != 2 {
+		return ""
+	}
+	key := strings.ToLower(strings.TrimSpace(keyValue[0]))
+	if key != "postbrain_scope" {
+		return ""
+	}
+	return strings.TrimSpace(keyValue[1])
 }

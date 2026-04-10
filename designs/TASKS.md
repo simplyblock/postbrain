@@ -25,6 +25,17 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-10: Extended `postbrain-base.md` scope parsing to support documented key format (TDD-first):
+  - Updated `internal/postbraincli/scope_resolver.go` parser to accept both:
+    - `POSTBRAIN_SCOPE=...` (env-style)
+    - `postbrain_scope: ...` (documented markdown/yaml-style key)
+      with case-insensitive key matching and whitespace-tolerant separators
+      (`:` or `=`).
+  - Added regression test
+    `TestResolveScopeFromBaseFiles_SupportsDocumentedPostbrainScopeKey` in
+    `internal/postbraincli/scope_resolver_test.go` to prevent silent scope
+    resolution failures for existing documented base files.
+
 - [x] 2026-04-10: Updated hook installers and hook runtime scope behavior to remove env-var dependency (TDD-first):
   - Updated hook installer generation in `internal/postbraincli`:
     - `InstallCodexHooks` and `InstallClaudeHooks` now resolve scope from
