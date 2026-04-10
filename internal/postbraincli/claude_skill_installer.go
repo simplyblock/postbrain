@@ -31,6 +31,9 @@ func InstallClaudeSkill(targetDir, skillContent, postbrainURL, postbrainScope st
 	if err := os.WriteFile(destFile, []byte(skillContent), 0o644); err != nil {
 		return "", false, fmt.Errorf("write skill file: %w", err)
 	}
+	if err := ensurePostbrainBaseFile(targetDir, ".claude", postbrainScope); err != nil {
+		return "", false, err
+	}
 
 	claudePath := filepath.Join(targetDir, "CLAUDE.md")
 	claudeBytes, err := os.ReadFile(claudePath)

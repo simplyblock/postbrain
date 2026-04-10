@@ -50,6 +50,9 @@ func InstallCodexSkillWithOptions(
 	if err := os.WriteFile(destFile, []byte(skillContent), 0o644); err != nil {
 		return "", false, fmt.Errorf("write skill file: %w", err)
 	}
+	if err := ensurePostbrainBaseFile(targetDir, ".codex", postbrainScope); err != nil {
+		return "", false, err
+	}
 	if opts.InstallHooks {
 		if _, err := InstallCodexHooks(targetDir, postbrainScope); err != nil {
 			return "", false, err

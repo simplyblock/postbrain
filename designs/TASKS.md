@@ -25,6 +25,23 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-10: Added canonical `postbrain-base.md` frontmatter generation with compatibility fallback:
+  - Added shared helper `ensurePostbrainBaseFile(...)` in
+    `internal/postbraincli/postbrain_base_file.go` to create
+    `<agent-dir>/postbrain-base.md` when missing using canonical frontmatter:
+    - `postbrain_enabled: true`
+    - optional `postbrain_scope: kind:external_id`
+  - Wired base-file creation into both installers:
+    - `InstallCodexSkill*` writes `.codex/postbrain-base.md`
+    - `InstallClaudeSkill` writes `.claude/postbrain-base.md`
+  - Preserved backward compatibility:
+    - existing base files are not overwritten,
+    - scope parser continues to support both legacy `POSTBRAIN_SCOPE=...` and
+      documented `postbrain_scope: ...` formats.
+  - Added coverage:
+    - installer tests now assert base-file creation/content for Codex/Claude,
+    - new tests verify canonical frontmatter output and no-overwrite behavior.
+
 - [x] 2026-04-10: Extended `postbrain-base.md` scope parsing to support documented key format (TDD-first):
   - Updated `internal/postbraincli/scope_resolver.go` parser to accept both:
     - `POSTBRAIN_SCOPE=...` (env-style)

@@ -53,6 +53,22 @@ func TestInstallClaudeSkill_WritesSkillFileAndUpdatesCLAUDE(t *testing.T) {
 	if !strings.Contains(content, "POSTBRAIN_SCOPE=project:acme/api") {
 		t.Fatal("CLAUDE.md missing POSTBRAIN_SCOPE")
 	}
+
+	basePath := filepath.Join(targetDir, ".claude", "postbrain-base.md")
+	baseData, err := os.ReadFile(basePath)
+	if err != nil {
+		t.Fatalf("read postbrain-base.md: %v", err)
+	}
+	base := string(baseData)
+	if !strings.Contains(base, "---") {
+		t.Fatal("postbrain-base.md missing frontmatter markers")
+	}
+	if !strings.Contains(base, "postbrain_enabled: true") {
+		t.Fatal("postbrain-base.md missing postbrain_enabled")
+	}
+	if !strings.Contains(base, "postbrain_scope: project:acme/api") {
+		t.Fatal("postbrain-base.md missing postbrain_scope")
+	}
 }
 
 func TestInstallClaudeSkill_DoesNotDuplicateBlock(t *testing.T) {
@@ -101,6 +117,14 @@ func TestInstallClaudeSkill_NoCLAUDEFileStillInstallsSkill(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(targetDir, "CLAUDE.md")); !os.IsNotExist(err) {
 		t.Fatalf("CLAUDE.md exists unexpectedly or stat error: %v", err)
+	}
+	basePath := filepath.Join(targetDir, ".claude", "postbrain-base.md")
+	baseData, err := os.ReadFile(basePath)
+	if err != nil {
+		t.Fatalf("read postbrain-base.md: %v", err)
+	}
+	if !strings.Contains(string(baseData), "postbrain_enabled: true") {
+		t.Fatal("postbrain-base.md missing postbrain_enabled")
 	}
 }
 

@@ -50,6 +50,22 @@ func TestInstallCodexSkill_WritesSkillFileAndAppendsAgentsBlock(t *testing.T) {
 	if !strings.Contains(content, "POSTBRAIN_SCOPE=project:acme/api") {
 		t.Fatal("AGENTS.md missing POSTBRAIN_SCOPE")
 	}
+
+	basePath := filepath.Join(targetDir, ".codex", "postbrain-base.md")
+	baseData, err := os.ReadFile(basePath)
+	if err != nil {
+		t.Fatalf("read postbrain-base.md: %v", err)
+	}
+	base := string(baseData)
+	if !strings.Contains(base, "---") {
+		t.Fatal("postbrain-base.md missing frontmatter markers")
+	}
+	if !strings.Contains(base, "postbrain_enabled: true") {
+		t.Fatal("postbrain-base.md missing postbrain_enabled")
+	}
+	if !strings.Contains(base, "postbrain_scope: project:acme/api") {
+		t.Fatal("postbrain-base.md missing postbrain_scope")
+	}
 }
 
 func TestInstallCodexSkill_DoesNotDuplicateAgentsBlock(t *testing.T) {
@@ -98,6 +114,14 @@ func TestInstallCodexSkill_NoAgentsFileStillInstallsSkill(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(targetDir, "AGENTS.md")); !os.IsNotExist(err) {
 		t.Fatalf("AGENTS.md exists unexpectedly or stat error: %v", err)
+	}
+	basePath := filepath.Join(targetDir, ".codex", "postbrain-base.md")
+	baseData, err := os.ReadFile(basePath)
+	if err != nil {
+		t.Fatalf("read postbrain-base.md: %v", err)
+	}
+	if !strings.Contains(string(baseData), "postbrain_enabled: true") {
+		t.Fatal("postbrain-base.md missing postbrain_enabled")
 	}
 	hooksPath := filepath.Join(targetDir, ".codex", "hooks.json")
 	if _, err := os.Stat(hooksPath); err != nil {
