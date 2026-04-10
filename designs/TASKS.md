@@ -25,6 +25,15 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-10: Removed `os.Chdir` global-state usage from CLI scope runtime tests:
+  - Added injectable working-directory function variable in
+    `cmd/postbrain-cli/main.go`:
+    - `getwdFn` (default `os.Getwd`) used by `resolveScopeForRuntime`.
+  - Updated `cmd/postbrain-cli/main_test.go` runtime fallback test to inject
+    `getwdFn` instead of mutating process CWD.
+  - This avoids cross-test interference with parallel tests and prevents
+    flakiness from global process state changes.
+
 - [x] 2026-04-10: Added canonical `postbrain-base.md` frontmatter generation with compatibility fallback:
   - Added shared helper `ensurePostbrainBaseFile(...)` in
     `internal/postbraincli/postbrain_base_file.go` to create

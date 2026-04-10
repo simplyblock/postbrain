@@ -295,25 +295,16 @@ func TestResolveScopeForRuntime_FallsBackToCwdPostbrainBase(t *testing.T) {
 	t.Setenv("POSTBRAIN_SCOPE", "")
 
 	targetDir := t.TempDir()
+	prevGetwd := getwdFn
+	getwdFn = func() (string, error) { return targetDir, nil }
+	t.Cleanup(func() { getwdFn = prevGetwd })
+
 	if err := os.MkdirAll(filepath.Join(targetDir, ".codex"), 0o755); err != nil {
 		t.Fatalf("mkdir .codex: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(targetDir, ".codex", "postbrain-base.md"), []byte("POSTBRAIN_SCOPE=project:from-cwd\n"), 0o644); err != nil {
 		t.Fatalf("write postbrain-base.md: %v", err)
 	}
-
-	oldWd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	if err := os.Chdir(targetDir); err != nil {
-		t.Fatalf("chdir temp dir: %v", err)
-	}
-	t.Cleanup(func() {
-		if chdirErr := os.Chdir(oldWd); chdirErr != nil {
-			t.Fatalf("restore cwd: %v", chdirErr)
-		}
-	})
 
 	if got := resolveScopeForRuntime(); got != "project:from-cwd" {
 		t.Fatalf("resolveScopeForRuntime() = %q, want project:from-cwd", got)

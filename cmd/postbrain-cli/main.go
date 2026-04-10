@@ -42,6 +42,7 @@ const latestReleaseAPIURL = "https://api.github.com/repos/simplyblock/postbrain/
 
 var detectCodexVersionFn = detectCodexVersion
 var fetchLatestPostbrainVersionFn = fetchLatestPostbrainVersion
+var getwdFn = os.Getwd
 
 // hookClient is a minimal HTTP client for the Postbrain REST API.
 type hookClient struct {
@@ -747,7 +748,7 @@ func resolveScopeForRuntime() string {
 	if scope := strings.TrimSpace(os.Getenv("POSTBRAIN_SCOPE")); scope != "" {
 		return scope
 	}
-	cwd, err := os.Getwd()
+	cwd, err := getwdFn()
 	if err != nil {
 		return ""
 	}
