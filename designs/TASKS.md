@@ -25,6 +25,20 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-10: Pushed memory recall time-window filtering into DB queries:
+  - Updated memory recall DB interfaces and call sites to pass `since`/`until`
+    for vector/code-vector/FTS/trigram retrieval paths.
+  - Extended memory recall SQL predicates (`internal/db/queries/memories.sql`)
+    to apply `created_at` lower/upper bounds in-query before ranking/limit.
+  - Updated DB compatibility wrappers (`internal/db/compat.go`) to normalize
+    optional windows into concrete bounds and pass them to generated query
+    params.
+  - Kept model-table fallback safe by applying window filtering before
+    materializing results and increasing candidate fetch size when a window is
+    present.
+  - Added recall unit coverage to assert time-window values are forwarded to DB
+    queries (`internal/memory/recall_test.go`).
+
 - [x] 2026-04-10: Made `cross_scope_context` layer authorization iteration deterministic:
   - Added canonical layer-order helper in
     `internal/api/mcp/cross_scope_context.go` to iterate requested layers in a

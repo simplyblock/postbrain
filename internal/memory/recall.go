@@ -37,10 +37,10 @@ type MemoryResult struct {
 
 // recallDB abstracts the DB calls needed by Recall so tests can inject mocks.
 type recallDB interface {
-	RecallMemoriesByVector(ctx context.Context, scopeIDs []uuid.UUID, queryVec []float32, limit int) ([]db.MemoryScore, error)
-	RecallMemoriesByFTS(ctx context.Context, scopeIDs []uuid.UUID, query string, limit int) ([]db.MemoryScore, error)
-	RecallMemoriesByTrigram(ctx context.Context, scopeIDs []uuid.UUID, query string, limit int) ([]db.MemoryScore, error)
-	RecallMemoriesByCodeVector(ctx context.Context, scopeIDs []uuid.UUID, queryVec []float32, limit int) ([]db.MemoryScore, error)
+	RecallMemoriesByVector(ctx context.Context, scopeIDs []uuid.UUID, queryVec []float32, limit int, since, until *time.Time) ([]db.MemoryScore, error)
+	RecallMemoriesByFTS(ctx context.Context, scopeIDs []uuid.UUID, query string, limit int, since, until *time.Time) ([]db.MemoryScore, error)
+	RecallMemoriesByTrigram(ctx context.Context, scopeIDs []uuid.UUID, query string, limit int, since, until *time.Time) ([]db.MemoryScore, error)
+	RecallMemoriesByCodeVector(ctx context.Context, scopeIDs []uuid.UUID, queryVec []float32, limit int, since, until *time.Time) ([]db.MemoryScore, error)
 	IncrementMemoryAccess(ctx context.Context, id uuid.UUID) error
 }
 
@@ -49,20 +49,20 @@ type poolRecallDB struct {
 	*poolMemoryDB
 }
 
-func (p *poolRecallDB) RecallMemoriesByVector(ctx context.Context, scopeIDs []uuid.UUID, queryVec []float32, limit int) ([]db.MemoryScore, error) {
-	return db.RecallMemoriesByVector(ctx, p.pool, scopeIDs, queryVec, limit)
+func (p *poolRecallDB) RecallMemoriesByVector(ctx context.Context, scopeIDs []uuid.UUID, queryVec []float32, limit int, since, until *time.Time) ([]db.MemoryScore, error) {
+	return db.RecallMemoriesByVector(ctx, p.pool, scopeIDs, queryVec, limit, since, until)
 }
 
-func (p *poolRecallDB) RecallMemoriesByFTS(ctx context.Context, scopeIDs []uuid.UUID, query string, limit int) ([]db.MemoryScore, error) {
-	return db.RecallMemoriesByFTS(ctx, p.pool, scopeIDs, query, limit)
+func (p *poolRecallDB) RecallMemoriesByFTS(ctx context.Context, scopeIDs []uuid.UUID, query string, limit int, since, until *time.Time) ([]db.MemoryScore, error) {
+	return db.RecallMemoriesByFTS(ctx, p.pool, scopeIDs, query, limit, since, until)
 }
 
-func (p *poolRecallDB) RecallMemoriesByTrigram(ctx context.Context, scopeIDs []uuid.UUID, query string, limit int) ([]db.MemoryScore, error) {
-	return db.RecallMemoriesByTrigram(ctx, p.pool, scopeIDs, query, limit)
+func (p *poolRecallDB) RecallMemoriesByTrigram(ctx context.Context, scopeIDs []uuid.UUID, query string, limit int, since, until *time.Time) ([]db.MemoryScore, error) {
+	return db.RecallMemoriesByTrigram(ctx, p.pool, scopeIDs, query, limit, since, until)
 }
 
-func (p *poolRecallDB) RecallMemoriesByCodeVector(ctx context.Context, scopeIDs []uuid.UUID, queryVec []float32, limit int) ([]db.MemoryScore, error) {
-	return db.RecallMemoriesByCodeVector(ctx, p.pool, scopeIDs, queryVec, limit)
+func (p *poolRecallDB) RecallMemoriesByCodeVector(ctx context.Context, scopeIDs []uuid.UUID, queryVec []float32, limit int, since, until *time.Time) ([]db.MemoryScore, error) {
+	return db.RecallMemoriesByCodeVector(ctx, p.pool, scopeIDs, queryVec, limit, since, until)
 }
 
 func (p *poolRecallDB) IncrementMemoryAccess(ctx context.Context, id uuid.UUID) error {
@@ -140,13 +140,13 @@ func (s *Store) Recall(ctx context.Context, input RecallInput) ([]*MemoryResult,
 		}
 		rows := make([]db.MemoryScore, 0)
 		if codeModelID, ok := s.getActiveEmbeddingModelID(ctx, "code"); ok {
-			rows, err = s.recallMemoriesByModelTable(ctx, codeModelID, codeVec, scopeIDs, input.Limit*2)
+			rows, err = s.recallMemoriesByModelTable(ctx, codeModelID, codeVec, scopeIDs, input.Limit*2, input.Since, input.Until)
 			if err != nil {
 				return nil, err
 			}
 		}
 		if len(rows) == 0 {
-			rows, err = rdb.RecallMemoriesByCodeVector(ctx, scopeIDs, codeVec, input.Limit*2)
+			rows, err = rdb.RecallMemoriesByCodeVector(ctx, scopeIDs, codeVec, input.Limit*2, input.Since, input.Until)
 			if err != nil {
 				return nil, err
 			}
@@ -154,7 +154,7 @@ func (s *Store) Recall(ctx context.Context, input RecallInput) ([]*MemoryResult,
 		// Fallback: many existing code memories have no embedding_code yet.
 		// If vector recall yields nothing, use lexical code search (FTS).
 		if len(rows) == 0 {
-			rows, err = rdb.RecallMemoriesByFTS(ctx, scopeIDs, input.Query, input.Limit*2)
+			rows, err = rdb.RecallMemoriesByFTS(ctx, scopeIDs, input.Query, input.Limit*2, input.Since, input.Until)
 			if err != nil {
 				return nil, err
 			}
@@ -166,13 +166,13 @@ func (s *Store) Recall(ctx context.Context, input RecallInput) ([]*MemoryResult,
 	case "text":
 		rows := make([]db.MemoryScore, 0)
 		if textModelID, ok := s.getActiveEmbeddingModelID(ctx, "text"); ok {
-			rows, err = s.recallMemoriesByModelTable(ctx, textModelID, queryVec, scopeIDs, input.Limit*2)
+			rows, err = s.recallMemoriesByModelTable(ctx, textModelID, queryVec, scopeIDs, input.Limit*2, input.Since, input.Until)
 			if err != nil {
 				return nil, err
 			}
 		}
 		if len(rows) == 0 {
-			rows, err = rdb.RecallMemoriesByVector(ctx, scopeIDs, queryVec, input.Limit*2)
+			rows, err = rdb.RecallMemoriesByVector(ctx, scopeIDs, queryVec, input.Limit*2, input.Since, input.Until)
 			if err != nil {
 				return nil, err
 			}
@@ -184,13 +184,13 @@ func (s *Store) Recall(ctx context.Context, input RecallInput) ([]*MemoryResult,
 	default: // "hybrid"
 		vecRows := make([]db.MemoryScore, 0)
 		if textModelID, ok := s.getActiveEmbeddingModelID(ctx, "text"); ok {
-			vecRows, err = s.recallMemoriesByModelTable(ctx, textModelID, queryVec, scopeIDs, input.Limit*2)
+			vecRows, err = s.recallMemoriesByModelTable(ctx, textModelID, queryVec, scopeIDs, input.Limit*2, input.Since, input.Until)
 			if err != nil {
 				return nil, err
 			}
 		}
 		if len(vecRows) == 0 {
-			vecRows, err = rdb.RecallMemoriesByVector(ctx, scopeIDs, queryVec, input.Limit*2)
+			vecRows, err = rdb.RecallMemoriesByVector(ctx, scopeIDs, queryVec, input.Limit*2, input.Since, input.Until)
 			if err != nil {
 				return nil, err
 			}
@@ -199,7 +199,7 @@ func (s *Store) Recall(ctx context.Context, input RecallInput) ([]*MemoryResult,
 			r := vecRows[i]
 			merged[r.Memory.ID] = &r
 		}
-		ftsRows, err := rdb.RecallMemoriesByFTS(ctx, scopeIDs, input.Query, input.Limit*2)
+		ftsRows, err := rdb.RecallMemoriesByFTS(ctx, scopeIDs, input.Query, input.Limit*2, input.Since, input.Until)
 		if err != nil {
 			return nil, err
 		}
@@ -211,7 +211,7 @@ func (s *Store) Recall(ctx context.Context, input RecallInput) ([]*MemoryResult,
 				merged[r.Memory.ID] = &r
 			}
 		}
-		trgmRows, err := rdb.RecallMemoriesByTrigram(ctx, scopeIDs, input.Query, input.Limit*2)
+		trgmRows, err := rdb.RecallMemoriesByTrigram(ctx, scopeIDs, input.Query, input.Limit*2, input.Since, input.Until)
 		if err != nil {
 			return nil, err
 		}
@@ -319,7 +319,7 @@ func (s *Store) getActiveEmbeddingModelID(ctx context.Context, contentType strin
 	}
 }
 
-func (s *Store) recallMemoriesByModelTable(ctx context.Context, modelID uuid.UUID, queryVec []float32, scopeIDs []uuid.UUID, limit int) ([]db.MemoryScore, error) {
+func (s *Store) recallMemoriesByModelTable(ctx context.Context, modelID uuid.UUID, queryVec []float32, scopeIDs []uuid.UUID, limit int, since, until *time.Time) ([]db.MemoryScore, error) {
 	if s.repo == nil || s.pool == nil || len(queryVec) == 0 || len(scopeIDs) == 0 {
 		return nil, nil
 	}
@@ -340,11 +340,15 @@ func (s *Store) recallMemoriesByModelTable(ctx context.Context, modelID uuid.UUI
 		if scope == nil {
 			continue
 		}
+		hitLimit := limit
+		if since != nil || until != nil {
+			hitLimit = limit * 4
+		}
 		hits, err := s.repo.QuerySimilar(ctx, db.EmbeddingQuery{
 			ModelID:    modelID,
 			ObjectType: "memory",
 			Embedding:  queryVec,
-			Limit:      limit,
+			Limit:      hitLimit,
 			Scope: &db.ScopeFilter{
 				ScopePath: scope.Path,
 			},
@@ -370,6 +374,9 @@ func (s *Store) recallMemoriesByModelTable(ctx context.Context, modelID uuid.UUI
 			return nil, err
 		}
 		if mem == nil || !mem.IsActive {
+			continue
+		}
+		if !memoryWithinWindow(mem, since, until) {
 			continue
 		}
 		if _, ok := allowedScopeSet[mem.ScopeID]; !ok {
