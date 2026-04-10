@@ -53,6 +53,22 @@ func TestInstallClaudeSkill_WritesSkillFileAndUpdatesCLAUDE(t *testing.T) {
 	if !strings.Contains(content, "POSTBRAIN_SCOPE=project:acme/api") {
 		t.Fatal("CLAUDE.md missing POSTBRAIN_SCOPE")
 	}
+
+	basePath := filepath.Join(targetDir, ".claude", "postbrain-base.md")
+	baseData, err := os.ReadFile(basePath)
+	if err != nil {
+		t.Fatalf("read postbrain-base.md: %v", err)
+	}
+	base := string(baseData)
+	if !strings.Contains(base, "---") {
+		t.Fatal("postbrain-base.md missing frontmatter markers")
+	}
+	if !strings.Contains(base, "postbrain_enabled: true") {
+		t.Fatal("postbrain-base.md missing postbrain_enabled")
+	}
+	if !strings.Contains(base, "postbrain_scope: project:acme/api") {
+		t.Fatal("postbrain-base.md missing postbrain_scope")
+	}
 }
 
 func TestInstallClaudeSkill_DoesNotDuplicateBlock(t *testing.T) {
@@ -101,6 +117,14 @@ func TestInstallClaudeSkill_NoCLAUDEFileStillInstallsSkill(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(targetDir, "CLAUDE.md")); !os.IsNotExist(err) {
 		t.Fatalf("CLAUDE.md exists unexpectedly or stat error: %v", err)
+	}
+	basePath := filepath.Join(targetDir, ".claude", "postbrain-base.md")
+	baseData, err := os.ReadFile(basePath)
+	if err != nil {
+		t.Fatalf("read postbrain-base.md: %v", err)
+	}
+	if !strings.Contains(string(baseData), "postbrain_enabled: true") {
+		t.Fatal("postbrain-base.md missing postbrain_enabled")
 	}
 }
 
@@ -184,7 +208,7 @@ func TestInstallClaudeHooks_CreatesSettingsWithHooks(t *testing.T) {
 	}
 }
 
-func TestInstallClaudeHooks_NoScope_UsesEnvVar(t *testing.T) {
+func TestInstallClaudeHooks_NoScope_UsesRuntimeResolutionCommands(t *testing.T) {
 	t.Parallel()
 	targetDir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(targetDir, ".claude"), 0o755); err != nil {
@@ -196,8 +220,36 @@ func TestInstallClaudeHooks_NoScope_UsesEnvVar(t *testing.T) {
 	}
 
 	data, _ := os.ReadFile(filepath.Join(targetDir, ".claude", "settings.local.json"))
-	if !strings.Contains(string(data), "$POSTBRAIN_SCOPE") {
-		t.Error("settings.json should use $POSTBRAIN_SCOPE when no scope provided")
+	content := string(data)
+	if !strings.Contains(content, `"command": "postbrain-cli snapshot"`) {
+		t.Error("settings.json should use postbrain-cli snapshot when no scope provided")
+	}
+	if !strings.Contains(content, `"command": "postbrain-cli summarize-session"`) {
+		t.Error("settings.json should use postbrain-cli summarize-session when no scope provided")
+	}
+	if strings.Contains(content, "$POSTBRAIN_SCOPE") {
+		t.Error("settings.json should not reference $POSTBRAIN_SCOPE")
+	}
+}
+
+func TestInstallClaudeHooks_ResolvesScopeFromPostbrainBaseWhenProvidedScopeEmpty(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(targetDir, ".claude"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(targetDir, ".claude", "postbrain-base.md"), []byte("POSTBRAIN_SCOPE=project:from-claude\n"), 0o644); err != nil {
+		t.Fatalf("write postbrain-base.md: %v", err)
+	}
+
+	if _, err := InstallClaudeHooks(targetDir, ""); err != nil {
+		t.Fatalf("InstallClaudeHooks: %v", err)
+	}
+
+	data, _ := os.ReadFile(filepath.Join(targetDir, ".claude", "settings.local.json"))
+	content := string(data)
+	if !strings.Contains(content, "--scope 'project:from-claude'") {
+		t.Fatalf("settings.local.json missing resolved scope command: %s", content)
 	}
 }
 

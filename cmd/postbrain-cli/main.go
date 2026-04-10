@@ -42,6 +42,7 @@ const latestReleaseAPIURL = "https://api.github.com/repos/simplyblock/postbrain/
 
 var detectCodexVersionFn = detectCodexVersion
 var fetchLatestPostbrainVersionFn = fetchLatestPostbrainVersion
+var getwdFn = os.Getwd
 
 // hookClient is a minimal HTTP client for the Postbrain REST API.
 type hookClient struct {
@@ -176,6 +177,11 @@ func snapshotCmd() *cobra.Command {
 func runSnapshot(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	client := newHookClient()
+	scope := resolveScopeForRuntime()
+	if scope == "" {
+		slog.Info("snapshot: no scope configured, skipping")
+		return nil
+	}
 
 	// Read tool output JSON from stdin.
 	stdinBytes, err := io.ReadAll(os.Stdin)
@@ -213,7 +219,7 @@ func runSnapshot(cmd *cobra.Command, args []string) error {
 	// 60s dedup check: query recent memories with same source_ref.
 	if sourceRef != "" {
 		resp, err := client.get(ctx, fmt.Sprintf("/v1/memories/recall?query=%s&scope=%s&limit=1&min_score=0.99",
-			sourceRef, scopeFlag))
+			sourceRef, scope))
 		if err == nil {
 			defer closeutil.Log(resp.Body, "snapshot dedup response body")
 			var result struct {
@@ -232,7 +238,7 @@ func runSnapshot(cmd *cobra.Command, args []string) error {
 	body := map[string]any{
 		"content":     desc,
 		"memory_type": "episodic",
-		"scope":       scopeFlag,
+		"scope":       scope,
 	}
 	if sourceRef != "" {
 		body["source_ref"] = sourceRef
@@ -265,10 +271,15 @@ func runSummarizeSession(ctx context.Context, sessionID string) error {
 		ctx = context.Background()
 	}
 	client := newHookClient()
+	scope := resolveScopeForRuntime()
+	if scope == "" {
+		slog.Info("summarize-session: no scope configured, skipping")
+		return nil
+	}
 
 	// Fetch episodic memories for this session.
 	resp, err := client.get(ctx, fmt.Sprintf(
-		"/v1/memories/recall?scope=%s&memory_types=episodic&limit=100&min_score=0.0", scopeFlag))
+		"/v1/memories/recall?scope=%s&memory_types=episodic&limit=100&min_score=0.0", scope))
 	if err != nil {
 		return fmt.Errorf("summarize-session: list memories: %w", err)
 	}
@@ -290,7 +301,7 @@ func runSummarizeSession(ctx context.Context, sessionID string) error {
 
 	// Call POST /v1/memories/summarize (REST endpoint that proxies consolidation logic).
 	summarizeResp, err := client.post(ctx, "/v1/memories/summarize", map[string]any{
-		"scope":   scopeFlag,
+		"scope":   scope,
 		"topic":   "session summary for " + sessionID,
 		"dry_run": false,
 	})
@@ -298,7 +309,7 @@ func runSummarizeSession(ctx context.Context, sessionID string) error {
 		return fmt.Errorf("summarize-session: summarize: %w", err)
 	}
 	defer closeutil.Log(summarizeResp.Body, "summarize session response body")
-	slog.Info("summarize-session: session summarized", "scope", scopeFlag)
+	slog.Info("summarize-session: session summarized", "scope", scope)
 	return nil
 }
 
@@ -532,12 +543,13 @@ func installCodexSkillCmd() *cobra.Command {
 			if !installHooks {
 				slog.Warn("Codex hooks are unavailable on Windows; installing full skill without hooks")
 			}
+			scope := resolveScopeForInstall(targetDir)
 
 			installedPath, updatedAgents, err := postbraincli.InstallCodexSkillWithOptions(
 				targetDir,
 				codexSkillContent(runtime.GOOS),
 				os.Getenv("POSTBRAIN_URL"),
-				os.Getenv("POSTBRAIN_SCOPE"),
+				scope,
 				postbraincli.CodexSkillInstallOptions{InstallHooks: installHooks},
 			)
 			if err != nil {
@@ -697,7 +709,7 @@ func installClaudeSkillCmd() *cobra.Command {
 			if strings.TrimSpace(targetDir) == "" {
 				targetDir = "."
 			}
-			scope := os.Getenv("POSTBRAIN_SCOPE")
+			scope := resolveScopeForInstall(targetDir)
 			installedPath, updatedClaude, err := postbraincli.InstallClaudeSkill(
 				targetDir,
 				embeddedClaudeSkill,
@@ -720,4 +732,25 @@ func installClaudeSkillCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&targetDir, "target", ".", "target directory")
 	return cmd
+}
+
+func resolveScopeForInstall(targetDir string) string {
+	if scope := strings.TrimSpace(os.Getenv("POSTBRAIN_SCOPE")); scope != "" {
+		return scope
+	}
+	return postbraincli.ResolveScopeFromBaseFiles(targetDir)
+}
+
+func resolveScopeForRuntime() string {
+	if strings.TrimSpace(scopeFlag) != "" {
+		return strings.TrimSpace(scopeFlag)
+	}
+	if scope := strings.TrimSpace(os.Getenv("POSTBRAIN_SCOPE")); scope != "" {
+		return scope
+	}
+	cwd, err := getwdFn()
+	if err != nil {
+		return ""
+	}
+	return postbraincli.ResolveScopeFromBaseFiles(cwd)
 }

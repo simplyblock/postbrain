@@ -25,6 +25,85 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-10: Synced `InstallClaudeHooks` comment with current scope-resolution behavior:
+  - Updated doc comment in
+    `internal/postbraincli/claude_skill_installer.go` to describe:
+    - explicit-scope inlining,
+    - install-time base-file scope resolution,
+    - no-scope command fallback using runtime scope resolution.
+
+- [x] 2026-04-10: Removed `os.Chdir` global-state usage from CLI scope runtime tests:
+  - Added injectable working-directory function variable in
+    `cmd/postbrain-cli/main.go`:
+    - `getwdFn` (default `os.Getwd`) used by `resolveScopeForRuntime`.
+  - Updated `cmd/postbrain-cli/main_test.go` runtime fallback test to inject
+    `getwdFn` instead of mutating process CWD.
+  - This avoids cross-test interference with parallel tests and prevents
+    flakiness from global process state changes.
+
+- [x] 2026-04-10: Added canonical `postbrain-base.md` frontmatter generation with compatibility fallback:
+  - Added shared helper `ensurePostbrainBaseFile(...)` in
+    `internal/postbraincli/postbrain_base_file.go` to create
+    `<agent-dir>/postbrain-base.md` when missing using canonical frontmatter:
+    - `postbrain_enabled: true`
+    - optional `postbrain_scope: kind:external_id`
+  - Wired base-file creation into both installers:
+    - `InstallCodexSkill*` writes `.codex/postbrain-base.md`
+    - `InstallClaudeSkill` writes `.claude/postbrain-base.md`
+  - Preserved backward compatibility:
+    - existing base files are not overwritten,
+    - scope parser continues to support both legacy `POSTBRAIN_SCOPE=...` and
+      documented `postbrain_scope: ...` formats.
+  - Added coverage:
+    - installer tests now assert base-file creation/content for Codex/Claude,
+    - new tests verify canonical frontmatter output and no-overwrite behavior.
+
+- [x] 2026-04-10: Extended `postbrain-base.md` scope parsing to support documented key format (TDD-first):
+  - Updated `internal/postbraincli/scope_resolver.go` parser to accept both:
+    - `POSTBRAIN_SCOPE=...` (env-style)
+    - `postbrain_scope: ...` (documented markdown/yaml-style key)
+      with case-insensitive key matching and whitespace-tolerant separators
+      (`:` or `=`).
+  - Added regression test
+    `TestResolveScopeFromBaseFiles_SupportsDocumentedPostbrainScopeKey` in
+    `internal/postbraincli/scope_resolver_test.go` to prevent silent scope
+    resolution failures for existing documented base files.
+
+- [x] 2026-04-10: Updated hook installers and hook runtime scope behavior to remove env-var dependency (TDD-first):
+  - Updated hook installer generation in `internal/postbraincli`:
+    - `InstallCodexHooks` and `InstallClaudeHooks` now resolve scope from
+      `postbrain-base.md` files when explicit scope is empty, in this order:
+      `.codex`, `.claude`, `.agents`.
+    - when no scope can be resolved, generated hook commands now call
+      `postbrain-cli snapshot` / `postbrain-cli summarize-session` directly
+      (no `$POSTBRAIN_SCOPE` shell dependency).
+  - Added shared resolver in `internal/postbraincli/scope_resolver.go` and
+    coverage in `internal/postbraincli/scope_resolver_test.go`.
+  - Updated installer tests:
+    - codex/claude no-scope commands now assert runtime-resolution command
+      shape (no env var references),
+    - codex/claude resolve scope from local `postbrain-base.md` when present.
+  - Updated CLI runtime in `cmd/postbrain-cli/main.go`:
+    - `snapshot` and `summarize-session` now auto-resolve scope at runtime:
+      `--scope` flag → `POSTBRAIN_SCOPE` env fallback → CWD
+      `postbrain-base.md` resolution (`.codex` → `.claude` → `.agents`).
+    - commands now skip gracefully when no scope is configured.
+  - Added runtime resolver tests in `cmd/postbrain-cli/main_test.go`.
+
+- [x] 2026-04-10: Added install-time scope fallback resolution for `postbrain-cli` skill installers (TDD-first):
+  - Added scope resolver in `cmd/postbrain-cli/main.go` used by both
+    `install-codex-skill` and `install-claude-skill`:
+    - first `POSTBRAIN_SCOPE` env var
+    - then `.codex/postbrain-base.md`
+    - then `.claude/postbrain-base.md`
+    - then `.agents/postbrain-base.md`
+  - Added parser helper for `POSTBRAIN_SCOPE=` entries in `postbrain-base.md`
+    files, ignoring comments/empty lines.
+  - Added red/green coverage in `cmd/postbrain-cli/main_test.go`:
+    - env var precedence over file values
+    - deterministic fallback order (`.codex` → `.claude` → `.agents`)
+    - Claude/agents fallback when higher-priority files are absent.
+
 - [x] 2026-04-10: Pushed knowledge recall time-window filtering into SQL recall paths:
   - Updated knowledge recall SQL (`internal/db/queries/knowledge.sql`) to apply
     `since`/`until` predicates using `COALESCE(published_at, created_at)` for

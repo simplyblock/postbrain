@@ -50,6 +50,22 @@ func TestInstallCodexSkill_WritesSkillFileAndAppendsAgentsBlock(t *testing.T) {
 	if !strings.Contains(content, "POSTBRAIN_SCOPE=project:acme/api") {
 		t.Fatal("AGENTS.md missing POSTBRAIN_SCOPE")
 	}
+
+	basePath := filepath.Join(targetDir, ".codex", "postbrain-base.md")
+	baseData, err := os.ReadFile(basePath)
+	if err != nil {
+		t.Fatalf("read postbrain-base.md: %v", err)
+	}
+	base := string(baseData)
+	if !strings.Contains(base, "---") {
+		t.Fatal("postbrain-base.md missing frontmatter markers")
+	}
+	if !strings.Contains(base, "postbrain_enabled: true") {
+		t.Fatal("postbrain-base.md missing postbrain_enabled")
+	}
+	if !strings.Contains(base, "postbrain_scope: project:acme/api") {
+		t.Fatal("postbrain-base.md missing postbrain_scope")
+	}
 }
 
 func TestInstallCodexSkill_DoesNotDuplicateAgentsBlock(t *testing.T) {
@@ -98,6 +114,14 @@ func TestInstallCodexSkill_NoAgentsFileStillInstallsSkill(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(targetDir, "AGENTS.md")); !os.IsNotExist(err) {
 		t.Fatalf("AGENTS.md exists unexpectedly or stat error: %v", err)
+	}
+	basePath := filepath.Join(targetDir, ".codex", "postbrain-base.md")
+	baseData, err := os.ReadFile(basePath)
+	if err != nil {
+		t.Fatalf("read postbrain-base.md: %v", err)
+	}
+	if !strings.Contains(string(baseData), "postbrain_enabled: true") {
+		t.Fatal("postbrain-base.md missing postbrain_enabled")
 	}
 	hooksPath := filepath.Join(targetDir, ".codex", "hooks.json")
 	if _, err := os.Stat(hooksPath); err != nil {
@@ -310,7 +334,7 @@ func TestInstallCodexHooks_QuotesExplicitScopeInCommands(t *testing.T) {
 	}
 }
 
-func TestInstallCodexHooks_UsesCanonicalEnvScopeCommands(t *testing.T) {
+func TestInstallCodexHooks_NoScope_UsesRuntimeResolutionCommands(t *testing.T) {
 	t.Parallel()
 	targetDir := t.TempDir()
 
@@ -330,14 +354,42 @@ func TestInstallCodexHooks_UsesCanonicalEnvScopeCommands(t *testing.T) {
 	if strings.Contains(content, `\u0026\u0026`) {
 		t.Fatalf("hooks.json should use literal &&, got escaped form: %s", content)
 	}
-	if !strings.Contains(content, `[ -n \"$POSTBRAIN_SCOPE\" ] && postbrain-cli snapshot --scope \"$POSTBRAIN_SCOPE\" || true`) {
+	if !strings.Contains(content, `"command": "postbrain-cli snapshot"`) {
 		t.Fatalf("hooks.json missing canonical snapshot command: %s", content)
 	}
-	if !strings.Contains(content, `[ -n \"$POSTBRAIN_SCOPE\" ] && postbrain-cli summarize-session --scope \"$POSTBRAIN_SCOPE\" || true`) {
+	if !strings.Contains(content, `"command": "postbrain-cli summarize-session"`) {
 		t.Fatalf("hooks.json missing canonical summarize command: %s", content)
 	}
-	if strings.Contains(content, "./postbrain-cli") {
-		t.Fatalf("hooks.json should not use relative postbrain-cli path: %s", content)
+	if strings.Contains(content, "$POSTBRAIN_SCOPE") {
+		t.Fatalf("hooks.json should not depend on POSTBRAIN_SCOPE env var: %s", content)
+	}
+}
+
+func TestInstallCodexHooks_ResolvesScopeFromPostbrainBaseWhenProvidedScopeEmpty(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(targetDir, ".codex"), 0o755); err != nil {
+		t.Fatalf("mkdir .codex: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(targetDir, ".codex", "postbrain-base.md"), []byte("POSTBRAIN_SCOPE=project:from-codex\n"), 0o644); err != nil {
+		t.Fatalf("write postbrain-base.md: %v", err)
+	}
+
+	updated, err := InstallCodexHooks(targetDir, "")
+	if err != nil {
+		t.Fatalf("InstallCodexHooks: %v", err)
+	}
+	if !updated {
+		t.Fatal("updated = false, want true")
+	}
+
+	data, err := os.ReadFile(filepath.Join(targetDir, ".codex", "hooks.json"))
+	if err != nil {
+		t.Fatalf("read hooks.json: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "--scope 'project:from-codex'") {
+		t.Fatalf("hooks.json missing resolved scope command: %s", content)
 	}
 }
 
