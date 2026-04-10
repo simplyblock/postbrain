@@ -25,6 +25,20 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-10: Added install-time scope fallback resolution for `postbrain-cli` skill installers (TDD-first):
+  - Added scope resolver in `cmd/postbrain-cli/main.go` used by both
+    `install-codex-skill` and `install-claude-skill`:
+    - first `POSTBRAIN_SCOPE` env var
+    - then `.codex/postbrain-base.md`
+    - then `.claude/postbrain-base.md`
+    - then `.agents/postbrain-base.md`
+  - Added parser helper for `POSTBRAIN_SCOPE=` entries in `postbrain-base.md`
+    files, ignoring comments/empty lines.
+  - Added red/green coverage in `cmd/postbrain-cli/main_test.go`:
+    - env var precedence over file values
+    - deterministic fallback order (`.codex` → `.claude` → `.agents`)
+    - Claude/agents fallback when higher-priority files are absent.
+
 - [x] 2026-04-10: Pushed knowledge recall time-window filtering into SQL recall paths:
   - Updated knowledge recall SQL (`internal/db/queries/knowledge.sql`) to apply
     `since`/`until` predicates using `COALESCE(published_at, created_at)` for

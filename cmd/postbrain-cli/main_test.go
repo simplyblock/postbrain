@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -193,5 +195,84 @@ func TestCheckUpdateCommand_DevBuild(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "unable to compare dev build") {
 		t.Fatalf("unexpected output: %q", out.String())
+	}
+}
+
+func TestResolveScopeForInstall_PrefersEnvVar(t *testing.T) {
+	t.Setenv("POSTBRAIN_SCOPE", "project:env/scope")
+
+	targetDir := t.TempDir()
+	codexDir := filepath.Join(targetDir, ".codex")
+	if err := os.MkdirAll(codexDir, 0o755); err != nil {
+		t.Fatalf("mkdir .codex: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(codexDir, "postbrain-base.md"), []byte("POSTBRAIN_SCOPE=project:file/scope\n"), 0o644); err != nil {
+		t.Fatalf("write codex postbrain-base.md: %v", err)
+	}
+
+	got := resolveScopeForInstall(targetDir)
+	if got != "project:env/scope" {
+		t.Fatalf("resolveScopeForInstall() = %q, want env scope", got)
+	}
+}
+
+func TestResolveScopeForInstall_PriorityOrder(t *testing.T) {
+	t.Setenv("POSTBRAIN_SCOPE", "")
+	targetDir := t.TempDir()
+
+	codexDir := filepath.Join(targetDir, ".codex")
+	claudeDir := filepath.Join(targetDir, ".claude")
+	agentsDir := filepath.Join(targetDir, ".agents")
+	for _, dir := range []string{codexDir, claudeDir, agentsDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+	}
+
+	if err := os.WriteFile(filepath.Join(codexDir, "postbrain-base.md"), []byte("POSTBRAIN_SCOPE=project:from-codex\n"), 0o644); err != nil {
+		t.Fatalf("write codex postbrain-base.md: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(claudeDir, "postbrain-base.md"), []byte("POSTBRAIN_SCOPE=project:from-claude\n"), 0o644); err != nil {
+		t.Fatalf("write claude postbrain-base.md: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(agentsDir, "postbrain-base.md"), []byte("POSTBRAIN_SCOPE=project:from-agents\n"), 0o644); err != nil {
+		t.Fatalf("write agents postbrain-base.md: %v", err)
+	}
+
+	got := resolveScopeForInstall(targetDir)
+	if got != "project:from-codex" {
+		t.Fatalf("resolveScopeForInstall() = %q, want codex scope", got)
+	}
+}
+
+func TestResolveScopeForInstall_FallsBackToClaudeThenAgents(t *testing.T) {
+	t.Setenv("POSTBRAIN_SCOPE", "")
+	targetDir := t.TempDir()
+
+	claudeDir := filepath.Join(targetDir, ".claude")
+	agentsDir := filepath.Join(targetDir, ".agents")
+	for _, dir := range []string{claudeDir, agentsDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(claudeDir, "postbrain-base.md"), []byte("POSTBRAIN_SCOPE=project:from-claude\n"), 0o644); err != nil {
+		t.Fatalf("write claude postbrain-base.md: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(agentsDir, "postbrain-base.md"), []byte("POSTBRAIN_SCOPE=project:from-agents\n"), 0o644); err != nil {
+		t.Fatalf("write agents postbrain-base.md: %v", err)
+	}
+
+	got := resolveScopeForInstall(targetDir)
+	if got != "project:from-claude" {
+		t.Fatalf("resolveScopeForInstall() = %q, want claude scope", got)
+	}
+
+	if err := os.Remove(filepath.Join(claudeDir, "postbrain-base.md")); err != nil {
+		t.Fatalf("remove claude postbrain-base.md: %v", err)
+	}
+	got = resolveScopeForInstall(targetDir)
+	if got != "project:from-agents" {
+		t.Fatalf("resolveScopeForInstall() = %q, want agents scope", got)
 	}
 }

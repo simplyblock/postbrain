@@ -532,12 +532,13 @@ func installCodexSkillCmd() *cobra.Command {
 			if !installHooks {
 				slog.Warn("Codex hooks are unavailable on Windows; installing full skill without hooks")
 			}
+			scope := resolveScopeForInstall(targetDir)
 
 			installedPath, updatedAgents, err := postbraincli.InstallCodexSkillWithOptions(
 				targetDir,
 				codexSkillContent(runtime.GOOS),
 				os.Getenv("POSTBRAIN_URL"),
-				os.Getenv("POSTBRAIN_SCOPE"),
+				scope,
 				postbraincli.CodexSkillInstallOptions{InstallHooks: installHooks},
 			)
 			if err != nil {
@@ -697,7 +698,7 @@ func installClaudeSkillCmd() *cobra.Command {
 			if strings.TrimSpace(targetDir) == "" {
 				targetDir = "."
 			}
-			scope := os.Getenv("POSTBRAIN_SCOPE")
+			scope := resolveScopeForInstall(targetDir)
 			installedPath, updatedClaude, err := postbraincli.InstallClaudeSkill(
 				targetDir,
 				embeddedClaudeSkill,
@@ -720,4 +721,42 @@ func installClaudeSkillCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&targetDir, "target", ".", "target directory")
 	return cmd
+}
+
+func resolveScopeForInstall(targetDir string) string {
+	if scope := strings.TrimSpace(os.Getenv("POSTBRAIN_SCOPE")); scope != "" {
+		return scope
+	}
+	if strings.TrimSpace(targetDir) == "" {
+		targetDir = "."
+	}
+	candidates := []string{
+		filepath.Join(targetDir, ".codex", "postbrain-base.md"),
+		filepath.Join(targetDir, ".claude", "postbrain-base.md"),
+		filepath.Join(targetDir, ".agents", "postbrain-base.md"),
+	}
+	for _, path := range candidates {
+		if scope := readScopeFromPostbrainBase(path); scope != "" {
+			return scope
+		}
+	}
+	return ""
+}
+
+func readScopeFromPostbrainBase(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	const key = "POSTBRAIN_SCOPE="
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, key) {
+			return strings.TrimSpace(strings.TrimPrefix(trimmed, key))
+		}
+	}
+	return ""
 }
