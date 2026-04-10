@@ -25,6 +25,13 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-10: Synced `InstallClaudeHooks` comment with current scope-resolution behavior:
+  - Updated doc comment in
+    `internal/postbraincli/claude_skill_installer.go` to describe:
+    - explicit-scope inlining,
+    - install-time base-file scope resolution,
+    - no-scope command fallback using runtime scope resolution.
+
 - [x] 2026-04-10: Removed `os.Chdir` global-state usage from CLI scope runtime tests:
   - Added injectable working-directory function variable in
     `cmd/postbrain-cli/main.go`:
