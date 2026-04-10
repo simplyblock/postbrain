@@ -223,7 +223,7 @@ func (s *Server) handleCrossScopeContext(ctx context.Context, req mcpgo.CallTool
 	if v, ok := args["search_mode"].(string); ok && v != "" {
 		searchMode = v
 	}
-	graphDepth := parseGraphDepth(args)
+	graphDepth := parseGraphDepthWithDefault(args, defaultCrossScopeGraphDepth)
 
 	if s.pool == nil {
 		return mcpgo.NewToolResultError("cross_scope_context: server not configured (no database connection)"), nil

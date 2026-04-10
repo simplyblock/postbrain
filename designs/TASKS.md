@@ -25,6 +25,17 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-10: Fixed `cross_scope_context` graph-depth default semantics and removed parser duplication:
+  - Replaced duplicated graph-depth parsing logic with a shared helper:
+    `parseGraphDepthWithDefault(args, defaultDepth)` in
+    `internal/api/mcp/recall.go`.
+  - Kept tool-specific defaults while sharing clamping/cap behavior:
+    - `recall` default remains `1`
+    - `cross_scope_context` default is `0` (matching tool contract).
+  - Updated cross-scope tests in
+    `internal/api/mcp/cross_scope_context_test.go` to verify default/cap/clamp
+    behavior through the shared parser.
+
 - [x] 2026-04-09: Completed cross-scope verification Phase 7 end-to-end and recall non-regression checks (TDD-first):
   - Added end-to-end integration coverage in
     `internal/api/mcp/cross_scope_context_end_to_end_integration_test.go`
