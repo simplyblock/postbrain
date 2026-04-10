@@ -25,6 +25,23 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-10: Pushed knowledge recall time-window filtering into SQL recall paths:
+  - Updated knowledge recall SQL (`internal/db/queries/knowledge.sql`) to apply
+    `since`/`until` predicates using `COALESCE(published_at, created_at)` for
+    vector/FTS/trigram retrieval queries.
+  - Regenerated sqlc artifacts and updated DB compatibility wrappers
+    (`internal/db/compat.go`) to accept optional time-window pointers and pass
+    normalized bounds to generated query params.
+  - Updated knowledge recall orchestration (`internal/knowledge/recall.go`) to
+    pass `Since`/`Until` into DB recall paths.
+  - Added a red/green integration regression
+    (`internal/knowledge/recall_integration_test.go`) proving that
+    out-of-window artifacts no longer starve in-window results under low limit
+    (`limit=1` cap starvation scenario).
+  - Added model-table parity safeguards by applying window filtering before
+    materializing model-table hits and over-fetching candidates when a time
+    window is present.
+
 - [x] 2026-04-10: Pushed memory recall time-window filtering into DB queries:
   - Updated memory recall DB interfaces and call sites to pass `since`/`until`
     for vector/code-vector/FTS/trigram retrieval paths.

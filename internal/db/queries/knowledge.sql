@@ -129,6 +129,8 @@ SELECT ka.id, ka.knowledge_type, ka.owner_scope_id, ka.author_id,
 FROM knowledge_artifacts ka
 JOIN scopes s ON ka.owner_scope_id = s.id, qs
 WHERE ka.status = 'published'
+  AND COALESCE(ka.published_at, ka.created_at) >= $4::timestamptz
+  AND COALESCE(ka.published_at, ka.created_at) <= $5::timestamptz
   AND (
     (ka.visibility = 'project'    AND ka.owner_scope_id = $1)
     OR (ka.visibility IN ('team', 'department') AND s.path @> qs.path)
@@ -164,6 +166,8 @@ SELECT ka.id, ka.knowledge_type, ka.owner_scope_id, ka.author_id,
 FROM knowledge_artifacts ka
 JOIN scopes s ON ka.owner_scope_id = s.id, qs
 WHERE ka.status = 'published'
+  AND COALESCE(ka.published_at, ka.created_at) >= $4::timestamptz
+  AND COALESCE(ka.published_at, ka.created_at) <= $5::timestamptz
   AND to_tsvector('postbrain_fts', ka.content) @@ plainto_tsquery('postbrain_fts', $3)
   AND (
     (ka.visibility = 'project'    AND ka.owner_scope_id = $1)
@@ -205,6 +209,8 @@ SELECT ka.id, ka.knowledge_type, ka.owner_scope_id, ka.author_id,
 FROM knowledge_artifacts ka
 JOIN scopes s ON ka.owner_scope_id = s.id, qs
 WHERE ka.status = 'published'
+  AND COALESCE(ka.published_at, ka.created_at) >= $4::timestamptz
+  AND COALESCE(ka.published_at, ka.created_at) <= $5::timestamptz
   AND similarity(ka.content, $3) > 0.1
   AND (
     (ka.visibility = 'project'    AND ka.owner_scope_id = $1)

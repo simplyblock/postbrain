@@ -636,6 +636,8 @@ SELECT ka.id, ka.knowledge_type, ka.owner_scope_id, ka.author_id,
 FROM knowledge_artifacts ka
 JOIN scopes s ON ka.owner_scope_id = s.id, qs
 WHERE ka.status = 'published'
+  AND COALESCE(ka.published_at, ka.created_at) >= $4::timestamptz
+  AND COALESCE(ka.published_at, ka.created_at) <= $5::timestamptz
   AND to_tsvector('postbrain_fts', ka.content) @@ plainto_tsquery('postbrain_fts', $3)
   AND (
     (ka.visibility = 'project'    AND ka.owner_scope_id = $1)
@@ -657,6 +659,8 @@ type RecallArtifactsByFTSParams struct {
 	OwnerScopeID   uuid.UUID
 	Limit          int32
 	PlaintoTsquery string
+	Column4        time.Time
+	Column5        time.Time
 }
 
 type RecallArtifactsByFTSRow struct {
@@ -690,7 +694,13 @@ type RecallArtifactsByFTSRow struct {
 
 // $1 = scope_id (visibility resolution fans out automatically)
 func (q *Queries) RecallArtifactsByFTS(ctx context.Context, arg RecallArtifactsByFTSParams) ([]*RecallArtifactsByFTSRow, error) {
-	rows, err := q.db.Query(ctx, recallArtifactsByFTS, arg.OwnerScopeID, arg.Limit, arg.PlaintoTsquery)
+	rows, err := q.db.Query(ctx, recallArtifactsByFTS,
+		arg.OwnerScopeID,
+		arg.Limit,
+		arg.PlaintoTsquery,
+		arg.Column4,
+		arg.Column5,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -748,6 +758,8 @@ SELECT ka.id, ka.knowledge_type, ka.owner_scope_id, ka.author_id,
 FROM knowledge_artifacts ka
 JOIN scopes s ON ka.owner_scope_id = s.id, qs
 WHERE ka.status = 'published'
+  AND COALESCE(ka.published_at, ka.created_at) >= $4::timestamptz
+  AND COALESCE(ka.published_at, ka.created_at) <= $5::timestamptz
   AND similarity(ka.content, $3) > 0.1
   AND (
     (ka.visibility = 'project'    AND ka.owner_scope_id = $1)
@@ -769,6 +781,8 @@ type RecallArtifactsByTrigramParams struct {
 	OwnerScopeID uuid.UUID
 	Limit        int32
 	Similarity   string
+	Column4      time.Time
+	Column5      time.Time
 }
 
 type RecallArtifactsByTrigramRow struct {
@@ -802,7 +816,13 @@ type RecallArtifactsByTrigramRow struct {
 
 // $1 = scope_id (visibility resolution fans out automatically)
 func (q *Queries) RecallArtifactsByTrigram(ctx context.Context, arg RecallArtifactsByTrigramParams) ([]*RecallArtifactsByTrigramRow, error) {
-	rows, err := q.db.Query(ctx, recallArtifactsByTrigram, arg.OwnerScopeID, arg.Limit, arg.Similarity)
+	rows, err := q.db.Query(ctx, recallArtifactsByTrigram,
+		arg.OwnerScopeID,
+		arg.Limit,
+		arg.Similarity,
+		arg.Column4,
+		arg.Column5,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -860,6 +880,8 @@ SELECT ka.id, ka.knowledge_type, ka.owner_scope_id, ka.author_id,
 FROM knowledge_artifacts ka
 JOIN scopes s ON ka.owner_scope_id = s.id, qs
 WHERE ka.status = 'published'
+  AND COALESCE(ka.published_at, ka.created_at) >= $4::timestamptz
+  AND COALESCE(ka.published_at, ka.created_at) <= $5::timestamptz
   AND (
     (ka.visibility = 'project'    AND ka.owner_scope_id = $1)
     OR (ka.visibility IN ('team', 'department') AND s.path @> qs.path)
@@ -880,6 +902,8 @@ type RecallArtifactsByVectorParams struct {
 	OwnerScopeID uuid.UUID
 	Limit        int32
 	Embedding    *pgvector_go.Vector
+	Column4      time.Time
+	Column5      time.Time
 }
 
 type RecallArtifactsByVectorRow struct {
@@ -913,7 +937,13 @@ type RecallArtifactsByVectorRow struct {
 
 // $1 = scope_id (the queried scope; visibility resolution fans out automatically)
 func (q *Queries) RecallArtifactsByVector(ctx context.Context, arg RecallArtifactsByVectorParams) ([]*RecallArtifactsByVectorRow, error) {
-	rows, err := q.db.Query(ctx, recallArtifactsByVector, arg.OwnerScopeID, arg.Limit, arg.Embedding)
+	rows, err := q.db.Query(ctx, recallArtifactsByVector,
+		arg.OwnerScopeID,
+		arg.Limit,
+		arg.Embedding,
+		arg.Column4,
+		arg.Column5,
+	)
 	if err != nil {
 		return nil, err
 	}
