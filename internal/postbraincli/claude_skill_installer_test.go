@@ -192,7 +192,7 @@ func TestInstallClaudeHooks_CreatesSettingsWithHooks(t *testing.T) {
 		t.Fatal("hooks.Stop is empty")
 	}
 
-	// Snapshot command must include the literal scope.
+	// Snapshot command should use runtime scope resolution (no fixed scope).
 	entry, _ := postToolUse[0].(map[string]any)
 	hooksList, _ := entry["hooks"].([]any)
 	if len(hooksList) == 0 {
@@ -203,8 +203,8 @@ func TestInstallClaudeHooks_CreatesSettingsWithHooks(t *testing.T) {
 	if !strings.Contains(cmd, "postbrain-cli snapshot") {
 		t.Errorf("PostToolUse command %q missing 'postbrain-cli snapshot'", cmd)
 	}
-	if !strings.Contains(cmd, "project:acme/api") {
-		t.Errorf("PostToolUse command %q missing scope", cmd)
+	if strings.Contains(cmd, "--scope") {
+		t.Errorf("PostToolUse command %q should not include fixed scope", cmd)
 	}
 }
 
@@ -232,7 +232,7 @@ func TestInstallClaudeHooks_NoScope_UsesRuntimeResolutionCommands(t *testing.T) 
 	}
 }
 
-func TestInstallClaudeHooks_ResolvesScopeFromPostbrainBaseWhenProvidedScopeEmpty(t *testing.T) {
+func TestInstallClaudeHooks_DoesNotInlineScopeFromPostbrainBaseWhenProvidedScopeEmpty(t *testing.T) {
 	t.Parallel()
 	targetDir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(targetDir, ".claude"), 0o755); err != nil {
@@ -248,8 +248,8 @@ func TestInstallClaudeHooks_ResolvesScopeFromPostbrainBaseWhenProvidedScopeEmpty
 
 	data, _ := os.ReadFile(filepath.Join(targetDir, ".claude", "settings.local.json"))
 	content := string(data)
-	if !strings.Contains(content, "--scope 'project:from-claude'") {
-		t.Fatalf("settings.local.json missing resolved scope command: %s", content)
+	if strings.Contains(content, "--scope") {
+		t.Fatalf("settings.local.json should not include fixed scope flags: %s", content)
 	}
 }
 
@@ -491,10 +491,7 @@ func TestInstallClaudeHooks_QuotesExplicitScopeInCommands(t *testing.T) {
 		t.Fatalf("read settings.local.json: %v", err)
 	}
 	content := string(data)
-	if !strings.Contains(content, "--scope 'project:acme/api; echo pwned'") {
-		t.Fatalf("settings.local.json missing quoted scope: %s", content)
-	}
-	if strings.Contains(content, "--scope project:acme/api; echo pwned") {
-		t.Fatalf("settings.local.json contains unquoted scope: %s", content)
+	if strings.Contains(content, "--scope") {
+		t.Fatalf("settings.local.json should not include fixed scope flags: %s", content)
 	}
 }

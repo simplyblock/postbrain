@@ -127,18 +127,8 @@ func InstallCodexHooks(targetDir, scope string) (bool, error) {
 		}
 	}
 
-	var snapshotCmd, summarizeCmd string
-	if strings.TrimSpace(scope) == "" {
-		scope = ResolveScopeFromBaseFiles(targetDir)
-	}
-	if strings.TrimSpace(scope) != "" {
-		quotedScope := shellSingleQuote(scope)
-		snapshotCmd = "postbrain-cli snapshot --scope " + quotedScope
-		summarizeCmd = "postbrain-cli summarize-session --scope " + quotedScope
-	} else {
-		snapshotCmd = "postbrain-cli snapshot"
-		summarizeCmd = "postbrain-cli summarize-session"
-	}
+	snapshotCmd := "postbrain-cli snapshot"
+	summarizeCmd := "postbrain-cli summarize-session"
 
 	hooks, _ := root["hooks"].(map[string]any)
 	if hooks == nil {

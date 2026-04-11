@@ -25,6 +25,17 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-11: Enforced runtime-only scope resolution for installed hooks:
+  - Updated `InstallCodexHooks` and `InstallClaudeHooks` to always install
+    scope-less commands:
+    - `postbrain-cli snapshot`
+    - `postbrain-cli summarize-session`
+  - Removed install-time scope inlining for hook commands, including when a
+    scope argument is provided.
+  - Preserved runtime scope resolution behavior in `postbrain-cli` itself.
+  - Updated and extended hook installer tests to assert no `--scope` flags are
+    written and to prevent regression back to fixed-scope hooks.
+
 - [x] 2026-04-11: Added hook-installer upgrade path for legacy command forms (TDD-first):
   - Fixed installer idempotency logic in `internal/postbraincli` to rewrite
     existing Postbrain hook commands when they match legacy forms instead of

@@ -326,11 +326,8 @@ func TestInstallCodexHooks_QuotesExplicitScopeInCommands(t *testing.T) {
 		t.Fatalf("read hooks.json: %v", err)
 	}
 	content := string(data)
-	if !strings.Contains(content, "--scope 'project:acme/api; echo pwned'") {
-		t.Fatalf("hooks.json missing quoted scope: %s", content)
-	}
-	if strings.Contains(content, "--scope project:acme/api; echo pwned") {
-		t.Fatalf("hooks.json contains unquoted scope: %s", content)
+	if strings.Contains(content, "--scope") {
+		t.Fatalf("hooks.json should not include fixed scope flags: %s", content)
 	}
 }
 
@@ -365,7 +362,7 @@ func TestInstallCodexHooks_NoScope_UsesRuntimeResolutionCommands(t *testing.T) {
 	}
 }
 
-func TestInstallCodexHooks_ResolvesScopeFromPostbrainBaseWhenProvidedScopeEmpty(t *testing.T) {
+func TestInstallCodexHooks_DoesNotInlineScopeFromPostbrainBaseWhenProvidedScopeEmpty(t *testing.T) {
 	t.Parallel()
 	targetDir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(targetDir, ".codex"), 0o755); err != nil {
@@ -388,8 +385,8 @@ func TestInstallCodexHooks_ResolvesScopeFromPostbrainBaseWhenProvidedScopeEmpty(
 		t.Fatalf("read hooks.json: %v", err)
 	}
 	content := string(data)
-	if !strings.Contains(content, "--scope 'project:from-codex'") {
-		t.Fatalf("hooks.json missing resolved scope command: %s", content)
+	if strings.Contains(content, "--scope") {
+		t.Fatalf("hooks.json should not include fixed scope flags: %s", content)
 	}
 }
 

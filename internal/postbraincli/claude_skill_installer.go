@@ -82,11 +82,8 @@ func InstallClaudeSkill(targetDir, skillContent, postbrainURL, postbrainScope st
 // The call is idempotent: if postbrain hooks are already present, the file is
 // not modified and updated=false is returned.
 //
-// If scope is non-empty it is inlined into the hook commands. If scope is
-// empty, the installer attempts to resolve it from local postbrain-base files
-// and inlines the resolved scope when found; otherwise hooks call
-// `postbrain-cli snapshot` / `postbrain-cli summarize-session` without scope
-// flags so runtime scope resolution can apply.
+// Hook commands are intentionally installed without explicit scope flags so
+// runtime scope resolution inside `postbrain-cli` is always used.
 func InstallClaudeHooks(targetDir, scope string) (bool, error) {
 	if strings.TrimSpace(targetDir) == "" {
 		targetDir = "."
@@ -110,18 +107,8 @@ func InstallClaudeHooks(targetDir, scope string) (bool, error) {
 		}
 	}
 
-	var snapshotCmd, summarizeCmd string
-	if strings.TrimSpace(scope) == "" {
-		scope = ResolveScopeFromBaseFiles(targetDir)
-	}
-	if strings.TrimSpace(scope) != "" {
-		quotedScope := shellSingleQuote(scope)
-		snapshotCmd = "postbrain-cli snapshot --scope " + quotedScope
-		summarizeCmd = "postbrain-cli summarize-session --scope " + quotedScope
-	} else {
-		snapshotCmd = "postbrain-cli snapshot"
-		summarizeCmd = "postbrain-cli summarize-session"
-	}
+	snapshotCmd := "postbrain-cli snapshot"
+	summarizeCmd := "postbrain-cli summarize-session"
 
 	// Ensure the hooks map exists.
 	hooks, _ := settings["hooks"].(map[string]any)
