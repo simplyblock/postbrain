@@ -524,11 +524,13 @@ func installCodexSkillCmd() *cobra.Command {
 			}
 
 			installHooks := runtime.GOOS != "windows"
-			codexVersion, err := detectCodexVersionFn()
-			if err != nil {
-				return err
-			}
-			if shouldEnforceCodexVersion(runtime.GOOS) {
+			enforceCodexVersion := shouldEnforceCodexVersion(runtime.GOOS)
+			codexVersion := "not_checked"
+			if enforceCodexVersion {
+				codexVersion, err = detectCodexVersionFn()
+				if err != nil {
+					return err
+				}
 				ok, err := codexVersionMeetsMinimum(codexVersion, minimumCodexHooksVersion)
 				if err != nil {
 					return err
