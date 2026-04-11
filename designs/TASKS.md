@@ -25,6 +25,15 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-11: Restored attached-repository visibility on Web UI scopes page (TDD-first):
+  - Added integration regression test
+    `TestScopesPage_ShowsAttachedRepositoryForProjectScope` in
+    `internal/ui/scopes_integration_test.go` to assert `/ui/scopes` renders
+    the attached repo URL and branch for project scopes.
+  - Fixed `db.GetScopesByIDs` in `internal/db/compat.go` to select and scan
+    repository fields (`repo_url`, `repo_default_branch`,
+    `last_indexed_commit`) so scope rows used by Web UI retain repo metadata.
+
 - [x] 2026-04-11: Enforced runtime-only scope resolution for installed hooks:
   - Updated `InstallCodexHooks` and `InstallClaudeHooks` to always install
     scope-less commands:

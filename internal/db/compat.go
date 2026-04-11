@@ -2926,7 +2926,8 @@ func GetScopesByIDs(ctx context.Context, pool *pgxpool.Pool, ids []uuid.UUID) ([
 		return []*Scope{}, nil
 	}
 	rows, err := pool.Query(ctx,
-		`SELECT id, kind, external_id, name, parent_id, principal_id, path::text, meta, created_at
+		`SELECT id, kind, external_id, name, parent_id, principal_id, path::text, meta,
+		        repo_url, repo_default_branch, last_indexed_commit, created_at
 		 FROM scopes WHERE id = ANY($1)
 		 ORDER BY created_at DESC`,
 		ids,
@@ -2939,7 +2940,7 @@ func GetScopesByIDs(ctx context.Context, pool *pgxpool.Pool, ids []uuid.UUID) ([
 	for rows.Next() {
 		var s Scope
 		if err := rows.Scan(&s.ID, &s.Kind, &s.ExternalID, &s.Name, &s.ParentID,
-			&s.PrincipalID, &s.Path, &s.Meta, &s.CreatedAt); err != nil {
+			&s.PrincipalID, &s.Path, &s.Meta, &s.RepoUrl, &s.RepoDefaultBranch, &s.LastIndexedCommit, &s.CreatedAt); err != nil {
 			return nil, fmt.Errorf("db: get scopes by ids scan: %w", err)
 		}
 		scopes = append(scopes, &s)
