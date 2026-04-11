@@ -42,8 +42,8 @@ func InstallCodexSkillWithOptions(
 		postbrainURL = "http://localhost:7433"
 	}
 
-	destDir := filepath.Join(targetDir, ".codex", "skills")
-	destFile := filepath.Join(destDir, "postbrain.md")
+	destDir := filepath.Join(targetDir, ".codex", "skills", "postbrain")
+	destFile := filepath.Join(destDir, "SKILL.md")
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return "", false, fmt.Errorf("create destination directory: %w", err)
 	}
@@ -75,7 +75,7 @@ func InstallCodexSkillWithOptions(
 	block.WriteString("\n")
 	block.WriteString(postbrainConfigMarker)
 	block.WriteString("\n## Postbrain\n\n")
-	block.WriteString("The `.codex/skills/postbrain.md` skill is active for this project.\n\n")
+	block.WriteString("The `.codex/skills/postbrain/SKILL.md` skill is active for this project.\n\n")
 	block.WriteString("```\n")
 	block.WriteString("POSTBRAIN_URL=")
 	block.WriteString(postbrainURL)

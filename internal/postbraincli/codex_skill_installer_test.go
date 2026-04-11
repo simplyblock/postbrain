@@ -23,7 +23,7 @@ func TestInstallCodexSkill_WritesSkillFileAndAppendsAgentsBlock(t *testing.T) {
 	if !updatedAgents {
 		t.Fatal("updatedAgents = false, want true")
 	}
-	wantPath := filepath.Join(targetDir, ".codex", "skills", "postbrain.md")
+	wantPath := filepath.Join(targetDir, ".codex", "skills", "postbrain", "SKILL.md")
 	if installedPath != wantPath {
 		t.Fatalf("installedPath = %q, want %q", installedPath, wantPath)
 	}
@@ -49,6 +49,9 @@ func TestInstallCodexSkill_WritesSkillFileAndAppendsAgentsBlock(t *testing.T) {
 	}
 	if !strings.Contains(content, "POSTBRAIN_SCOPE=project:acme/api") {
 		t.Fatal("AGENTS.md missing POSTBRAIN_SCOPE")
+	}
+	if !strings.Contains(content, "The `.codex/skills/postbrain/SKILL.md` skill is active for this project.") {
+		t.Fatal("AGENTS.md missing updated Codex skill path note")
 	}
 
 	basePath := filepath.Join(targetDir, ".codex", "postbrain-base.md")

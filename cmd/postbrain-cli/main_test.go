@@ -129,6 +129,20 @@ func TestShouldEnforceCodexVersion_NonWindowsTrue(t *testing.T) {
 	}
 }
 
+func TestInstallSkillCommands_ShortDescriptionsUseCurrentPaths(t *testing.T) {
+	t.Parallel()
+
+	codexCmd := installCodexSkillCmd()
+	if !strings.Contains(codexCmd.Short, ".codex/skills/postbrain/SKILL.md") {
+		t.Fatalf("codex installer short description = %q, want updated SKILL.md path", codexCmd.Short)
+	}
+
+	claudeCmd := installClaudeSkillCmd()
+	if !strings.Contains(claudeCmd.Short, ".claude/postbrain.md") {
+		t.Fatalf("claude installer short description = %q, want .claude/postbrain.md path", claudeCmd.Short)
+	}
+}
+
 func TestCheckUpdateCommand_UpdateAvailable(t *testing.T) {
 	oldBuild := buildVersion
 	oldFetch := fetchLatestPostbrainVersionFn

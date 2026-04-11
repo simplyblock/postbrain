@@ -176,7 +176,7 @@ Before every `git commit`, verify all of the following:
 <!-- postbrain-config -->
 ## Postbrain
 
-The `.codex/skills/postbrain.md` skill is active for this project.
+The `.codex/skills/postbrain/SKILL.md` skill is active for this project.
 
 ```
 POSTBRAIN_URL=http://localhost:7433

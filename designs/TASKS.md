@@ -35,6 +35,21 @@
     `InstallClaudeHooks` to reference `.claude/settings.local.json` (actual
     file used by implementation/tests) instead of `.claude/settings.json`.
 
+- [x] 2026-04-11: Fixed Codex skill installer path to the new SKILL.md layout (TDD-first):
+  - Updated `InstallCodexSkill` to install into
+    `.codex/skills/postbrain/SKILL.md` and to write the same path in the
+    AGENTS postbrain-config block.
+  - Updated CLI command text (`install-codex-skill`) to describe the new path.
+  - Updated `scripts/install-codex-skill.sh` source/destination paths and
+    AGENTS hint text to match `.codex/skills/postbrain/SKILL.md`.
+  - Added/updated tests to enforce the new Codex install path and CLI short
+    descriptions for both Codex and Claude installers.
+
+- [x] 2026-04-11: Corrected active Postbrain Codex skill path in `AGENTS.md`:
+  - Updated the postbrain-config note to reference
+    `.codex/skills/postbrain/SKILL.md` instead of the outdated
+    `.codex/skills/postbrain.md` location.
+
 - [x] 2026-04-11: Restored attached-repository visibility on Web UI scopes page (TDD-first):
   - Added integration regression test
     `TestScopesPage_ShowsAttachedRepositoryForProjectScope` in
