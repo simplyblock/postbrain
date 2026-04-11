@@ -48,6 +48,14 @@
     - deterministic scope resolution and persistence guidance,
     - default behaviors and tool usage expectations,
     - gotchas/checklist/validation-loop sections for safer execution.
+  - Restored explicit persisted-base-file format examples in all assets to
+    prevent ambiguity when writing scope defaults:
+    - `postbrain_enabled: true`
+    - `postbrain_scope: project:acme/api`
+    - `updated_at: YYYY-MM-DD`
+  - Added regression coverage
+    `TestSkillAssets_DocumentPostbrainBaseFileFormat` in
+    `cmd/postbrain-cli/main_test.go`.
 
 - [x] 2026-04-11: Switched Codex skill installer output to `.agents` skill directory (TDD-first):
   - Updated `InstallCodexSkill` to install the Codex skill at

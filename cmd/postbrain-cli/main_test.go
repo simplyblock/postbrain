@@ -230,6 +230,29 @@ func TestSkillAssets_ContainExecutionPatterns(t *testing.T) {
 	}
 }
 
+func TestSkillAssets_DocumentPostbrainBaseFileFormat(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		content string
+	}{
+		{name: "codex-lite", content: embeddedCodexSkillLight},
+		{name: "codex-full", content: embeddedCodexSkillFull},
+		{name: "claude", content: embeddedClaudeSkill},
+	} {
+		if !strings.Contains(tc.content, "postbrain_enabled: true") {
+			t.Fatalf("%s skill missing postbrain_enabled format guidance", tc.name)
+		}
+		if !strings.Contains(tc.content, "postbrain_scope: project:acme/api") {
+			t.Fatalf("%s skill missing postbrain_scope format guidance", tc.name)
+		}
+		if !strings.Contains(tc.content, "updated_at: YYYY-MM-DD") {
+			t.Fatalf("%s skill missing updated_at format guidance", tc.name)
+		}
+	}
+}
+
 func TestCheckUpdateCommand_UpdateAvailable(t *testing.T) {
 	oldBuild := buildVersion
 	oldFetch := fetchLatestPostbrainVersionFn

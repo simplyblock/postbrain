@@ -29,8 +29,18 @@ Resolve scope in this order:
 3. `CLAUDE.md`
 4. `README.md`
 
-If unresolved, ask user and persist the chosen value.
+If unresolved, ask user and persist the chosen value to `.claude/postbrain-base.md`.
 Never invent scope values.
+
+Canonical format when persisting scope (for `.claude/postbrain-base.md` or `.agents/postbrain-base.md`):
+
+```md
+---
+postbrain_enabled: true
+postbrain_scope: project:acme/api
+updated_at: YYYY-MM-DD
+---
+```
 
 ## 3. Session Bootstrap
 

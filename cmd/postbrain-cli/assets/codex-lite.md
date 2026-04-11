@@ -16,6 +16,16 @@ Use this profile when repo-local hooks already run `postbrain-cli snapshot` and 
 3. Start a session: `session_begin(scope=...)`.
 4. Load context: `context(scope=..., query=...)`.
 
+When persisting scope defaults, use this canonical format in `.agents/postbrain-base.md`:
+
+```md
+---
+postbrain_enabled: true
+postbrain_scope: project:acme/api
+updated_at: YYYY-MM-DD
+---
+```
+
 ## Defaults
 
 - Never invent scope values. Scope must be `kind:external_id`.

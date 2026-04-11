@@ -31,6 +31,16 @@ Resolve scope in this order:
 If still missing, ask user and persist to `.agents/postbrain-base.md`.
 Never invent scope values.
 
+Canonical `.agents/postbrain-base.md` format when persisting scope:
+
+```md
+---
+postbrain_enabled: true
+postbrain_scope: project:acme/api
+updated_at: YYYY-MM-DD
+---
+```
+
 ## 3. Session Bootstrap
 
 1. `session_begin(scope=...)`
