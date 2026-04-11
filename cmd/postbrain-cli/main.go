@@ -53,10 +53,7 @@ type hookClient struct {
 }
 
 func newHookClient() *hookClient {
-	url := os.Getenv("POSTBRAIN_URL")
-	if url == "" {
-		url = "http://localhost:7433"
-	}
+	url := resolveURLForRuntime()
 	token := os.Getenv("POSTBRAIN_TOKEN")
 	return &hookClient{
 		baseURL: strings.TrimRight(url, "/"),
@@ -807,4 +804,17 @@ func resolveScopeForRuntime() string {
 		return ""
 	}
 	return postbraincli.ResolveScopeFromBaseFiles(cwd)
+}
+
+func resolveURLForRuntime() string {
+	if url := strings.TrimSpace(os.Getenv("POSTBRAIN_URL")); url != "" {
+		return strings.TrimRight(url, "/")
+	}
+	cwd, err := getwdFn()
+	if err == nil {
+		if url := strings.TrimSpace(postbraincli.ResolveURLFromBaseFiles(cwd)); url != "" {
+			return strings.TrimRight(url, "/")
+		}
+	}
+	return "http://localhost:7433"
 }

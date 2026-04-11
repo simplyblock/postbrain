@@ -54,6 +54,11 @@
     `POSTBRAIN_URL=` formats) and regression tests across CLI/internal packages.
   - Updated plugin template `plugins/postbrain/mcp.json` to include
     `\"type\": \"http\"` for style parity.
+  - Follow-up: fixed runtime `postbrain-cli` backend URL resolution so hook and
+    skill API calls also read `postbrain_url` from cwd base files when
+    `POSTBRAIN_URL` is unset (instead of env-only behavior).
+  - Added CLI regression tests for runtime URL resolution precedence and
+    default fallback (`resolveURLForRuntime`).
 
 - [x] 2026-04-11: Updated CLI-embedded Postbrain skill assets to follow skill-authoring best practices (TDD-first):
   - Added regression tests in `cmd/postbrain-cli/main_test.go` to enforce:

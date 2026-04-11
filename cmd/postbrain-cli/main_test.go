@@ -527,3 +527,45 @@ func TestResolveScopeForRuntime_FallsBackToCwdPostbrainBase(t *testing.T) {
 		t.Fatalf("resolveScopeForRuntime() = %q, want project:from-cwd", got)
 	}
 }
+
+func TestResolveURLForRuntime_PrefersEnvVar(t *testing.T) {
+	prevGetwd := getwdFn
+	getwdFn = func() (string, error) { return "", nil }
+	t.Cleanup(func() { getwdFn = prevGetwd })
+	t.Setenv("POSTBRAIN_URL", "http://env-url:7433/")
+
+	if got := resolveURLForRuntime(); got != "http://env-url:7433" {
+		t.Fatalf("resolveURLForRuntime() = %q, want env URL", got)
+	}
+}
+
+func TestResolveURLForRuntime_FallsBackToCwdPostbrainBase(t *testing.T) {
+	t.Setenv("POSTBRAIN_URL", "")
+	targetDir := t.TempDir()
+
+	prevGetwd := getwdFn
+	getwdFn = func() (string, error) { return targetDir, nil }
+	t.Cleanup(func() { getwdFn = prevGetwd })
+
+	if err := os.MkdirAll(filepath.Join(targetDir, ".agents"), 0o755); err != nil {
+		t.Fatalf("mkdir .agents: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(targetDir, ".agents", "postbrain-base.md"), []byte("postbrain_url: http://from-cwd:7433\n"), 0o644); err != nil {
+		t.Fatalf("write postbrain-base.md: %v", err)
+	}
+
+	if got := resolveURLForRuntime(); got != "http://from-cwd:7433" {
+		t.Fatalf("resolveURLForRuntime() = %q, want http://from-cwd:7433", got)
+	}
+}
+
+func TestResolveURLForRuntime_DefaultWhenUnset(t *testing.T) {
+	prevGetwd := getwdFn
+	getwdFn = func() (string, error) { return "", os.ErrNotExist }
+	t.Cleanup(func() { getwdFn = prevGetwd })
+	t.Setenv("POSTBRAIN_URL", "")
+
+	if got := resolveURLForRuntime(); got != "http://localhost:7433" {
+		t.Fatalf("resolveURLForRuntime() = %q, want default URL", got)
+	}
+}
