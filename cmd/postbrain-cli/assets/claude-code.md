@@ -1,6 +1,6 @@
 ---
 name: postbrain
-description: Postbrain Claude Code persistent memory and knowledge operating policy
+description: Use this skill when working in Claude Code with Postbrain memory, knowledge, and session workflows.
 version: 1
 user-invocable: false
 allowed-tools: Bash(postbrain-cli *)

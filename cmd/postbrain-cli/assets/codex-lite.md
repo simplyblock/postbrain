@@ -1,6 +1,6 @@
 ---
 name: postbrain
-description: Postbrain Codex hooks-enabled workflow and memory policy
+description: Use this skill when Codex hooks are enabled and Postbrain should capture and retrieve task context.
 version: 1
 allowed-tools: Bash(postbrain-cli *)
 ---

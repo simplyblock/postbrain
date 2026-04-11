@@ -56,6 +56,13 @@
   - Added regression coverage
     `TestSkillAssets_DocumentPostbrainBaseFileFormat` in
     `cmd/postbrain-cli/main_test.go`.
+  - Validated and aligned frontmatter descriptions against skill-description
+    optimization guidance:
+    - rewrote asset `description` values to trigger-oriented imperative phrasing
+      (`Use this skill when ...`) for Codex lite/full and Claude profiles.
+    - added regression coverage
+      `TestSkillAssets_DescriptionsAreTriggerOriented` in
+      `cmd/postbrain-cli/main_test.go`.
 
 - [x] 2026-04-11: Switched Codex skill installer output to `.agents` skill directory (TDD-first):
   - Updated `InstallCodexSkill` to install the Codex skill at

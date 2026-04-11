@@ -1,6 +1,6 @@
 ---
 name: postbrain
-description: Postbrain Codex persistent memory and knowledge operating policy
+description: Use this skill when working in Codex with Postbrain memory, knowledge, and skill workflows.
 version: 1
 allowed-tools: Bash(postbrain-cli *)
 ---

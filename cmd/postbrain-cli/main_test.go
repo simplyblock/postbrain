@@ -253,6 +253,23 @@ func TestSkillAssets_DocumentPostbrainBaseFileFormat(t *testing.T) {
 	}
 }
 
+func TestSkillAssets_DescriptionsAreTriggerOriented(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		content string
+	}{
+		{name: "codex-lite", content: embeddedCodexSkillLight},
+		{name: "codex-full", content: embeddedCodexSkillFull},
+		{name: "claude", content: embeddedClaudeSkill},
+	} {
+		if !strings.Contains(tc.content, "\ndescription: Use this skill when ") {
+			t.Fatalf("%s skill description should use trigger-oriented imperative phrasing", tc.name)
+		}
+	}
+}
+
 func TestCheckUpdateCommand_UpdateAvailable(t *testing.T) {
 	oldBuild := buildVersion
 	oldFetch := fetchLatestPostbrainVersionFn
