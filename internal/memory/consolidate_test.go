@@ -2,7 +2,9 @@ package memory
 
 import (
 	"context"
+	"fmt"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -231,5 +233,81 @@ func TestMergeCluster_CallsSummarizerAndSoftDeletes(t *testing.T) {
 	}
 	if mdb.consolidation == nil {
 		t.Fatal("expected consolidation record to be created")
+	}
+}
+
+type summaryLengthGuardEmbeddingService struct {
+	noopMemoryEmbeddingService
+	maxBytes int
+	calls    []string
+}
+
+func (s *summaryLengthGuardEmbeddingService) EmbedText(_ context.Context, text string) ([]float32, error) {
+	s.calls = append(s.calls, text)
+	if len(text) > s.maxBytes {
+		return nil, fmt.Errorf("openai: input[0] too long (%d bytes, max ~%d)", len(text), s.maxBytes)
+	}
+	return []float32{float32(len(text))}, nil
+}
+
+func TestMergeCluster_ChunkEmbedsOversizedSummaryBeforeEmbedding(t *testing.T) {
+	mdb := &mockConsolidatorDB{}
+	svc := &summaryLengthGuardEmbeddingService{maxBytes: 32000}
+	c := &Consolidator{
+		svc: svc,
+		cdb: mdb,
+	}
+
+	scopeID := uuid.New()
+	authorID := uuid.New()
+	cluster := []*db.Memory{
+		{ID: uuid.New(), ScopeID: scopeID, AuthorID: authorID, Content: "memory one", Importance: 0.2, MemoryType: "episodic"},
+		{ID: uuid.New(), ScopeID: scopeID, AuthorID: authorID, Content: "memory two", Importance: 0.7, MemoryType: "episodic"},
+	}
+
+	oversized := strings.Repeat("a", 33000)
+	summarizer := func(_ context.Context, _ []string) (string, error) {
+		return oversized, nil
+	}
+
+	merged, err := c.MergeCluster(context.Background(), cluster, summarizer)
+	if err != nil {
+		t.Fatalf("expected oversized summary to be truncated and embedded, got error: %v", err)
+	}
+	if merged == nil {
+		t.Fatal("expected non-nil merged memory")
+	}
+	if len(svc.calls) <= 1 {
+		t.Fatalf("expected oversized summary to be embedded in multiple chunks, got %d call(s)", len(svc.calls))
+	}
+	for i, call := range svc.calls {
+		if len(call) > 32000 {
+			t.Fatalf("chunk embed input[%d] bytes = %d, exceeds limit", i, len(call))
+		}
+	}
+	if mdb.created.Content != oversized {
+		t.Fatal("expected stored summary content to remain untruncated")
+	}
+	if mdb.created.Embedding == nil {
+		t.Fatal("expected created embedding to be set")
+	}
+	sum := 0.0
+	for _, call := range svc.calls {
+		sum += float64(len(call))
+	}
+	want := float32(sum / float64(len(svc.calls)))
+	got := mdb.created.Embedding.Slice()[0]
+	if math.Abs(float64(got-want)) > 1e-6 {
+		t.Fatalf("pooled embedding[0] = %v, want %v", got, want)
+	}
+}
+
+func TestMeanPoolEmbeddings_DimensionMismatch(t *testing.T) {
+	_, err := meanPoolEmbeddings([][]float32{
+		{1, 2},
+		{3},
+	})
+	if err == nil {
+		t.Fatal("expected dimension mismatch error")
 	}
 }
