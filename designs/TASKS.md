@@ -35,6 +35,26 @@
     `InstallClaudeHooks` to reference `.claude/settings.local.json` (actual
     file used by implementation/tests) instead of `.claude/settings.json`.
 
+- [x] 2026-04-11: Extended skill installers with backend URL onboarding and MCP config provisioning (TDD-first):
+  - Added install-time backend URL resolution for CLI installers:
+    - priority: `POSTBRAIN_URL` env → base-file `postbrain_url` → interactive prompt
+    - prompt default: `http://localhost:7433`
+  - Added backend URL persistence to `postbrain-base.md` frontmatter for both
+    Codex and Claude installs:
+    - `postbrain_url: <backend-url>`
+    - maintained canonical keys (`postbrain_enabled`, `postbrain_scope`,
+      `updated_at`).
+  - Added Codex MCP config installation into repo-local `.codex/config.toml`:
+    - `[mcp_servers.postbrain]` with `url` and `bearer_token_env_var`
+    - per-tool approval blocks for required Postbrain tools with
+      `approval_mode = "approve"`.
+  - Added Claude MCP config installation into project-root `.mcp.json` in
+    HTTP-server style (`type`, `url`, `headers.Authorization`).
+  - Added URL resolver support from base files (`postbrain_url` and
+    `POSTBRAIN_URL=` formats) and regression tests across CLI/internal packages.
+  - Updated plugin template `plugins/postbrain/mcp.json` to include
+    `\"type\": \"http\"` for style parity.
+
 - [x] 2026-04-11: Updated CLI-embedded Postbrain skill assets to follow skill-authoring best practices (TDD-first):
   - Added regression tests in `cmd/postbrain-cli/main_test.go` to enforce:
     - canonical `.agents/postbrain-base.md` guidance (no deprecated `.agent/...` path),

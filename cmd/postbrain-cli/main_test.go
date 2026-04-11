@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/spf13/cobra"
 )
 
 func TestParseSkillID_ValidUUID_ReturnsID(t *testing.T) {
@@ -415,6 +416,81 @@ func TestResolveScopeForInstall_FallsBackToClaudeThenAgents(t *testing.T) {
 	got = resolveScopeForInstall(targetDir)
 	if got != "project:from-agents" {
 		t.Fatalf("resolveScopeForInstall() = %q, want agents scope", got)
+	}
+}
+
+func TestResolveURLForInstall_PrefersEnvVar(t *testing.T) {
+	t.Setenv("POSTBRAIN_URL", "http://env-url:7433")
+	targetDir := t.TempDir()
+	cmd := &cobra.Command{}
+	cmd.SetIn(strings.NewReader(""))
+	cmd.SetErr(&bytes.Buffer{})
+
+	got, err := resolveURLForInstall(cmd, targetDir)
+	if err != nil {
+		t.Fatalf("resolveURLForInstall: %v", err)
+	}
+	if got != "http://env-url:7433" {
+		t.Fatalf("resolveURLForInstall() = %q, want env URL", got)
+	}
+}
+
+func TestResolveURLForInstall_FallsBackToBaseFile(t *testing.T) {
+	t.Setenv("POSTBRAIN_URL", "")
+	targetDir := t.TempDir()
+	agentsDir := filepath.Join(targetDir, ".agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatalf("mkdir .agents: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(agentsDir, "postbrain-base.md"), []byte("postbrain_url: http://from-base:7433\n"), 0o644); err != nil {
+		t.Fatalf("write postbrain-base.md: %v", err)
+	}
+	cmd := &cobra.Command{}
+	cmd.SetIn(strings.NewReader(""))
+	cmd.SetErr(&bytes.Buffer{})
+
+	got, err := resolveURLForInstall(cmd, targetDir)
+	if err != nil {
+		t.Fatalf("resolveURLForInstall: %v", err)
+	}
+	if got != "http://from-base:7433" {
+		t.Fatalf("resolveURLForInstall() = %q, want base URL", got)
+	}
+}
+
+func TestResolveURLForInstall_PromptsAndUsesDefaultOnEmptyInput(t *testing.T) {
+	t.Setenv("POSTBRAIN_URL", "")
+	targetDir := t.TempDir()
+	cmd := &cobra.Command{}
+	cmd.SetIn(strings.NewReader("\n"))
+	var errOut bytes.Buffer
+	cmd.SetErr(&errOut)
+
+	got, err := resolveURLForInstall(cmd, targetDir)
+	if err != nil {
+		t.Fatalf("resolveURLForInstall: %v", err)
+	}
+	if got != "http://localhost:7433" {
+		t.Fatalf("resolveURLForInstall() = %q, want default URL", got)
+	}
+	if !strings.Contains(errOut.String(), "Postbrain backend URL") {
+		t.Fatalf("expected prompt output, got %q", errOut.String())
+	}
+}
+
+func TestResolveURLForInstall_PromptsAndUsesUserInput(t *testing.T) {
+	t.Setenv("POSTBRAIN_URL", "")
+	targetDir := t.TempDir()
+	cmd := &cobra.Command{}
+	cmd.SetIn(strings.NewReader("http://custom-host:8123/\n"))
+	cmd.SetErr(&bytes.Buffer{})
+
+	got, err := resolveURLForInstall(cmd, targetDir)
+	if err != nil {
+		t.Fatalf("resolveURLForInstall: %v", err)
+	}
+	if got != "http://custom-host:8123" {
+		t.Fatalf("resolveURLForInstall() = %q, want trimmed custom URL", got)
 	}
 }
 

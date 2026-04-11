@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -50,7 +51,7 @@ func InstallCodexSkillWithOptions(
 	if err := os.WriteFile(destFile, []byte(skillContent), 0o644); err != nil {
 		return "", false, fmt.Errorf("write skill file: %w", err)
 	}
-	if err := ensurePostbrainBaseFile(targetDir, ".agents", postbrainScope); err != nil {
+	if err := ensurePostbrainBaseFile(targetDir, ".agents", postbrainScope, postbrainURL); err != nil {
 		return "", false, err
 	}
 	if opts.InstallHooks {
@@ -203,6 +204,65 @@ func EnableCodexHooks(targetDir string) (bool, error) {
 	return true, nil
 }
 
+// InstallCodexMCPConfig ensures repo-local .codex/config.toml has Postbrain MCP
+// server configuration and tool approval modes.
+func InstallCodexMCPConfig(targetDir, postbrainURL string) (bool, error) {
+	if strings.TrimSpace(targetDir) == "" {
+		targetDir = "."
+	}
+	if strings.TrimSpace(postbrainURL) == "" {
+		postbrainURL = "http://localhost:7433"
+	}
+	postbrainURL = strings.TrimRight(strings.TrimSpace(postbrainURL), "/")
+
+	configDir := filepath.Join(targetDir, ".codex")
+	configPath := filepath.Join(configDir, "config.toml")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		return false, fmt.Errorf("create .codex directory: %w", err)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil && !os.IsNotExist(err) {
+		return false, fmt.Errorf("read config.toml: %w", err)
+	}
+	content := string(data)
+	updatedAny := false
+
+	mcpURL := postbrainURL + "/mcp"
+	sectionUpdated := false
+	content, sectionUpdated = ensureTOMLStringKey(content, "mcp_servers.postbrain", "url", mcpURL)
+	updatedAny = updatedAny || sectionUpdated
+	content, sectionUpdated = ensureTOMLStringKey(content, "mcp_servers.postbrain", "bearer_token_env_var", "POSTBRAIN_TOKEN")
+	updatedAny = updatedAny || sectionUpdated
+
+	for _, tool := range []string{
+		"list_scopes",
+		"session_begin",
+		"recall",
+		"context",
+		"knowledge_detail",
+		"publish",
+		"remember",
+		"session_end",
+		"graph_query",
+	} {
+		section := "mcp_servers.postbrain.tools." + tool
+		content, sectionUpdated = ensureTOMLStringKey(content, section, "approval_mode", "approve")
+		updatedAny = updatedAny || sectionUpdated
+	}
+
+	if !updatedAny {
+		return false, nil
+	}
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
+		return false, fmt.Errorf("write config.toml: %w", err)
+	}
+	return true, nil
+}
+
 func ensureCodexHooksEnabled(content string) (bool, string) {
 	if strings.TrimSpace(content) == "" {
 		return true, "[features]\ncodex_hooks = true\n"
@@ -272,6 +332,39 @@ func parseTOMLAssignment(line string) (key, value string, ok bool) {
 	key = strings.TrimSpace(trimmed[:eq])
 	value = strings.TrimSpace(trimmed[eq+1:])
 	return key, value, true
+}
+
+func ensureTOMLStringKey(content, section, key, value string) (string, bool) {
+	sectionStart, sectionEnd := findSection(strings.Split(content, "\n"), section)
+	quoted := strconv.Quote(value)
+
+	if sectionStart < 0 {
+		trimmed := strings.TrimRight(content, "\n")
+		if trimmed == "" {
+			return "[" + section + "]\n" + key + " = " + quoted + "\n", true
+		}
+		return trimmed + "\n\n[" + section + "]\n" + key + " = " + quoted + "\n", true
+	}
+
+	lines := strings.Split(content, "\n")
+	for i := sectionStart + 1; i < sectionEnd; i++ {
+		k, _, ok := parseTOMLAssignment(lines[i])
+		if !ok || k != key {
+			continue
+		}
+		want := key + " = " + quoted
+		if strings.TrimSpace(lines[i]) == want {
+			return content, false
+		}
+		lines[i] = want
+		return strings.Join(lines, "\n"), true
+	}
+
+	insertAt := sectionEnd
+	lines = append(lines, "")
+	copy(lines[insertAt+1:], lines[insertAt:])
+	lines[insertAt] = key + " = " + quoted
+	return strings.Join(lines, "\n"), true
 }
 
 func ensureEventHookCommand(entries []any, needle, desiredCommand string, entryDefaults map[string]any) ([]any, bool) {

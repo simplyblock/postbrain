@@ -69,6 +69,9 @@ func TestInstallClaudeSkill_WritesSkillFileAndUpdatesCLAUDE(t *testing.T) {
 	if !strings.Contains(base, "postbrain_scope: project:acme/api") {
 		t.Fatal("postbrain-base.md missing postbrain_scope")
 	}
+	if !strings.Contains(base, "postbrain_url: http://localhost:7433") {
+		t.Fatal("postbrain-base.md missing postbrain_url")
+	}
 }
 
 func TestInstallClaudeSkill_DoesNotDuplicateBlock(t *testing.T) {
@@ -133,6 +136,9 @@ func TestInstallClaudeSkill_NoCLAUDEFileCreatesAndUpdatesCLAUDE(t *testing.T) {
 	}
 	if !strings.Contains(string(baseData), "postbrain_enabled: true") {
 		t.Fatal("postbrain-base.md missing postbrain_enabled")
+	}
+	if !strings.Contains(string(baseData), "postbrain_url: http://localhost:7433") {
+		t.Fatal("postbrain-base.md missing postbrain_url")
 	}
 }
 
@@ -522,5 +528,64 @@ func TestInstallClaudeHooks_QuotesExplicitScopeInCommands(t *testing.T) {
 	content := string(data)
 	if strings.Contains(content, "--scope") {
 		t.Fatalf("settings.local.json should not include fixed scope flags: %s", content)
+	}
+}
+
+func TestInstallClaudeMCPConfig_CreatesProjectMCPJSON(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+
+	updated, err := InstallClaudeMCPConfig(targetDir, "http://localhost:7433")
+	if err != nil {
+		t.Fatalf("InstallClaudeMCPConfig: %v", err)
+	}
+	if !updated {
+		t.Fatal("updated = false, want true")
+	}
+
+	data, err := os.ReadFile(filepath.Join(targetDir, ".mcp.json"))
+	if err != nil {
+		t.Fatalf("read .mcp.json: %v", err)
+	}
+	var root map[string]any
+	if err := json.Unmarshal(data, &root); err != nil {
+		t.Fatalf("parse .mcp.json: %v", err)
+	}
+	servers, _ := root["mcpServers"].(map[string]any)
+	if servers == nil {
+		t.Fatal(".mcp.json missing mcpServers")
+	}
+	postbrain, _ := servers["postbrain"].(map[string]any)
+	if postbrain == nil {
+		t.Fatal(".mcp.json missing postbrain server")
+	}
+	if postbrain["type"] != "http" {
+		t.Fatalf("postbrain.type = %v, want http", postbrain["type"])
+	}
+	if postbrain["url"] != "http://localhost:7433/mcp" {
+		t.Fatalf("postbrain.url = %v, want http://localhost:7433/mcp", postbrain["url"])
+	}
+	headers, _ := postbrain["headers"].(map[string]any)
+	if headers == nil {
+		t.Fatal("postbrain.headers missing")
+	}
+	if headers["Authorization"] != "Bearer ${POSTBRAIN_TOKEN}" {
+		t.Fatalf("Authorization header = %v, want Bearer ${POSTBRAIN_TOKEN}", headers["Authorization"])
+	}
+}
+
+func TestInstallClaudeMCPConfig_IsIdempotent(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+
+	if _, err := InstallClaudeMCPConfig(targetDir, "http://localhost:7433"); err != nil {
+		t.Fatalf("first InstallClaudeMCPConfig: %v", err)
+	}
+	updated, err := InstallClaudeMCPConfig(targetDir, "http://localhost:7433")
+	if err != nil {
+		t.Fatalf("second InstallClaudeMCPConfig: %v", err)
+	}
+	if updated {
+		t.Fatal("updated = true on second call, want false")
 	}
 }
