@@ -187,6 +187,49 @@ func TestEmbeddedClaudeSkill_ContainsRequiredFrontmatterFields(t *testing.T) {
 	}
 }
 
+func TestSkillAssets_UseAgentsBasePath(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		content string
+	}{
+		{name: "codex-lite", content: embeddedCodexSkillLight},
+		{name: "codex-full", content: embeddedCodexSkillFull},
+		{name: "claude", content: embeddedClaudeSkill},
+	} {
+		if strings.Contains(tc.content, ".agent/postbrain-base.md") {
+			t.Fatalf("%s skill uses deprecated .agent base path", tc.name)
+		}
+		if !strings.Contains(tc.content, ".agents/postbrain-base.md") {
+			t.Fatalf("%s skill missing .agents base path guidance", tc.name)
+		}
+	}
+}
+
+func TestSkillAssets_ContainExecutionPatterns(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		content string
+	}{
+		{name: "codex-lite", content: embeddedCodexSkillLight},
+		{name: "codex-full", content: embeddedCodexSkillFull},
+		{name: "claude", content: embeddedClaudeSkill},
+	} {
+		if !strings.Contains(tc.content, "## Gotchas") {
+			t.Fatalf("%s skill missing Gotchas section", tc.name)
+		}
+		if !strings.Contains(tc.content, "## Workflow Checklist") {
+			t.Fatalf("%s skill missing Workflow Checklist section", tc.name)
+		}
+		if !strings.Contains(tc.content, "## Validation Loop") {
+			t.Fatalf("%s skill missing Validation Loop section", tc.name)
+		}
+	}
+}
+
 func TestCheckUpdateCommand_UpdateAvailable(t *testing.T) {
 	oldBuild := buildVersion
 	oldFetch := fetchLatestPostbrainVersionFn

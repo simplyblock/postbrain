@@ -35,6 +35,20 @@
     `InstallClaudeHooks` to reference `.claude/settings.local.json` (actual
     file used by implementation/tests) instead of `.claude/settings.json`.
 
+- [x] 2026-04-11: Updated CLI-embedded Postbrain skill assets to follow skill-authoring best practices (TDD-first):
+  - Added regression tests in `cmd/postbrain-cli/main_test.go` to enforce:
+    - canonical `.agents/postbrain-base.md` guidance (no deprecated `.agent/...` path),
+    - explicit execution sections in all embedded skill assets:
+      - `## Gotchas`
+      - `## Workflow Checklist`
+      - `## Validation Loop`
+  - Reworked `cmd/postbrain-cli/assets/*.md` (`codex.md`, `codex-lite.md`,
+    `claude-code.md`) to a concise procedure-first format with:
+    - explicit startup gate (`list_scopes`),
+    - deterministic scope resolution and persistence guidance,
+    - default behaviors and tool usage expectations,
+    - gotchas/checklist/validation-loop sections for safer execution.
+
 - [x] 2026-04-11: Switched Codex skill installer output to `.agents` skill directory (TDD-first):
   - Updated `InstallCodexSkill` to install the Codex skill at
     `.agents/skills/postbrain/SKILL.md` instead of `.codex/...`.
