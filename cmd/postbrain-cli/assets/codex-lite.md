@@ -2,6 +2,7 @@
 name: postbrain
 description: Postbrain Codex hooks-enabled workflow and memory policy
 version: 1
+allowed-tools: Bash(postbrain-cli *)
 ---
 
 # Postbrain — Codex (Hooks-Enabled)
@@ -13,7 +14,7 @@ This lightweight profile assumes repo-local Codex hooks are installed and enable
 ## Startup checklist
 
 1. Verify Postbrain is reachable with `list_scopes`.
-2. Resolve scope from local config (`.codex/postbrain-base.md`, `README.md`, `AGENTS.md`).
+2. Resolve scope from local config (`.codex/postbrain-base.md`, `.agent/postbrain-base.md`, `README.md`, `AGENTS.md`).
 3. Start a session: `session_begin(scope=...)`.
 4. Load task context: `context(scope=..., query=...)`.
 
@@ -21,7 +22,7 @@ This lightweight profile assumes repo-local Codex hooks are installed and enable
 
 Never invent a scope. Use an explicit `kind:external_id` (for example `project:acme/api`).
 
-If no scope is configured, ask the user and persist the answer in `.codex/postbrain-base.md`.
+If no scope is configured, ask the user and persist the answer in `.agent/postbrain-base.md`.
 
 ## Working policy
 

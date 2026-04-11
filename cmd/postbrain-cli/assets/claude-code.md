@@ -2,6 +2,8 @@
 name: postbrain
 description: Postbrain Claude Code persistent memory and knowledge operating policy
 version: 1
+user-invocable: false
+allowed-tools: Bash(postbrain-cli *)
 ---
 
 # Postbrain — Persistent Memory & Knowledge for Claude Code

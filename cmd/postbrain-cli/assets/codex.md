@@ -2,6 +2,7 @@
 name: postbrain
 description: Postbrain Codex persistent memory and knowledge operating policy
 version: 1
+allowed-tools: Bash(postbrain-cli *)
 ---
 
 # Postbrain — Persistent Memory & Knowledge for Codex
@@ -35,7 +36,7 @@ are stored.
 
 At the start of a new session, find a configured project scope in this order:
 
-1. `.codex/postbrain-base.md`
+1. `.codex/postbrain-base.md` or `.agent/postbrain-base.md` 
 2. `README.md`
 3. `AGENTS.md`
 4. Other common local docs (`docs/`, `designs/`, `.codex/`) mentioning `POSTBRAIN_SCOPE` or `postbrain scope`
@@ -47,13 +48,13 @@ If no defined scope is found, ask the user whether to use Postbrain for this pro
 > Do you want me to use Postbrain memory/knowledge for this project?
 
 - If user says **no**:
-    - Persist that decision to `.codex/postbrain-base.md` for future sessions.
+    - Persist that decision to `.agent/postbrain-base.md` for future sessions.
     - Do not call Postbrain tools in this session unless the user later opts in.
 - If user says **yes**:
-    - Persist opt-in to `.codex/postbrain-base.md`.
+    - Persist opt-in to `.agent/postbrain-base.md`.
     - Ask for the project scope:
       > What Postbrain scope should I use? (e.g. `project:acme/api`)
-    - Persist the provided scope in `.codex/postbrain-base.md`.
+    - Persist the provided scope in `.agent/postbrain-base.md`.
 
 Never invent a scope.
 
@@ -354,8 +355,8 @@ Always call `session_end` when the session terminates (in a Stop hook if availab
 ```
 startup
   list_scopes                        # verify server + discover scopes
-  resolve scope from local files     # .codex/postbrain-base.md, README.md, AGENTS.md, etc.
-  ask user to opt in/out if missing  # persist decision to .codex/postbrain-base.md
+  resolve scope from local files     # .codex/postbrain-base.md, .agent/postbrain-base.md, README.md, AGENTS.md, etc.
+  ask user to opt in/out if missing  # persist decision to .agent/postbrain-base.md
   ask and persist scope if opted in
   session_begin(scope)               # open session
   context(scope, query=first_task)   # hydrate with relevant knowledge
@@ -384,7 +385,7 @@ wrapping up
 | `POSTBRAIN_TOKEN` | —                       | Bearer auth token                                   |
 | `POSTBRAIN_SCOPE` | —                       | Default scope (set in AGENTS.md to skip the prompt) |
 
-`.codex/postbrain-base.md` convention (recommended):
+`.agent/postbrain-base.md` convention (recommended):
 
 - `postbrain_enabled: yes|no`
 - `postbrain_scope: kind:external_id` (when enabled)
