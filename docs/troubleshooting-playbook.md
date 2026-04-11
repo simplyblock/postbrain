@@ -71,6 +71,7 @@ Typical causes:
 - model endpoint unavailable or wrong URL
 - provider auth/key issue
 - model dimensions mismatch
+- active model uses a provider profile with `service_url` pointing to localhost (for example `http://localhost:8080`) on a host where that service is not running
 
 Recovery flow:
 

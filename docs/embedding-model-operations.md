@@ -13,7 +13,7 @@ Use these procedures for production and staging.
 
 ## 1) Register a new embedding model
 
-Registering a model creates or reuses an `embedding_models` entry, provisions a
+Registering a model creates or reuses an `ai_models` entry (`model_type='embedding'`), provisions a
 per-model storage table, and seeds `embedding_index` pending rows for existing
 objects.
 
@@ -47,15 +47,16 @@ postbrain --config config.yaml embedding-model list
 
 Check:
 
-- `active=true` for exactly one model per `content_type`
+- `active=true` for exactly one embedding model per `content_type`
 - `ready=true` for active models
 - `table_name` is present (`embeddings_model_<uuid_no_dashes>`)
 
 Optional SQL check:
 
 ```sql
-SELECT slug, content_type, is_active, is_ready, table_name
-FROM embedding_models
+SELECT slug, content_type, model_type, is_active, is_ready, table_name
+FROM ai_models
+WHERE model_type = 'embedding'
 ORDER BY content_type, slug;
 ```
 
@@ -101,7 +102,47 @@ ORDER BY updated_at DESC
 LIMIT 100;
 ```
 
-## 5) Manual retry for failed rows
+## 5) Register/activate summary generation models
+
+Summarization/analyze routing now resolves the active `generation/text` model.
+If none exists, Postbrain falls back to the active `embedding/text` model profile.
+
+Register a generation model:
+
+```bash
+postbrain --config config.yaml embedding-model register \
+  --slug gpt-4o-mini-summary-v1 \
+  --provider-config openai-prod \
+  --dimensions 1536 \
+  --content-type text
+```
+
+Then set model type to generation and activate it:
+
+```sql
+UPDATE ai_models
+SET model_type = 'generation'
+WHERE slug = 'gpt-4o-mini-summary-v1';
+
+UPDATE ai_models
+SET is_active = false
+WHERE model_type = 'generation' AND content_type = 'text';
+
+UPDATE ai_models
+SET is_active = true
+WHERE slug = 'gpt-4o-mini-summary-v1';
+```
+
+Validate:
+
+```sql
+SELECT slug, model_type, content_type, is_active, provider_config
+FROM ai_models
+WHERE content_type = 'text'
+ORDER BY model_type, slug;
+```
+
+## 6) Manual retry for failed rows
 
 After fixing provider/network/model issues, reset failed rows to pending:
 
@@ -128,7 +169,7 @@ WHERE object_type = 'memory'
   AND model_id = '<MODEL_UUID>'::uuid;
 ```
 
-## 6) Rollback procedure
+## 7) Rollback procedure
 
 If a newly activated model causes regressions:
 
@@ -145,7 +186,7 @@ postbrain --config config.yaml embedding-model activate \
   --content-type text
 ```
 
-## 7) Post-change acceptance checks
+## 8) Post-change acceptance checks
 
 Run after register/activate/rollback operations:
 

@@ -79,7 +79,8 @@ Core logical groups:
 - sessions and observability entities:
   - `sessions`, `events`
 - model registry entities:
-  - `embedding_models` and associated embedding infrastructure
+  - `ai_models` (`model_type`-scoped embedding/generation registry),
+    `embedding_models` (legacy compatibility), and associated embedding infrastructure
 
 ## Extension set
 

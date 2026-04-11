@@ -1,5 +1,11 @@
 # TASKS — Embedding Architecture Update
 
+## Status Update (2026-04-11)
+
+`ai_models` is now the canonical model registry table with
+`model_type IN ('embedding','generation')`. `embedding_models` remains as a
+legacy compatibility table during transition/rollback windows.
+
 ## Goal
 
 Move from fixed inline embedding columns to a model-scoped embedding architecture that supports:
@@ -23,7 +29,7 @@ Tracks which objects have embeddings in which model tables, including backfill s
 CREATE TABLE embedding_index (
     object_type  TEXT        NOT NULL CHECK (object_type IN ('memory', 'entity', 'knowledge_artifact', 'skill')),
     object_id    UUID        NOT NULL,
-    model_id     UUID        NOT NULL REFERENCES embedding_models(id),
+    model_id     UUID        NOT NULL REFERENCES ai_models(id),
     status       TEXT        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'ready', 'failed')),
     retry_count  INT         NOT NULL DEFAULT 0,
     last_error   TEXT,
@@ -41,7 +47,7 @@ CREATE TABLE embedding_index (
 
 ### Per-Model Vector Table Schema
 
-One table per registered model. `N = embedding_models.dimensions`.
+One table per registered model. `N = ai_models.dimensions`.
 
 ```sql
 CREATE TABLE embeddings_model_<uuid> (
@@ -60,18 +66,19 @@ CREATE INDEX ON embeddings_model_<uuid>
 Central `embedding_index` table + per-model vector tables. Legacy `embedding_model_id` FK columns in `memories`, `entities`, `knowledge_artifacts`, and `skills` are retained during compatibility and removed in a later cleanup migration.
 
 ### Multi-Content-Type Per Object
-A memory can have both a text embedding and a code embedding. In the new architecture it gets one row per model in `embedding_index` and one row per model in the corresponding per-model vector table. The `content_type` on `embedding_models` encodes the distinction.
+A memory can have both a text embedding and a code embedding. In the new architecture it gets one row per model in `embedding_index` and one row per model in the corresponding per-model vector table. The `content_type` on `ai_models` encodes the distinction.
 
-### `embedding_models` Schema Extension
-New columns added to `embedding_models`:
+### `ai_models` Schema Extension
+Canonical columns on `ai_models`:
 - `slug` — operator-assigned unique human-readable identifier (e.g. `"my-text-model-v2"`). Retained as the unique key.
 - `provider_model` — the model name sent to the provider API (e.g. `"nomic-embed-text"`). Can differ from `slug`.
 - `provider` — provider runtime (`"ollama"` or `"openai"`).
 - `service_url` — per-model endpoint URL.
 - `table_name` — name of the backing per-model vector table, set at registration time.
 - `is_ready` — false until registration transaction completes successfully.
+- `model_type` — semantic class (`embedding` or `generation`).
 
-The existing `is_active` partial unique indexes (one active model per `content_type`) are **preserved unchanged**.
+The active uniqueness constraint remains one active row per (`model_type`, `content_type`).
 
 ### EmbeddingService / Factory Integration
 `EmbeddingService` stays as the call site for all write paths. It wraps an internal `EmbedderForModel(modelID)` factory. `EmbedText` and `EmbedCode` return:
@@ -137,13 +144,13 @@ All of the following must be true before Step 11 begins:
 
 - [ ] Define and approve the storage contract:
   - One physical embedding table per registered embedding model.
-  - Table schema uses fixed `vector(N)` where `N = embedding_models.dimensions`.
+  - Table schema uses fixed `vector(N)` where `N = ai_models.dimensions`.
   - One model row maps to exactly one provider/service/model slug and one dimension contract.
 
-- [ ] Extend `embedding_models` schema:
-  - Add `provider`, `service_url`, `provider_model`, `table_name`, `is_ready`, `created_at` columns.
+- [ ] Extend canonical model schema (`ai_models`):
+  - Ensure `provider`, `service_url`, `provider_model`, `table_name`, `is_ready`, `created_at`, `model_type` columns are present.
   - Add constraints/indexes for uniqueness and safe lifecycle transitions.
-  - Preserve existing `is_active` partial unique indexes unchanged.
+  - Preserve active uniqueness by (`model_type`, `content_type`).
 
 - [ ] Introduce `embedding_index` table per resolved schema above.
 
@@ -163,7 +170,7 @@ All of the following must be true before Step 11 begins:
 
 - [ ] Add verification SQL checks:
   - table exists for every `is_ready = true` model,
-  - dimensions in table type match `embedding_models.dimensions`.
+  - dimensions in table type match `ai_models.dimensions`.
 
 ---
 
@@ -205,7 +212,7 @@ All of the following must be true before Step 11 begins:
   - Idempotency via `ON CONFLICT (slug)`. Rollback on any failure — no cleanup logic needed.
 
 - [ ] Add CLI commands:
-  - `embedding-model register` (provider, service_url, provider_model, slug, dimensions, content_type, optional activate),
+  - `embedding-model register` (provider, service_url, provider_model, slug, dimensions, content_type, model_type, optional activate),
   - `embedding-model activate`,
   - `embedding-model list`.
 
@@ -308,7 +315,7 @@ Every step follows strict Red → Green → Refactor before moving to the next s
 
 ### Step 1: Schema Preparation
 
-- [x] RED: migration tests for new `embedding_models` columns (`provider`, `service_url`, `provider_model`, `table_name`, `is_ready`) and `embedding_index` table, with legacy FK columns retained during compatibility.
+- [x] RED: migration tests for canonical model columns (`provider`, `service_url`, `provider_model`, `table_name`, `is_ready`, `model_type`) on `ai_models` and `embedding_index` table, with legacy FK columns retained during compatibility.
 - [x] GREEN: add migration(s) implementing the above. Preserve existing `is_active` partial unique indexes.
 - [ ] REFACTOR: tighten constraints/indexes and migration comments.
 
