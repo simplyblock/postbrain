@@ -42,19 +42,15 @@ func InstallCodexSkillWithOptions(
 		postbrainURL = "http://localhost:7433"
 	}
 
-	destDir := filepath.Join(targetDir, ".codex", "skills", "postbrain")
+	destDir := filepath.Join(targetDir, ".agents", "skills", "postbrain")
 	destFile := filepath.Join(destDir, "SKILL.md")
-	legacyRootSkill := filepath.Join(targetDir, ".codex", "skills", "SKILL.md")
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return "", false, fmt.Errorf("create destination directory: %w", err)
 	}
 	if err := os.WriteFile(destFile, []byte(skillContent), 0o644); err != nil {
 		return "", false, fmt.Errorf("write skill file: %w", err)
 	}
-	if err := os.Remove(legacyRootSkill); err != nil && !os.IsNotExist(err) {
-		return "", false, fmt.Errorf("remove legacy root skill file: %w", err)
-	}
-	if err := ensurePostbrainBaseFile(targetDir, ".codex", postbrainScope); err != nil {
+	if err := ensurePostbrainBaseFile(targetDir, ".agents", postbrainScope); err != nil {
 		return "", false, err
 	}
 	if opts.InstallHooks {
@@ -79,7 +75,7 @@ func InstallCodexSkillWithOptions(
 	block.WriteString("\n")
 	block.WriteString(postbrainConfigMarker)
 	block.WriteString("\n## Postbrain\n\n")
-	block.WriteString("The `.codex/skills/postbrain/SKILL.md` skill is active for this project.\n\n")
+	block.WriteString("The `.agents/skills/postbrain/SKILL.md` skill is active for this project.\n\n")
 	block.WriteString("```\n")
 	block.WriteString("POSTBRAIN_URL=")
 	block.WriteString(postbrainURL)

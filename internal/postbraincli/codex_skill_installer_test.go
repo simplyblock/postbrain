@@ -23,7 +23,7 @@ func TestInstallCodexSkill_WritesSkillFileAndAppendsAgentsBlock(t *testing.T) {
 	if !updatedAgents {
 		t.Fatal("updatedAgents = false, want true")
 	}
-	wantPath := filepath.Join(targetDir, ".codex", "skills", "postbrain", "SKILL.md")
+	wantPath := filepath.Join(targetDir, ".agents", "skills", "postbrain", "SKILL.md")
 	if installedPath != wantPath {
 		t.Fatalf("installedPath = %q, want %q", installedPath, wantPath)
 	}
@@ -50,11 +50,11 @@ func TestInstallCodexSkill_WritesSkillFileAndAppendsAgentsBlock(t *testing.T) {
 	if !strings.Contains(content, "POSTBRAIN_SCOPE=project:acme/api") {
 		t.Fatal("AGENTS.md missing POSTBRAIN_SCOPE")
 	}
-	if !strings.Contains(content, "The `.codex/skills/postbrain/SKILL.md` skill is active for this project.") {
+	if !strings.Contains(content, "The `.agents/skills/postbrain/SKILL.md` skill is active for this project.") {
 		t.Fatal("AGENTS.md missing updated Codex skill path note")
 	}
 
-	basePath := filepath.Join(targetDir, ".codex", "postbrain-base.md")
+	basePath := filepath.Join(targetDir, ".agents", "postbrain-base.md")
 	baseData, err := os.ReadFile(basePath)
 	if err != nil {
 		t.Fatalf("read postbrain-base.md: %v", err)
@@ -118,7 +118,7 @@ func TestInstallCodexSkill_NoAgentsFileStillInstallsSkill(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(targetDir, "AGENTS.md")); !os.IsNotExist(err) {
 		t.Fatalf("AGENTS.md exists unexpectedly or stat error: %v", err)
 	}
-	basePath := filepath.Join(targetDir, ".codex", "postbrain-base.md")
+	basePath := filepath.Join(targetDir, ".agents", "postbrain-base.md")
 	baseData, err := os.ReadFile(basePath)
 	if err != nil {
 		t.Fatalf("read postbrain-base.md: %v", err)
@@ -147,27 +147,6 @@ func TestInstallCodexSkill_NoAgentsFileStillInstallsSkill(t *testing.T) {
 	}
 	if _, ok := hooks["Stop"]; !ok {
 		t.Fatal("hooks.json missing Stop")
-	}
-}
-
-func TestInstallCodexSkill_RemovesLegacyRootSkillFile(t *testing.T) {
-	t.Parallel()
-	targetDir := t.TempDir()
-	legacyPath := filepath.Join(targetDir, ".codex", "skills", "SKILL.md")
-	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o755); err != nil {
-		t.Fatalf("mkdir legacy skill dir: %v", err)
-	}
-	if err := os.WriteFile(legacyPath, []byte("---\nversion: 1\n---\n"), 0o644); err != nil {
-		t.Fatalf("write legacy SKILL.md: %v", err)
-	}
-
-	_, _, err := InstallCodexSkill(targetDir, "skill-content", "http://localhost:7433", "")
-	if err != nil {
-		t.Fatalf("InstallCodexSkill: %v", err)
-	}
-
-	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
-		t.Fatalf("legacy root SKILL.md should be removed, got stat err=%v", err)
 	}
 }
 

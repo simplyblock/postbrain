@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# install-codex-skill.sh — Install the Postbrain skill into a project's .codex/skills/ directory.
+# install-codex-skill.sh — Install the Postbrain skill into a project's .agents/skills/ directory.
 #
 # Usage:
 #   ./scripts/install-codex-skill.sh [TARGET_DIR]
 #
 # TARGET_DIR defaults to the current working directory.
-# The script creates .codex/skills/ inside TARGET_DIR if it doesn't exist,
+# The script creates .agents/skills/ inside TARGET_DIR if it doesn't exist,
 # then copies .codex/skills/postbrain/SKILL.md from the Postbrain source tree.
 #
 # Environment variables honoured:
@@ -24,7 +24,7 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_SKILL="${SCRIPT_DIR}/../.codex/skills/postbrain/SKILL.md"
-DEST_DIR="${TARGET_DIR}/.codex/skills"
+DEST_DIR="${TARGET_DIR}/.agents/skills"
 DEST_FILE="${DEST_DIR}/postbrain/SKILL.md"
 AGENTS_FILE="${TARGET_DIR}/AGENTS.md"
 
@@ -53,7 +53,7 @@ else
     echo "${HINT_MARKER}"
     echo "## Postbrain"
     echo ""
-    echo "The \`.codex/skills/postbrain/SKILL.md\` skill is active for this project."
+    echo "The \`.agents/skills/postbrain/SKILL.md\` skill is active for this project."
     echo ""
     echo "\`\`\`"
     echo "POSTBRAIN_URL=${POSTBRAIN_URL}"

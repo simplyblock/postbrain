@@ -133,7 +133,7 @@ func TestInstallSkillCommands_ShortDescriptionsUseCurrentPaths(t *testing.T) {
 	t.Parallel()
 
 	codexCmd := installCodexSkillCmd()
-	if !strings.Contains(codexCmd.Short, ".codex/skills/postbrain/SKILL.md") {
+	if !strings.Contains(codexCmd.Short, ".agents/skills/postbrain/SKILL.md") {
 		t.Fatalf("codex installer short description = %q, want updated SKILL.md path", codexCmd.Short)
 	}
 

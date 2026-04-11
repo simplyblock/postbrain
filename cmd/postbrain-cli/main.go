@@ -514,7 +514,7 @@ func installCodexSkillCmd() *cobra.Command {
 	var targetDir string
 	cmd := &cobra.Command{
 		Use:   "install-codex-skill [target_dir]",
-		Short: "Install .codex/skills/postbrain/SKILL.md into a target directory",
+		Short: "Install .agents/skills/postbrain/SKILL.md into a target directory",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {

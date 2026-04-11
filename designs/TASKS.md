@@ -35,6 +35,21 @@
     `InstallClaudeHooks` to reference `.claude/settings.local.json` (actual
     file used by implementation/tests) instead of `.claude/settings.json`.
 
+- [x] 2026-04-11: Switched Codex skill installer output to `.agents` skill directory (TDD-first):
+  - Updated `InstallCodexSkill` to install the Codex skill at
+    `.agents/skills/postbrain/SKILL.md` instead of `.codex/...`.
+  - Updated installer-generated AGENTS hint text to reference
+    `.agents/skills/postbrain/SKILL.md`.
+  - Updated installer-created base scope file path to `.agents/postbrain-base.md`.
+  - Removed legacy `.codex/skills/SKILL.md` migration cleanup from the Codex
+    installer (no migration path required).
+  - Updated `install-codex-skill` CLI short description to the `.agents` path.
+  - Updated `scripts/install-codex-skill.sh` fallback installer destination and
+    hint text to `.agents/skills/postbrain/SKILL.md`.
+  - Updated/red-green installer tests in
+    `internal/postbraincli/codex_skill_installer_test.go` and CLI command
+    description tests in `cmd/postbrain-cli/main_test.go`.
+
 - [x] 2026-04-11: Migrated Claude skill installer to SKILL.md layout (TDD-first):
   - Updated `InstallClaudeSkill` to install into
     `.claude/skills/postbrain/SKILL.md`.
