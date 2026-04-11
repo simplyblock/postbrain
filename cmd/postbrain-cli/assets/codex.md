@@ -1,4 +1,6 @@
 ---
+name: postbrain
+description: Postbrain Codex persistent memory and knowledge operating policy
 version: 1
 ---
 

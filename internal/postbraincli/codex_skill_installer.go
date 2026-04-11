@@ -44,11 +44,15 @@ func InstallCodexSkillWithOptions(
 
 	destDir := filepath.Join(targetDir, ".codex", "skills", "postbrain")
 	destFile := filepath.Join(destDir, "SKILL.md")
+	legacyRootSkill := filepath.Join(targetDir, ".codex", "skills", "SKILL.md")
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return "", false, fmt.Errorf("create destination directory: %w", err)
 	}
 	if err := os.WriteFile(destFile, []byte(skillContent), 0o644); err != nil {
 		return "", false, fmt.Errorf("write skill file: %w", err)
+	}
+	if err := os.Remove(legacyRootSkill); err != nil && !os.IsNotExist(err) {
+		return "", false, fmt.Errorf("remove legacy root skill file: %w", err)
 	}
 	if err := ensurePostbrainBaseFile(targetDir, ".codex", postbrainScope); err != nil {
 		return "", false, err

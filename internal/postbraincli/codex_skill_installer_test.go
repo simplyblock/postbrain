@@ -150,6 +150,27 @@ func TestInstallCodexSkill_NoAgentsFileStillInstallsSkill(t *testing.T) {
 	}
 }
 
+func TestInstallCodexSkill_RemovesLegacyRootSkillFile(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+	legacyPath := filepath.Join(targetDir, ".codex", "skills", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o755); err != nil {
+		t.Fatalf("mkdir legacy skill dir: %v", err)
+	}
+	if err := os.WriteFile(legacyPath, []byte("---\nversion: 1\n---\n"), 0o644); err != nil {
+		t.Fatalf("write legacy SKILL.md: %v", err)
+	}
+
+	_, _, err := InstallCodexSkill(targetDir, "skill-content", "http://localhost:7433", "")
+	if err != nil {
+		t.Fatalf("InstallCodexSkill: %v", err)
+	}
+
+	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
+		t.Fatalf("legacy root SKILL.md should be removed, got stat err=%v", err)
+	}
+}
+
 func TestInstallCodexSkill_DoesNotDuplicateHooks(t *testing.T) {
 	t.Parallel()
 	targetDir := t.TempDir()

@@ -35,6 +35,22 @@
     `InstallClaudeHooks` to reference `.claude/settings.local.json` (actual
     file used by implementation/tests) instead of `.claude/settings.json`.
 
+- [x] 2026-04-11: Fixed Codex SKILL.md frontmatter to satisfy loader requirements (TDD-first):
+  - Added required skill metadata frontmatter fields (`name`,
+    `description`) to Codex skill content variants:
+    - `.codex/skills/postbrain/SKILL.md`
+    - `cmd/postbrain-cli/assets/codex-lite.md`
+    - `cmd/postbrain-cli/assets/codex.md`
+    - `plugins/postbrain/skills/codex-lite.md`
+    - `plugins/postbrain/skills/codex.md`
+  - Added regression test
+    `TestCodexSkillContent_ContainsRequiredFrontmatterFields` in
+    `cmd/postbrain-cli/main_test.go` to enforce presence of required
+    frontmatter fields in both lite and full Codex profiles.
+  - Added installer migration coverage and implementation to remove legacy
+    `.codex/skills/SKILL.md` during Codex skill install to prevent duplicate
+    invalid-skill scan results.
+
 - [x] 2026-04-11: Fixed Codex skill installer path to the new SKILL.md layout (TDD-first):
   - Updated `InstallCodexSkill` to install into
     `.codex/skills/postbrain/SKILL.md` and to write the same path in the

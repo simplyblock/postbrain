@@ -143,6 +143,32 @@ func TestInstallSkillCommands_ShortDescriptionsUseCurrentPaths(t *testing.T) {
 	}
 }
 
+func TestCodexSkillContent_ContainsRequiredFrontmatterFields(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		goos    string
+		profile string
+	}{
+		{goos: "linux", profile: "lite"},
+		{goos: "windows", profile: "full"},
+	} {
+		content := codexSkillContent(tc.goos)
+		if !strings.HasPrefix(content, "---\n") {
+			t.Fatalf("%s profile missing frontmatter start", tc.profile)
+		}
+		if !strings.Contains(content, "\nname: ") {
+			t.Fatalf("%s profile missing frontmatter field name", tc.profile)
+		}
+		if !strings.Contains(content, "\ndescription: ") {
+			t.Fatalf("%s profile missing frontmatter field description", tc.profile)
+		}
+		if !strings.Contains(content, "\nversion: ") {
+			t.Fatalf("%s profile missing frontmatter field version", tc.profile)
+		}
+	}
+}
+
 func TestCheckUpdateCommand_UpdateAvailable(t *testing.T) {
 	oldBuild := buildVersion
 	oldFetch := fetchLatestPostbrainVersionFn
