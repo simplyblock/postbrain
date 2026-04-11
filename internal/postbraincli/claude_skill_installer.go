@@ -77,16 +77,13 @@ func InstallClaudeSkill(targetDir, skillContent, postbrainURL, postbrainScope st
 	return destFile, true, nil
 }
 
-// InstallClaudeHooks merges Postbrain hooks into .claude/settings.json.
+// InstallClaudeHooks merges Postbrain hooks into .claude/settings.local.json.
 // It creates the file if it does not exist and preserves all existing settings.
 // The call is idempotent: if postbrain hooks are already present, the file is
 // not modified and updated=false is returned.
 //
-// If scope is non-empty it is inlined into the hook commands. If scope is
-// empty, the installer attempts to resolve it from local postbrain-base files
-// and inlines the resolved scope when found; otherwise hooks call
-// `postbrain-cli snapshot` / `postbrain-cli summarize-session` without scope
-// flags so runtime scope resolution can apply.
+// Hook commands are intentionally installed without explicit scope flags so
+// runtime scope resolution inside `postbrain-cli` is always used.
 func InstallClaudeHooks(targetDir, scope string) (bool, error) {
 	if strings.TrimSpace(targetDir) == "" {
 		targetDir = "."
@@ -102,26 +99,16 @@ func InstallClaudeHooks(targetDir, scope string) (bool, error) {
 	settings := make(map[string]any)
 	data, err := os.ReadFile(settingsPath)
 	if err != nil && !os.IsNotExist(err) {
-		return false, fmt.Errorf("read settings.json: %w", err)
+		return false, fmt.Errorf("read settings.local.json: %w", err)
 	}
 	if len(data) > 0 {
 		if err := json.Unmarshal(data, &settings); err != nil {
-			return false, fmt.Errorf("parse settings.json: %w", err)
+			return false, fmt.Errorf("parse settings.local.json: %w", err)
 		}
 	}
 
-	var snapshotCmd, summarizeCmd string
-	if strings.TrimSpace(scope) == "" {
-		scope = ResolveScopeFromBaseFiles(targetDir)
-	}
-	if strings.TrimSpace(scope) != "" {
-		quotedScope := shellSingleQuote(scope)
-		snapshotCmd = "postbrain-cli snapshot --scope " + quotedScope
-		summarizeCmd = "postbrain-cli summarize-session --scope " + quotedScope
-	} else {
-		snapshotCmd = "postbrain-cli snapshot"
-		summarizeCmd = "postbrain-cli summarize-session"
-	}
+	snapshotCmd := "postbrain-cli snapshot"
+	summarizeCmd := "postbrain-cli summarize-session"
 
 	// Ensure the hooks map exists.
 	hooks, _ := settings["hooks"].(map[string]any)
@@ -132,44 +119,32 @@ func InstallClaudeHooks(targetDir, scope string) (bool, error) {
 
 	postToolUse, _ := hooks["PostToolUse"].([]any)
 	stop, _ := hooks["Stop"].([]any)
-	hasSnapshot := eventHooksContainCommand(postToolUse, "postbrain-cli snapshot")
-	hasSummarize := eventHooksContainCommand(stop, "postbrain-cli summarize-session")
-	if !hasSnapshot {
-		// PostToolUse: snapshot on file edits.
-		postToolUse = append(postToolUse, map[string]any{
-			"matcher": "Edit|Write|Bash",
-			"hooks": []any{
-				map[string]any{
-					"type":    "command",
-					"command": snapshotCmd,
-				},
-			},
-		})
-		hooks["PostToolUse"] = postToolUse
-	}
-	if !hasSummarize {
-		// Stop: summarize session when the agent stops.
-		stop = append(stop, map[string]any{
-			"matcher": "",
-			"hooks": []any{
-				map[string]any{
-					"type":    "command",
-					"command": summarizeCmd,
-				},
-			},
-		})
-		hooks["Stop"] = stop
-	}
-	if hasSnapshot && hasSummarize {
+
+	postToolUse, snapshotUpdated := ensureEventHookCommand(
+		postToolUse,
+		"postbrain-cli snapshot",
+		snapshotCmd,
+		map[string]any{"matcher": "Edit|Write|Bash"},
+	)
+	stop, summarizeUpdated := ensureEventHookCommand(
+		stop,
+		"postbrain-cli summarize-session",
+		summarizeCmd,
+		map[string]any{"matcher": ""},
+	)
+
+	hooks["PostToolUse"] = postToolUse
+	hooks["Stop"] = stop
+	if !snapshotUpdated && !summarizeUpdated {
 		return false, nil
 	}
 
 	out, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
-		return false, fmt.Errorf("marshal settings.json: %w", err)
+		return false, fmt.Errorf("marshal settings.local.json: %w", err)
 	}
 	if err := os.WriteFile(settingsPath, append(out, '\n'), 0o644); err != nil {
-		return false, fmt.Errorf("write settings.json: %w", err)
+		return false, fmt.Errorf("write settings.local.json: %w", err)
 	}
 	return true, nil
 }

@@ -260,3 +260,48 @@ func TestScopedSessionToken_IncludesParentScopesInDropdowns(t *testing.T) {
 		})
 	}
 }
+
+func TestScopesPage_ShowsAttachedRepositoryForProjectScope(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+
+	user := testhelper.CreateTestPrincipal(t, pool, "user", "ui-scope-repo-user-"+uuid.NewString())
+	scope := testhelper.CreateTestScope(t, pool, "project", "ui-scope-repo-"+uuid.NewString(), nil, user.ID)
+
+	repoURL := "https://github.com/acme/repo.git"
+	branch := "main"
+	if _, err := db.SetScopeRepo(ctx, pool, scope.ID, repoURL, branch); err != nil {
+		t.Fatalf("set scope repo: %v", err)
+	}
+
+	rawSession, hashSession, err := auth.GenerateToken()
+	if err != nil {
+		t.Fatalf("generate session token: %v", err)
+	}
+	if _, err := db.CreateToken(ctx, pool, user.ID, hashSession, "repo-session", nil, nil, nil); err != nil {
+		t.Fatalf("create session token: %v", err)
+	}
+
+	client, baseURL := loginUITestClient(t, pool, rawSession)
+
+	resp, err := client.Get(baseURL + "/ui/scopes")
+	if err != nil {
+		t.Fatalf("scopes request: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("scopes status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read scopes body: %v", err)
+	}
+	bodyText := string(body)
+	if !strings.Contains(bodyText, repoURL) {
+		t.Fatalf("expected attached repository URL %q in scopes page", repoURL)
+	}
+	if !strings.Contains(bodyText, "branch: "+branch) {
+		t.Fatalf("expected branch %q in scopes page", branch)
+	}
+}

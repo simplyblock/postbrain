@@ -25,6 +25,52 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-11: Corrected Claude hook installer error strings for settings filename:
+  - Updated `internal/postbraincli/claude_skill_installer.go` error messages
+    in `InstallClaudeHooks` to reference `settings.local.json` for read/parse/
+    marshal/write failures, matching the actual file path in use.
+
+- [x] 2026-04-11: Corrected Claude hook installer doc comment filename:
+  - Updated `internal/postbraincli/claude_skill_installer.go` comment for
+    `InstallClaudeHooks` to reference `.claude/settings.local.json` (actual
+    file used by implementation/tests) instead of `.claude/settings.json`.
+
+- [x] 2026-04-11: Restored attached-repository visibility on Web UI scopes page (TDD-first):
+  - Added integration regression test
+    `TestScopesPage_ShowsAttachedRepositoryForProjectScope` in
+    `internal/ui/scopes_integration_test.go` to assert `/ui/scopes` renders
+    the attached repo URL and branch for project scopes.
+  - Fixed `db.GetScopesByIDs` in `internal/db/compat.go` to select and scan
+    repository fields (`repo_url`, `repo_default_branch`,
+    `last_indexed_commit`) so scope rows used by Web UI retain repo metadata.
+
+- [x] 2026-04-11: Enforced runtime-only scope resolution for installed hooks:
+  - Updated `InstallCodexHooks` and `InstallClaudeHooks` to always install
+    scope-less commands:
+    - `postbrain-cli snapshot`
+    - `postbrain-cli summarize-session`
+  - Removed install-time scope inlining for hook commands, including when a
+    scope argument is provided.
+  - Preserved runtime scope resolution behavior in `postbrain-cli` itself.
+  - Updated and extended hook installer tests to assert no `--scope` flags are
+    written and to prevent regression back to fixed-scope hooks.
+
+- [x] 2026-04-11: Added hook-installer upgrade path for legacy command forms (TDD-first):
+  - Fixed installer idempotency logic in `internal/postbraincli` to rewrite
+    existing Postbrain hook commands when they match legacy forms instead of
+    treating them as already-up-to-date.
+  - `InstallCodexHooks` and `InstallClaudeHooks` now:
+    - detect existing hook commands by tool intent (`postbrain-cli snapshot`,
+      `postbrain-cli summarize-session`),
+    - rewrite command strings in-place to the current canonical scope-less,
+      runtime-resolved command form,
+    - still append missing hooks when no matching command exists.
+  - Added regression tests:
+    - `TestInstallCodexHooks_RewritesLegacyCommands`
+    - `TestInstallClaudeHooks_RewritesLegacyCommands`
+    covering legacy wrappers like
+    `[ -n "$POSTBRAIN_SCOPE" ] && ./postbrain-cli ...`.
+
 - [x] 2026-04-10: Synced `InstallClaudeHooks` comment with current scope-resolution behavior:
   - Updated doc comment in
     `internal/postbraincli/claude_skill_installer.go` to describe:
