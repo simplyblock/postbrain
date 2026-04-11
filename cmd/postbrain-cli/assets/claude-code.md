@@ -1,4 +1,6 @@
 ---
+name: postbrain
+description: Postbrain Claude Code persistent memory and knowledge operating policy
 version: 1
 ---
 

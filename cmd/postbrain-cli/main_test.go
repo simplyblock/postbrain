@@ -138,8 +138,8 @@ func TestInstallSkillCommands_ShortDescriptionsUseCurrentPaths(t *testing.T) {
 	}
 
 	claudeCmd := installClaudeSkillCmd()
-	if !strings.Contains(claudeCmd.Short, ".claude/postbrain.md") {
-		t.Fatalf("claude installer short description = %q, want .claude/postbrain.md path", claudeCmd.Short)
+	if !strings.Contains(claudeCmd.Short, ".claude/skills/postbrain/SKILL.md") {
+		t.Fatalf("claude installer short description = %q, want .claude/skills/postbrain/SKILL.md path", claudeCmd.Short)
 	}
 }
 
@@ -166,6 +166,24 @@ func TestCodexSkillContent_ContainsRequiredFrontmatterFields(t *testing.T) {
 		if !strings.Contains(content, "\nversion: ") {
 			t.Fatalf("%s profile missing frontmatter field version", tc.profile)
 		}
+	}
+}
+
+func TestEmbeddedClaudeSkill_ContainsRequiredFrontmatterFields(t *testing.T) {
+	t.Parallel()
+
+	content := embeddedClaudeSkill
+	if !strings.HasPrefix(content, "---\n") {
+		t.Fatal("embedded Claude skill missing frontmatter start")
+	}
+	if !strings.Contains(content, "\nname: ") {
+		t.Fatal("embedded Claude skill missing frontmatter field name")
+	}
+	if !strings.Contains(content, "\ndescription: ") {
+		t.Fatal("embedded Claude skill missing frontmatter field description")
+	}
+	if !strings.Contains(content, "\nversion: ") {
+		t.Fatal("embedded Claude skill missing frontmatter field version")
 	}
 }
 

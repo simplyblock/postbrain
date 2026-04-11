@@ -23,13 +23,17 @@ func InstallClaudeSkill(targetDir, skillContent, postbrainURL, postbrainScope st
 		postbrainURL = "http://localhost:7433"
 	}
 
-	destDir := filepath.Join(targetDir, ".claude")
-	destFile := filepath.Join(destDir, "postbrain.md")
+	destDir := filepath.Join(targetDir, ".claude", "skills", "postbrain")
+	destFile := filepath.Join(destDir, "SKILL.md")
+	legacyFile := filepath.Join(targetDir, ".claude", "postbrain.md")
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return "", false, fmt.Errorf("create destination directory: %w", err)
 	}
 	if err := os.WriteFile(destFile, []byte(skillContent), 0o644); err != nil {
 		return "", false, fmt.Errorf("write skill file: %w", err)
+	}
+	if err := os.Remove(legacyFile); err != nil && !os.IsNotExist(err) {
+		return "", false, fmt.Errorf("remove legacy skill file: %w", err)
 	}
 	if err := ensurePostbrainBaseFile(targetDir, ".claude", postbrainScope); err != nil {
 		return "", false, err
@@ -39,9 +43,10 @@ func InstallClaudeSkill(targetDir, skillContent, postbrainURL, postbrainScope st
 	claudeBytes, err := os.ReadFile(claudePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return destFile, false, nil
+			claudeBytes = nil
+		} else {
+			return "", false, fmt.Errorf("read CLAUDE.md: %w", err)
 		}
-		return "", false, fmt.Errorf("read CLAUDE.md: %w", err)
 	}
 	if strings.Contains(string(claudeBytes), postbrainConfigMarker) {
 		return destFile, false, nil
@@ -51,7 +56,7 @@ func InstallClaudeSkill(targetDir, skillContent, postbrainURL, postbrainScope st
 	block.WriteString("\n")
 	block.WriteString(postbrainConfigMarker)
 	block.WriteString("\n## Postbrain\n\n")
-	block.WriteString("@.claude/postbrain.md\n\n")
+	block.WriteString("@.claude/skills/postbrain/SKILL.md\n\n")
 	block.WriteString("```\n")
 	block.WriteString("POSTBRAIN_URL=")
 	block.WriteString(postbrainURL)
@@ -65,6 +70,13 @@ func InstallClaudeSkill(targetDir, skillContent, postbrainURL, postbrainScope st
 	}
 	block.WriteString("```\n")
 
+	if len(claudeBytes) == 0 {
+		initial := "# Project\n"
+		if err := os.WriteFile(claudePath, []byte(initial+block.String()), 0o644); err != nil {
+			return "", false, fmt.Errorf("write CLAUDE.md: %w", err)
+		}
+		return destFile, true, nil
+	}
 	f, err := os.OpenFile(claudePath, os.O_APPEND|os.O_WRONLY, 0)
 	if err != nil {
 		return "", false, fmt.Errorf("open CLAUDE.md for append: %w", err)

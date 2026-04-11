@@ -700,7 +700,7 @@ func installClaudeSkillCmd() *cobra.Command {
 	var targetDir string
 	cmd := &cobra.Command{
 		Use:   "install-claude-skill [target_dir]",
-		Short: "Install .claude/postbrain.md into a target directory",
+		Short: "Install .claude/skills/postbrain/SKILL.md into a target directory",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {

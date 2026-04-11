@@ -35,6 +35,19 @@
     `InstallClaudeHooks` to reference `.claude/settings.local.json` (actual
     file used by implementation/tests) instead of `.claude/settings.json`.
 
+- [x] 2026-04-11: Migrated Claude skill installer to SKILL.md layout (TDD-first):
+  - Updated `InstallClaudeSkill` to install into
+    `.claude/skills/postbrain/SKILL.md`.
+  - Installer now ensures `CLAUDE.md` exists and writes the Postbrain block
+    with `@.claude/skills/postbrain/SKILL.md` when missing.
+  - Added migration cleanup to remove legacy `.claude/postbrain.md` if found.
+  - Updated `install-claude-skill` CLI command description to the new path.
+  - Added required frontmatter metadata (`name`, `description`) to the Claude
+    skill templates in CLI assets and plugin templates.
+  - Added regression tests for new Claude install path, `CLAUDE.md` creation,
+    legacy file cleanup, installer short description, and required Claude skill
+    frontmatter fields.
+
 - [x] 2026-04-11: Fixed Codex SKILL.md frontmatter to satisfy loader requirements (TDD-first):
   - Added required skill metadata frontmatter fields (`name`,
     `description`) to Codex skill content variants:

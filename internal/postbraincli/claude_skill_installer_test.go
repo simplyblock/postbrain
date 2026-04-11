@@ -23,7 +23,7 @@ func TestInstallClaudeSkill_WritesSkillFileAndUpdatesCLAUDE(t *testing.T) {
 	if !updatedClaude {
 		t.Fatal("updatedClaude = false, want true")
 	}
-	wantPath := filepath.Join(targetDir, ".claude", "postbrain.md")
+	wantPath := filepath.Join(targetDir, ".claude", "skills", "postbrain", "SKILL.md")
 	if installedPath != wantPath {
 		t.Fatalf("installedPath = %q, want %q", installedPath, wantPath)
 	}
@@ -44,8 +44,8 @@ func TestInstallClaudeSkill_WritesSkillFileAndUpdatesCLAUDE(t *testing.T) {
 	if !strings.Contains(content, "<!-- postbrain-config -->") {
 		t.Fatal("CLAUDE.md missing postbrain marker")
 	}
-	if !strings.Contains(content, "@.claude/postbrain.md") {
-		t.Fatal("CLAUDE.md missing @.claude/postbrain.md import")
+	if !strings.Contains(content, "@.claude/skills/postbrain/SKILL.md") {
+		t.Fatal("CLAUDE.md missing @.claude/skills/postbrain/SKILL.md import")
 	}
 	if !strings.Contains(content, "POSTBRAIN_URL=http://localhost:7433") {
 		t.Fatal("CLAUDE.md missing POSTBRAIN_URL")
@@ -101,7 +101,7 @@ func TestInstallClaudeSkill_DoesNotDuplicateBlock(t *testing.T) {
 	}
 }
 
-func TestInstallClaudeSkill_NoCLAUDEFileStillInstallsSkill(t *testing.T) {
+func TestInstallClaudeSkill_NoCLAUDEFileCreatesAndUpdatesCLAUDE(t *testing.T) {
 	t.Parallel()
 	targetDir := t.TempDir()
 
@@ -109,14 +109,22 @@ func TestInstallClaudeSkill_NoCLAUDEFileStillInstallsSkill(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InstallClaudeSkill: %v", err)
 	}
-	if updatedClaude {
-		t.Fatal("updatedClaude = true, want false")
+	if !updatedClaude {
+		t.Fatal("updatedClaude = false, want true")
 	}
 	if _, err := os.Stat(installedPath); err != nil {
 		t.Fatalf("installed skill stat: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(targetDir, "CLAUDE.md")); !os.IsNotExist(err) {
-		t.Fatalf("CLAUDE.md exists unexpectedly or stat error: %v", err)
+	claudeData, err := os.ReadFile(filepath.Join(targetDir, "CLAUDE.md"))
+	if err != nil {
+		t.Fatalf("read CLAUDE.md: %v", err)
+	}
+	content := string(claudeData)
+	if !strings.Contains(content, "<!-- postbrain-config -->") {
+		t.Fatal("CLAUDE.md missing postbrain marker")
+	}
+	if !strings.Contains(content, "@.claude/skills/postbrain/SKILL.md") {
+		t.Fatal("CLAUDE.md missing @.claude/skills/postbrain/SKILL.md import")
 	}
 	basePath := filepath.Join(targetDir, ".claude", "postbrain-base.md")
 	baseData, err := os.ReadFile(basePath)
@@ -125,6 +133,27 @@ func TestInstallClaudeSkill_NoCLAUDEFileStillInstallsSkill(t *testing.T) {
 	}
 	if !strings.Contains(string(baseData), "postbrain_enabled: true") {
 		t.Fatal("postbrain-base.md missing postbrain_enabled")
+	}
+}
+
+func TestInstallClaudeSkill_RemovesLegacyRootSkillFile(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+	legacyPath := filepath.Join(targetDir, ".claude", "postbrain.md")
+	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o755); err != nil {
+		t.Fatalf("mkdir .claude: %v", err)
+	}
+	if err := os.WriteFile(legacyPath, []byte("legacy"), 0o644); err != nil {
+		t.Fatalf("write legacy postbrain.md: %v", err)
+	}
+
+	_, _, err := InstallClaudeSkill(targetDir, "skill-content", "http://localhost:7433", "")
+	if err != nil {
+		t.Fatalf("InstallClaudeSkill: %v", err)
+	}
+
+	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
+		t.Fatalf("legacy .claude/postbrain.md should be removed, got stat err=%v", err)
 	}
 }
 
