@@ -99,11 +99,11 @@ func InstallClaudeHooks(targetDir, scope string) (bool, error) {
 	settings := make(map[string]any)
 	data, err := os.ReadFile(settingsPath)
 	if err != nil && !os.IsNotExist(err) {
-		return false, fmt.Errorf("read settings.json: %w", err)
+		return false, fmt.Errorf("read settings.local.json: %w", err)
 	}
 	if len(data) > 0 {
 		if err := json.Unmarshal(data, &settings); err != nil {
-			return false, fmt.Errorf("parse settings.json: %w", err)
+			return false, fmt.Errorf("parse settings.local.json: %w", err)
 		}
 	}
 
@@ -141,10 +141,10 @@ func InstallClaudeHooks(targetDir, scope string) (bool, error) {
 
 	out, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
-		return false, fmt.Errorf("marshal settings.json: %w", err)
+		return false, fmt.Errorf("marshal settings.local.json: %w", err)
 	}
 	if err := os.WriteFile(settingsPath, append(out, '\n'), 0o644); err != nil {
-		return false, fmt.Errorf("write settings.json: %w", err)
+		return false, fmt.Errorf("write settings.local.json: %w", err)
 	}
 	return true, nil
 }

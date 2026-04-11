@@ -25,6 +25,11 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-11: Corrected Claude hook installer error strings for settings filename:
+  - Updated `internal/postbraincli/claude_skill_installer.go` error messages
+    in `InstallClaudeHooks` to reference `settings.local.json` for read/parse/
+    marshal/write failures, matching the actual file path in use.
+
 - [x] 2026-04-11: Corrected Claude hook installer doc comment filename:
   - Updated `internal/postbraincli/claude_skill_installer.go` comment for
     `InstallClaudeHooks` to reference `.claude/settings.local.json` (actual
