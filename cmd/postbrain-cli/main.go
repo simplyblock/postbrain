@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	_ "embed"
@@ -37,6 +38,7 @@ var embeddedCodexSkillLight string
 //go:embed assets/claude-code.md
 var embeddedClaudeSkill string
 
+// Effectively disabled for now since the hooks system is still very minimal
 const minimumCodexHooksVersion = "0.114.0"
 const latestReleaseAPIURL = "https://api.github.com/repos/simplyblock/postbrain/releases/latest"
 
@@ -52,10 +54,7 @@ type hookClient struct {
 }
 
 func newHookClient() *hookClient {
-	url := os.Getenv("POSTBRAIN_URL")
-	if url == "" {
-		url = "http://localhost:7433"
-	}
+	url := resolveURLForRuntime()
 	token := os.Getenv("POSTBRAIN_TOKEN")
 	return &hookClient{
 		baseURL: strings.TrimRight(url, "/"),
@@ -514,7 +513,7 @@ func installCodexSkillCmd() *cobra.Command {
 	var targetDir string
 	cmd := &cobra.Command{
 		Use:   "install-codex-skill [target_dir]",
-		Short: "Install .codex/skills/postbrain.md into a target directory",
+		Short: "Install .agents/skills/postbrain/SKILL.md into a target directory",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
@@ -525,9 +524,10 @@ func installCodexSkillCmd() *cobra.Command {
 			}
 
 			installHooks := runtime.GOOS != "windows"
-			codexVersion := "not-checked-on-windows"
+			enforceCodexVersion := shouldEnforceCodexVersion(runtime.GOOS)
+			codexVersion := "not_checked"
 			var err error
-			if shouldEnforceCodexVersion(runtime.GOOS) {
+			if enforceCodexVersion {
 				codexVersion, err = detectCodexVersionFn()
 				if err != nil {
 					return err
@@ -544,11 +544,15 @@ func installCodexSkillCmd() *cobra.Command {
 				slog.Warn("Codex hooks are unavailable on Windows; installing full skill without hooks")
 			}
 			scope := resolveScopeForInstall(targetDir)
+			backendURL, err := resolveURLForInstall(cmd, targetDir)
+			if err != nil {
+				return err
+			}
 
 			installedPath, updatedAgents, err := postbraincli.InstallCodexSkillWithOptions(
 				targetDir,
 				codexSkillContent(runtime.GOOS),
-				os.Getenv("POSTBRAIN_URL"),
+				backendURL,
 				scope,
 				postbraincli.CodexSkillInstallOptions{InstallHooks: installHooks},
 			)
@@ -562,12 +566,18 @@ func installCodexSkillCmd() *cobra.Command {
 					return err
 				}
 			}
+			updatedMCP, err := postbraincli.InstallCodexMCPConfig(targetDir, backendURL)
+			if err != nil {
+				return err
+			}
 			slog.Info("install-codex-skill: installed",
 				"path", installedPath,
 				"codex_version", codexVersion,
+				"backend_url", backendURL,
 				"hooks_installed", installHooks,
 				"agents_updated", updatedAgents,
-				"config_updated", updatedConfig)
+				"config_updated", updatedConfig,
+				"mcp_updated", updatedMCP)
 			return nil
 		},
 	}
@@ -700,7 +710,7 @@ func installClaudeSkillCmd() *cobra.Command {
 	var targetDir string
 	cmd := &cobra.Command{
 		Use:   "install-claude-skill [target_dir]",
-		Short: "Install .claude/postbrain.md into a target directory",
+		Short: "Install .claude/skills/postbrain/SKILL.md into a target directory",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
@@ -710,10 +720,14 @@ func installClaudeSkillCmd() *cobra.Command {
 				targetDir = "."
 			}
 			scope := resolveScopeForInstall(targetDir)
+			backendURL, err := resolveURLForInstall(cmd, targetDir)
+			if err != nil {
+				return err
+			}
 			installedPath, updatedClaude, err := postbraincli.InstallClaudeSkill(
 				targetDir,
 				embeddedClaudeSkill,
-				os.Getenv("POSTBRAIN_URL"),
+				backendURL,
 				scope,
 			)
 			if err != nil {
@@ -723,10 +737,16 @@ func installClaudeSkillCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			updatedMCP, err := postbraincli.InstallClaudeMCPConfig(targetDir, backendURL)
+			if err != nil {
+				return err
+			}
 			slog.Info("install-claude-skill: installed",
 				"path", installedPath,
+				"backend_url", backendURL,
 				"claude_updated", updatedClaude,
-				"settings_updated", updatedSettings)
+				"settings_updated", updatedSettings,
+				"mcp_updated", updatedMCP)
 			return nil
 		},
 	}
@@ -741,6 +761,39 @@ func resolveScopeForInstall(targetDir string) string {
 	return postbraincli.ResolveScopeFromBaseFiles(targetDir)
 }
 
+func resolveURLForInstall(cmd *cobra.Command, targetDir string) (string, error) {
+	if url := strings.TrimSpace(os.Getenv("POSTBRAIN_URL")); url != "" {
+		return strings.TrimRight(url, "/"), nil
+	}
+	if url := strings.TrimSpace(postbraincli.ResolveURLFromBaseFiles(targetDir)); url != "" {
+		return strings.TrimRight(url, "/"), nil
+	}
+
+	var out io.Writer = os.Stderr
+	var in io.Reader = os.Stdin
+	if cmd != nil {
+		if cmd.ErrOrStderr() != nil {
+			out = cmd.ErrOrStderr()
+		}
+		if cmd.InOrStdin() != nil {
+			in = cmd.InOrStdin()
+		}
+	}
+
+	const defaultURL = "http://localhost:7433"
+	_, _ = fmt.Fprintf(out, "Postbrain backend URL [%s]: ", defaultURL)
+	reader := bufio.NewReader(in)
+	line, err := reader.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return "", fmt.Errorf("read backend URL: %w", err)
+	}
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return defaultURL, nil
+	}
+	return strings.TrimRight(trimmed, "/"), nil
+}
+
 func resolveScopeForRuntime() string {
 	if strings.TrimSpace(scopeFlag) != "" {
 		return strings.TrimSpace(scopeFlag)
@@ -753,4 +806,17 @@ func resolveScopeForRuntime() string {
 		return ""
 	}
 	return postbraincli.ResolveScopeFromBaseFiles(cwd)
+}
+
+func resolveURLForRuntime() string {
+	if url := strings.TrimSpace(os.Getenv("POSTBRAIN_URL")); url != "" {
+		return strings.TrimRight(url, "/")
+	}
+	cwd, err := getwdFn()
+	if err == nil {
+		if url := strings.TrimSpace(postbraincli.ResolveURLFromBaseFiles(cwd)); url != "" {
+			return strings.TrimRight(url, "/")
+		}
+	}
+	return "http://localhost:7433"
 }

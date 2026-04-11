@@ -23,15 +23,19 @@ func InstallClaudeSkill(targetDir, skillContent, postbrainURL, postbrainScope st
 		postbrainURL = "http://localhost:7433"
 	}
 
-	destDir := filepath.Join(targetDir, ".claude")
-	destFile := filepath.Join(destDir, "postbrain.md")
+	destDir := filepath.Join(targetDir, ".claude", "skills", "postbrain")
+	destFile := filepath.Join(destDir, "SKILL.md")
+	legacyFile := filepath.Join(targetDir, ".claude", "postbrain.md")
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return "", false, fmt.Errorf("create destination directory: %w", err)
 	}
 	if err := os.WriteFile(destFile, []byte(skillContent), 0o644); err != nil {
 		return "", false, fmt.Errorf("write skill file: %w", err)
 	}
-	if err := ensurePostbrainBaseFile(targetDir, ".claude", postbrainScope); err != nil {
+	if err := os.Remove(legacyFile); err != nil && !os.IsNotExist(err) {
+		return "", false, fmt.Errorf("remove legacy skill file: %w", err)
+	}
+	if err := ensurePostbrainBaseFile(targetDir, ".claude", postbrainScope, postbrainURL); err != nil {
 		return "", false, err
 	}
 
@@ -39,9 +43,10 @@ func InstallClaudeSkill(targetDir, skillContent, postbrainURL, postbrainScope st
 	claudeBytes, err := os.ReadFile(claudePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return destFile, false, nil
+			claudeBytes = nil
+		} else {
+			return "", false, fmt.Errorf("read CLAUDE.md: %w", err)
 		}
-		return "", false, fmt.Errorf("read CLAUDE.md: %w", err)
 	}
 	if strings.Contains(string(claudeBytes), postbrainConfigMarker) {
 		return destFile, false, nil
@@ -51,7 +56,7 @@ func InstallClaudeSkill(targetDir, skillContent, postbrainURL, postbrainScope st
 	block.WriteString("\n")
 	block.WriteString(postbrainConfigMarker)
 	block.WriteString("\n## Postbrain\n\n")
-	block.WriteString("@.claude/postbrain.md\n\n")
+	block.WriteString("@.claude/skills/postbrain/SKILL.md\n\n")
 	block.WriteString("```\n")
 	block.WriteString("POSTBRAIN_URL=")
 	block.WriteString(postbrainURL)
@@ -65,6 +70,13 @@ func InstallClaudeSkill(targetDir, skillContent, postbrainURL, postbrainScope st
 	}
 	block.WriteString("```\n")
 
+	if len(claudeBytes) == 0 {
+		initial := "# Project\n"
+		if err := os.WriteFile(claudePath, []byte(initial+block.String()), 0o644); err != nil {
+			return "", false, fmt.Errorf("write CLAUDE.md: %w", err)
+		}
+		return destFile, true, nil
+	}
 	f, err := os.OpenFile(claudePath, os.O_APPEND|os.O_WRONLY, 0)
 	if err != nil {
 		return "", false, fmt.Errorf("open CLAUDE.md for append: %w", err)
@@ -145,6 +157,74 @@ func InstallClaudeHooks(targetDir, scope string) (bool, error) {
 	}
 	if err := os.WriteFile(settingsPath, append(out, '\n'), 0o644); err != nil {
 		return false, fmt.Errorf("write settings.local.json: %w", err)
+	}
+	return true, nil
+}
+
+// InstallClaudeMCPConfig ensures project-root .mcp.json includes a Postbrain
+// HTTP MCP server entry.
+func InstallClaudeMCPConfig(targetDir, postbrainURL string) (bool, error) {
+	if strings.TrimSpace(targetDir) == "" {
+		targetDir = "."
+	}
+	if strings.TrimSpace(postbrainURL) == "" {
+		postbrainURL = "http://localhost:7433"
+	}
+	postbrainURL = strings.TrimRight(strings.TrimSpace(postbrainURL), "/")
+
+	mcpPath := filepath.Join(targetDir, ".mcp.json")
+	root := make(map[string]any)
+	data, err := os.ReadFile(mcpPath)
+	if err != nil && !os.IsNotExist(err) {
+		return false, fmt.Errorf("read .mcp.json: %w", err)
+	}
+	if len(strings.TrimSpace(string(data))) > 0 {
+		if err := json.Unmarshal(data, &root); err != nil {
+			return false, fmt.Errorf("parse .mcp.json: %w", err)
+		}
+	}
+
+	servers, _ := root["mcpServers"].(map[string]any)
+	if servers == nil {
+		servers = make(map[string]any)
+		root["mcpServers"] = servers
+	}
+	postbrain, _ := servers["postbrain"].(map[string]any)
+	if postbrain == nil {
+		postbrain = make(map[string]any)
+		servers["postbrain"] = postbrain
+	}
+	headers, _ := postbrain["headers"].(map[string]any)
+	if headers == nil {
+		headers = make(map[string]any)
+		postbrain["headers"] = headers
+	}
+
+	updated := false
+	if postbrain["type"] != "http" {
+		postbrain["type"] = "http"
+		updated = true
+	}
+	wantURL := postbrainURL + "/mcp"
+	if postbrain["url"] != wantURL {
+		postbrain["url"] = wantURL
+		updated = true
+	}
+	wantAuth := "Bearer ${POSTBRAIN_TOKEN}"
+	if headers["Authorization"] != wantAuth {
+		headers["Authorization"] = wantAuth
+		updated = true
+	}
+
+	if !updated {
+		return false, nil
+	}
+	out, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return false, fmt.Errorf("marshal .mcp.json: %w", err)
+	}
+	if err := os.WriteFile(mcpPath, append(out, '\n'), 0o644); err != nil {
+		return false, fmt.Errorf("write .mcp.json: %w", err)
 	}
 	return true, nil
 }

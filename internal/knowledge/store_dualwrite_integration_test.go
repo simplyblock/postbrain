@@ -98,7 +98,7 @@ func TestKnowledgeCreate_DualWritesToEmbeddingRepository(t *testing.T) {
 	}
 
 	var tableName string
-	err = pool.QueryRow(ctx, `SELECT table_name FROM embedding_models WHERE id=$1`, model.ID).Scan(&tableName)
+	err = pool.QueryRow(ctx, `SELECT table_name FROM ai_models WHERE id=$1`, model.ID).Scan(&tableName)
 	if err != nil {
 		t.Fatalf("select model table name: %v", err)
 	}

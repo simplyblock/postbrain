@@ -14,13 +14,20 @@ type fakeModelStore struct {
 }
 
 type fakeResolver struct {
-	embedder Embedder
+	embedder   Embedder
+	summarizer Summarizer
 }
 
 func (f fakeResolver) EmbedderForModel(ctx context.Context, modelID uuid.UUID) (Embedder, error) {
 	_ = ctx
 	_ = modelID
 	return f.embedder, nil
+}
+
+func (f fakeResolver) SummarizerForModel(ctx context.Context, modelID uuid.UUID) (Summarizer, error) {
+	_ = ctx
+	_ = modelID
+	return f.summarizer, nil
 }
 
 func (f *fakeModelStore) GetModelConfig(ctx context.Context, modelID uuid.UUID) (*ModelConfig, error) {
@@ -146,6 +153,7 @@ func TestEmbeddingService_EmbedTextResult_UsesActiveModelFactory(t *testing.T) {
 		fakeResolver{embedder: &mockEmbedder{vec: []float32{1, 2, 3}}},
 		&modelID,
 		nil,
+		nil,
 	)
 
 	res, err := svc.EmbedTextResult(context.Background(), "hello")
@@ -172,6 +180,7 @@ func TestEmbeddingService_EmbedCodeResult_UsesActiveModelFactory(t *testing.T) {
 		fakeResolver{embedder: &mockEmbedder{vec: []float32{4, 5}}},
 		nil,
 		&modelID,
+		nil,
 	)
 
 	res, err := svc.EmbedCodeResult(context.Background(), "hello")
@@ -186,5 +195,112 @@ func TestEmbeddingService_EmbedCodeResult_UsesActiveModelFactory(t *testing.T) {
 	}
 	if len(res.Embedding) != 2 || res.Embedding[0] != 4 {
 		t.Fatalf("Embedding = %#v, want [4 5]", res.Embedding)
+	}
+}
+
+func TestModelEmbedderFactory_SummarizerForModel_UsesProfileSummaryModel(t *testing.T) {
+	t.Parallel()
+
+	modelID := uuid.New()
+	factory := NewModelEmbedderFactory(&config.EmbeddingConfig{
+		RequestTimeout: 5 * time.Second,
+		BatchSize:      16,
+		Providers: map[string]config.EmbeddingProviderConfig{
+			"openai-prod": {
+				Backend:      "openai",
+				ServiceURL:   "https://api.openai.com/v1",
+				APIKey:       "sk-profile",
+				SummaryModel: "gpt-4o-mini",
+			},
+		},
+	}, &fakeModelStore{models: map[uuid.UUID]ModelConfig{
+		modelID: {
+			ID:             modelID,
+			Provider:       "openai",
+			ProviderModel:  "text-embedding-3-small",
+			ProviderConfig: "openai-prod",
+			Dimensions:     1536,
+		},
+	}})
+
+	sum, err := factory.SummarizerForModel(context.Background(), modelID)
+	if err != nil {
+		t.Fatalf("SummarizerForModel: %v", err)
+	}
+	oa, ok := sum.(*OpenAISummarizer)
+	if !ok {
+		t.Fatalf("summarizer type = %T, want *OpenAISummarizer", sum)
+	}
+	if oa.baseURL != "https://api.openai.com/v1" {
+		t.Fatalf("baseURL = %q, want profile service URL", oa.baseURL)
+	}
+	if oa.modelSlug != "gpt-4o-mini" {
+		t.Fatalf("modelSlug = %q, want profile summary model", oa.modelSlug)
+	}
+}
+
+func TestModelSummarizerFactory_SummarizerForModel_UsesProfileSummaryModel(t *testing.T) {
+	t.Parallel()
+
+	modelID := uuid.New()
+	factory := NewModelSummarizerFactory(&config.EmbeddingConfig{
+		RequestTimeout: 5 * time.Second,
+		BatchSize:      16,
+		Providers: map[string]config.EmbeddingProviderConfig{
+			"openai-prod": {
+				Backend:      "openai",
+				ServiceURL:   "https://api.openai.com/v1",
+				APIKey:       "sk-profile",
+				SummaryModel: "gpt-4o-mini",
+			},
+		},
+	}, &fakeModelStore{models: map[uuid.UUID]ModelConfig{
+		modelID: {
+			ID:             modelID,
+			Provider:       "openai",
+			ProviderModel:  "text-embedding-3-small",
+			ProviderConfig: "openai-prod",
+			Dimensions:     1536,
+		},
+	}})
+
+	sum, err := factory.SummarizerForModel(context.Background(), modelID)
+	if err != nil {
+		t.Fatalf("SummarizerForModel: %v", err)
+	}
+	oa, ok := sum.(*OpenAISummarizer)
+	if !ok {
+		t.Fatalf("summarizer type = %T, want *OpenAISummarizer", sum)
+	}
+	if oa.modelSlug != "gpt-4o-mini" {
+		t.Fatalf("modelSlug = %q, want profile summary model", oa.modelSlug)
+	}
+}
+
+func TestModelSummarizerFactory_SummarizerForModel_MissingSummaryModelReturnsError(t *testing.T) {
+	t.Parallel()
+
+	modelID := uuid.New()
+	factory := NewModelSummarizerFactory(&config.EmbeddingConfig{
+		Providers: map[string]config.EmbeddingProviderConfig{
+			"default": {
+				Backend:    "openai",
+				ServiceURL: "https://api.openai.com/v1",
+				APIKey:     "sk-profile",
+			},
+		},
+	}, &fakeModelStore{models: map[uuid.UUID]ModelConfig{
+		modelID: {
+			ID:             modelID,
+			Provider:       "openai",
+			ProviderModel:  "text-embedding-3-small",
+			ProviderConfig: "default",
+			Dimensions:     1536,
+		},
+	}})
+
+	_, err := factory.SummarizerForModel(context.Background(), modelID)
+	if err == nil {
+		t.Fatal("expected missing summary_model error")
 	}
 }

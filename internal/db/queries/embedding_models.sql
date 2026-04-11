@@ -1,10 +1,10 @@
 -- name: GetActiveTextModel :one
 SELECT id, slug, dimensions, content_type, is_active, description, created_at
-FROM embedding_models WHERE content_type = 'text' AND is_active = true LIMIT 1;
+FROM ai_models WHERE model_type = 'embedding' AND content_type = 'text' AND is_active = true LIMIT 1;
 
 -- name: GetActiveCodeModel :one
 SELECT id, slug, dimensions, content_type, is_active, description, created_at
-FROM embedding_models WHERE content_type = 'code' AND is_active = true LIMIT 1;
+FROM ai_models WHERE model_type = 'embedding' AND content_type = 'code' AND is_active = true LIMIT 1;
 
 -- name: GetMemoriesNeedingTextReembed :many
 SELECT id, memory_type, scope_id, author_id,
@@ -41,10 +41,11 @@ UPDATE memories SET embedding_code = $2, embedding_code_model_id = $3, updated_a
 WHERE id = $1;
 
 -- name: UpsertEmbeddingModel :one
-INSERT INTO embedding_models (slug, dimensions, content_type, is_active)
-VALUES ($1, $2, $3, $4)
+INSERT INTO ai_models (slug, dimensions, content_type, model_type, is_active)
+VALUES ($1, $2, $3, 'embedding', $4)
 ON CONFLICT (slug) DO UPDATE SET
   dimensions = EXCLUDED.dimensions,
   is_active = EXCLUDED.is_active,
-  content_type = EXCLUDED.content_type
+  content_type = EXCLUDED.content_type,
+  model_type = EXCLUDED.model_type
 RETURNING id, slug, dimensions, content_type, is_active, description, created_at;

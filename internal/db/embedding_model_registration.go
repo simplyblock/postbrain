@@ -90,9 +90,9 @@ func validateRegisterEmbeddingModelParams(params RegisterEmbeddingModelParams) e
 
 func deactivateEmbeddingModelsByType(ctx context.Context, tx DBTX, contentType string) error {
 	_, err := tx.Exec(ctx, `
-		UPDATE embedding_models
+		UPDATE ai_models
 		SET is_active = false
-		WHERE content_type = $1
+		WHERE model_type = 'embedding' AND content_type = $1
 	`, contentType)
 	return err
 }
@@ -102,8 +102,8 @@ func upsertEmbeddingModelTx(ctx context.Context, tx DBTX, params RegisterEmbeddi
 		params.ProviderConfig = "default"
 	}
 	row := tx.QueryRow(ctx, `
-		INSERT INTO embedding_models (slug, provider, service_url, provider_model, provider_config, dimensions, content_type, is_active, is_ready)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false)
+		INSERT INTO ai_models (slug, provider, service_url, provider_model, provider_config, dimensions, content_type, model_type, is_active, is_ready)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 'embedding', $8, false)
 		ON CONFLICT (slug) DO UPDATE SET
 			provider = EXCLUDED.provider,
 			service_url = EXCLUDED.service_url,
@@ -111,6 +111,7 @@ func upsertEmbeddingModelTx(ctx context.Context, tx DBTX, params RegisterEmbeddi
 			provider_config = EXCLUDED.provider_config,
 			dimensions = EXCLUDED.dimensions,
 			content_type = EXCLUDED.content_type,
+			model_type = EXCLUDED.model_type,
 			is_active = EXCLUDED.is_active
 		RETURNING id, slug, dimensions, content_type, is_active, description, created_at
 	`, params.Slug, params.Provider, params.ServiceURL, params.ProviderModel, params.ProviderConfig, params.Dimensions, params.ContentType, params.Activate)
@@ -132,7 +133,7 @@ func upsertEmbeddingModelTx(ctx context.Context, tx DBTX, params RegisterEmbeddi
 
 func markEmbeddingModelReady(ctx context.Context, tx DBTX, modelID uuid.UUID, tableName string) error {
 	_, err := tx.Exec(ctx, `
-		UPDATE embedding_models
+		UPDATE ai_models
 		SET table_name = $2, is_ready = true
 		WHERE id = $1
 	`, modelID, tableName)

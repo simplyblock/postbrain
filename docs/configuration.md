@@ -34,7 +34,7 @@ environment variables.
 | `embedding.providers.<name>.api_key` | Provider API key (for OpenAI-compatible services). |
 | `embedding.providers.<name>.text_model` | Provider-specific text embedding model slug. |
 | `embedding.providers.<name>.code_model` | Provider-specific code embedding model slug. |
-| `embedding.providers.<name>.summary_model` | Provider-specific summarize/analyze model slug. |
+| `embedding.providers.<name>.summary_model` | Provider-specific summarize/analyze model slug used by model-driven summarizers. |
 | `embedding.request_timeout` | Timeout for embedding/analyze requests.            |
 | `embedding.batch_size`      | Batch size for embedding jobs.                     |
 
@@ -42,9 +42,15 @@ For how embeddings/chunks/entities are used during indexing and retrieval, see
 [Indexing Model](./indexing-model.md).
 
 `embedding.providers` lets you define multiple runtime profiles (for example
-`default`, `openai-prod`, `local-ollama`). Embedding models can then bind to a
-profile via `postbrain --config config.yaml embedding-model register --provider-config <name>`.
-Startup embedding and summarize/analyze behavior uses `embedding.providers.default`.
+`default`, `openai-prod`, `local-ollama`). Models bind to a profile via
+`postbrain --config config.yaml embedding-model register --provider-config <name>`.
+
+At runtime:
+- text/code embeddings resolve from active `ai_models` rows where `model_type='embedding'`
+- summarize/analyze resolves from active `ai_models` row where `model_type='generation'` and `content_type='text'`
+- if no active generation model exists, summarize/analyze falls back to the active text embedding model profile
+
+If model-driven lookup is unavailable, startup falls back to `embedding.providers.default`.
 For `backend: openai`, `api_key` is required when `service_url` is empty (default OpenAI API URL).
 
 ## `server`

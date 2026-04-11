@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/spf13/cobra"
 )
 
 func TestParseSkillID_ValidUUID_ReturnsID(t *testing.T) {
@@ -126,6 +127,147 @@ func TestShouldEnforceCodexVersion_NonWindowsTrue(t *testing.T) {
 	t.Parallel()
 	if !shouldEnforceCodexVersion("linux") {
 		t.Fatal("non-windows should enforce codex version")
+	}
+}
+
+func TestInstallSkillCommands_ShortDescriptionsUseCurrentPaths(t *testing.T) {
+	t.Parallel()
+
+	codexCmd := installCodexSkillCmd()
+	if !strings.Contains(codexCmd.Short, ".agents/skills/postbrain/SKILL.md") {
+		t.Fatalf("codex installer short description = %q, want updated SKILL.md path", codexCmd.Short)
+	}
+
+	claudeCmd := installClaudeSkillCmd()
+	if !strings.Contains(claudeCmd.Short, ".claude/skills/postbrain/SKILL.md") {
+		t.Fatalf("claude installer short description = %q, want .claude/skills/postbrain/SKILL.md path", claudeCmd.Short)
+	}
+}
+
+func TestCodexSkillContent_ContainsRequiredFrontmatterFields(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		goos    string
+		profile string
+	}{
+		{goos: "linux", profile: "lite"},
+		{goos: "windows", profile: "full"},
+	} {
+		content := codexSkillContent(tc.goos)
+		if !strings.HasPrefix(content, "---\n") {
+			t.Fatalf("%s profile missing frontmatter start", tc.profile)
+		}
+		if !strings.Contains(content, "\nname: ") {
+			t.Fatalf("%s profile missing frontmatter field name", tc.profile)
+		}
+		if !strings.Contains(content, "\ndescription: ") {
+			t.Fatalf("%s profile missing frontmatter field description", tc.profile)
+		}
+		if !strings.Contains(content, "\nversion: ") {
+			t.Fatalf("%s profile missing frontmatter field version", tc.profile)
+		}
+	}
+}
+
+func TestEmbeddedClaudeSkill_ContainsRequiredFrontmatterFields(t *testing.T) {
+	t.Parallel()
+
+	content := embeddedClaudeSkill
+	if !strings.HasPrefix(content, "---\n") {
+		t.Fatal("embedded Claude skill missing frontmatter start")
+	}
+	if !strings.Contains(content, "\nname: ") {
+		t.Fatal("embedded Claude skill missing frontmatter field name")
+	}
+	if !strings.Contains(content, "\ndescription: ") {
+		t.Fatal("embedded Claude skill missing frontmatter field description")
+	}
+	if !strings.Contains(content, "\nversion: ") {
+		t.Fatal("embedded Claude skill missing frontmatter field version")
+	}
+}
+
+func TestSkillAssets_UseAgentsBasePath(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		content string
+	}{
+		{name: "codex-lite", content: embeddedCodexSkillLight},
+		{name: "codex-full", content: embeddedCodexSkillFull},
+		{name: "claude", content: embeddedClaudeSkill},
+	} {
+		if strings.Contains(tc.content, ".agent/postbrain-base.md") {
+			t.Fatalf("%s skill uses deprecated .agent base path", tc.name)
+		}
+		if !strings.Contains(tc.content, ".agents/postbrain-base.md") {
+			t.Fatalf("%s skill missing .agents base path guidance", tc.name)
+		}
+	}
+}
+
+func TestSkillAssets_ContainExecutionPatterns(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		content string
+	}{
+		{name: "codex-lite", content: embeddedCodexSkillLight},
+		{name: "codex-full", content: embeddedCodexSkillFull},
+		{name: "claude", content: embeddedClaudeSkill},
+	} {
+		if !strings.Contains(tc.content, "## Gotchas") {
+			t.Fatalf("%s skill missing Gotchas section", tc.name)
+		}
+		if !strings.Contains(tc.content, "## Workflow Checklist") {
+			t.Fatalf("%s skill missing Workflow Checklist section", tc.name)
+		}
+		if !strings.Contains(tc.content, "## Validation Loop") {
+			t.Fatalf("%s skill missing Validation Loop section", tc.name)
+		}
+	}
+}
+
+func TestSkillAssets_DocumentPostbrainBaseFileFormat(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		content string
+	}{
+		{name: "codex-lite", content: embeddedCodexSkillLight},
+		{name: "codex-full", content: embeddedCodexSkillFull},
+		{name: "claude", content: embeddedClaudeSkill},
+	} {
+		if !strings.Contains(tc.content, "postbrain_enabled: true") {
+			t.Fatalf("%s skill missing postbrain_enabled format guidance", tc.name)
+		}
+		if !strings.Contains(tc.content, "postbrain_scope: project:acme/api") {
+			t.Fatalf("%s skill missing postbrain_scope format guidance", tc.name)
+		}
+		if !strings.Contains(tc.content, "updated_at: YYYY-MM-DD") {
+			t.Fatalf("%s skill missing updated_at format guidance", tc.name)
+		}
+	}
+}
+
+func TestSkillAssets_DescriptionsAreTriggerOriented(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		content string
+	}{
+		{name: "codex-lite", content: embeddedCodexSkillLight},
+		{name: "codex-full", content: embeddedCodexSkillFull},
+		{name: "claude", content: embeddedClaudeSkill},
+	} {
+		if !strings.Contains(tc.content, "\ndescription: Use this skill when ") {
+			t.Fatalf("%s skill description should use trigger-oriented imperative phrasing", tc.name)
+		}
 	}
 }
 
@@ -277,6 +419,81 @@ func TestResolveScopeForInstall_FallsBackToClaudeThenAgents(t *testing.T) {
 	}
 }
 
+func TestResolveURLForInstall_PrefersEnvVar(t *testing.T) {
+	t.Setenv("POSTBRAIN_URL", "http://env-url:7433")
+	targetDir := t.TempDir()
+	cmd := &cobra.Command{}
+	cmd.SetIn(strings.NewReader(""))
+	cmd.SetErr(&bytes.Buffer{})
+
+	got, err := resolveURLForInstall(cmd, targetDir)
+	if err != nil {
+		t.Fatalf("resolveURLForInstall: %v", err)
+	}
+	if got != "http://env-url:7433" {
+		t.Fatalf("resolveURLForInstall() = %q, want env URL", got)
+	}
+}
+
+func TestResolveURLForInstall_FallsBackToBaseFile(t *testing.T) {
+	t.Setenv("POSTBRAIN_URL", "")
+	targetDir := t.TempDir()
+	agentsDir := filepath.Join(targetDir, ".agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatalf("mkdir .agents: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(agentsDir, "postbrain-base.md"), []byte("postbrain_url: http://from-base:7433\n"), 0o644); err != nil {
+		t.Fatalf("write postbrain-base.md: %v", err)
+	}
+	cmd := &cobra.Command{}
+	cmd.SetIn(strings.NewReader(""))
+	cmd.SetErr(&bytes.Buffer{})
+
+	got, err := resolveURLForInstall(cmd, targetDir)
+	if err != nil {
+		t.Fatalf("resolveURLForInstall: %v", err)
+	}
+	if got != "http://from-base:7433" {
+		t.Fatalf("resolveURLForInstall() = %q, want base URL", got)
+	}
+}
+
+func TestResolveURLForInstall_PromptsAndUsesDefaultOnEmptyInput(t *testing.T) {
+	t.Setenv("POSTBRAIN_URL", "")
+	targetDir := t.TempDir()
+	cmd := &cobra.Command{}
+	cmd.SetIn(strings.NewReader("\n"))
+	var errOut bytes.Buffer
+	cmd.SetErr(&errOut)
+
+	got, err := resolveURLForInstall(cmd, targetDir)
+	if err != nil {
+		t.Fatalf("resolveURLForInstall: %v", err)
+	}
+	if got != "http://localhost:7433" {
+		t.Fatalf("resolveURLForInstall() = %q, want default URL", got)
+	}
+	if !strings.Contains(errOut.String(), "Postbrain backend URL") {
+		t.Fatalf("expected prompt output, got %q", errOut.String())
+	}
+}
+
+func TestResolveURLForInstall_PromptsAndUsesUserInput(t *testing.T) {
+	t.Setenv("POSTBRAIN_URL", "")
+	targetDir := t.TempDir()
+	cmd := &cobra.Command{}
+	cmd.SetIn(strings.NewReader("http://custom-host:8123/\n"))
+	cmd.SetErr(&bytes.Buffer{})
+
+	got, err := resolveURLForInstall(cmd, targetDir)
+	if err != nil {
+		t.Fatalf("resolveURLForInstall: %v", err)
+	}
+	if got != "http://custom-host:8123" {
+		t.Fatalf("resolveURLForInstall() = %q, want trimmed custom URL", got)
+	}
+}
+
 func TestResolveScopeForRuntime_PrefersScopeFlag(t *testing.T) {
 	prev := scopeFlag
 	scopeFlag = "project:from-flag"
@@ -308,5 +525,47 @@ func TestResolveScopeForRuntime_FallsBackToCwdPostbrainBase(t *testing.T) {
 
 	if got := resolveScopeForRuntime(); got != "project:from-cwd" {
 		t.Fatalf("resolveScopeForRuntime() = %q, want project:from-cwd", got)
+	}
+}
+
+func TestResolveURLForRuntime_PrefersEnvVar(t *testing.T) {
+	prevGetwd := getwdFn
+	getwdFn = func() (string, error) { return "", nil }
+	t.Cleanup(func() { getwdFn = prevGetwd })
+	t.Setenv("POSTBRAIN_URL", "http://env-url:7433/")
+
+	if got := resolveURLForRuntime(); got != "http://env-url:7433" {
+		t.Fatalf("resolveURLForRuntime() = %q, want env URL", got)
+	}
+}
+
+func TestResolveURLForRuntime_FallsBackToCwdPostbrainBase(t *testing.T) {
+	t.Setenv("POSTBRAIN_URL", "")
+	targetDir := t.TempDir()
+
+	prevGetwd := getwdFn
+	getwdFn = func() (string, error) { return targetDir, nil }
+	t.Cleanup(func() { getwdFn = prevGetwd })
+
+	if err := os.MkdirAll(filepath.Join(targetDir, ".agents"), 0o755); err != nil {
+		t.Fatalf("mkdir .agents: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(targetDir, ".agents", "postbrain-base.md"), []byte("postbrain_url: http://from-cwd:7433\n"), 0o644); err != nil {
+		t.Fatalf("write postbrain-base.md: %v", err)
+	}
+
+	if got := resolveURLForRuntime(); got != "http://from-cwd:7433" {
+		t.Fatalf("resolveURLForRuntime() = %q, want http://from-cwd:7433", got)
+	}
+}
+
+func TestResolveURLForRuntime_DefaultWhenUnset(t *testing.T) {
+	prevGetwd := getwdFn
+	getwdFn = func() (string, error) { return "", os.ErrNotExist }
+	t.Cleanup(func() { getwdFn = prevGetwd })
+	t.Setenv("POSTBRAIN_URL", "")
+
+	if got := resolveURLForRuntime(); got != "http://localhost:7433" {
+		t.Fatalf("resolveURLForRuntime() = %q, want default URL", got)
 	}
 }

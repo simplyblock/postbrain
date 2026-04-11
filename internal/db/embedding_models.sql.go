@@ -15,7 +15,7 @@ import (
 
 const getActiveCodeModel = `-- name: GetActiveCodeModel :one
 SELECT id, slug, dimensions, content_type, is_active, description, created_at
-FROM embedding_models WHERE content_type = 'code' AND is_active = true LIMIT 1
+FROM ai_models WHERE model_type = 'embedding' AND content_type = 'code' AND is_active = true LIMIT 1
 `
 
 type GetActiveCodeModelRow struct {
@@ -45,7 +45,7 @@ func (q *Queries) GetActiveCodeModel(ctx context.Context) (*GetActiveCodeModelRo
 
 const getActiveTextModel = `-- name: GetActiveTextModel :one
 SELECT id, slug, dimensions, content_type, is_active, description, created_at
-FROM embedding_models WHERE content_type = 'text' AND is_active = true LIMIT 1
+FROM ai_models WHERE model_type = 'embedding' AND content_type = 'text' AND is_active = true LIMIT 1
 `
 
 type GetActiveTextModelRow struct {
@@ -290,12 +290,13 @@ func (q *Queries) UpdateMemoryTextEmbedding(ctx context.Context, arg UpdateMemor
 }
 
 const upsertEmbeddingModel = `-- name: UpsertEmbeddingModel :one
-INSERT INTO embedding_models (slug, dimensions, content_type, is_active)
-VALUES ($1, $2, $3, $4)
+INSERT INTO ai_models (slug, dimensions, content_type, model_type, is_active)
+VALUES ($1, $2, $3, 'embedding', $4)
 ON CONFLICT (slug) DO UPDATE SET
   dimensions = EXCLUDED.dimensions,
   is_active = EXCLUDED.is_active,
-  content_type = EXCLUDED.content_type
+  content_type = EXCLUDED.content_type,
+  model_type = EXCLUDED.model_type
 RETURNING id, slug, dimensions, content_type, is_active, description, created_at
 `
 

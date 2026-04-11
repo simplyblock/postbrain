@@ -1,11 +1,11 @@
 {
   "mcpServers": {
     "postbrain": {
-      "type": "http",
-      "url": "http://localhost:7433/mcp",
       "headers": {
         "Authorization": "Bearer ${POSTBRAIN_TOKEN}"
-      }
+      },
+      "type": "http",
+      "url": "http://localhost:7433/mcp"
     }
   }
 }

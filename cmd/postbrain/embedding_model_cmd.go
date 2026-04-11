@@ -235,17 +235,17 @@ func runActivateEmbeddingModelCommand(ctx context.Context, opts embeddingModelAc
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	if _, err := tx.Exec(ctx, `
-		UPDATE embedding_models
+		UPDATE ai_models
 		SET is_active = false
-		WHERE content_type = $1
+		WHERE content_type = $1 AND model_type = 'embedding'
 	`, opts.ContentType); err != nil {
 		return "", fmt.Errorf("deactivate models: %w", err)
 	}
 
 	tag, err := tx.Exec(ctx, `
-		UPDATE embedding_models
+		UPDATE ai_models
 		SET is_active = true
-		WHERE slug = $1 AND content_type = $2
+		WHERE slug = $1 AND content_type = $2 AND model_type = 'embedding'
 	`, opts.Slug, opts.ContentType)
 	if err != nil {
 		return "", fmt.Errorf("activate model: %w", err)
@@ -269,7 +269,8 @@ func runListEmbeddingModelsCommand(ctx context.Context, opts embeddingModelListO
 
 	rows, err := pool.Query(ctx, `
 		SELECT slug, provider, provider_model, content_type, dimensions, is_active, is_ready, COALESCE(table_name, '')
-		FROM embedding_models
+		FROM ai_models
+		WHERE model_type = 'embedding'
 		ORDER BY content_type, slug
 	`)
 	if err != nil {

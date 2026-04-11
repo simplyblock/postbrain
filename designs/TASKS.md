@@ -25,6 +25,18 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-11: Restored summarize/analyze no-error contract for missing model-driven summary model (TDD-first):
+  - Added regression tests in `internal/embedding/service_test.go`:
+    - `TestSummarize_MissingModelDrivenSummaryModel_ReturnsEmptyWithoutError`
+    - `TestAnalyze_MissingModelDrivenSummaryModel_ReturnsNilWithoutError`
+  - Added sentinel `errSummaryModelNotConfigured` in
+    `internal/embedding/factory.go` and returned it (wrapped) when provider
+    profiles do not define `summary_model`.
+  - Updated `internal/embedding/service.go` so model-driven summarize/analyze
+    treat that sentinel as "no summarizer configured":
+    - fallback to configured legacy `s.summarizer` when present
+    - otherwise return empty summary / nil analysis with no error.
+
 - [x] 2026-04-11: Corrected Claude hook installer error strings for settings filename:
   - Updated `internal/postbraincli/claude_skill_installer.go` error messages
     in `InstallClaudeHooks` to reference `settings.local.json` for read/parse/
@@ -34,6 +46,168 @@
   - Updated `internal/postbraincli/claude_skill_installer.go` comment for
     `InstallClaudeHooks` to reference `.claude/settings.local.json` (actual
     file used by implementation/tests) instead of `.claude/settings.json`.
+
+- [x] 2026-04-11: Introduced `ai_models` registry and model-driven summarizer resolution:
+  - Added migration `000019_ai_models`:
+    - created new `ai_models` table (copy of `embedding_models` + `model_type`)
+      with `model_type IN ('embedding','generation')`
+    - backfilled existing `embedding_models` rows into `ai_models` with
+      `model_type='embedding'`
+    - rewired current FK constraints from object tables and `embedding_index`
+      to `ai_models(id)` while retaining `embedding_models` table for
+      compatibility
+    - down migration restores FK targets to `embedding_models` and copies
+      embedding rows back from `ai_models`.
+  - Switched current runtime model lookups/registration paths from
+    `embedding_models` to `ai_models` with `model_type='embedding'`:
+    - registration/deactivation/listing/model metadata/re-embed active model
+      queries and sqlc model queries.
+  - Added model-driven summarizer factory support:
+    - `ModelEmbedderFactory.SummarizerForModel(...)`
+    - new `ModelSummarizerFactory` wrapper with dedicated tests
+    - `EmbeddingService` now supports model-driven summarize/analyze routing
+      via active summary model ID
+    - `EnableModelDrivenFactory` now resolves active
+      `generation/text` summary model with fallback to active embedding text
+      model profile.
+
+- [x] 2026-04-11: Hardened memory consolidation against oversized summary embedding inputs (TDD-first):
+  - Added regression test
+    `TestMergeCluster_ChunkEmbedsOversizedSummaryBeforeEmbedding`
+    in `internal/memory/consolidate_test.go` reproducing OpenAI-style
+    `input too long` failures and asserting successful merge via chunked embedding.
+  - Added pooling edge-case regression test
+    `TestMeanPoolEmbeddings_DimensionMismatch`.
+  - Updated `internal/memory/consolidate.go`:
+    - introduced byte guard `consolidateSummaryMaxEmbedBytes = 32000`
+    - for oversized summaries, split text with existing `chunking.Chunk`
+      (same chunking stack used for artifact/memory chunk flows),
+      embed each chunk, then mean-pool vectors for the merged memory embedding
+    - preserve full summary content (no truncation) while preventing embed-size failures.
+
+- [x] 2026-04-11: Hardened AGE backfill relation sync against known AGE internal update failures (TDD-first):
+  - Added red/green unit coverage in `internal/jobs/age_backfill_test.go` for
+    classification of skippable AGE relation sync failures:
+    - `SQLSTATE XX000`
+    - message contains `Entity failed to be updated`
+  - Updated relation backfill loop in `internal/jobs/age_backfill.go` to
+    continue processing when this specific AGE internal failure occurs:
+    - emits structured warning with subject/object/predicate and error
+    - advances keyset cursor for the skipped row to avoid infinite retries
+    - preserves existing fail-fast behavior for all other relation sync errors.
+
+- [x] 2026-04-11: Extended skill installers with backend URL onboarding and MCP config provisioning (TDD-first):
+  - Added install-time backend URL resolution for CLI installers:
+    - priority: `POSTBRAIN_URL` env → base-file `postbrain_url` → interactive prompt
+    - prompt default: `http://localhost:7433`
+  - Added backend URL persistence to `postbrain-base.md` frontmatter for both
+    Codex and Claude installs:
+    - `postbrain_url: <backend-url>`
+    - maintained canonical keys (`postbrain_enabled`, `postbrain_scope`,
+      `updated_at`).
+  - Added Codex MCP config installation into repo-local `.codex/config.toml`:
+    - `[mcp_servers.postbrain]` with `url` and `bearer_token_env_var`
+    - per-tool approval blocks for required Postbrain tools with
+      `approval_mode = "approve"`.
+  - Added Claude MCP config installation into project-root `.mcp.json` in
+    HTTP-server style (`type`, `url`, `headers.Authorization`).
+  - Added URL resolver support from base files (`postbrain_url` and
+    `POSTBRAIN_URL=` formats) and regression tests across CLI/internal packages.
+  - Updated plugin template `plugins/postbrain/mcp.json` to include
+    `\"type\": \"http\"` for style parity.
+  - Follow-up: fixed runtime `postbrain-cli` backend URL resolution so hook and
+    skill API calls also read `postbrain_url` from cwd base files when
+    `POSTBRAIN_URL` is unset (instead of env-only behavior).
+  - Added CLI regression tests for runtime URL resolution precedence and
+    default fallback (`resolveURLForRuntime`).
+
+- [x] 2026-04-11: Updated CLI-embedded Postbrain skill assets to follow skill-authoring best practices (TDD-first):
+  - Added regression tests in `cmd/postbrain-cli/main_test.go` to enforce:
+    - canonical `.agents/postbrain-base.md` guidance (no deprecated `.agent/...` path),
+    - explicit execution sections in all embedded skill assets:
+      - `## Gotchas`
+      - `## Workflow Checklist`
+      - `## Validation Loop`
+  - Reworked `cmd/postbrain-cli/assets/*.md` (`codex.md`, `codex-lite.md`,
+    `claude-code.md`) to a concise procedure-first format with:
+    - explicit startup gate (`list_scopes`),
+    - deterministic scope resolution and persistence guidance,
+    - default behaviors and tool usage expectations,
+    - gotchas/checklist/validation-loop sections for safer execution.
+  - Restored explicit persisted-base-file format examples in all assets to
+    prevent ambiguity when writing scope defaults:
+    - `postbrain_enabled: true`
+    - `postbrain_scope: project:acme/api`
+    - `updated_at: YYYY-MM-DD`
+  - Added regression coverage
+    `TestSkillAssets_DocumentPostbrainBaseFileFormat` in
+    `cmd/postbrain-cli/main_test.go`.
+  - Validated and aligned frontmatter descriptions against skill-description
+    optimization guidance:
+    - rewrote asset `description` values to trigger-oriented imperative phrasing
+      (`Use this skill when ...`) for Codex lite/full and Claude profiles.
+    - added regression coverage
+      `TestSkillAssets_DescriptionsAreTriggerOriented` in
+      `cmd/postbrain-cli/main_test.go`.
+
+- [x] 2026-04-11: Switched Codex skill installer output to `.agents` skill directory (TDD-first):
+  - Updated `InstallCodexSkill` to install the Codex skill at
+    `.agents/skills/postbrain/SKILL.md` instead of `.codex/...`.
+  - Updated installer-generated AGENTS hint text to reference
+    `.agents/skills/postbrain/SKILL.md`.
+  - Updated installer-created base scope file path to `.agents/postbrain-base.md`.
+  - Removed legacy `.codex/skills/SKILL.md` migration cleanup from the Codex
+    installer (no migration path required).
+  - Updated `install-codex-skill` CLI short description to the `.agents` path.
+  - Updated `scripts/install-codex-skill.sh` fallback installer destination and
+    hint text to `.agents/skills/postbrain/SKILL.md`.
+  - Updated/red-green installer tests in
+    `internal/postbraincli/codex_skill_installer_test.go` and CLI command
+    description tests in `cmd/postbrain-cli/main_test.go`.
+
+- [x] 2026-04-11: Migrated Claude skill installer to SKILL.md layout (TDD-first):
+  - Updated `InstallClaudeSkill` to install into
+    `.claude/skills/postbrain/SKILL.md`.
+  - Installer now ensures `CLAUDE.md` exists and writes the Postbrain block
+    with `@.claude/skills/postbrain/SKILL.md` when missing.
+  - Added migration cleanup to remove legacy `.claude/postbrain.md` if found.
+  - Updated `install-claude-skill` CLI command description to the new path.
+  - Added required frontmatter metadata (`name`, `description`) to the Claude
+    skill templates in CLI assets and plugin templates.
+  - Added regression tests for new Claude install path, `CLAUDE.md` creation,
+    legacy file cleanup, installer short description, and required Claude skill
+    frontmatter fields.
+
+- [x] 2026-04-11: Fixed Codex SKILL.md frontmatter to satisfy loader requirements (TDD-first):
+  - Added required skill metadata frontmatter fields (`name`,
+    `description`) to Codex skill content variants:
+    - `.codex/skills/postbrain/SKILL.md`
+    - `cmd/postbrain-cli/assets/codex-lite.md`
+    - `cmd/postbrain-cli/assets/codex.md`
+    - `plugins/postbrain/skills/codex-lite.md`
+    - `plugins/postbrain/skills/codex.md`
+  - Added regression test
+    `TestCodexSkillContent_ContainsRequiredFrontmatterFields` in
+    `cmd/postbrain-cli/main_test.go` to enforce presence of required
+    frontmatter fields in both lite and full Codex profiles.
+  - Added installer migration coverage and implementation to remove legacy
+    `.codex/skills/SKILL.md` during Codex skill install to prevent duplicate
+    invalid-skill scan results.
+
+- [x] 2026-04-11: Fixed Codex skill installer path to the new SKILL.md layout (TDD-first):
+  - Updated `InstallCodexSkill` to install into
+    `.codex/skills/postbrain/SKILL.md` and to write the same path in the
+    AGENTS postbrain-config block.
+  - Updated CLI command text (`install-codex-skill`) to describe the new path.
+  - Updated `scripts/install-codex-skill.sh` source/destination paths and
+    AGENTS hint text to match `.codex/skills/postbrain/SKILL.md`.
+  - Added/updated tests to enforce the new Codex install path and CLI short
+    descriptions for both Codex and Claude installers.
+
+- [x] 2026-04-11: Corrected active Postbrain Codex skill path in `AGENTS.md`:
+  - Updated the postbrain-config note to reference
+    `.codex/skills/postbrain/SKILL.md` instead of the outdated
+    `.codex/skills/postbrain.md` location.
 
 - [x] 2026-04-11: Restored attached-repository visibility on Web UI scopes page (TDD-first):
   - Added integration regression test

@@ -1,4 +1,6 @@
 ---
+name: postbrain
+description: Postbrain Codex hooks-enabled workflow and memory policy
 version: 1
 ---
 

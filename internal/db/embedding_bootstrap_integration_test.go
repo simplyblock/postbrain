@@ -121,7 +121,7 @@ func TestBootstrapLegacyEmbeddingsForModel_TextCopiesAllObjectTypes(t *testing.T
 	}
 
 	var tableName string
-	if err := pool.QueryRow(ctx, `SELECT table_name FROM embedding_models WHERE id=$1`, model.ID).Scan(&tableName); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT table_name FROM ai_models WHERE id=$1`, model.ID).Scan(&tableName); err != nil {
 		t.Fatalf("load table_name: %v", err)
 	}
 	for _, tc := range []struct {

@@ -69,3 +69,66 @@ func TestResolveScopeFromBaseFiles_SupportsDocumentedPostbrainScopeKey(t *testin
 		t.Fatalf("ResolveScopeFromBaseFiles() = %q, want project:documented-format", got)
 	}
 }
+
+func TestResolveURLFromBaseFiles_Order(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+
+	for _, dir := range []string{
+		filepath.Join(targetDir, ".codex"),
+		filepath.Join(targetDir, ".claude"),
+		filepath.Join(targetDir, ".agents"),
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(targetDir, ".codex", "postbrain-base.md"), []byte("POSTBRAIN_URL=http://from-codex:7433\n"), 0o644); err != nil {
+		t.Fatalf("write codex file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(targetDir, ".claude", "postbrain-base.md"), []byte("POSTBRAIN_URL=http://from-claude:7433\n"), 0o644); err != nil {
+		t.Fatalf("write claude file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(targetDir, ".agents", "postbrain-base.md"), []byte("POSTBRAIN_URL=http://from-agents:7433\n"), 0o644); err != nil {
+		t.Fatalf("write agents file: %v", err)
+	}
+
+	if got := ResolveURLFromBaseFiles(targetDir); got != "http://from-codex:7433" {
+		t.Fatalf("ResolveURLFromBaseFiles() = %q, want codex URL", got)
+	}
+}
+
+func TestResolveURLFromBaseFiles_IgnoreComments(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(targetDir, ".claude"), 0o755); err != nil {
+		t.Fatalf("mkdir .claude: %v", err)
+	}
+	content := "# POSTBRAIN_URL=http://commented:7433\n\nPOSTBRAIN_URL=http://active:7433\n"
+	if err := os.WriteFile(filepath.Join(targetDir, ".claude", "postbrain-base.md"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	if got := ResolveURLFromBaseFiles(targetDir); got != "http://active:7433" {
+		t.Fatalf("ResolveURLFromBaseFiles() = %q, want http://active:7433", got)
+	}
+}
+
+func TestResolveURLFromBaseFiles_SupportsDocumentedPostbrainURLKey(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(targetDir, ".agents"), 0o755); err != nil {
+		t.Fatalf("mkdir .agents: %v", err)
+	}
+	content := strings.Join([]string{
+		"postbrain_enabled: true",
+		"  PostBrain_URL   :   http://documented:7433  ",
+		"",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(targetDir, ".agents", "postbrain-base.md"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	if got := ResolveURLFromBaseFiles(targetDir); got != "http://documented:7433" {
+		t.Fatalf("ResolveURLFromBaseFiles() = %q, want http://documented:7433", got)
+	}
+}

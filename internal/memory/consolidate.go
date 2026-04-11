@@ -9,9 +9,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	pgvector "github.com/pgvector/pgvector-go"
 
+	"github.com/simplyblock/postbrain/internal/chunking"
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/embedding"
 )
+
+const consolidateSummaryMaxEmbedBytes = 32_000
 
 // consolidatorDB abstracts the DB operations needed by Consolidator.
 type consolidatorDB interface {
@@ -152,7 +155,7 @@ func (c *Consolidator) MergeCluster(ctx context.Context, cluster []*db.Memory, s
 	}
 
 	// 3. Re-embed the summary.
-	vec, err := c.svc.EmbedText(ctx, summary)
+	vec, err := c.embedSummary(ctx, summary)
 	if err != nil {
 		return nil, fmt.Errorf("consolidate: embed summary: %w", err)
 	}
@@ -194,6 +197,47 @@ func (c *Consolidator) MergeCluster(ctx context.Context, cluster []*db.Memory, s
 	}
 
 	return created, nil
+}
+
+func (c *Consolidator) embedSummary(ctx context.Context, summary string) ([]float32, error) {
+	if len(summary) <= consolidateSummaryMaxEmbedBytes {
+		return c.svc.EmbedText(ctx, summary)
+	}
+
+	parts := chunking.Chunk(summary, chunking.DefaultChunkRunes, chunking.DefaultOverlap)
+	embeddings := make([][]float32, 0, len(parts))
+	for i, part := range parts {
+		vec, err := c.svc.EmbedText(ctx, part)
+		if err != nil {
+			return nil, fmt.Errorf("embed summary chunk %d: %w", i, err)
+		}
+		embeddings = append(embeddings, vec)
+	}
+	return meanPoolEmbeddings(embeddings)
+}
+
+func meanPoolEmbeddings(embeddings [][]float32) ([]float32, error) {
+	if len(embeddings) == 0 {
+		return nil, fmt.Errorf("no embeddings to pool")
+	}
+	dims := len(embeddings[0])
+	if dims == 0 {
+		return nil, fmt.Errorf("embedding vector has zero dimensions")
+	}
+	pooled := make([]float32, dims)
+	for i, vec := range embeddings {
+		if len(vec) != dims {
+			return nil, fmt.Errorf("embedding dimension mismatch at index %d: got %d, want %d", i, len(vec), dims)
+		}
+		for j := 0; j < dims; j++ {
+			pooled[j] += vec[j]
+		}
+	}
+	inv := float32(1.0 / float64(len(embeddings)))
+	for j := 0; j < dims; j++ {
+		pooled[j] *= inv
+	}
+	return pooled, nil
 }
 
 // cosineDist computes the cosine distance between two vectors.

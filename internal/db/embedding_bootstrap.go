@@ -56,9 +56,9 @@ func BootstrapLegacyEmbeddingsForModel(ctx context.Context, pool *pgxpool.Pool, 
 		return nil, fmt.Errorf("db: bootstrap legacy embeddings: ensure model table: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `
-		UPDATE embedding_models
+		UPDATE ai_models
 		SET table_name = $2, is_ready = true
-		WHERE id = $1
+		WHERE id = $1 AND model_type = 'embedding'
 	`, modelID, name); err != nil {
 		return nil, fmt.Errorf("db: bootstrap legacy embeddings: set model ready: %w", err)
 	}

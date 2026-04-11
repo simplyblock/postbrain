@@ -23,7 +23,7 @@ func TestInstallCodexSkill_WritesSkillFileAndAppendsAgentsBlock(t *testing.T) {
 	if !updatedAgents {
 		t.Fatal("updatedAgents = false, want true")
 	}
-	wantPath := filepath.Join(targetDir, ".codex", "skills", "postbrain.md")
+	wantPath := filepath.Join(targetDir, ".agents", "skills", "postbrain", "SKILL.md")
 	if installedPath != wantPath {
 		t.Fatalf("installedPath = %q, want %q", installedPath, wantPath)
 	}
@@ -50,8 +50,11 @@ func TestInstallCodexSkill_WritesSkillFileAndAppendsAgentsBlock(t *testing.T) {
 	if !strings.Contains(content, "POSTBRAIN_SCOPE=project:acme/api") {
 		t.Fatal("AGENTS.md missing POSTBRAIN_SCOPE")
 	}
+	if !strings.Contains(content, "The `.agents/skills/postbrain/SKILL.md` skill is active for this project.") {
+		t.Fatal("AGENTS.md missing updated Codex skill path note")
+	}
 
-	basePath := filepath.Join(targetDir, ".codex", "postbrain-base.md")
+	basePath := filepath.Join(targetDir, ".agents", "postbrain-base.md")
 	baseData, err := os.ReadFile(basePath)
 	if err != nil {
 		t.Fatalf("read postbrain-base.md: %v", err)
@@ -65,6 +68,9 @@ func TestInstallCodexSkill_WritesSkillFileAndAppendsAgentsBlock(t *testing.T) {
 	}
 	if !strings.Contains(base, "postbrain_scope: project:acme/api") {
 		t.Fatal("postbrain-base.md missing postbrain_scope")
+	}
+	if !strings.Contains(base, "postbrain_url: http://localhost:7433") {
+		t.Fatal("postbrain-base.md missing postbrain_url")
 	}
 }
 
@@ -115,13 +121,16 @@ func TestInstallCodexSkill_NoAgentsFileStillInstallsSkill(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(targetDir, "AGENTS.md")); !os.IsNotExist(err) {
 		t.Fatalf("AGENTS.md exists unexpectedly or stat error: %v", err)
 	}
-	basePath := filepath.Join(targetDir, ".codex", "postbrain-base.md")
+	basePath := filepath.Join(targetDir, ".agents", "postbrain-base.md")
 	baseData, err := os.ReadFile(basePath)
 	if err != nil {
 		t.Fatalf("read postbrain-base.md: %v", err)
 	}
 	if !strings.Contains(string(baseData), "postbrain_enabled: true") {
 		t.Fatal("postbrain-base.md missing postbrain_enabled")
+	}
+	if !strings.Contains(string(baseData), "postbrain_url: http://localhost:7433") {
+		t.Fatal("postbrain-base.md missing postbrain_url")
 	}
 	hooksPath := filepath.Join(targetDir, ".codex", "hooks.json")
 	if _, err := os.Stat(hooksPath); err != nil {
@@ -520,5 +529,65 @@ func TestEnableCodexHooks_MergesWithExistingConfigAndIsIdempotent(t *testing.T) 
 	}
 	if got := strings.Count(content, "codex_hooks = true"); got != 1 {
 		t.Fatalf("codex_hooks line count = %d, want 1", got)
+	}
+}
+
+func TestInstallCodexMCPConfig_CreatesRequiredPostbrainSections(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+
+	updated, err := InstallCodexMCPConfig(targetDir, "http://localhost:7433")
+	if err != nil {
+		t.Fatalf("InstallCodexMCPConfig: %v", err)
+	}
+	if !updated {
+		t.Fatal("updated = false, want true")
+	}
+
+	data, err := os.ReadFile(filepath.Join(targetDir, ".codex", "config.toml"))
+	if err != nil {
+		t.Fatalf("read config.toml: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "[mcp_servers.postbrain]") {
+		t.Fatal("config.toml missing [mcp_servers.postbrain]")
+	}
+	if !strings.Contains(content, `url = "http://localhost:7433/mcp"`) {
+		t.Fatal("config.toml missing mcp postbrain URL")
+	}
+	if !strings.Contains(content, `bearer_token_env_var = "POSTBRAIN_TOKEN"`) {
+		t.Fatal("config.toml missing bearer token env var")
+	}
+	for _, tool := range []string{
+		"list_scopes",
+		"session_begin",
+		"recall",
+		"context",
+		"knowledge_detail",
+		"publish",
+		"remember",
+		"session_end",
+		"graph_query",
+	} {
+		section := "[mcp_servers.postbrain.tools." + tool + "]"
+		if !strings.Contains(content, section) {
+			t.Fatalf("config.toml missing %s", section)
+		}
+	}
+}
+
+func TestInstallCodexMCPConfig_IsIdempotent(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+
+	if _, err := InstallCodexMCPConfig(targetDir, "http://localhost:7433"); err != nil {
+		t.Fatalf("first InstallCodexMCPConfig: %v", err)
+	}
+	updated, err := InstallCodexMCPConfig(targetDir, "http://localhost:7433")
+	if err != nil {
+		t.Fatalf("second InstallCodexMCPConfig: %v", err)
+	}
+	if updated {
+		t.Fatal("updated = true on second call, want false")
 	}
 }

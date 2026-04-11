@@ -10,6 +10,20 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
+func TestShouldSkipAGEBackfillRelationSyncError_EntityUpdateFailureInternalError(t *testing.T) {
+	err := fmt.Errorf("graph: sync relation to age: %w", &pgconn.PgError{Code: "XX000", Message: "Entity failed to be updated: 3"})
+	if !shouldSkipAGEBackfillRelationSyncError(err) {
+		t.Fatal("expected entity update internal AGE failure to be skippable")
+	}
+}
+
+func TestShouldSkipAGEBackfillRelationSyncError_NonMatchingError(t *testing.T) {
+	err := fmt.Errorf("graph: sync relation to age: %w", &pgconn.PgError{Code: "23505", Message: "duplicate key value violates unique constraint"})
+	if shouldSkipAGEBackfillRelationSyncError(err) {
+		t.Fatal("did not expect non-matching error to be skippable")
+	}
+}
+
 func TestNewAGEBackfillJob_DefaultBatchSize(t *testing.T) {
 	j := NewAGEBackfillJob(nil, 0)
 	if j.batchSize != 500 {

@@ -13,7 +13,7 @@ type modelRowQueryer interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-// DBModelStore resolves embedding model metadata from embedding_models.
+// DBModelStore resolves model metadata from ai_models.
 type DBModelStore struct {
 	q modelRowQueryer
 }
@@ -38,7 +38,7 @@ func (s *DBModelStore) GetModelConfig(ctx context.Context, modelID uuid.UUID) (*
 	)
 	err := s.q.QueryRow(ctx, `
 		SELECT provider, service_url, provider_model, dimensions, COALESCE(provider_config, 'default')
-		FROM embedding_models
+		FROM ai_models
 		WHERE id = $1
 	`, modelID).Scan(&provider, &serviceURL, &providerModel, &dimensions, &providerConfig)
 	if err != nil {
@@ -61,9 +61,9 @@ func (s *DBModelStore) GetModelConfig(ctx context.Context, modelID uuid.UUID) (*
 	return cfg, nil
 }
 
-// ActiveModelIDByContentType returns the active model ID for one content type.
+// ActiveModelIDByTypeAndContent returns the active model ID for one model/content type pair.
 // Returns (nil, nil) when no active model is registered.
-func (s *DBModelStore) ActiveModelIDByContentType(ctx context.Context, contentType string) (*uuid.UUID, error) {
+func (s *DBModelStore) ActiveModelIDByTypeAndContent(ctx context.Context, modelType, contentType string) (*uuid.UUID, error) {
 	if s == nil || s.q == nil {
 		return nil, fmt.Errorf("embedding model store: queryer is not configured")
 	}
@@ -71,15 +71,21 @@ func (s *DBModelStore) ActiveModelIDByContentType(ctx context.Context, contentTy
 	var id uuid.UUID
 	err := s.q.QueryRow(ctx, `
 		SELECT id
-		FROM embedding_models
-		WHERE is_active = true AND content_type = $1
+		FROM ai_models
+		WHERE is_active = true AND model_type = $1 AND content_type = $2
 		LIMIT 1
-	`, contentType).Scan(&id)
+	`, modelType, contentType).Scan(&id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("embedding model store: query active %s model: %w", contentType, err)
+		return nil, fmt.Errorf("embedding model store: query active %s/%s model: %w", modelType, contentType, err)
 	}
 	return &id, nil
+}
+
+// ActiveModelIDByContentType returns the active embedding model ID for one content type.
+// Returns (nil, nil) when no active model is registered.
+func (s *DBModelStore) ActiveModelIDByContentType(ctx context.Context, contentType string) (*uuid.UUID, error) {
+	return s.ActiveModelIDByTypeAndContent(ctx, "embedding", contentType)
 }
