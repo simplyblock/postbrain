@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/simplyblock/postbrain/internal/config"
 )
 
@@ -34,6 +35,32 @@ func (m *mockEmbedder) EmbedBatch(_ context.Context, texts []string) ([][]float3
 
 func (m *mockEmbedder) ModelSlug() string { return m.slug }
 func (m *mockEmbedder) Dimensions() int   { return m.dims }
+
+type mockSummarizer struct {
+	summary  string
+	analysis *DocumentAnalysis
+}
+
+func (m *mockSummarizer) Summarize(_ context.Context, _ string) (string, error) {
+	return m.summary, nil
+}
+
+func (m *mockSummarizer) Analyze(_ context.Context, _ string) (*DocumentAnalysis, error) {
+	return m.analysis, nil
+}
+
+type mockRuntimeResolver struct {
+	embedder   Embedder
+	summarizer Summarizer
+}
+
+func (m mockRuntimeResolver) EmbedderForModel(_ context.Context, _ uuid.UUID) (Embedder, error) {
+	return m.embedder, nil
+}
+
+func (m mockRuntimeResolver) SummarizerForModel(_ context.Context, _ uuid.UUID) (Summarizer, error) {
+	return m.summarizer, nil
+}
 
 func ollamaCfgForService(textModel, codeModel string) *config.EmbeddingConfig {
 	return &config.EmbeddingConfig{
@@ -236,6 +263,38 @@ func TestEmbedText_PropagatesError(t *testing.T) {
 	_, err := svc.EmbedText(context.Background(), "hello")
 	if !errors.Is(err, wantErr) {
 		t.Errorf("expected wrapped error %v, got %v", wantErr, err)
+	}
+}
+
+func TestAnalyze_UsesModelDrivenSummarizerWhenConfigured(t *testing.T) {
+	t.Parallel()
+
+	modelID := uuid.New()
+	svc := NewServiceFromEmbedders(&mockEmbedder{vec: []float32{1}}, nil)
+	svc.summarizer = &mockSummarizer{
+		analysis: &DocumentAnalysis{Summary: "default"},
+	}
+	svc.SetModelFactory(
+		mockRuntimeResolver{
+			embedder: &mockEmbedder{vec: []float32{1}},
+			summarizer: &mockSummarizer{
+				analysis: &DocumentAnalysis{Summary: "model-driven"},
+			},
+		},
+		&modelID,
+		nil,
+		&modelID,
+	)
+
+	out, err := svc.Analyze(context.Background(), "hello")
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if out == nil {
+		t.Fatal("Analyze returned nil analysis")
+	}
+	if out.Summary != "model-driven" {
+		t.Fatalf("summary = %q, want model-driven", out.Summary)
 	}
 }
 

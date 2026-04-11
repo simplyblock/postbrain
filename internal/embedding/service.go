@@ -15,13 +15,15 @@ type EmbeddingService struct {
 	code       Embedder   // may be nil if no code model is configured
 	summarizer Summarizer // may be nil if no summary model is configured
 
-	factory           modelEmbedderResolver
-	activeTextModelID *uuid.UUID
-	activeCodeModelID *uuid.UUID
+	factory              modelEmbedderResolver
+	activeTextModelID    *uuid.UUID
+	activeCodeModelID    *uuid.UUID
+	activeSummaryModelID *uuid.UUID
 }
 
 type modelEmbedderResolver interface {
 	EmbedderForModel(ctx context.Context, modelID uuid.UUID) (Embedder, error)
+	SummarizerForModel(ctx context.Context, modelID uuid.UUID) (Summarizer, error)
 }
 
 // EmbedResult carries both embedding bytes and the model identity.
@@ -162,6 +164,13 @@ func (s *EmbeddingService) EmbedCodeResult(ctx context.Context, text string) (*E
 // Returns an empty string (and no error) when no summary model is configured,
 // allowing callers to fall back to extractive summarization.
 func (s *EmbeddingService) Summarize(ctx context.Context, text string) (string, error) {
+	if s.factory != nil && s.activeSummaryModelID != nil {
+		sum, err := s.factory.SummarizerForModel(ctx, *s.activeSummaryModelID)
+		if err != nil {
+			return "", err
+		}
+		return sum.Summarize(ctx, text)
+	}
 	if s.summarizer == nil {
 		return "", nil
 	}
@@ -172,6 +181,13 @@ func (s *EmbeddingService) Summarize(ctx context.Context, text string) (string, 
 // configured summary model. Returns nil, nil when no summary model is configured,
 // allowing callers to fall back to heuristic extraction.
 func (s *EmbeddingService) Analyze(ctx context.Context, text string) (*DocumentAnalysis, error) {
+	if s.factory != nil && s.activeSummaryModelID != nil {
+		sum, err := s.factory.SummarizerForModel(ctx, *s.activeSummaryModelID)
+		if err != nil {
+			return nil, err
+		}
+		return sum.Analyze(ctx, text)
+	}
 	if s.summarizer == nil {
 		return nil, nil
 	}
@@ -192,8 +208,9 @@ func NewServiceFromEmbedders(text Embedder, code Embedder) *EmbeddingService {
 }
 
 // SetModelFactory configures optional model-aware embedder resolution.
-func (s *EmbeddingService) SetModelFactory(factory modelEmbedderResolver, activeTextModelID, activeCodeModelID *uuid.UUID) {
+func (s *EmbeddingService) SetModelFactory(factory modelEmbedderResolver, activeTextModelID, activeCodeModelID, activeSummaryModelID *uuid.UUID) {
 	s.factory = factory
 	s.activeTextModelID = activeTextModelID
 	s.activeCodeModelID = activeCodeModelID
+	s.activeSummaryModelID = activeSummaryModelID
 }

@@ -27,7 +27,15 @@ func (s *EmbeddingService) EnableModelDrivenFactory(ctx context.Context, pool *p
 	if err != nil {
 		return err
 	}
+	summaryModelID, err := store.ActiveModelIDByTypeAndContent(ctx, "generation", "text")
+	if err != nil {
+		return err
+	}
+	if summaryModelID == nil {
+		// Fallback: use the active embedding text model's provider profile.
+		summaryModelID = textModelID
+	}
 	factory := NewModelEmbedderFactory(cfg, store)
-	s.SetModelFactory(factory, textModelID, codeModelID)
+	s.SetModelFactory(factory, textModelID, codeModelID, summaryModelID)
 	return nil
 }
