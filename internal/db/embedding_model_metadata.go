@@ -26,8 +26,8 @@ func lookupModelMetadata(ctx context.Context, q DBTX, modelID uuid.UUID) (*model
 	var out modelMetadata
 	err := q.QueryRow(ctx, `
 		SELECT table_name, dimensions, content_type, is_ready
-		FROM embedding_models
-		WHERE id = $1
+		FROM ai_models
+		WHERE id = $1 AND model_type = 'embedding'
 	`, modelID).Scan(&out.tableName, &out.dimensions, &out.contentType, &out.isReady)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

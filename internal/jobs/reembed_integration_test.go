@@ -119,8 +119,8 @@ func TestReembedJob_RunCode_ReembedsMismatchedCodeMemory(t *testing.T) {
 	// Insert active code embedding model.
 	var codeModelID uuid.UUID
 	if err := pool.QueryRow(ctx,
-		`INSERT INTO embedding_models (slug, dimensions, content_type, is_active)
-		 VALUES ('test/code-model', 4, 'code', true)
+		`INSERT INTO ai_models (slug, dimensions, content_type, model_type, is_active)
+		 VALUES ('test/code-model', 4, 'code', 'embedding', true)
 		 RETURNING id`,
 	).Scan(&codeModelID); err != nil {
 		t.Fatalf("create code embedding model: %v", err)

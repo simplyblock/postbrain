@@ -11,6 +11,23 @@ import (
 	pgvector_go "github.com/pgvector/pgvector-go"
 )
 
+type AiModel struct {
+	ID             uuid.UUID
+	Slug           string
+	Dimensions     int32
+	ContentType    string
+	ModelType      string
+	IsActive       bool
+	Description    *string
+	CreatedAt      time.Time
+	Provider       *string
+	ServiceUrl     *string
+	ProviderModel  *string
+	TableName      *string
+	IsReady        bool
+	ProviderConfig string
+}
+
 type ArtifactDigestSource struct {
 	DigestID uuid.UUID
 	SourceID uuid.UUID

@@ -59,7 +59,7 @@ func TestRegisterEmbeddingModel_CreatesTableAndPendingRows(t *testing.T) {
 	var tableName string
 	var isReady bool
 	err = pool.QueryRow(ctx, `
-		SELECT table_name, is_ready FROM embedding_models WHERE id = $1
+		SELECT table_name, is_ready FROM ai_models WHERE id = $1
 	`, model.ID).Scan(&tableName, &isReady)
 	if err != nil {
 		t.Fatalf("load model metadata: %v", err)
@@ -119,7 +119,7 @@ func TestRegisterEmbeddingModel_ProviderConfig_DefaultAndOverride(t *testing.T) 
 	}
 
 	var providerConfig string
-	if err := pool.QueryRow(ctx, `SELECT provider_config FROM embedding_models WHERE id = $1`, defaultModel.ID).Scan(&providerConfig); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT provider_config FROM ai_models WHERE id = $1`, defaultModel.ID).Scan(&providerConfig); err != nil {
 		t.Fatalf("load default provider_config: %v", err)
 	}
 	if providerConfig != "default" {
@@ -140,7 +140,7 @@ func TestRegisterEmbeddingModel_ProviderConfig_DefaultAndOverride(t *testing.T) 
 		t.Fatalf("RegisterEmbeddingModel custom provider_config: %v", err)
 	}
 
-	if err := pool.QueryRow(ctx, `SELECT provider_config FROM embedding_models WHERE id = $1`, customModel.ID).Scan(&providerConfig); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT provider_config FROM ai_models WHERE id = $1`, customModel.ID).Scan(&providerConfig); err != nil {
 		t.Fatalf("load custom provider_config: %v", err)
 	}
 	if providerConfig != "openai-prod" {
@@ -198,8 +198,8 @@ func TestRegisterEmbeddingModel_RollsBackOnProvisionFailure(t *testing.T) {
 
 	var modelID uuid.UUID
 	err := pool.QueryRow(ctx, `
-		INSERT INTO embedding_models (slug, provider, service_url, provider_model, dimensions, content_type, is_active, is_ready)
-		VALUES ('conflict-model', 'openai', 'http://localhost:11434/v1', 'text-embedding-3-large', 8, 'text', false, true)
+		INSERT INTO ai_models (slug, provider, service_url, provider_model, dimensions, content_type, model_type, is_active, is_ready)
+		VALUES ('conflict-model', 'openai', 'http://localhost:11434/v1', 'text-embedding-3-large', 8, 'text', 'embedding', false, true)
 		RETURNING id
 	`).Scan(&modelID)
 	if err != nil {
@@ -226,7 +226,7 @@ func TestRegisterEmbeddingModel_RollsBackOnProvisionFailure(t *testing.T) {
 	}
 
 	var dimensions int
-	err = pool.QueryRow(ctx, `SELECT dimensions FROM embedding_models WHERE id = $1`, modelID).Scan(&dimensions)
+	err = pool.QueryRow(ctx, `SELECT dimensions FROM ai_models WHERE id = $1`, modelID).Scan(&dimensions)
 	if err != nil {
 		t.Fatalf("load model dimensions: %v", err)
 	}

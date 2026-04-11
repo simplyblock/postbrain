@@ -174,8 +174,8 @@ func TestEmbeddingRepository_UpsertEmbedding_ModelNotReady(t *testing.T) {
 
 	modelID := uuid.New()
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO embedding_models (id, slug, provider, service_url, provider_model, dimensions, content_type, is_active, is_ready)
-		VALUES ($1, $2, 'openai', 'http://localhost:11434/v1', 'text-embedding-3-small', 3, 'text', true, false)
+		INSERT INTO ai_models (id, slug, provider, service_url, provider_model, dimensions, content_type, model_type, is_active, is_ready)
+		VALUES ($1, $2, 'openai', 'http://localhost:11434/v1', 'text-embedding-3-small', 3, 'text', 'embedding', true, false)
 	`, modelID, "repo-model-not-ready-"+uuid.NewString()); err != nil {
 		t.Fatalf("insert model: %v", err)
 	}

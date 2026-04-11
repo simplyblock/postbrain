@@ -42,7 +42,7 @@ func NewReembedJob(pool *pgxpool.Pool, svc *embedding.EmbeddingService, batchSiz
 func (j *ReembedJob) activeModelID(ctx context.Context, contentType string) (*uuid.UUID, error) {
 	var id uuid.UUID
 	err := j.pool.QueryRow(ctx,
-		`SELECT id FROM embedding_models WHERE is_active=true AND content_type=$1`,
+		`SELECT id FROM ai_models WHERE is_active=true AND model_type='embedding' AND content_type=$1`,
 		contentType,
 	).Scan(&id)
 	if err != nil {

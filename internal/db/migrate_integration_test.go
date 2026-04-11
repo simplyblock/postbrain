@@ -33,7 +33,7 @@ func TestMigrationsApplyCleanly(t *testing.T) {
 	ctx := context.Background()
 
 	tables := []string{
-		"principals", "tokens", "scopes", "embedding_models",
+		"principals", "tokens", "scopes", "embedding_models", "ai_models",
 		"memories", "entities", "relations",
 		"knowledge_artifacts", "knowledge_endorsements", "knowledge_history",
 		"knowledge_collections", "sharing_grants", "promotion_requests",

@@ -73,8 +73,8 @@ func CreateTestEmbeddingModel(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
 	ctx := context.Background()
 	var id uuid.UUID
 	err := pool.QueryRow(ctx, `
-		INSERT INTO embedding_models (slug, dimensions, content_type, is_active)
-		VALUES ('test/model', 4, 'text', true)
+		INSERT INTO ai_models (slug, dimensions, content_type, model_type, is_active)
+		VALUES ('test/model', 4, 'text', 'embedding', true)
 		RETURNING id
 	`).Scan(&id)
 	if err != nil {

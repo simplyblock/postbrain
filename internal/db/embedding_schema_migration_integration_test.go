@@ -51,11 +51,11 @@ func TestEmbeddingIndexStatusConstraint(t *testing.T) {
 	pool := testhelper.NewTestPool(t)
 	ctx := context.Background()
 
-	// Insert a valid embedding_models row to satisfy the FK.
+	// Insert a valid ai_models row to satisfy the FK.
 	var modelID string
 	err := pool.QueryRow(ctx, `
-		INSERT INTO embedding_models (slug, provider, provider_model, service_url, dimensions, content_type, is_active, is_ready)
-		VALUES ('test-model-status', 'ollama', 'nomic-embed-text', 'http://localhost:11434', 768, 'text', false, true)
+		INSERT INTO ai_models (slug, provider, provider_model, service_url, dimensions, content_type, model_type, is_active, is_ready)
+		VALUES ('test-model-status', 'ollama', 'nomic-embed-text', 'http://localhost:11434', 768, 'text', 'embedding', false, true)
 		RETURNING id
 	`).Scan(&modelID)
 	if err != nil {
@@ -82,8 +82,8 @@ func TestEmbeddingIndexObjectTypeConstraint(t *testing.T) {
 
 	var modelID string
 	err := pool.QueryRow(ctx, `
-		INSERT INTO embedding_models (slug, provider, provider_model, service_url, dimensions, content_type, is_active, is_ready)
-		VALUES ('test-model-objtype', 'ollama', 'nomic-embed-text', 'http://localhost:11434', 768, 'text', false, true)
+		INSERT INTO ai_models (slug, provider, provider_model, service_url, dimensions, content_type, model_type, is_active, is_ready)
+		VALUES ('test-model-objtype', 'ollama', 'nomic-embed-text', 'http://localhost:11434', 768, 'text', 'embedding', false, true)
 		RETURNING id
 	`).Scan(&modelID)
 	if err != nil {
@@ -110,8 +110,8 @@ func TestEmbeddingIndexDefaults(t *testing.T) {
 
 	var modelID string
 	err := pool.QueryRow(ctx, `
-		INSERT INTO embedding_models (slug, provider, provider_model, service_url, dimensions, content_type, is_active, is_ready)
-		VALUES ('test-model-defaults', 'ollama', 'nomic-embed-text', 'http://localhost:11434', 768, 'text', false, true)
+		INSERT INTO ai_models (slug, provider, provider_model, service_url, dimensions, content_type, model_type, is_active, is_ready)
+		VALUES ('test-model-defaults', 'ollama', 'nomic-embed-text', 'http://localhost:11434', 768, 'text', 'embedding', false, true)
 		RETURNING id
 	`).Scan(&modelID)
 	if err != nil {
@@ -144,35 +144,35 @@ func TestEmbeddingIndexDefaults(t *testing.T) {
 	}
 }
 
-// TestEmbeddingModelsNewColumns verifies the new provider-related columns
-// exist on embedding_models.
-func TestEmbeddingModelsNewColumns(t *testing.T) {
+// TestAIModelsNewColumns verifies the provider-related columns
+// exist on ai_models.
+func TestAIModelsNewColumns(t *testing.T) {
 	pool := testhelper.NewTestPool(t)
 	ctx := context.Background()
 
 	for _, col := range []string{"provider", "service_url", "provider_model", "provider_config", "table_name", "is_ready"} {
-		assertColumnExists(t, ctx, pool, "embedding_models", col, true)
+		assertColumnExists(t, ctx, pool, "ai_models", col, true)
 	}
 }
 
-// TestEmbeddingModelsSlugRetained verifies the slug column is retained
+// TestAIModelsSlugRetained verifies the slug column is retained
 // as the unique operator-assigned identifier.
-func TestEmbeddingModelsSlugRetained(t *testing.T) {
+func TestAIModelsSlugRetained(t *testing.T) {
 	pool := testhelper.NewTestPool(t)
 	ctx := context.Background()
 
-	assertColumnExists(t, ctx, pool, "embedding_models", "slug", true)
+	assertColumnExists(t, ctx, pool, "ai_models", "slug", true)
 }
 
-// TestEmbeddingModelsActiveIndexesPreserved verifies the partial unique indexes
+// TestAIModelsActiveIndexesPreserved verifies the partial unique indexes
 // enforcing one active model per content_type are still present.
-func TestEmbeddingModelsActiveIndexesPreserved(t *testing.T) {
+func TestAIModelsActiveIndexesPreserved(t *testing.T) {
 	pool := testhelper.NewTestPool(t)
 	ctx := context.Background()
 
-	assertIndexExists(t, ctx, pool, "embedding_models_active_text_idx", true)
-	assertIndexExists(t, ctx, pool, "embedding_models_active_code_idx", true)
-	assertIndexExists(t, ctx, pool, "embedding_models_provider_config_idx", true)
+	assertIndexExists(t, ctx, pool, "ai_models_active_embedding_text_idx", true)
+	assertIndexExists(t, ctx, pool, "ai_models_active_embedding_code_idx", true)
+	assertIndexExists(t, ctx, pool, "ai_models_provider_config_idx", true)
 }
 
 // TestEmbeddingModelIDColumnsRetained verifies that the legacy embedding_model_id
