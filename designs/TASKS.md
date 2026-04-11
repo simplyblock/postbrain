@@ -35,6 +35,55 @@
     `InstallClaudeHooks` to reference `.claude/settings.local.json` (actual
     file used by implementation/tests) instead of `.claude/settings.json`.
 
+- [x] 2026-04-11: Introduced `ai_models` registry and model-driven summarizer resolution:
+  - Added migration `000019_ai_models`:
+    - created new `ai_models` table (copy of `embedding_models` + `model_type`)
+      with `model_type IN ('embedding','generation')`
+    - backfilled existing `embedding_models` rows into `ai_models` with
+      `model_type='embedding'`
+    - rewired current FK constraints from object tables and `embedding_index`
+      to `ai_models(id)` while retaining `embedding_models` table for
+      compatibility
+    - down migration restores FK targets to `embedding_models` and copies
+      embedding rows back from `ai_models`.
+  - Switched current runtime model lookups/registration paths from
+    `embedding_models` to `ai_models` with `model_type='embedding'`:
+    - registration/deactivation/listing/model metadata/re-embed active model
+      queries and sqlc model queries.
+  - Added model-driven summarizer factory support:
+    - `ModelEmbedderFactory.SummarizerForModel(...)`
+    - new `ModelSummarizerFactory` wrapper with dedicated tests
+    - `EmbeddingService` now supports model-driven summarize/analyze routing
+      via active summary model ID
+    - `EnableModelDrivenFactory` now resolves active
+      `generation/text` summary model with fallback to active embedding text
+      model profile.
+
+- [x] 2026-04-11: Hardened memory consolidation against oversized summary embedding inputs (TDD-first):
+  - Added regression test
+    `TestMergeCluster_ChunkEmbedsOversizedSummaryBeforeEmbedding`
+    in `internal/memory/consolidate_test.go` reproducing OpenAI-style
+    `input too long` failures and asserting successful merge via chunked embedding.
+  - Added pooling edge-case regression test
+    `TestMeanPoolEmbeddings_DimensionMismatch`.
+  - Updated `internal/memory/consolidate.go`:
+    - introduced byte guard `consolidateSummaryMaxEmbedBytes = 32000`
+    - for oversized summaries, split text with existing `chunking.Chunk`
+      (same chunking stack used for artifact/memory chunk flows),
+      embed each chunk, then mean-pool vectors for the merged memory embedding
+    - preserve full summary content (no truncation) while preventing embed-size failures.
+
+- [x] 2026-04-11: Hardened AGE backfill relation sync against known AGE internal update failures (TDD-first):
+  - Added red/green unit coverage in `internal/jobs/age_backfill_test.go` for
+    classification of skippable AGE relation sync failures:
+    - `SQLSTATE XX000`
+    - message contains `Entity failed to be updated`
+  - Updated relation backfill loop in `internal/jobs/age_backfill.go` to
+    continue processing when this specific AGE internal failure occurs:
+    - emits structured warning with subject/object/predicate and error
+    - advances keyset cursor for the skipped row to avoid infinite retries
+    - preserves existing fail-fast behavior for all other relation sync errors.
+
 - [x] 2026-04-11: Extended skill installers with backend URL onboarding and MCP config provisioning (TDD-first):
   - Added install-time backend URL resolution for CLI installers:
     - priority: `POSTBRAIN_URL` env → base-file `postbrain_url` → interactive prompt

@@ -38,6 +38,7 @@ var embeddedCodexSkillLight string
 //go:embed assets/claude-code.md
 var embeddedClaudeSkill string
 
+// Effectively disabled for now since the hooks system is still very minimal
 const minimumCodexHooksVersion = "0.114.0"
 const latestReleaseAPIURL = "https://api.github.com/repos/simplyblock/postbrain/releases/latest"
 
@@ -523,13 +524,11 @@ func installCodexSkillCmd() *cobra.Command {
 			}
 
 			installHooks := runtime.GOOS != "windows"
-			codexVersion := "not-checked-on-windows"
-			var err error
+			codexVersion, err := detectCodexVersionFn()
+			if err != nil {
+				return err
+			}
 			if shouldEnforceCodexVersion(runtime.GOOS) {
-				codexVersion, err = detectCodexVersionFn()
-				if err != nil {
-					return err
-				}
 				ok, err := codexVersionMeetsMinimum(codexVersion, minimumCodexHooksVersion)
 				if err != nil {
 					return err
