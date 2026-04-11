@@ -2,6 +2,7 @@ package embedding
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -39,6 +40,8 @@ type ModelEmbedderFactory struct {
 type ModelSummarizerFactory struct {
 	inner *ModelEmbedderFactory
 }
+
+var errSummaryModelNotConfigured = errors.New("embedding factory: summary_model is not configured")
 
 // NewModelEmbedderFactory constructs a model-aware embedder factory.
 func NewModelEmbedderFactory(baseCfg *config.EmbeddingConfig, store ModelConfigStore) *ModelEmbedderFactory {
@@ -165,7 +168,7 @@ func (f *ModelEmbedderFactory) newSummarizerForConfig(model *ModelConfig) (Summa
 		return nil, err
 	}
 	if summaryModel == "" {
-		return nil, fmt.Errorf("embedding factory: summary_model is required in provider profile for model %s", model.ID)
+		return nil, fmt.Errorf("%w for model %s", errSummaryModelNotConfigured, model.ID)
 	}
 
 	cfg := *f.baseCfg

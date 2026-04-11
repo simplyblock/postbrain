@@ -2,6 +2,7 @@ package embedding
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -167,6 +168,12 @@ func (s *EmbeddingService) Summarize(ctx context.Context, text string) (string, 
 	if s.factory != nil && s.activeSummaryModelID != nil {
 		sum, err := s.factory.SummarizerForModel(ctx, *s.activeSummaryModelID)
 		if err != nil {
+			if errors.Is(err, errSummaryModelNotConfigured) {
+				if s.summarizer == nil {
+					return "", nil
+				}
+				return s.summarizer.Summarize(ctx, text)
+			}
 			return "", err
 		}
 		return sum.Summarize(ctx, text)
@@ -184,6 +191,12 @@ func (s *EmbeddingService) Analyze(ctx context.Context, text string) (*DocumentA
 	if s.factory != nil && s.activeSummaryModelID != nil {
 		sum, err := s.factory.SummarizerForModel(ctx, *s.activeSummaryModelID)
 		if err != nil {
+			if errors.Is(err, errSummaryModelNotConfigured) {
+				if s.summarizer == nil {
+					return nil, nil
+				}
+				return s.summarizer.Analyze(ctx, text)
+			}
 			return nil, err
 		}
 		return sum.Analyze(ctx, text)

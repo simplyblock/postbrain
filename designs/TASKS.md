@@ -25,6 +25,18 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-11: Restored summarize/analyze no-error contract for missing model-driven summary model (TDD-first):
+  - Added regression tests in `internal/embedding/service_test.go`:
+    - `TestSummarize_MissingModelDrivenSummaryModel_ReturnsEmptyWithoutError`
+    - `TestAnalyze_MissingModelDrivenSummaryModel_ReturnsNilWithoutError`
+  - Added sentinel `errSummaryModelNotConfigured` in
+    `internal/embedding/factory.go` and returned it (wrapped) when provider
+    profiles do not define `summary_model`.
+  - Updated `internal/embedding/service.go` so model-driven summarize/analyze
+    treat that sentinel as "no summarizer configured":
+    - fallback to configured legacy `s.summarizer` when present
+    - otherwise return empty summary / nil analysis with no error.
+
 - [x] 2026-04-11: Corrected Claude hook installer error strings for settings filename:
   - Updated `internal/postbraincli/claude_skill_installer.go` error messages
     in `InstallClaudeHooks` to reference `settings.local.json` for read/parse/
