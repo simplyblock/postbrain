@@ -77,7 +77,7 @@ func InstallClaudeSkill(targetDir, skillContent, postbrainURL, postbrainScope st
 	return destFile, true, nil
 }
 
-// InstallClaudeHooks merges Postbrain hooks into .claude/settings.json.
+// InstallClaudeHooks merges Postbrain hooks into .claude/settings.local.json.
 // It creates the file if it does not exist and preserves all existing settings.
 // The call is idempotent: if postbrain hooks are already present, the file is
 // not modified and updated=false is returned.

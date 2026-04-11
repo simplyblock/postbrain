@@ -25,6 +25,11 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-11: Corrected Claude hook installer doc comment filename:
+  - Updated `internal/postbraincli/claude_skill_installer.go` comment for
+    `InstallClaudeHooks` to reference `.claude/settings.local.json` (actual
+    file used by implementation/tests) instead of `.claude/settings.json`.
+
 - [x] 2026-04-11: Restored attached-repository visibility on Web UI scopes page (TDD-first):
   - Added integration regression test
     `TestScopesPage_ShowsAttachedRepositoryForProjectScope` in
