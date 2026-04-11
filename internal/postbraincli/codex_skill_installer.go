@@ -148,32 +148,24 @@ func InstallCodexHooks(targetDir, scope string) (bool, error) {
 
 	postToolUse, _ := hooks["PostToolUse"].([]any)
 	stop, _ := hooks["Stop"].([]any)
-	hasSnapshot := eventHooksContainCommand(postToolUse, "postbrain-cli snapshot")
-	hasSummarize := eventHooksContainCommand(stop, "postbrain-cli summarize-session")
-	if !hasSnapshot {
-		postToolUse = append(postToolUse, map[string]any{
-			"matcher": "Bash",
-			"hooks": []any{
-				map[string]any{
-					"type":    "command",
-					"command": snapshotCmd,
-				},
-			},
-		})
-		hooks["PostToolUse"] = postToolUse
-	}
-	if !hasSummarize {
-		stop = append(stop, map[string]any{
-			"hooks": []any{
-				map[string]any{
-					"type":    "command",
-					"command": summarizeCmd,
-				},
-			},
-		})
-		hooks["Stop"] = stop
-	}
-	if hasSnapshot && hasSummarize {
+
+	postToolUse, snapshotUpdated := ensureEventHookCommand(
+		postToolUse,
+		"postbrain-cli snapshot",
+		snapshotCmd,
+		map[string]any{"matcher": "Bash"},
+	)
+	stop, summarizeUpdated := ensureEventHookCommand(
+		stop,
+		"postbrain-cli summarize-session",
+		summarizeCmd,
+		nil,
+	)
+
+	hooks["PostToolUse"] = postToolUse
+	hooks["Stop"] = stop
+
+	if !snapshotUpdated && !summarizeUpdated {
 		return false, nil
 	}
 
@@ -292,7 +284,9 @@ func parseTOMLAssignment(line string) (key, value string, ok bool) {
 	return key, value, true
 }
 
-func eventHooksContainCommand(entries []any, needle string) bool {
+func ensureEventHookCommand(entries []any, needle, desiredCommand string, entryDefaults map[string]any) ([]any, bool) {
+	updated := false
+	found := false
 	for _, e := range entries {
 		entry, _ := e.(map[string]any)
 		hooksList, _ := entry["hooks"].([]any)
@@ -300,9 +294,28 @@ func eventHooksContainCommand(entries []any, needle string) bool {
 			hook, _ := h.(map[string]any)
 			cmd, _ := hook["command"].(string)
 			if strings.Contains(cmd, needle) {
-				return true
+				found = true
+				if cmd != desiredCommand {
+					hook["command"] = desiredCommand
+					updated = true
+				}
 			}
 		}
 	}
-	return false
+	if found {
+		return entries, updated
+	}
+
+	newEntry := map[string]any{
+		"hooks": []any{
+			map[string]any{
+				"type":    "command",
+				"command": desiredCommand,
+			},
+		},
+	}
+	for k, v := range entryDefaults {
+		newEntry[k] = v
+	}
+	return append(entries, newEntry), true
 }

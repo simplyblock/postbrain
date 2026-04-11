@@ -132,35 +132,23 @@ func InstallClaudeHooks(targetDir, scope string) (bool, error) {
 
 	postToolUse, _ := hooks["PostToolUse"].([]any)
 	stop, _ := hooks["Stop"].([]any)
-	hasSnapshot := eventHooksContainCommand(postToolUse, "postbrain-cli snapshot")
-	hasSummarize := eventHooksContainCommand(stop, "postbrain-cli summarize-session")
-	if !hasSnapshot {
-		// PostToolUse: snapshot on file edits.
-		postToolUse = append(postToolUse, map[string]any{
-			"matcher": "Edit|Write|Bash",
-			"hooks": []any{
-				map[string]any{
-					"type":    "command",
-					"command": snapshotCmd,
-				},
-			},
-		})
-		hooks["PostToolUse"] = postToolUse
-	}
-	if !hasSummarize {
-		// Stop: summarize session when the agent stops.
-		stop = append(stop, map[string]any{
-			"matcher": "",
-			"hooks": []any{
-				map[string]any{
-					"type":    "command",
-					"command": summarizeCmd,
-				},
-			},
-		})
-		hooks["Stop"] = stop
-	}
-	if hasSnapshot && hasSummarize {
+
+	postToolUse, snapshotUpdated := ensureEventHookCommand(
+		postToolUse,
+		"postbrain-cli snapshot",
+		snapshotCmd,
+		map[string]any{"matcher": "Edit|Write|Bash"},
+	)
+	stop, summarizeUpdated := ensureEventHookCommand(
+		stop,
+		"postbrain-cli summarize-session",
+		summarizeCmd,
+		map[string]any{"matcher": ""},
+	)
+
+	hooks["PostToolUse"] = postToolUse
+	hooks["Stop"] = stop
+	if !snapshotUpdated && !summarizeUpdated {
 		return false, nil
 	}
 

@@ -253,6 +253,61 @@ func TestInstallClaudeHooks_ResolvesScopeFromPostbrainBaseWhenProvidedScopeEmpty
 	}
 }
 
+func TestInstallClaudeHooks_RewritesLegacyCommands(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+	claudeDir := filepath.Join(targetDir, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		t.Fatalf("mkdir .claude: %v", err)
+	}
+	legacy := `{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|Bash",
+        "hooks": [
+          { "type": "command", "command": "[ -n \"$POSTBRAIN_SCOPE\" ] && ./postbrain-cli snapshot --scope \"$POSTBRAIN_SCOPE\" || true" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "[ -n \"$POSTBRAIN_SCOPE\" ] && ./postbrain-cli summarize-session --scope \"$POSTBRAIN_SCOPE\" || true" }
+        ]
+      }
+    ]
+  }
+}`
+	settingsPath := filepath.Join(claudeDir, "settings.local.json")
+	if err := os.WriteFile(settingsPath, []byte(legacy), 0o644); err != nil {
+		t.Fatalf("write settings.local.json: %v", err)
+	}
+
+	updated, err := InstallClaudeHooks(targetDir, "")
+	if err != nil {
+		t.Fatalf("InstallClaudeHooks: %v", err)
+	}
+	if !updated {
+		t.Fatal("updated = false, want true")
+	}
+
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("read settings.local.json: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, `"command": "postbrain-cli snapshot"`) {
+		t.Fatalf("settings.local.json missing rewritten snapshot command: %s", content)
+	}
+	if !strings.Contains(content, `"command": "postbrain-cli summarize-session"`) {
+		t.Fatalf("settings.local.json missing rewritten summarize command: %s", content)
+	}
+	if strings.Contains(content, "./postbrain-cli") || strings.Contains(content, "$POSTBRAIN_SCOPE") {
+		t.Fatalf("settings.local.json still contains legacy command fragments: %s", content)
+	}
+}
+
 func TestInstallClaudeHooks_MergesIntoExistingSettings(t *testing.T) {
 	t.Parallel()
 	targetDir := t.TempDir()

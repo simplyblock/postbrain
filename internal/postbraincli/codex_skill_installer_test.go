@@ -393,6 +393,67 @@ func TestInstallCodexHooks_ResolvesScopeFromPostbrainBaseWhenProvidedScopeEmpty(
 	}
 }
 
+func TestInstallCodexHooks_RewritesLegacyCommands(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+	configDir := filepath.Join(targetDir, ".codex")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("mkdir .codex: %v", err)
+	}
+	legacy := `{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "[ -n \"$POSTBRAIN_SCOPE\" ] && ./postbrain-cli snapshot --scope \"$POSTBRAIN_SCOPE\" || true",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "[ -n \"$POSTBRAIN_SCOPE\" ] && ./postbrain-cli summarize-session --scope \"$POSTBRAIN_SCOPE\" || true",
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  }
+}`
+	hooksPath := filepath.Join(configDir, "hooks.json")
+	if err := os.WriteFile(hooksPath, []byte(legacy), 0o644); err != nil {
+		t.Fatalf("write hooks.json: %v", err)
+	}
+
+	updated, err := InstallCodexHooks(targetDir, "")
+	if err != nil {
+		t.Fatalf("InstallCodexHooks: %v", err)
+	}
+	if !updated {
+		t.Fatal("updated = false, want true")
+	}
+
+	data, err := os.ReadFile(hooksPath)
+	if err != nil {
+		t.Fatalf("read hooks.json: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, `"command": "postbrain-cli snapshot"`) {
+		t.Fatalf("hooks.json missing rewritten snapshot command: %s", content)
+	}
+	if !strings.Contains(content, `"command": "postbrain-cli summarize-session"`) {
+		t.Fatalf("hooks.json missing rewritten summarize command: %s", content)
+	}
+	if strings.Contains(content, "./postbrain-cli") || strings.Contains(content, "$POSTBRAIN_SCOPE") {
+		t.Fatalf("hooks.json still contains legacy command fragments: %s", content)
+	}
+}
+
 func TestEnableCodexHooks_CreatesConfigWhenMissing(t *testing.T) {
 	t.Parallel()
 	targetDir := t.TempDir()

@@ -25,6 +25,22 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-11: Added hook-installer upgrade path for legacy command forms (TDD-first):
+  - Fixed installer idempotency logic in `internal/postbraincli` to rewrite
+    existing Postbrain hook commands when they match legacy forms instead of
+    treating them as already-up-to-date.
+  - `InstallCodexHooks` and `InstallClaudeHooks` now:
+    - detect existing hook commands by tool intent (`postbrain-cli snapshot`,
+      `postbrain-cli summarize-session`),
+    - rewrite command strings in-place to the current canonical form
+      (scope-inlined or runtime-resolution command),
+    - still append missing hooks when no matching command exists.
+  - Added regression tests:
+    - `TestInstallCodexHooks_RewritesLegacyCommands`
+    - `TestInstallClaudeHooks_RewritesLegacyCommands`
+    covering legacy wrappers like
+    `[ -n "$POSTBRAIN_SCOPE" ] && ./postbrain-cli ...`.
+
 - [x] 2026-04-10: Synced `InstallClaudeHooks` comment with current scope-resolution behavior:
   - Updated doc comment in
     `internal/postbraincli/claude_skill_installer.go` to describe:
