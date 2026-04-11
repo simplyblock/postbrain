@@ -6,7 +6,7 @@
 #
 # TARGET_DIR defaults to the current working directory.
 # The script creates .agents/skills/ inside TARGET_DIR if it doesn't exist,
-# then copies .codex/skills/postbrain/SKILL.md from the Postbrain source tree.
+# then copies .agents/skills/postbrain/SKILL.md from the Postbrain source tree.
 #
 # Environment variables honoured:
 #   POSTBRAIN_URL    — written into TARGET_DIR/AGENTS.md hint block if not already present
