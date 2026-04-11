@@ -62,8 +62,8 @@
   - `InstallCodexHooks` and `InstallClaudeHooks` now:
     - detect existing hook commands by tool intent (`postbrain-cli snapshot`,
       `postbrain-cli summarize-session`),
-    - rewrite command strings in-place to the current canonical form
-      (scope-inlined or runtime-resolution command),
+    - rewrite command strings in-place to the current canonical scope-less,
+      runtime-resolved command form,
     - still append missing hooks when no matching command exists.
   - Added regression tests:
     - `TestInstallCodexHooks_RewritesLegacyCommands`
