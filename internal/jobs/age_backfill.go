@@ -2,8 +2,10 @@ package jobs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -213,6 +215,19 @@ func (j *AGEBackfillJob) backfillRelations(ctx context.Context) (int, error) {
 				Confidence: confidence,
 			}
 			if err := graph.SyncRelationToAGE(ctx, j.pool, rel); err != nil {
+				if shouldSkipAGEBackfillRelationSyncError(err) {
+					slog.Warn("age backfill relations: skipping relation after AGE internal update failure",
+						"subject_id", subjectID,
+						"object_id", objectID,
+						"predicate", predicate,
+						"error", err,
+					)
+					lastCreatedAt = createdAt
+					lastID = id
+					hasCursor = true
+					count++
+					continue
+				}
 				rows.Close()
 				return total, fmt.Errorf("age backfill relations: sync %s->%s %s: %w", subjectID, objectID, predicate, err)
 			}
@@ -270,4 +285,15 @@ func releaseAGEBackfillLockWithTimeout(conn ageBackfillLockConn) error {
 	unlockCtx, cancel := context.WithTimeout(context.Background(), ageBackfillUnlockTimeout)
 	defer cancel()
 	return releaseAGEBackfillLock(unlockCtx, conn)
+}
+
+func shouldSkipAGEBackfillRelationSyncError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+	return pgErr.Code == "XX000" && strings.Contains(pgErr.Message, "Entity failed to be updated")
 }
