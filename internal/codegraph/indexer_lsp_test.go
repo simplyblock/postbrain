@@ -8,8 +8,6 @@ import (
 )
 
 func TestLSPResolverForIndex_EmptyAddress_Disabled(t *testing.T) {
-	t.Parallel()
-
 	called := false
 	prev := newGoplsTCPResolverFn
 	newGoplsTCPResolverFn = func(string, time.Duration, string) (LSPResolver, error) {
@@ -28,8 +26,6 @@ func TestLSPResolverForIndex_EmptyAddress_Disabled(t *testing.T) {
 }
 
 func TestLSPResolverForIndex_Enabled_ReturnsResolver(t *testing.T) {
-	t.Parallel()
-
 	want := &fakeLSPResolver{lang: ".go"}
 	prev := newGoplsTCPResolverFn
 	newGoplsTCPResolverFn = func(addr string, timeout time.Duration, rootURI string) (LSPResolver, error) {
@@ -57,8 +53,6 @@ func TestLSPResolverForIndex_Enabled_ReturnsResolver(t *testing.T) {
 }
 
 func TestLSPResolverForIndex_ConstructorError_FallsBackToNil(t *testing.T) {
-	t.Parallel()
-
 	prev := newGoplsTCPResolverFn
 	newGoplsTCPResolverFn = func(string, time.Duration, string) (LSPResolver, error) {
 		return nil, errors.New("dial failed")
