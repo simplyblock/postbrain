@@ -89,6 +89,8 @@ func withToolMetrics(toolName string, fn mcpserver.ToolHandlerFunc) mcpserver.To
 func (s *Server) registerTools() {
 	// remember
 	s.mcpServer.AddTool(mcpgo.NewTool("remember",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
 		mcpgo.WithDescription("Store a new memory or update an existing near-duplicate"),
 		mcpgo.WithString("content", mcpgo.Required(), mcpgo.Description("The memory content")),
 		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Target scope as kind:external_id, e.g. project:acme/api")),
@@ -102,6 +104,8 @@ func (s *Server) registerTools() {
 
 	// recall
 	s.mcpServer.AddTool(mcpgo.NewTool("recall",
+		mcpgo.WithReadOnlyHintAnnotation(true),
+		mcpgo.WithDestructiveHintAnnotation(false),
 		mcpgo.WithDescription("Retrieve memories and knowledge relevant to a query"),
 		mcpgo.WithString("query", mcpgo.Required(), mcpgo.Description("Semantic search query")),
 		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
@@ -116,6 +120,8 @@ func (s *Server) registerTools() {
 
 	// cross_scope_context
 	s.mcpServer.AddTool(mcpgo.NewTool("cross_scope_context",
+		mcpgo.WithReadOnlyHintAnnotation(true),
+		mcpgo.WithDestructiveHintAnnotation(false),
 		mcpgo.WithDescription("Retrieve and compare memory/knowledge context across baseline and comparison scopes"),
 		mcpgo.WithString("query", mcpgo.Required(), mcpgo.Description("Semantic search query")),
 		mcpgo.WithString("baseline_scope", mcpgo.Required(), mcpgo.Description("Baseline scope as kind:external_id")),
@@ -132,6 +138,8 @@ func (s *Server) registerTools() {
 	// graph_query (AGE-only)
 	if s.ageEnabled {
 		s.mcpServer.AddTool(mcpgo.NewTool("graph_query",
+			mcpgo.WithReadOnlyHintAnnotation(true),
+			mcpgo.WithDestructiveHintAnnotation(false),
 			mcpgo.WithDescription("Execute a scoped Cypher query against the AGE graph overlay"),
 			mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
 			mcpgo.WithString("cypher", mcpgo.Required(), mcpgo.Description("Cypher query body to execute")),
@@ -140,6 +148,8 @@ func (s *Server) registerTools() {
 
 	// forget
 	s.mcpServer.AddTool(mcpgo.NewTool("forget",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(true),
 		mcpgo.WithDescription("Deactivate or permanently delete a memory"),
 		mcpgo.WithString("memory_id", mcpgo.Required(), mcpgo.Description("UUID of the memory to delete")),
 		mcpgo.WithBoolean("hard", mcpgo.Description("true = permanent delete, false = soft-delete (default: false)")),
@@ -147,6 +157,8 @@ func (s *Server) registerTools() {
 
 	// context
 	s.mcpServer.AddTool(mcpgo.NewTool("context",
+		mcpgo.WithReadOnlyHintAnnotation(true),
+		mcpgo.WithDestructiveHintAnnotation(false),
 		mcpgo.WithDescription("Retrieve a context bundle for the current scope and query"),
 		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
 		mcpgo.WithString("query", mcpgo.Description("What you are about to work on")),
@@ -155,6 +167,8 @@ func (s *Server) registerTools() {
 
 	// summarize
 	s.mcpServer.AddTool(mcpgo.NewTool("summarize",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
 		mcpgo.WithDescription("Consolidate memories into a higher-level semantic memory"),
 		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
 		mcpgo.WithString("topic", mcpgo.Description("Topic to cluster and summarize")),
@@ -163,6 +177,8 @@ func (s *Server) registerTools() {
 
 	// publish
 	s.mcpServer.AddTool(mcpgo.NewTool("publish",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
 		mcpgo.WithDescription("Create or update a knowledge artifact"),
 		mcpgo.WithString("title", mcpgo.Required(), mcpgo.Description("Artifact title")),
 		mcpgo.WithString("content", mcpgo.Required(), mcpgo.Description("Artifact content")),
@@ -177,6 +193,8 @@ func (s *Server) registerTools() {
 
 	// endorse
 	s.mcpServer.AddTool(mcpgo.NewTool("endorse",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
 		mcpgo.WithDescription("Endorse a knowledge artifact or skill"),
 		mcpgo.WithString("artifact_id", mcpgo.Required(), mcpgo.Description("UUID of the artifact or skill to endorse")),
 		mcpgo.WithString("note", mcpgo.Description("Optional endorsement note")),
@@ -184,6 +202,8 @@ func (s *Server) registerTools() {
 
 	// promote
 	s.mcpServer.AddTool(mcpgo.NewTool("promote",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
 		mcpgo.WithDescription("Nominate a memory for elevation into a knowledge artifact"),
 		mcpgo.WithString("memory_id", mcpgo.Required(), mcpgo.Description("UUID of the memory to promote")),
 		mcpgo.WithString("target_scope", mcpgo.Required(), mcpgo.Description("Target scope as kind:external_id")),
@@ -194,6 +214,8 @@ func (s *Server) registerTools() {
 
 	// collect
 	s.mcpServer.AddTool(mcpgo.NewTool("collect",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
 		mcpgo.WithDescription("Add artifact to collection, create collection, or list collections"),
 		mcpgo.WithString("action", mcpgo.Required(), mcpgo.Description("add_to_collection|create_collection|list_collections")),
 		mcpgo.WithString("artifact_id", mcpgo.Description("UUID of the artifact (for add_to_collection)")),
@@ -206,6 +228,8 @@ func (s *Server) registerTools() {
 
 	// skill_search
 	s.mcpServer.AddTool(mcpgo.NewTool("skill_search",
+		mcpgo.WithReadOnlyHintAnnotation(true),
+		mcpgo.WithDestructiveHintAnnotation(false),
 		mcpgo.WithDescription("Search for skills by semantic similarity"),
 		mcpgo.WithString("query", mcpgo.Required(), mcpgo.Description("Search query")),
 		mcpgo.WithString("scope", mcpgo.Description("Scope as kind:external_id")),
@@ -216,6 +240,8 @@ func (s *Server) registerTools() {
 
 	// skill_install
 	s.mcpServer.AddTool(mcpgo.NewTool("skill_install",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
 		mcpgo.WithDescription("Materialise a skill into the agent command directory"),
 		mcpgo.WithString("skill_id", mcpgo.Description("UUID of the skill to install")),
 		mcpgo.WithString("slug", mcpgo.Description("Slug alternative to skill_id")),
@@ -226,6 +252,8 @@ func (s *Server) registerTools() {
 
 	// skill_invoke
 	s.mcpServer.AddTool(mcpgo.NewTool("skill_invoke",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
 		mcpgo.WithDescription("Look up a skill by slug, substitute params, return expanded body"),
 		mcpgo.WithString("slug", mcpgo.Required(), mcpgo.Description("Skill slug")),
 		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
@@ -236,29 +264,39 @@ func (s *Server) registerTools() {
 
 	// knowledge_detail
 	s.mcpServer.AddTool(mcpgo.NewTool("knowledge_detail",
+		mcpgo.WithReadOnlyHintAnnotation(true),
+		mcpgo.WithDestructiveHintAnnotation(false),
 		mcpgo.WithDescription("Retrieve the full content of a knowledge artifact by ID. Use when recall returns full_content_available=true and the summary is insufficient."),
 		mcpgo.WithString("artifact_id", mcpgo.Required(), mcpgo.Description("UUID of the knowledge artifact")),
 	), withToolMetrics("knowledge_detail", withToolPermission("knowledge:read", s.handleKnowledgeDetail)))
 
 	// list_scopes
 	s.mcpServer.AddTool(mcpgo.NewTool("list_scopes",
+		mcpgo.WithReadOnlyHintAnnotation(true),
+		mcpgo.WithDestructiveHintAnnotation(false),
 		mcpgo.WithDescription("List all scopes accessible to the current token. Returns scope IDs and their kind:external_id strings for use in other tools."),
 	), withToolMetrics("list_scopes", withToolPermission("scopes:read", s.handleListScopes)))
 
 	// session_begin
 	s.mcpServer.AddTool(mcpgo.NewTool("session_begin",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
 		mcpgo.WithDescription("Start a new agent session for a scope. Returns a session_id to pass to skill_invoke for event correlation. Call once at the start of each agent session."),
 		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
 	), withToolMetrics("session_begin", withToolPermission("sessions:write", s.handleSessionBegin)))
 
 	// session_end
 	s.mcpServer.AddTool(mcpgo.NewTool("session_end",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
 		mcpgo.WithDescription("Close an agent session. Call when the agent session is ending (e.g. in a Stop hook)."),
 		mcpgo.WithString("session_id", mcpgo.Required(), mcpgo.Description("Session ID returned by session_begin")),
 	), withToolMetrics("session_end", withToolPermission("sessions:write", s.handleSessionEnd)))
 
 	// synthesize_topic
 	s.mcpServer.AddTool(mcpgo.NewTool("synthesize_topic",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
 		mcpgo.WithDescription("Synthesise multiple published knowledge artifacts into a single topic digest artifact"),
 		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Owner scope as kind:external_id")),
 		mcpgo.WithArray("source_ids", mcpgo.Required(), mcpgo.Description("UUIDs of the source artifacts to synthesise (minimum 2, all must be published non-digest artifacts)")),
