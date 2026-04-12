@@ -113,7 +113,6 @@ Register a summary model:
 postbrain --config config.yaml summary-model register \
   --slug gpt-4o-mini-summary-v1 \
   --provider-config openai-prod \
-  --dimensions 1536 \
   --activate
 ```
 

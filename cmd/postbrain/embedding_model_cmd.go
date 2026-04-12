@@ -98,6 +98,9 @@ func summaryModelRegisterCmd() *cobra.Command {
 		Short: "Register a summary generation model",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts.ContentType = "text"
+			if opts.Dimensions <= 0 {
+				opts.Dimensions = 1
+			}
 			msg, err := registerSummaryModelCmdFn(cmd.Context(), opts)
 			if err != nil {
 				return err
@@ -109,10 +112,8 @@ func summaryModelRegisterCmd() *cobra.Command {
 	cmd.Flags().StringVar(&opts.DatabaseURL, "database-url", "", "PostgreSQL URL (overrides config file and POSTBRAIN_DATABASE_URL)")
 	cmd.Flags().StringVar(&opts.Slug, "slug", "", "model slug (required)")
 	cmd.Flags().StringVar(&opts.ProviderConfig, "provider-config", "default", "named embedding provider profile to use")
-	cmd.Flags().IntVar(&opts.Dimensions, "dimensions", 0, "model dimensions metadata (required)")
 	cmd.Flags().BoolVar(&opts.Activate, "activate", false, "set as active summary model")
 	_ = cmd.MarkFlagRequired("slug")
-	_ = cmd.MarkFlagRequired("dimensions")
 	return cmd
 }
 
@@ -201,6 +202,9 @@ func runRegisterEmbeddingModelCommand(ctx context.Context, opts embeddingModelRe
 
 func runRegisterSummaryModelCommand(ctx context.Context, opts embeddingModelRegisterOptions) (string, error) {
 	opts.ContentType = "text"
+	if opts.Dimensions <= 0 {
+		opts.Dimensions = 1
+	}
 	return runRegisterModelCommand(ctx, opts, "generation")
 }
 

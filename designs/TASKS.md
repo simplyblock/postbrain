@@ -25,6 +25,16 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-12: Removed `--dimensions` from `summary-model register` CLI surface:
+  - Updated `cmd/postbrain/embedding_model_cmd.go` to:
+    - remove the `--dimensions` flag from `summary-model register`,
+    - apply an internal default dimensions value (`1`) for generation models.
+  - Updated `cmd/postbrain/embedding_model_cmd_test.go` to assert:
+    - summary-model registration succeeds without `--dimensions`,
+    - generated options pass default dimensions `1`.
+  - Updated `docs/embedding-model-operations.md` summary-model examples to
+    remove `--dimensions`.
+
 - [x] 2026-04-12: Added `postbrain summary-model` CLI with shared model-management internals (TDD-first):
   - Added new command group in `cmd/postbrain`:
     - `summary-model register`

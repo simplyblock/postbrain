@@ -184,12 +184,15 @@ func TestSummaryModelRegisterCommand_Success(t *testing.T) {
 		if opts.ContentType != "text" {
 			t.Fatalf("content-type = %q, want text", opts.ContentType)
 		}
+		if opts.Dimensions != 1 {
+			t.Fatalf("dimensions = %d, want default 1", opts.Dimensions)
+		}
 		return "registered model summary-1", nil
 	}
 	t.Cleanup(func() { registerSummaryModelCmdFn = old })
 
 	root := newRootCmd()
-	root.SetArgs([]string{"summary-model", "register", "--slug", "summary-1", "--dimensions", "1536"})
+	root.SetArgs([]string{"summary-model", "register", "--slug", "summary-1"})
 
 	var out bytes.Buffer
 	root.SetOut(&out)
