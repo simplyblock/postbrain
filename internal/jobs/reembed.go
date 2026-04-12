@@ -303,8 +303,10 @@ func (j *ReembedJob) updateTextEmbeddingByObjectType(ctx context.Context, object
 func (j *ReembedJob) resolveScopeID(ctx context.Context, objectType string, id uuid.UUID) uuid.UUID {
 	var scopeID uuid.UUID
 	switch objectType {
-	case "memory", "skill":
-		_ = j.pool.QueryRow(ctx, `SELECT scope_id FROM `+map[string]string{"memory": "memories", "skill": "skills"}[objectType]+` WHERE id=$1`, id).Scan(&scopeID)
+	case "memory":
+		_ = j.pool.QueryRow(ctx, `SELECT scope_id FROM memories WHERE id=$1`, id).Scan(&scopeID)
+	case "skill":
+		_ = j.pool.QueryRow(ctx, `SELECT scope_id FROM skills WHERE id=$1`, id).Scan(&scopeID)
 	case "knowledge_artifact":
 		_ = j.pool.QueryRow(ctx, `SELECT owner_scope_id FROM knowledge_artifacts WHERE id=$1`, id).Scan(&scopeID)
 	}
