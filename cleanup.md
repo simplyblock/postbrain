@@ -1152,11 +1152,12 @@ Both paths spawn goroutines with `context.Background()` and intentionally ignore
 
 ---
 
-### 8.11 Additional check outcomes (for traceability)
+### 8.11 Additional check outcomes (for traceability) ✓ Done
 
 - `go vet ./...` completed (no vet findings; one upstream C warning from tree-sitter dependency).
 - `make lint` completed (`golangci-lint` reports 0 issues).
-- `go test ./...` fails due external dependency coupling in `internal/ingest` (see 8.3).
+- `go test ./...` passes (8.3 fixed; ingest uses native DOCX extraction, no external binary dependency).
+- `go test -tags integration ./...` passes (27/27 packages; LSP resolver test race fixed).
 
 ---
 
