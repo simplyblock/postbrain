@@ -15,21 +15,7 @@ import (
 
 // handleSummarize consolidates memories for a scope/topic, or previews the plan.
 func (s *Server) handleSummarize(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-	var token mcpgo.ProgressToken
-	if req.Params.Meta != nil {
-		token = req.Params.Meta.ProgressToken
-	}
-	report := func(progress, total float64, msg string) {
-		if token == nil || s.mcpServer == nil {
-			return
-		}
-		_ = s.mcpServer.SendNotificationToClient(ctx, "notifications/progress", map[string]any{
-			"progressToken": token,
-			"progress":      progress,
-			"total":         total,
-			"message":       msg,
-		})
-	}
+	report := s.progressReporter(ctx, req)
 
 	args := req.GetArguments()
 

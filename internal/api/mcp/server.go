@@ -65,12 +65,34 @@ func NewServer(pool *pgxpool.Pool, svc *embedding.EmbeddingService, cfg *config.
 
 	s.mcpServer = mcpserver.NewMCPServer("postbrain", "1.0.0")
 	s.registerTools()
+	s.registerResources()
 	return s
 }
 
 // MCPServer returns the underlying mcp-go server, for use in tests.
 func (s *Server) MCPServer() *mcpserver.MCPServer {
 	return s.mcpServer
+}
+
+// progressReporter returns a closure that sends notifications/progress
+// notifications to the client. It is a no-op when the request carries no
+// progress token or when the MCP server is nil.
+func (s *Server) progressReporter(ctx context.Context, req mcpgo.CallToolRequest) func(progress, total float64, msg string) {
+	var token mcpgo.ProgressToken
+	if req.Params.Meta != nil {
+		token = req.Params.Meta.ProgressToken
+	}
+	return func(progress, total float64, msg string) {
+		if token == nil || s.mcpServer == nil {
+			return
+		}
+		_ = s.mcpServer.SendNotificationToClient(ctx, "notifications/progress", map[string]any{
+			"progressToken": token,
+			"progress":      progress,
+			"total":         total,
+			"message":       msg,
+		})
+	}
 }
 
 // withToolMetrics wraps a ToolHandlerFunc to record the call duration in the
