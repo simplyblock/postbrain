@@ -347,6 +347,53 @@ func (q *Queries) GetEndorsementByEndorser(ctx context.Context, arg GetEndorseme
 	return &i, err
 }
 
+const getPublishedArtifactsBatch = `-- name: GetPublishedArtifactsBatch :many
+SELECT id, owner_scope_id, title, content, embedding
+FROM knowledge_artifacts
+WHERE status='published'
+ORDER BY created_at
+LIMIT $1 OFFSET $2
+`
+
+type GetPublishedArtifactsBatchParams struct {
+	Limit  int32
+	Offset int32
+}
+
+type GetPublishedArtifactsBatchRow struct {
+	ID           uuid.UUID
+	OwnerScopeID uuid.UUID
+	Title        string
+	Content      string
+	Embedding    *pgvector_go.Vector
+}
+
+func (q *Queries) GetPublishedArtifactsBatch(ctx context.Context, arg GetPublishedArtifactsBatchParams) ([]*GetPublishedArtifactsBatchRow, error) {
+	rows, err := q.db.Query(ctx, getPublishedArtifactsBatch, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*GetPublishedArtifactsBatchRow{}
+	for rows.Next() {
+		var i GetPublishedArtifactsBatchRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerScopeID,
+			&i.Title,
+			&i.Content,
+			&i.Embedding,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUnsummarisedArtifacts = `-- name: GetUnsummarisedArtifacts :many
 SELECT id, content FROM knowledge_artifacts
 WHERE summary IS NULL

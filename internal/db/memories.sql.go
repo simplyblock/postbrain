@@ -364,6 +364,41 @@ func (q *Queries) GetMemory(ctx context.Context, id uuid.UUID) (*GetMemoryRow, e
 	return &i, err
 }
 
+const getRecentMemoriesForScope = `-- name: GetRecentMemoriesForScope :many
+SELECT m.id, m.content, m.embedding
+FROM memories m
+JOIN scopes s ON m.scope_id = s.id
+WHERE m.is_active=true
+  AND m.created_at > now() - INTERVAL '7 days'
+  AND s.path @> (SELECT path FROM scopes sc WHERE sc.id = $1)
+`
+
+type GetRecentMemoriesForScopeRow struct {
+	ID        uuid.UUID
+	Content   string
+	Embedding *pgvector_go.Vector
+}
+
+func (q *Queries) GetRecentMemoriesForScope(ctx context.Context, id uuid.UUID) ([]*GetRecentMemoriesForScopeRow, error) {
+	rows, err := q.db.Query(ctx, getRecentMemoriesForScope, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*GetRecentMemoriesForScopeRow{}
+	for rows.Next() {
+		var i GetRecentMemoriesForScopeRow
+		if err := rows.Scan(&i.ID, &i.Content, &i.Embedding); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getScopesWithConsolidationCandidates = `-- name: GetScopesWithConsolidationCandidates :many
 SELECT DISTINCT scope_id FROM memories
 WHERE is_active = true AND importance < 0.7 AND access_count < 3

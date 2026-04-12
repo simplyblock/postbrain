@@ -245,3 +245,10 @@ WHERE char_length(a.content) > $1::int
   )
 ORDER BY a.created_at
 LIMIT $2 OFFSET $3;
+
+-- name: GetPublishedArtifactsBatch :many
+SELECT id, owner_scope_id, title, content, embedding
+FROM knowledge_artifacts
+WHERE status='published'
+ORDER BY created_at
+LIMIT $1 OFFSET $2;

@@ -176,3 +176,11 @@ WHERE char_length(m.content) > $1::int
   )
 ORDER BY m.created_at
 LIMIT $2 OFFSET $3;
+
+-- name: GetRecentMemoriesForScope :many
+SELECT m.id, m.content, m.embedding
+FROM memories m
+JOIN scopes s ON m.scope_id = s.id
+WHERE m.is_active=true
+  AND m.created_at > now() - INTERVAL '7 days'
+  AND s.path @> (SELECT path FROM scopes sc WHERE sc.id = $1);
