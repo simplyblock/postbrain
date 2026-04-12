@@ -29,19 +29,12 @@ func (s *Server) handleSkillInvoke(ctx context.Context, req mcpgo.CallToolReques
 		return mcpgo.NewToolResultError("skill_invoke: server not configured"), nil
 	}
 
-	kind, externalID, err := parseScopeString(scopeStr)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("skill_invoke: invalid scope: %v", err)), nil
-	}
-	scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
-	if err != nil || scope == nil {
-		return mcpgo.NewToolResultError("skill_invoke: scope not found"), nil
-	}
-	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-		return scopeAuthzToolError(ctx, "skill_invoke", scope.ID, err), nil
+	scopeID, errResult := s.resolveScope(ctx, "skill_invoke", scopeStr)
+	if errResult != nil {
+		return errResult, nil
 	}
 
-	skill, err := s.sklStore.GetBySlug(ctx, scope.ID, slug)
+	skill, err := s.sklStore.GetBySlug(ctx, scopeID, slug)
 	if err != nil || skill == nil {
 		return mcpgo.NewToolResultError(fmt.Sprintf("skill_invoke: skill '%s' not found", slug)), nil
 	}
@@ -70,7 +63,7 @@ func (s *Server) handleSkillInvoke(ctx context.Context, req mcpgo.CallToolReques
 			}
 		}
 		payload, _ := json.Marshal(map[string]any{"skill_id": skill.ID.String()})
-		_ = db.InsertEvent(context.Background(), s.pool, sessionID, scope.ID, "skill_invoked", payload)
+		_ = db.InsertEvent(context.Background(), s.pool, sessionID, scopeID, "skill_invoked", payload)
 	}()
 
 	out, _ := json.Marshal(map[string]any{

@@ -9,7 +9,6 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 )
 
@@ -57,19 +56,9 @@ func (s *Server) handlePublish(ctx context.Context, req mcpgo.CallToolRequest) (
 		return mcpgo.NewToolResultError("publish: server not configured"), nil
 	}
 
-	kind, externalID, err := parseScopeString(scopeStr)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("publish: invalid scope: %v", err)), nil
-	}
-	scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("publish: scope lookup: %v", err)), nil
-	}
-	if scope == nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("publish: scope '%s' not found", scopeStr)), nil
-	}
-	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-		return scopeAuthzToolError(ctx, "publish", scope.ID, err), nil
+	scopeID, errResult := s.resolveScope(ctx, "publish", scopeStr)
+	if errResult != nil {
+		return errResult, nil
 	}
 
 	authorID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
@@ -77,7 +66,7 @@ func (s *Server) handlePublish(ctx context.Context, req mcpgo.CallToolRequest) (
 	artifact, err := s.knwStore.Create(ctx, knowledge.CreateInput{
 		KnowledgeType: knowledgeType,
 		ArtifactKind:  normalizedArtifactKind,
-		OwnerScopeID:  scope.ID,
+		OwnerScopeID:  scopeID,
 		AuthorID:      authorID,
 		Visibility:    visibility,
 		Title:         title,
@@ -91,7 +80,7 @@ func (s *Server) handlePublish(ctx context.Context, req mcpgo.CallToolRequest) (
 
 	// Optionally add to collection.
 	if collectionSlug != "" && s.knwColl != nil {
-		coll, err := s.knwColl.GetBySlug(ctx, scope.ID, collectionSlug)
+		coll, err := s.knwColl.GetBySlug(ctx, scopeID, collectionSlug)
 		if err == nil && coll != nil {
 			_ = s.knwColl.AddItem(ctx, coll.ID, artifact.ID, authorID)
 		}

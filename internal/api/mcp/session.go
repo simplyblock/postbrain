@@ -12,6 +12,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/db"
 )
 
+
 // handleSessionBegin creates a new session for the given scope and returns its ID.
 // The returned session_id should be passed to skill_invoke and other tools that
 // emit events, so that all activity within a logical agent session is correlated.
@@ -27,24 +28,14 @@ func (s *Server) handleSessionBegin(ctx context.Context, req mcpgo.CallToolReque
 		return mcpgo.NewToolResultError("session_begin: server not configured (no database connection)"), nil
 	}
 
-	kind, externalID, err := parseScopeString(scopeStr)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("session_begin: invalid scope: %v", err)), nil
-	}
-	scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("session_begin: scope lookup: %v", err)), nil
-	}
-	if scope == nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("session_begin: scope '%s' not found", scopeStr)), nil
-	}
-	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-		return scopeAuthzToolError(ctx, "session_begin", scope.ID, err), nil
+	scopeID, errResult := s.resolveScope(ctx, "session_begin", scopeStr)
+	if errResult != nil {
+		return errResult, nil
 	}
 
 	principalID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 
-	session, err := db.CreateSession(ctx, s.pool, scope.ID, principalID, nil)
+	session, err := db.CreateSession(ctx, s.pool, scopeID, principalID, nil)
 	if err != nil {
 		return mcpgo.NewToolResultError(fmt.Sprintf("session_begin: %v", err)), nil
 	}

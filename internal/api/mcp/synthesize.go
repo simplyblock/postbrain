@@ -9,7 +9,6 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 )
 
@@ -50,19 +49,9 @@ func (s *Server) handleSynthesizeTopic(ctx context.Context, req mcpgo.CallToolRe
 		return mcpgo.NewToolResultError("synthesize_topic: server not configured"), nil
 	}
 
-	kind, externalID, err := parseScopeString(scopeStr)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("synthesize_topic: invalid scope: %v", err)), nil
-	}
-	scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("synthesize_topic: scope lookup: %v", err)), nil
-	}
-	if scope == nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("synthesize_topic: scope '%s' not found", scopeStr)), nil
-	}
-	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-		return scopeAuthzToolError(ctx, "synthesize_topic", scope.ID, err), nil
+	scopeID, errResult := s.resolveScope(ctx, "synthesize_topic", scopeStr)
+	if errResult != nil {
+		return errResult, nil
 	}
 	report(1, 2, "scope verified")
 
@@ -71,7 +60,7 @@ func (s *Server) handleSynthesizeTopic(ctx context.Context, req mcpgo.CallToolRe
 	report(2, 2, fmt.Sprintf("synthesising %d artifacts", len(sourceIDs)))
 	synth := knowledge.NewSynthesiser(s.pool, s.svc)
 	artifact, err := synth.Create(ctx, knowledge.SynthesisInput{
-		ScopeID:    scope.ID,
+		ScopeID:    scopeID,
 		AuthorID:   authorID,
 		SourceIDs:  sourceIDs,
 		Title:      title,

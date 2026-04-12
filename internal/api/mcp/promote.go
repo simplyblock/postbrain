@@ -9,7 +9,6 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 )
 
@@ -40,32 +39,22 @@ func (s *Server) handlePromote(ctx context.Context, req mcpgo.CallToolRequest) (
 		return mcpgo.NewToolResultError("promote: server not configured"), nil
 	}
 
-	kind, externalID, err := parseScopeString(targetScopeStr)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("promote: invalid target_scope: %v", err)), nil
-	}
-	scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("promote: scope lookup: %v", err)), nil
-	}
-	if scope == nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("promote: scope '%s' not found", targetScopeStr)), nil
-	}
-	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-		return scopeAuthzToolError(ctx, "promote", scope.ID, err), nil
+	scopeID, errResult := s.resolveScope(ctx, "promote", targetScopeStr)
+	if errResult != nil {
+		return errResult, nil
 	}
 
 	requesterID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 
 	var proposedTitle *string
-	if v, ok := args["proposed_title"].(string); ok && v != "" {
+	if v := argString(args, "proposed_title"); v != "" {
 		proposedTitle = &v
 	}
 
 	// Optionally resolve collection by slug.
 	var collectionID *uuid.UUID
-	if collSlug, ok := args["collection_slug"].(string); ok && collSlug != "" && s.knwColl != nil {
-		coll, err := s.knwColl.GetBySlug(ctx, scope.ID, collSlug)
+	if collSlug := argString(args, "collection_slug"); collSlug != "" && s.knwColl != nil {
+		coll, err := s.knwColl.GetBySlug(ctx, scopeID, collSlug)
 		if err == nil && coll != nil {
 			collectionID = &coll.ID
 		}
@@ -74,7 +63,7 @@ func (s *Server) handlePromote(ctx context.Context, req mcpgo.CallToolRequest) (
 	promotionReq, err := s.knwProm.CreateRequest(ctx, knowledge.PromoteInput{
 		MemoryID:             memID,
 		RequestedBy:          requesterID,
-		TargetScopeID:        scope.ID,
+		TargetScopeID:        scopeID,
 		TargetVisibility:     targetVisibility,
 		ProposedTitle:        proposedTitle,
 		ProposedCollectionID: collectionID,

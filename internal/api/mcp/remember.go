@@ -9,7 +9,6 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/memory"
 )
 
@@ -29,24 +28,13 @@ func (s *Server) handleRemember(ctx context.Context, req mcpgo.CallToolRequest) 
 		return mcpgo.NewToolResultError("remember: 'scope' is required"), nil
 	}
 
-	kind, externalID, err := parseScopeString(scopeStr)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("remember: invalid scope: %v", err)), nil
-	}
-
 	if s.pool == nil {
 		return mcpgo.NewToolResultError("remember: server not configured (no database connection)"), nil
 	}
 
-	scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("remember: scope lookup failed: %v", err)), nil
-	}
-	if scope == nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("remember: scope '%s' not found", scopeStr)), nil
-	}
-	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-		return scopeAuthzToolError(ctx, "remember", scope.ID, err), nil
+	scopeID, errResult := s.resolveScope(ctx, "remember", scopeStr)
+	if errResult != nil {
+		return errResult, nil
 	}
 
 	// Get principal from context.
@@ -96,7 +84,7 @@ func (s *Server) handleRemember(ctx context.Context, req mcpgo.CallToolRequest) 
 		Content:    content,
 		Summary:    summary,
 		MemoryType: memoryType,
-		ScopeID:    scope.ID,
+		ScopeID:    scopeID,
 		AuthorID:   principalID,
 		Importance: importance,
 		SourceRef:  sourceRef,

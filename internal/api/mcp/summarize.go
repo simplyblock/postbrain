@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/memory"
 )
 
@@ -31,24 +30,14 @@ func (s *Server) handleSummarize(ctx context.Context, req mcpgo.CallToolRequest)
 		return mcpgo.NewToolResultError("summarize: server not configured"), nil
 	}
 
-	kind, externalID, err := parseScopeString(scopeStr)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("summarize: invalid scope: %v", err)), nil
-	}
-	scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("summarize: scope lookup: %v", err)), nil
-	}
-	if scope == nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("summarize: scope '%s' not found", scopeStr)), nil
-	}
-	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-		return scopeAuthzToolError(ctx, "summarize", scope.ID, err), nil
+	scopeID, errResult := s.resolveScope(ctx, "summarize", scopeStr)
+	if errResult != nil {
+		return errResult, nil
 	}
 	report(1, 3, "scope verified")
 
 	consolidator := memory.NewConsolidator(s.pool, s.svc)
-	clusters, err := consolidator.FindClusters(ctx, scope.ID)
+	clusters, err := consolidator.FindClusters(ctx, scopeID)
 	if err != nil {
 		return mcpgo.NewToolResultError(fmt.Sprintf("summarize: find clusters: %v", err)), nil
 	}

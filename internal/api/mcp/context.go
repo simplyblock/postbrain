@@ -3,13 +3,11 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/google/uuid"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 	"github.com/simplyblock/postbrain/internal/memory"
 )
@@ -18,8 +16,8 @@ import (
 func (s *Server) handleContext(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
 
-	scopeStr, ok := args["scope"].(string)
-	if !ok || scopeStr == "" {
+	scopeStr := argString(args, "scope")
+	if scopeStr == "" {
 		return mcpgo.NewToolResultError("context: 'scope' is required"), nil
 	}
 
@@ -30,19 +28,9 @@ func (s *Server) handleContext(ctx context.Context, req mcpgo.CallToolRequest) (
 		return mcpgo.NewToolResultError("context: server not configured"), nil
 	}
 
-	kind, externalID, err := parseScopeString(scopeStr)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("context: invalid scope: %v", err)), nil
-	}
-	scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("context: scope lookup: %v", err)), nil
-	}
-	if scope == nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("context: scope '%s' not found", scopeStr)), nil
-	}
-	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-		return scopeAuthzToolError(ctx, "context", scope.ID, err), nil
+	scopeID, errResult := s.resolveScope(ctx, "context", scopeStr)
+	if errResult != nil {
+		return errResult, nil
 	}
 
 	principalID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
@@ -70,7 +58,7 @@ func (s *Server) handleContext(ctx context.Context, req mcpgo.CallToolRequest) (
 	if s.knwStore != nil {
 		arts, err := s.knwStore.Recall(ctx, s.pool, knowledge.RecallInput{
 			Query:   query,
-			ScopeID: scope.ID,
+			ScopeID: scopeID,
 			Limit:   50,
 		})
 		if err == nil {
@@ -113,7 +101,7 @@ func (s *Server) handleContext(ctx context.Context, req mcpgo.CallToolRequest) (
 	if s.memStore != nil {
 		mems, err := s.memStore.Recall(ctx, memory.RecallInput{
 			Query:              query,
-			ScopeID:            scope.ID,
+			ScopeID:            scopeID,
 			PrincipalID:        principalID,
 			AuthorizedScopeIDs: authorizedScopeIDs,
 			SearchMode:         "hybrid",
