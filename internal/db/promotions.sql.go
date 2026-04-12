@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -84,6 +85,45 @@ func (q *Queries) GetPromotionRequest(ctx context.Context, id uuid.UUID) (*Promo
 		&i.CreatedAt,
 	)
 	return &i, err
+}
+
+const getStalePromotionRequests = `-- name: GetStalePromotionRequests :many
+SELECT id, memory_id, target_scope_id, created_at
+FROM promotion_requests
+WHERE status = 'pending' AND created_at < now() - interval '24 hours'
+ORDER BY created_at
+`
+
+type GetStalePromotionRequestsRow struct {
+	ID            uuid.UUID
+	MemoryID      uuid.UUID
+	TargetScopeID uuid.UUID
+	CreatedAt     time.Time
+}
+
+func (q *Queries) GetStalePromotionRequests(ctx context.Context) ([]*GetStalePromotionRequestsRow, error) {
+	rows, err := q.db.Query(ctx, getStalePromotionRequests)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*GetStalePromotionRequestsRow{}
+	for rows.Next() {
+		var i GetStalePromotionRequestsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.MemoryID,
+			&i.TargetScopeID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listPendingPromotions = `-- name: ListPendingPromotions :many

@@ -25,3 +25,9 @@ ORDER BY created_at;
 UPDATE promotion_requests
 SET status=$2, reviewer_id=$3, review_note=$4, reviewed_at=now(), result_artifact_id=$5
 WHERE id=$1;
+
+-- name: GetStalePromotionRequests :many
+SELECT id, memory_id, target_scope_id, created_at
+FROM promotion_requests
+WHERE status = 'pending' AND created_at < now() - interval '24 hours'
+ORDER BY created_at;
