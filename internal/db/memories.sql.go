@@ -245,6 +245,55 @@ func (q *Queries) FindNearDuplicates(ctx context.Context, arg FindNearDuplicates
 	return items, nil
 }
 
+const getMemoriesWithoutChunks = `-- name: GetMemoriesWithoutChunks :many
+SELECT m.id, m.scope_id, m.author_id, m.content FROM memories m
+WHERE char_length(m.content) > $1::int
+  AND m.parent_memory_id IS NULL
+  AND NOT EXISTS (
+      SELECT 1 FROM memories c WHERE c.parent_memory_id = m.id
+  )
+ORDER BY m.created_at
+LIMIT $2 OFFSET $3
+`
+
+type GetMemoriesWithoutChunksParams struct {
+	Column1 int32
+	Limit   int32
+	Offset  int32
+}
+
+type GetMemoriesWithoutChunksRow struct {
+	ID       uuid.UUID
+	ScopeID  uuid.UUID
+	AuthorID uuid.UUID
+	Content  string
+}
+
+func (q *Queries) GetMemoriesWithoutChunks(ctx context.Context, arg GetMemoriesWithoutChunksParams) ([]*GetMemoriesWithoutChunksRow, error) {
+	rows, err := q.db.Query(ctx, getMemoriesWithoutChunks, arg.Column1, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*GetMemoriesWithoutChunksRow{}
+	for rows.Next() {
+		var i GetMemoriesWithoutChunksRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ScopeID,
+			&i.AuthorID,
+			&i.Content,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getMemory = `-- name: GetMemory :one
 SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,

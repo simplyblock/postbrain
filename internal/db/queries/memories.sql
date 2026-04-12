@@ -166,3 +166,13 @@ WHERE expires_at < now() AND is_active = true;
 -- name: GetScopesWithConsolidationCandidates :many
 SELECT DISTINCT scope_id FROM memories
 WHERE is_active = true AND importance < 0.7 AND access_count < 3;
+
+-- name: GetMemoriesWithoutChunks :many
+SELECT m.id, m.scope_id, m.author_id, m.content FROM memories m
+WHERE char_length(m.content) > $1::int
+  AND m.parent_memory_id IS NULL
+  AND NOT EXISTS (
+      SELECT 1 FROM memories c WHERE c.parent_memory_id = m.id
+  )
+ORDER BY m.created_at
+LIMIT $2 OFFSET $3;

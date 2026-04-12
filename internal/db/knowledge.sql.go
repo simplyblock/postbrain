@@ -275,6 +275,55 @@ func (q *Queries) GetArtifactHistory(ctx context.Context, artifactID uuid.UUID) 
 	return items, nil
 }
 
+const getArtifactsWithoutChunks = `-- name: GetArtifactsWithoutChunks :many
+SELECT a.id, a.owner_scope_id, a.author_id, a.content FROM knowledge_artifacts a
+WHERE char_length(a.content) > $1::int
+  AND NOT EXISTS (
+      SELECT 1 FROM memories m
+      WHERE m.source_ref LIKE 'artifact:' || a.id::text || ':chunk:%'
+  )
+ORDER BY a.created_at
+LIMIT $2 OFFSET $3
+`
+
+type GetArtifactsWithoutChunksParams struct {
+	Column1 int32
+	Limit   int32
+	Offset  int32
+}
+
+type GetArtifactsWithoutChunksRow struct {
+	ID           uuid.UUID
+	OwnerScopeID uuid.UUID
+	AuthorID     uuid.UUID
+	Content      string
+}
+
+func (q *Queries) GetArtifactsWithoutChunks(ctx context.Context, arg GetArtifactsWithoutChunksParams) ([]*GetArtifactsWithoutChunksRow, error) {
+	rows, err := q.db.Query(ctx, getArtifactsWithoutChunks, arg.Column1, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*GetArtifactsWithoutChunksRow{}
+	for rows.Next() {
+		var i GetArtifactsWithoutChunksRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerScopeID,
+			&i.AuthorID,
+			&i.Content,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getEndorsementByEndorser = `-- name: GetEndorsementByEndorser :one
 SELECT id, artifact_id, endorser_id, note, created_at
 FROM knowledge_endorsements WHERE artifact_id=$1 AND endorser_id=$2

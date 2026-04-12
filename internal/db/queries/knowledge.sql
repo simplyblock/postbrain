@@ -235,3 +235,13 @@ LIMIT $1 OFFSET $2;
 
 -- name: SetArtifactSummary :exec
 UPDATE knowledge_artifacts SET summary=$2, updated_at=now() WHERE id=$1;
+
+-- name: GetArtifactsWithoutChunks :many
+SELECT a.id, a.owner_scope_id, a.author_id, a.content FROM knowledge_artifacts a
+WHERE char_length(a.content) > $1::int
+  AND NOT EXISTS (
+      SELECT 1 FROM memories m
+      WHERE m.source_ref LIKE 'artifact:' || a.id::text || ':chunk:%'
+  )
+ORDER BY a.created_at
+LIMIT $2 OFFSET $3;
