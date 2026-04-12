@@ -6,13 +6,13 @@ import (
 	"github.com/google/uuid"
 )
 
-// TestFanOut_StrictScope verifies that strictScope=true returns only the given scopeID.
+// TestFanOut_StrictScope verifies that strictScope=true returns only the given scopeID
+// without performing any DB call.
 func TestFanOut_StrictScope(t *testing.T) {
 	scopeID := uuid.New()
 	principalID := uuid.New()
 
-	// strictScope=true should return immediately without any DB call.
-	ids, err := fanOutStrict(scopeID, principalID)
+	ids, err := FanOutScopeIDs(t.Context(), nil, scopeID, principalID, 0, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

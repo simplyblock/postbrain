@@ -103,7 +103,3 @@ func deduplicateScopeIDs(ids []uuid.UUID) []uuid.UUID {
 	return out
 }
 
-// fanOutStrict is an internal helper exposed to tests: returns [scopeID].
-func fanOutStrict(scopeID, _ uuid.UUID) ([]uuid.UUID, error) {
-	return []uuid.UUID{scopeID}, nil
-}
