@@ -47,46 +47,15 @@ func FanOutScopeIDs(ctx context.Context, pool *pgxpool.Pool, scopeID, principalI
 
 // filterByDepth returns only scope IDs whose ltree path depth <= maxDepth.
 func filterByDepth(ctx context.Context, pool *pgxpool.Pool, ids []uuid.UUID, maxDepth int) ([]uuid.UUID, error) {
-	rows, err := pool.Query(ctx,
-		`SELECT id FROM scopes WHERE id = ANY($1) AND nlevel(path) <= $2`,
-		ids, maxDepth,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var filtered []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		filtered = append(filtered, id)
-	}
-	return filtered, rows.Err()
+	return db.New(pool).FilterScopesByDepth(ctx, db.FilterScopesByDepthParams{
+		Column1: ids,
+		Column2: int32(maxDepth),
+	})
 }
 
 // personalScopeIDs returns the scope IDs where kind='user' AND principal_id = principalID.
 func personalScopeIDs(ctx context.Context, pool *pgxpool.Pool, principalID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := pool.Query(ctx,
-		`SELECT id FROM scopes WHERE kind='user' AND principal_id = $1`,
-		principalID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var ids []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
+	return db.New(pool).GetUserScopesByPrincipal(ctx, principalID)
 }
 
 // deduplicateScopeIDs returns a slice with all duplicate UUIDs removed,
