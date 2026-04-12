@@ -117,3 +117,101 @@ func (q *Queries) GetMemberships(ctx context.Context, memberID uuid.UUID) ([]*Pr
 	}
 	return items, nil
 }
+
+const getPrincipalIsSystemAdmin = `-- name: GetPrincipalIsSystemAdmin :one
+SELECT is_system_admin FROM principals WHERE id = $1
+`
+
+func (q *Queries) GetPrincipalIsSystemAdmin(ctx context.Context, id uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, getPrincipalIsSystemAdmin, id)
+	var is_system_admin bool
+	err := row.Scan(&is_system_admin)
+	return is_system_admin, err
+}
+
+const getScopesForPrincipals = `-- name: GetScopesForPrincipals :many
+SELECT id FROM scopes WHERE principal_id = ANY($1::uuid[])
+`
+
+func (q *Queries) GetScopesForPrincipals(ctx context.Context, dollar_1 []uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, getScopesForPrincipals, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const hasAnyAdminMembership = `-- name: HasAnyAdminMembership :one
+SELECT EXISTS(
+    SELECT 1
+    FROM principal_memberships pm
+    WHERE pm.member_id = $1
+    AND pm.role = 'admin'
+)
+`
+
+func (q *Queries) HasAnyAdminMembership(ctx context.Context, memberID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, hasAnyAdminMembership, memberID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const isPrincipalAdmin = `-- name: IsPrincipalAdmin :one
+SELECT EXISTS(
+    SELECT 1
+    FROM principal_memberships pm
+    WHERE pm.member_id = $1
+    AND pm.parent_id = ANY($2::uuid[])
+    AND pm.role = 'admin'
+)
+`
+
+type IsPrincipalAdminParams struct {
+	MemberID uuid.UUID
+	Column2  []uuid.UUID
+}
+
+func (q *Queries) IsPrincipalAdmin(ctx context.Context, arg IsPrincipalAdminParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isPrincipalAdmin, arg.MemberID, arg.Column2)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const isScopeAdmin = `-- name: IsScopeAdmin :one
+SELECT EXISTS(
+    SELECT 1 FROM scopes sc1
+    WHERE sc1.id = ANY($1::uuid[]) AND sc1.principal_id = $2
+    UNION ALL
+    SELECT 1 FROM principal_memberships pm
+    JOIN scopes sc2 ON sc2.principal_id = pm.parent_id
+    WHERE sc2.id = ANY($1::uuid[])
+    AND pm.member_id = $2
+    AND pm.role = 'admin'
+)
+`
+
+type IsScopeAdminParams struct {
+	Column1     []uuid.UUID
+	PrincipalID uuid.UUID
+}
+
+func (q *Queries) IsScopeAdmin(ctx context.Context, arg IsScopeAdminParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isScopeAdmin, arg.Column1, arg.PrincipalID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
