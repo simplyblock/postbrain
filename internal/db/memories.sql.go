@@ -315,6 +315,31 @@ func (q *Queries) GetMemory(ctx context.Context, id uuid.UUID) (*GetMemoryRow, e
 	return &i, err
 }
 
+const getScopesWithConsolidationCandidates = `-- name: GetScopesWithConsolidationCandidates :many
+SELECT DISTINCT scope_id FROM memories
+WHERE is_active = true AND importance < 0.7 AND access_count < 3
+`
+
+func (q *Queries) GetScopesWithConsolidationCandidates(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, getScopesWithConsolidationCandidates)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var scope_id uuid.UUID
+		if err := rows.Scan(&scope_id); err != nil {
+			return nil, err
+		}
+		items = append(items, scope_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const hardDeleteMemory = `-- name: HardDeleteMemory :exec
 DELETE FROM memories WHERE id=$1
 `

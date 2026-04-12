@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/embedding"
 	"github.com/simplyblock/postbrain/internal/memory"
 )
@@ -36,25 +36,9 @@ func NewConsolidateJob(pool *pgxpool.Pool, svc *embedding.EmbeddingService, summ
 // Run finds and merges near-duplicate memory clusters across all active scopes.
 func (j *ConsolidateJob) Run(ctx context.Context) error {
 	// Fetch all distinct scope IDs that have consolidation candidates.
-	rows, err := j.pool.Query(ctx,
-		`SELECT DISTINCT scope_id FROM memories
-		 WHERE is_active=true AND importance < 0.7 AND access_count < 3`,
-	)
+	scopeIDs, err := db.New(j.pool).GetScopesWithConsolidationCandidates(ctx)
 	if err != nil {
 		return fmt.Errorf("consolidate: fetch scopes: %w", err)
-	}
-	defer rows.Close()
-
-	var scopeIDs []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return fmt.Errorf("consolidate: scan scope_id: %w", err)
-		}
-		scopeIDs = append(scopeIDs, id)
-	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("consolidate: rows error: %w", err)
 	}
 
 	totalMerged := 0

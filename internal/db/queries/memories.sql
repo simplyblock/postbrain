@@ -162,3 +162,7 @@ UPDATE memories SET promotion_status='nominated', updated_at=now() WHERE id=$1;
 -- name: ExpireWorkingMemories :execrows
 UPDATE memories SET is_active = false
 WHERE expires_at < now() AND is_active = true;
+
+-- name: GetScopesWithConsolidationCandidates :many
+SELECT DISTINCT scope_id FROM memories
+WHERE is_active = true AND importance < 0.7 AND access_count < 3;
