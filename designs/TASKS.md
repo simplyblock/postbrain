@@ -25,6 +25,39 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-12: Removed `--dimensions` from `summary-model register` CLI surface:
+  - Updated `cmd/postbrain/embedding_model_cmd.go` to:
+    - remove the `--dimensions` flag from `summary-model register`,
+    - apply an internal default dimensions value (`1`) for generation models.
+  - Updated `cmd/postbrain/embedding_model_cmd_test.go` to assert:
+    - summary-model registration succeeds without `--dimensions`,
+    - generated options pass default dimensions `1`.
+  - Updated `docs/embedding-model-operations.md` summary-model examples to
+    remove `--dimensions`.
+
+- [x] 2026-04-12: Added `postbrain summary-model` CLI with shared model-management internals (TDD-first):
+  - Added new command group in `cmd/postbrain`:
+    - `summary-model register`
+    - `summary-model activate`
+    - `summary-model list`
+  - Refactored `cmd/postbrain/embedding_model_cmd.go` to share register/activate/list
+    execution paths across model types while parameterizing `model_type`.
+  - `summary-model` commands now operate on `model_type='generation'`
+    with fixed `content_type='text'` and provider-profile `summary_model`.
+  - Extended DB registration contract (`internal/db/embedding_model_registration.go`):
+    - added `ModelType` param (defaults to `embedding` for compatibility),
+    - generation registration skips embedding table provisioning and
+      `embedding_index` seeding,
+    - generation rows are marked ready without vector table creation.
+  - Added test coverage:
+    - summary-model command tests in
+      `cmd/postbrain/embedding_model_cmd_test.go`
+    - generation registration integration test in
+      `internal/db/embedding_model_registration_integration_test.go`.
+  - Updated operator docs:
+    - `docs/embedding-model-operations.md`
+    - `docs/configuration.md`.
+
 - [x] 2026-04-11: Restored summarize/analyze no-error contract for missing model-driven summary model (TDD-first):
   - Added regression tests in `internal/embedding/service_test.go`:
     - `TestSummarize_MissingModelDrivenSummaryModel_ReturnsEmptyWithoutError`

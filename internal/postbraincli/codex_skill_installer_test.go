@@ -570,8 +570,8 @@ func TestInstallCodexMCPConfig_CreatesRequiredPostbrainSections(t *testing.T) {
 		"graph_query",
 	} {
 		section := "[mcp_servers.postbrain.tools." + tool + "]"
-		if !strings.Contains(content, section) {
-			t.Fatalf("config.toml missing %s", section)
+		if strings.Contains(content, section) {
+			t.Fatalf("config.toml should not contain approval sections (moved to InstallCodexPermissions): found %s", section)
 		}
 	}
 }
@@ -589,5 +589,88 @@ func TestInstallCodexMCPConfig_IsIdempotent(t *testing.T) {
 	}
 	if updated {
 		t.Fatal("updated = true on second call, want false")
+	}
+}
+
+// ── InstallCodexPermissions ───────────────────────────────────────────────────
+
+func TestInstallCodexPermissions_WritesApprovalModes(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+
+	updated, err := InstallCodexPermissions(targetDir)
+	if err != nil {
+		t.Fatalf("InstallCodexPermissions: %v", err)
+	}
+	if !updated {
+		t.Fatal("updated = false, want true")
+	}
+
+	data, err := os.ReadFile(filepath.Join(targetDir, ".codex", "config.toml"))
+	if err != nil {
+		t.Fatalf("read config.toml: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "default_tools_enabled = true") {
+		t.Fatal("config.toml missing default_tools_enabled = true")
+	}
+	if !strings.Contains(content, `default_tools_approval_mode = "approve"`) {
+		t.Fatal(`config.toml missing default_tools_approval_mode = "approve"`)
+	}
+	// Must not fall back to per-tool sections.
+	if strings.Contains(content, "[mcp_servers.postbrain.tools.") {
+		t.Fatal("config.toml must not contain per-tool approval sections")
+	}
+}
+
+func TestInstallCodexPermissions_IsIdempotent(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+
+	if _, err := InstallCodexPermissions(targetDir); err != nil {
+		t.Fatalf("first InstallCodexPermissions: %v", err)
+	}
+	updated, err := InstallCodexPermissions(targetDir)
+	if err != nil {
+		t.Fatalf("second InstallCodexPermissions: %v", err)
+	}
+	if updated {
+		t.Fatal("updated = true on second call, want false (idempotent)")
+	}
+}
+
+func TestInstallCodexPermissions_MergesIntoExistingConfig(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+	configDir := filepath.Join(targetDir, ".codex")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	existing := "[features]\ncodex_hooks = true\n\n[mcp_servers.postbrain]\nurl = \"http://localhost:7433/mcp\"\n"
+	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(existing), 0o644); err != nil {
+		t.Fatalf("write config.toml: %v", err)
+	}
+
+	updated, err := InstallCodexPermissions(targetDir)
+	if err != nil {
+		t.Fatalf("InstallCodexPermissions: %v", err)
+	}
+	if !updated {
+		t.Fatal("updated = false, want true")
+	}
+
+	data, _ := os.ReadFile(filepath.Join(configDir, "config.toml"))
+	content := string(data)
+	if !strings.Contains(content, "codex_hooks = true") {
+		t.Error("existing codex_hooks entry lost after merge")
+	}
+	if !strings.Contains(content, `url = "http://localhost:7433/mcp"`) {
+		t.Error("existing MCP url lost after merge")
+	}
+	if !strings.Contains(content, "default_tools_enabled = true") {
+		t.Error("default_tools_enabled = true not added")
+	}
+	if !strings.Contains(content, `default_tools_approval_mode = "approve"`) {
+		t.Error(`default_tools_approval_mode = "approve" not added`)
 	}
 }

@@ -43,6 +43,9 @@ type embeddingModelListOptions struct {
 var registerEmbeddingModelCmdFn = runRegisterEmbeddingModelCommand
 var activateEmbeddingModelCmdFn = runActivateEmbeddingModelCommand
 var listEmbeddingModelCmdFn = runListEmbeddingModelsCommand
+var registerSummaryModelCmdFn = runRegisterSummaryModelCommand
+var activateSummaryModelCmdFn = runActivateSummaryModelCommand
+var listSummaryModelCmdFn = runListSummaryModelsCommand
 
 func embeddingModelCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -50,6 +53,15 @@ func embeddingModelCmd() *cobra.Command {
 		Short: "Embedding model management",
 	}
 	cmd.AddCommand(embeddingModelRegisterCmd(), embeddingModelActivateCmd(), embeddingModelListCmd())
+	return cmd
+}
+
+func summaryModelCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "summary-model",
+		Short: "Summary model management",
+	}
+	cmd.AddCommand(summaryModelRegisterCmd(), summaryModelActivateCmd(), summaryModelListCmd())
 	return cmd
 }
 
@@ -79,6 +91,32 @@ func embeddingModelRegisterCmd() *cobra.Command {
 	return cmd
 }
 
+func summaryModelRegisterCmd() *cobra.Command {
+	opts := embeddingModelRegisterOptions{ContentType: "text"}
+	cmd := &cobra.Command{
+		Use:   "register",
+		Short: "Register a summary generation model",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			opts.ContentType = "text"
+			if opts.Dimensions <= 0 {
+				opts.Dimensions = 1
+			}
+			msg, err := registerSummaryModelCmdFn(cmd.Context(), opts)
+			if err != nil {
+				return err
+			}
+			_, err = fmt.Fprintln(cmd.OutOrStdout(), msg)
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&opts.DatabaseURL, "database-url", "", "PostgreSQL URL (overrides config file and POSTBRAIN_DATABASE_URL)")
+	cmd.Flags().StringVar(&opts.Slug, "slug", "", "model slug (required)")
+	cmd.Flags().StringVar(&opts.ProviderConfig, "provider-config", "default", "named embedding provider profile to use")
+	cmd.Flags().BoolVar(&opts.Activate, "activate", false, "set as active summary model")
+	_ = cmd.MarkFlagRequired("slug")
+	return cmd
+}
+
 func embeddingModelActivateCmd() *cobra.Command {
 	opts := embeddingModelActivateOptions{}
 	cmd := &cobra.Command{
@@ -101,6 +139,27 @@ func embeddingModelActivateCmd() *cobra.Command {
 	return cmd
 }
 
+func summaryModelActivateCmd() *cobra.Command {
+	opts := embeddingModelActivateOptions{ContentType: "text"}
+	cmd := &cobra.Command{
+		Use:   "activate",
+		Short: "Activate a registered summary model",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			opts.ContentType = "text"
+			msg, err := activateSummaryModelCmdFn(cmd.Context(), opts)
+			if err != nil {
+				return err
+			}
+			_, err = fmt.Fprintln(cmd.OutOrStdout(), msg)
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&opts.DatabaseURL, "database-url", "", "PostgreSQL URL (overrides config file and POSTBRAIN_DATABASE_URL)")
+	cmd.Flags().StringVar(&opts.Slug, "slug", "", "model slug (required)")
+	_ = cmd.MarkFlagRequired("slug")
+	return cmd
+}
+
 func embeddingModelListCmd() *cobra.Command {
 	opts := embeddingModelListOptions{}
 	cmd := &cobra.Command{
@@ -119,12 +178,42 @@ func embeddingModelListCmd() *cobra.Command {
 	return cmd
 }
 
+func summaryModelListCmd() *cobra.Command {
+	opts := embeddingModelListOptions{}
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List registered summary models",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			msg, err := listSummaryModelCmdFn(cmd.Context(), opts)
+			if err != nil {
+				return err
+			}
+			_, err = fmt.Fprintln(cmd.OutOrStdout(), msg)
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&opts.DatabaseURL, "database-url", "", "PostgreSQL URL (overrides config file and POSTBRAIN_DATABASE_URL)")
+	return cmd
+}
+
 func runRegisterEmbeddingModelCommand(ctx context.Context, opts embeddingModelRegisterOptions) (string, error) {
+	return runRegisterModelCommand(ctx, opts, "embedding")
+}
+
+func runRegisterSummaryModelCommand(ctx context.Context, opts embeddingModelRegisterOptions) (string, error) {
+	opts.ContentType = "text"
+	if opts.Dimensions <= 0 {
+		opts.Dimensions = 1
+	}
+	return runRegisterModelCommand(ctx, opts, "generation")
+}
+
+func runRegisterModelCommand(ctx context.Context, opts embeddingModelRegisterOptions, modelType string) (string, error) {
 	embCfg, err := loadCLIEmbeddingConfig(cfgPath)
 	if err != nil {
 		return "", err
 	}
-	resolved, err := resolveProviderRegistrationFields(opts, embCfg)
+	resolved, err := resolveProviderRegistrationFields(opts, embCfg, modelType)
 	if err != nil {
 		return "", err
 	}
@@ -143,6 +232,7 @@ func runRegisterEmbeddingModelCommand(ctx context.Context, opts embeddingModelRe
 		ProviderConfig: resolved.ProviderConfig,
 		Dimensions:     opts.Dimensions,
 		ContentType:    opts.ContentType,
+		ModelType:      modelType,
 		Activate:       opts.Activate,
 	})
 	if err != nil {
@@ -175,7 +265,7 @@ func loadCLIEmbeddingConfig(path string) (*config.EmbeddingConfig, error) {
 	return &emb, nil
 }
 
-func resolveProviderRegistrationFields(opts embeddingModelRegisterOptions, embCfg *config.EmbeddingConfig) (resolvedEmbeddingRegistration, error) {
+func resolveProviderRegistrationFields(opts embeddingModelRegisterOptions, embCfg *config.EmbeddingConfig, modelType string) (resolvedEmbeddingRegistration, error) {
 	out := resolvedEmbeddingRegistration{}
 	profileName := strings.TrimSpace(opts.ProviderConfig)
 	if profileName == "" {
@@ -183,8 +273,11 @@ func resolveProviderRegistrationFields(opts embeddingModelRegisterOptions, embCf
 	}
 	out.ProviderConfig = profileName
 
-	if opts.ContentType != "text" && opts.ContentType != "code" {
+	if modelType == "embedding" && opts.ContentType != "text" && opts.ContentType != "code" {
 		return out, fmt.Errorf("invalid content type %q", opts.ContentType)
+	}
+	if modelType == "generation" && opts.ContentType != "text" {
+		return out, fmt.Errorf("summary models require content type \"text\"")
 	}
 	if embCfg == nil {
 		return out, fmt.Errorf("embedding config is not available")
@@ -196,11 +289,15 @@ func resolveProviderRegistrationFields(opts embeddingModelRegisterOptions, embCf
 
 	out.Provider = strings.TrimSpace(profile.Backend)
 	out.ServiceURL = strings.TrimSpace(profile.ServiceURL)
-	switch opts.ContentType {
-	case "text":
-		out.ProviderModel = strings.TrimSpace(profile.TextModel)
-	case "code":
-		out.ProviderModel = strings.TrimSpace(profile.CodeModel)
+	if modelType == "generation" {
+		out.ProviderModel = strings.TrimSpace(profile.SummaryModel)
+	} else {
+		switch opts.ContentType {
+		case "text":
+			out.ProviderModel = strings.TrimSpace(profile.TextModel)
+		case "code":
+			out.ProviderModel = strings.TrimSpace(profile.CodeModel)
+		}
 	}
 	if out.Provider == "" {
 		return out, fmt.Errorf("embedding.providers.%s.backend is required", profileName)
@@ -211,15 +308,30 @@ func resolveProviderRegistrationFields(opts embeddingModelRegisterOptions, embCf
 	if out.ServiceURL == "" {
 		return out, fmt.Errorf("embedding.providers.%s.service_url is required", profileName)
 	}
-	if out.ProviderModel == "" {
+	if out.ProviderModel == "" && modelType == "generation" {
+		return out, fmt.Errorf("embedding.providers.%s.summary_model is required", profileName)
+	}
+	if out.ProviderModel == "" && modelType == "embedding" {
 		return out, fmt.Errorf("embedding.providers.%s.%s_model is required", profileName, opts.ContentType)
 	}
 	return out, nil
 }
 
 func runActivateEmbeddingModelCommand(ctx context.Context, opts embeddingModelActivateOptions) (string, error) {
-	if opts.ContentType != "text" && opts.ContentType != "code" {
+	return runActivateModelCommand(ctx, opts, "embedding")
+}
+
+func runActivateSummaryModelCommand(ctx context.Context, opts embeddingModelActivateOptions) (string, error) {
+	opts.ContentType = "text"
+	return runActivateModelCommand(ctx, opts, "generation")
+}
+
+func runActivateModelCommand(ctx context.Context, opts embeddingModelActivateOptions, modelType string) (string, error) {
+	if modelType == "embedding" && opts.ContentType != "text" && opts.ContentType != "code" {
 		return "", fmt.Errorf("invalid content type %q", opts.ContentType)
+	}
+	if modelType == "generation" && opts.ContentType != "text" {
+		return "", fmt.Errorf("summary models require content type \"text\"")
 	}
 
 	pool, err := openCLIPool(ctx, opts.DatabaseURL)
@@ -237,16 +349,16 @@ func runActivateEmbeddingModelCommand(ctx context.Context, opts embeddingModelAc
 	if _, err := tx.Exec(ctx, `
 		UPDATE ai_models
 		SET is_active = false
-		WHERE content_type = $1 AND model_type = 'embedding'
-	`, opts.ContentType); err != nil {
+		WHERE content_type = $1 AND model_type = $2
+	`, opts.ContentType, modelType); err != nil {
 		return "", fmt.Errorf("deactivate models: %w", err)
 	}
 
 	tag, err := tx.Exec(ctx, `
 		UPDATE ai_models
 		SET is_active = true
-		WHERE slug = $1 AND content_type = $2 AND model_type = 'embedding'
-	`, opts.Slug, opts.ContentType)
+		WHERE slug = $1 AND content_type = $2 AND model_type = $3
+	`, opts.Slug, opts.ContentType, modelType)
 	if err != nil {
 		return "", fmt.Errorf("activate model: %w", err)
 	}
@@ -261,6 +373,14 @@ func runActivateEmbeddingModelCommand(ctx context.Context, opts embeddingModelAc
 }
 
 func runListEmbeddingModelsCommand(ctx context.Context, opts embeddingModelListOptions) (string, error) {
+	return runListModelsCommand(ctx, opts, "embedding")
+}
+
+func runListSummaryModelsCommand(ctx context.Context, opts embeddingModelListOptions) (string, error) {
+	return runListModelsCommand(ctx, opts, "generation")
+}
+
+func runListModelsCommand(ctx context.Context, opts embeddingModelListOptions, modelType string) (string, error) {
 	pool, err := openCLIPool(ctx, opts.DatabaseURL)
 	if err != nil {
 		return "", err
@@ -270,11 +390,11 @@ func runListEmbeddingModelsCommand(ctx context.Context, opts embeddingModelListO
 	rows, err := pool.Query(ctx, `
 		SELECT slug, provider, provider_model, content_type, dimensions, is_active, is_ready, COALESCE(table_name, '')
 		FROM ai_models
-		WHERE model_type = 'embedding'
+		WHERE model_type = $1
 		ORDER BY content_type, slug
-	`)
+	`, modelType)
 	if err != nil {
-		return "", fmt.Errorf("list embedding models: %w", err)
+		return "", fmt.Errorf("list %s models: %w", modelType, err)
 	}
 	defer rows.Close()
 
@@ -292,13 +412,13 @@ func runListEmbeddingModelsCommand(ctx context.Context, opts embeddingModelListO
 			tableName     string
 		)
 		if err := rows.Scan(&slug, &provider, &providerModel, &contentType, &dimensions, &isActive, &isReady, &tableName); err != nil {
-			return "", fmt.Errorf("scan embedding model: %w", err)
+			return "", fmt.Errorf("scan %s model: %w", modelType, err)
 		}
 		b.WriteString(fmt.Sprintf("%s\t%s\t%s\t%s\t%d\t%t\t%t\t%s\n",
 			slug, strOrEmpty(provider), strOrEmpty(providerModel), contentType, dimensions, isActive, isReady, tableName))
 	}
 	if err := rows.Err(); err != nil {
-		return "", fmt.Errorf("iterate embedding models: %w", err)
+		return "", fmt.Errorf("iterate %s models: %w", modelType, err)
 	}
 	return strings.TrimSpace(b.String()), nil
 }

@@ -235,21 +235,45 @@ func InstallCodexMCPConfig(targetDir, postbrainURL string) (bool, error) {
 	content, sectionUpdated = ensureTOMLStringKey(content, "mcp_servers.postbrain", "bearer_token_env_var", "POSTBRAIN_TOKEN")
 	updatedAny = updatedAny || sectionUpdated
 
-	for _, tool := range []string{
-		"list_scopes",
-		"session_begin",
-		"recall",
-		"context",
-		"knowledge_detail",
-		"publish",
-		"remember",
-		"session_end",
-		"graph_query",
-	} {
-		section := "mcp_servers.postbrain.tools." + tool
-		content, sectionUpdated = ensureTOMLStringKey(content, section, "approval_mode", "approve")
-		updatedAny = updatedAny || sectionUpdated
+	if !updatedAny {
+		return false, nil
 	}
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
+		return false, fmt.Errorf("write config.toml: %w", err)
+	}
+	return true, nil
+}
+
+// InstallCodexPermissions sets default_tools_enabled = true and
+// default_tools_approval_mode = "approve" at the [mcp_servers.postbrain] level
+// so Codex auto-approves all Postbrain MCP tool calls without needing a
+// per-tool list. The call is idempotent.
+func InstallCodexPermissions(targetDir string) (bool, error) {
+	if strings.TrimSpace(targetDir) == "" {
+		targetDir = "."
+	}
+
+	configDir := filepath.Join(targetDir, ".codex")
+	configPath := filepath.Join(configDir, "config.toml")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		return false, fmt.Errorf("create .codex directory: %w", err)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil && !os.IsNotExist(err) {
+		return false, fmt.Errorf("read config.toml: %w", err)
+	}
+	content := string(data)
+	updatedAny := false
+
+	var sectionUpdated bool
+	content, sectionUpdated = ensureTOMLBoolKey(content, "mcp_servers.postbrain", "default_tools_enabled", true)
+	updatedAny = updatedAny || sectionUpdated
+	content, sectionUpdated = ensureTOMLStringKey(content, "mcp_servers.postbrain", "default_tools_approval_mode", "approve")
+	updatedAny = updatedAny || sectionUpdated
 
 	if !updatedAny {
 		return false, nil
@@ -332,6 +356,42 @@ func parseTOMLAssignment(line string) (key, value string, ok bool) {
 	key = strings.TrimSpace(trimmed[:eq])
 	value = strings.TrimSpace(trimmed[eq+1:])
 	return key, value, true
+}
+
+func ensureTOMLBoolKey(content, section, key string, value bool) (string, bool) {
+	sectionStart, sectionEnd := findSection(strings.Split(content, "\n"), section)
+	strVal := "false"
+	if value {
+		strVal = "true"
+	}
+
+	if sectionStart < 0 {
+		trimmed := strings.TrimRight(content, "\n")
+		if trimmed == "" {
+			return "[" + section + "]\n" + key + " = " + strVal + "\n", true
+		}
+		return trimmed + "\n\n[" + section + "]\n" + key + " = " + strVal + "\n", true
+	}
+
+	lines := strings.Split(content, "\n")
+	for i := sectionStart + 1; i < sectionEnd; i++ {
+		k, _, ok := parseTOMLAssignment(lines[i])
+		if !ok || k != key {
+			continue
+		}
+		want := key + " = " + strVal
+		if strings.TrimSpace(lines[i]) == want {
+			return content, false
+		}
+		lines[i] = want
+		return strings.Join(lines, "\n"), true
+	}
+
+	insertAt := sectionEnd
+	lines = append(lines, "")
+	copy(lines[insertAt+1:], lines[insertAt:])
+	lines[insertAt] = key + " = " + strVal
+	return strings.Join(lines, "\n"), true
 }
 
 func ensureTOMLStringKey(content, section, key, value string) (string, bool) {

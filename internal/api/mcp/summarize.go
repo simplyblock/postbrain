@@ -15,6 +15,8 @@ import (
 
 // handleSummarize consolidates memories for a scope/topic, or previews the plan.
 func (s *Server) handleSummarize(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+	report := s.progressReporter(ctx, req)
+
 	args := req.GetArguments()
 
 	scopeStr, ok := args["scope"].(string)
@@ -50,12 +52,14 @@ func (s *Server) handleSummarize(ctx context.Context, req mcpgo.CallToolRequest)
 	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
 		return scopeAuthzToolError(ctx, "summarize", scope.ID, err), nil
 	}
+	report(1, 3, "scope verified")
 
 	consolidator := memory.NewConsolidator(s.pool, s.svc)
 	clusters, err := consolidator.FindClusters(ctx, scope.ID)
 	if err != nil {
 		return mcpgo.NewToolResultError(fmt.Sprintf("summarize: find clusters: %v", err)), nil
 	}
+	report(2, 3, fmt.Sprintf("found %d clusters", len(clusters)))
 
 	if dryRun {
 		var wouldConsolidate []string
@@ -103,6 +107,7 @@ func (s *Server) handleSummarize(ctx context.Context, req mcpgo.CallToolRequest)
 		lastSummary = result.Content
 	}
 
+	report(3, 3, "consolidation complete")
 	out, _ := json.Marshal(map[string]any{
 		"consolidated_count": totalConsolidated,
 		"result_memory_id":   lastResultID.String(),

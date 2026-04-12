@@ -511,6 +511,7 @@ func parseSkillID(raw string) (uuid.UUID, error) {
 
 func installCodexSkillCmd() *cobra.Command {
 	var targetDir string
+	var autoapprove bool
 	cmd := &cobra.Command{
 		Use:   "install-codex-skill [target_dir]",
 		Short: "Install .agents/skills/postbrain/SKILL.md into a target directory",
@@ -570,6 +571,13 @@ func installCodexSkillCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			updatedPerms := false
+			if autoapprove {
+				updatedPerms, err = postbraincli.InstallCodexPermissions(targetDir)
+				if err != nil {
+					return err
+				}
+			}
 			slog.Info("install-codex-skill: installed",
 				"path", installedPath,
 				"codex_version", codexVersion,
@@ -577,11 +585,13 @@ func installCodexSkillCmd() *cobra.Command {
 				"hooks_installed", installHooks,
 				"agents_updated", updatedAgents,
 				"config_updated", updatedConfig,
-				"mcp_updated", updatedMCP)
+				"mcp_updated", updatedMCP,
+				"permissions_updated", updatedPerms)
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&targetDir, "target", ".", "target directory")
+	cmd.Flags().BoolVar(&autoapprove, "autoapprove", false, "add approval_mode=approve for all Postbrain tools in .codex/config.toml")
 	return cmd
 }
 
@@ -708,6 +718,7 @@ func extractSemver(input string) (semver, error) {
 
 func installClaudeSkillCmd() *cobra.Command {
 	var targetDir string
+	var autoapprove bool
 	cmd := &cobra.Command{
 		Use:   "install-claude-skill [target_dir]",
 		Short: "Install .claude/skills/postbrain/SKILL.md into a target directory",
@@ -741,16 +752,25 @@ func installClaudeSkillCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			updatedPerms := false
+			if autoapprove {
+				updatedPerms, err = postbraincli.InstallClaudePermissions(targetDir)
+				if err != nil {
+					return err
+				}
+			}
 			slog.Info("install-claude-skill: installed",
 				"path", installedPath,
 				"backend_url", backendURL,
 				"claude_updated", updatedClaude,
 				"settings_updated", updatedSettings,
-				"mcp_updated", updatedMCP)
+				"mcp_updated", updatedMCP,
+				"permissions_updated", updatedPerms)
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&targetDir, "target", ".", "target directory")
+	cmd.Flags().BoolVar(&autoapprove, "autoapprove", false, "add mcp__postbrain__* to permissions.allow in .claude/settings.local.json")
 	return cmd
 }
 

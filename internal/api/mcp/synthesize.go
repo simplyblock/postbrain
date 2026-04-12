@@ -16,6 +16,8 @@ import (
 // handleSynthesizeTopic synthesises multiple published knowledge artifacts into
 // a single topic digest artifact.
 func (s *Server) handleSynthesizeTopic(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+	report := s.progressReporter(ctx, req)
+
 	args := req.GetArguments()
 
 	scopeStr, ok := args["scope"].(string)
@@ -69,9 +71,11 @@ func (s *Server) handleSynthesizeTopic(ctx context.Context, req mcpgo.CallToolRe
 	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
 		return scopeAuthzToolError(ctx, "synthesize_topic", scope.ID, err), nil
 	}
+	report(1, 2, "scope verified")
 
 	authorID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 
+	report(2, 2, fmt.Sprintf("synthesising %d artifacts", len(sourceIDs)))
 	synth := knowledge.NewSynthesiser(s.pool, s.svc)
 	artifact, err := synth.Create(ctx, knowledge.SynthesisInput{
 		ScopeID:    scope.ID,

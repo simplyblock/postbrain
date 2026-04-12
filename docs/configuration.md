@@ -43,7 +43,8 @@ For how embeddings/chunks/entities are used during indexing and retrieval, see
 
 `embedding.providers` lets you define multiple runtime profiles (for example
 `default`, `openai-prod`, `local-ollama`). Models bind to a profile via
-`postbrain --config config.yaml embedding-model register --provider-config <name>`.
+`postbrain --config config.yaml embedding-model register --provider-config <name>`
+or `postbrain --config config.yaml summary-model register --provider-config <name>`.
 
 At runtime:
 - text/code embeddings resolve from active `ai_models` rows where `model_type='embedding'`

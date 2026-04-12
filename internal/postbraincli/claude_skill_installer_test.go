@@ -589,3 +589,152 @@ func TestInstallClaudeMCPConfig_IsIdempotent(t *testing.T) {
 		t.Fatal("updated = true on second call, want false")
 	}
 }
+
+// ── InstallClaudePermissions ──────────────────────────────────────────────────
+
+func TestInstallClaudePermissions_CreatesSettingsWithPermissions(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+
+	updated, err := InstallClaudePermissions(targetDir)
+	if err != nil {
+		t.Fatalf("InstallClaudePermissions: %v", err)
+	}
+	if !updated {
+		t.Fatal("updated = false, want true")
+	}
+
+	data, err := os.ReadFile(filepath.Join(targetDir, ".claude", "settings.local.json"))
+	if err != nil {
+		t.Fatalf("read settings.local.json: %v", err)
+	}
+	var s map[string]any
+	if err := json.Unmarshal(data, &s); err != nil {
+		t.Fatalf("parse settings.local.json: %v", err)
+	}
+	perms, _ := s["permissions"].(map[string]any)
+	if perms == nil {
+		t.Fatal("settings.local.json missing permissions")
+	}
+	allow, _ := perms["allow"].([]any)
+	if len(allow) == 0 {
+		t.Fatal("permissions.allow is empty")
+	}
+	found := false
+	for _, v := range allow {
+		if v == "mcp__postbrain__*" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("permissions.allow does not contain mcp__postbrain__*, got %v", allow)
+	}
+}
+
+func TestInstallClaudePermissions_IsIdempotent(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+
+	if _, err := InstallClaudePermissions(targetDir); err != nil {
+		t.Fatalf("first InstallClaudePermissions: %v", err)
+	}
+	updated, err := InstallClaudePermissions(targetDir)
+	if err != nil {
+		t.Fatalf("second InstallClaudePermissions: %v", err)
+	}
+	if updated {
+		t.Fatal("updated = true on second call, want false (idempotent)")
+	}
+
+	data, _ := os.ReadFile(filepath.Join(targetDir, ".claude", "settings.local.json"))
+	if strings.Count(string(data), "mcp__postbrain__*") != 1 {
+		t.Error("mcp__postbrain__* duplicated in settings.local.json")
+	}
+}
+
+func TestInstallClaudePermissions_MergesIntoExistingSettings(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+	clDir := filepath.Join(targetDir, ".claude")
+	if err := os.MkdirAll(clDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	existing := `{"theme":"dark","permissions":{"allow":["Bash(git:*)"],"defaultMode":"default"}}`
+	if err := os.WriteFile(filepath.Join(clDir, "settings.local.json"), []byte(existing), 0o644); err != nil {
+		t.Fatalf("write settings.local.json: %v", err)
+	}
+
+	updated, err := InstallClaudePermissions(targetDir)
+	if err != nil {
+		t.Fatalf("InstallClaudePermissions: %v", err)
+	}
+	if !updated {
+		t.Fatal("updated = false, want true")
+	}
+
+	data, _ := os.ReadFile(filepath.Join(clDir, "settings.local.json"))
+	var s map[string]any
+	if err := json.Unmarshal(data, &s); err != nil {
+		t.Fatalf("parse settings.local.json: %v", err)
+	}
+	if s["theme"] != "dark" {
+		t.Errorf("theme lost after merge, got %v", s["theme"])
+	}
+	perms, _ := s["permissions"].(map[string]any)
+	if perms == nil {
+		t.Fatal("permissions missing after merge")
+	}
+	if perms["defaultMode"] != "default" {
+		t.Errorf("permissions.defaultMode lost, got %v", perms["defaultMode"])
+	}
+	allow, _ := perms["allow"].([]any)
+	hasGit, hasPostbrain := false, false
+	for _, v := range allow {
+		switch v {
+		case "Bash(git:*)":
+			hasGit = true
+		case "mcp__postbrain__*":
+			hasPostbrain = true
+		}
+	}
+	if !hasGit {
+		t.Error("existing Bash(git:*) allow rule lost after merge")
+	}
+	if !hasPostbrain {
+		t.Error("mcp__postbrain__* not added to allow list")
+	}
+}
+
+func TestInstallClaudePermissions_ErrorOnNonObjectPermissions(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+	clDir := filepath.Join(targetDir, ".claude")
+	if err := os.MkdirAll(clDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(clDir, "settings.local.json"), []byte(`{"permissions":"bad"}`), 0o644); err != nil {
+		t.Fatalf("write settings.local.json: %v", err)
+	}
+
+	_, err := InstallClaudePermissions(targetDir)
+	if err == nil {
+		t.Fatal("expected error when permissions is not an object, got nil")
+	}
+}
+
+func TestInstallClaudePermissions_ErrorOnNonArrayAllow(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+	clDir := filepath.Join(targetDir, ".claude")
+	if err := os.MkdirAll(clDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(clDir, "settings.local.json"), []byte(`{"permissions":{"allow":"bad"}}`), 0o644); err != nil {
+		t.Fatalf("write settings.local.json: %v", err)
+	}
+
+	_, err := InstallClaudePermissions(targetDir)
+	if err == nil {
+		t.Fatal("expected error when permissions.allow is not an array, got nil")
+	}
+}
