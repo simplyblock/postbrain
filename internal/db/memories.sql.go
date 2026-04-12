@@ -132,6 +132,19 @@ func (q *Queries) CreateMemory(ctx context.Context, arg CreateMemoryParams) (*Cr
 	return &i, err
 }
 
+const expireWorkingMemories = `-- name: ExpireWorkingMemories :execrows
+UPDATE memories SET is_active = false
+WHERE expires_at < now() AND is_active = true
+`
+
+func (q *Queries) ExpireWorkingMemories(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, expireWorkingMemories)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const findNearDuplicates = `-- name: FindNearDuplicates :many
 SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,

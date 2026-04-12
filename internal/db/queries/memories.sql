@@ -158,3 +158,7 @@ ORDER BY created_at;
 
 -- name: MarkMemoryNominated :exec
 UPDATE memories SET promotion_status='nominated', updated_at=now() WHERE id=$1;
+
+-- name: ExpireWorkingMemories :execrows
+UPDATE memories SET is_active = false
+WHERE expires_at < now() AND is_active = true;
