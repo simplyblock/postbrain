@@ -7,19 +7,17 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-)
 
-type modelRowQueryer interface {
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-}
+	"github.com/simplyblock/postbrain/internal/db"
+)
 
 // DBModelStore resolves model metadata from ai_models.
 type DBModelStore struct {
-	q modelRowQueryer
+	q db.DBTX
 }
 
 // NewDBModelStore constructs a DB-backed model config store.
-func NewDBModelStore(q modelRowQueryer) *DBModelStore {
+func NewDBModelStore(q db.DBTX) *DBModelStore {
 	return &DBModelStore{q: q}
 }
 
@@ -29,18 +27,7 @@ func (s *DBModelStore) GetModelConfig(ctx context.Context, modelID uuid.UUID) (*
 		return nil, fmt.Errorf("embedding model store: queryer is not configured")
 	}
 
-	var (
-		provider       string
-		serviceURL     *string
-		providerModel  string
-		dimensions     int
-		providerConfig string
-	)
-	err := s.q.QueryRow(ctx, `
-		SELECT provider, service_url, provider_model, dimensions, COALESCE(provider_config, 'default')
-		FROM ai_models
-		WHERE id = $1
-	`, modelID).Scan(&provider, &serviceURL, &providerModel, &dimensions, &providerConfig)
+	row, err := db.New(s.q).GetAIModelRuntimeConfigByID(ctx, modelID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -50,13 +37,17 @@ func (s *DBModelStore) GetModelConfig(ctx context.Context, modelID uuid.UUID) (*
 
 	cfg := &ModelConfig{
 		ID:             modelID,
-		Provider:       provider,
-		ProviderConfig: providerConfig,
-		ProviderModel:  providerModel,
-		Dimensions:     dimensions,
+		Dimensions:     int(row.Dimensions),
+		ProviderConfig: row.ProviderConfig,
 	}
-	if serviceURL != nil {
-		cfg.ServiceURL = *serviceURL
+	if row.Provider != nil {
+		cfg.Provider = *row.Provider
+	}
+	if row.ServiceUrl != nil {
+		cfg.ServiceURL = *row.ServiceUrl
+	}
+	if row.ProviderModel != nil {
+		cfg.ProviderModel = *row.ProviderModel
 	}
 	return cfg, nil
 }
@@ -68,13 +59,10 @@ func (s *DBModelStore) ActiveModelIDByTypeAndContent(ctx context.Context, modelT
 		return nil, fmt.Errorf("embedding model store: queryer is not configured")
 	}
 
-	var id uuid.UUID
-	err := s.q.QueryRow(ctx, `
-		SELECT id
-		FROM ai_models
-		WHERE is_active = true AND model_type = $1 AND content_type = $2
-		LIMIT 1
-	`, modelType, contentType).Scan(&id)
+	id, err := db.New(s.q).GetActiveAIModelIDByTypeAndContent(ctx, db.GetActiveAIModelIDByTypeAndContentParams{
+		ModelType:   modelType,
+		ContentType: contentType,
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil

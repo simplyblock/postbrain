@@ -40,6 +40,15 @@ WHERE id = $1;
 UPDATE memories SET embedding_code = $2, embedding_code_model_id = $3, updated_at = now()
 WHERE id = $1;
 
+-- name: GetAIModelRuntimeConfigByID :one
+SELECT provider, service_url, provider_model, dimensions, provider_config
+FROM ai_models WHERE id = $1;
+
+-- name: GetActiveAIModelIDByTypeAndContent :one
+SELECT id FROM ai_models
+WHERE is_active = true AND model_type = $1 AND content_type = $2
+LIMIT 1;
+
 -- name: UpsertEmbeddingModel :one
 INSERT INTO ai_models (slug, dimensions, content_type, model_type, is_active)
 VALUES ($1, $2, $3, 'embedding', $4)

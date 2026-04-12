@@ -13,6 +13,50 @@ import (
 	pgvector_go "github.com/pgvector/pgvector-go"
 )
 
+const getAIModelRuntimeConfigByID = `-- name: GetAIModelRuntimeConfigByID :one
+SELECT provider, service_url, provider_model, dimensions, provider_config
+FROM ai_models WHERE id = $1
+`
+
+type GetAIModelRuntimeConfigByIDRow struct {
+	Provider       *string
+	ServiceUrl     *string
+	ProviderModel  *string
+	Dimensions     int32
+	ProviderConfig string
+}
+
+func (q *Queries) GetAIModelRuntimeConfigByID(ctx context.Context, id uuid.UUID) (*GetAIModelRuntimeConfigByIDRow, error) {
+	row := q.db.QueryRow(ctx, getAIModelRuntimeConfigByID, id)
+	var i GetAIModelRuntimeConfigByIDRow
+	err := row.Scan(
+		&i.Provider,
+		&i.ServiceUrl,
+		&i.ProviderModel,
+		&i.Dimensions,
+		&i.ProviderConfig,
+	)
+	return &i, err
+}
+
+const getActiveAIModelIDByTypeAndContent = `-- name: GetActiveAIModelIDByTypeAndContent :one
+SELECT id FROM ai_models
+WHERE is_active = true AND model_type = $1 AND content_type = $2
+LIMIT 1
+`
+
+type GetActiveAIModelIDByTypeAndContentParams struct {
+	ModelType   string
+	ContentType string
+}
+
+func (q *Queries) GetActiveAIModelIDByTypeAndContent(ctx context.Context, arg GetActiveAIModelIDByTypeAndContentParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getActiveAIModelIDByTypeAndContent, arg.ModelType, arg.ContentType)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getActiveCodeModel = `-- name: GetActiveCodeModel :one
 SELECT id, slug, dimensions, content_type, is_active, description, created_at
 FROM ai_models WHERE model_type = 'embedding' AND content_type = 'code' AND is_active = true LIMIT 1

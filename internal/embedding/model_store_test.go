@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type fakeRow struct {
@@ -31,6 +32,8 @@ func (r fakeRow) Scan(dest ...any) error {
 			}
 		case *int:
 			*d = r.vals[i].(int)
+		case *int32:
+			*d = int32(r.vals[i].(int))
 		case *uuid.UUID:
 			*d = r.vals[i].(uuid.UUID)
 		default:
@@ -54,6 +57,14 @@ func (q *fakeQueryer) QueryRow(ctx context.Context, sql string, args ...any) pgx
 	row := q.rows[0]
 	q.rows = q.rows[1:]
 	return row
+}
+
+func (q *fakeQueryer) Exec(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, nil
+}
+
+func (q *fakeQueryer) Query(_ context.Context, _ string, _ ...any) (pgx.Rows, error) {
+	return nil, nil
 }
 
 func TestDBModelStore_GetModelConfig(t *testing.T) {
