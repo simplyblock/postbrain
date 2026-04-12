@@ -429,7 +429,7 @@ func fanOutStrict(scopeID, _ uuid.UUID) ([]uuid.UUID, error) {
 
 ## 4. Duplicate Code That Should Be Unified
 
-### 4.1 `parseScopeString` defined in two separate packages
+### 4.1 `parseScopeString` defined in two separate packages ✓ Done
 
 **Files:**
 - `internal/api/rest/memories.go:399–410` (with comment "duplicated here to avoid a cross-package dependency")
@@ -522,7 +522,7 @@ The same pattern already appears in the language-specific extractors in other fi
 
 ---
 
-### 4.3 Scope-resolution boilerplate repeated in every MCP handler
+### 4.3 Scope-resolution boilerplate repeated in every MCP handler ✓ Done
 
 Each of the ~14 MCP handler functions contains the same 6-line scope resolution block:
 
@@ -582,7 +582,7 @@ if errResult != nil { return errResult, nil }
 
 ---
 
-### 4.4 MCP argument type-assertion boilerplate repeated in every handler
+### 4.4 MCP argument type-assertion boilerplate repeated in every handler ✓ Done
 
 All MCP handlers use the same pattern for extracting typed arguments from `args map[string]any`:
 
