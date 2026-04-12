@@ -37,11 +37,7 @@ func (p *poolPromoterDB) createPromotionRequest(ctx context.Context, req *db.Pro
 }
 
 func (p *poolPromoterDB) markMemoryNominated(ctx context.Context, memoryID uuid.UUID) error {
-	_, err := p.pool.Exec(ctx,
-		`UPDATE memories SET promotion_status='nominated', updated_at=now() WHERE id=$1`,
-		memoryID,
-	)
-	return err
+	return db.New(p.pool).MarkMemoryNominated(ctx, memoryID)
 }
 
 // Promoter manages the memory → knowledge promotion workflow.

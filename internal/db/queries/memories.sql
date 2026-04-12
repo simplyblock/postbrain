@@ -155,3 +155,6 @@ SELECT id, memory_type, scope_id, author_id,
 FROM memories
 WHERE parent_memory_id = $1 AND is_active = true
 ORDER BY created_at;
+
+-- name: MarkMemoryNominated :exec
+UPDATE memories SET promotion_status='nominated', updated_at=now() WHERE id=$1;

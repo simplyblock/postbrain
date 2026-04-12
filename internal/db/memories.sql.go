@@ -674,6 +674,15 @@ func (q *Queries) ListMemoriesForEntity(ctx context.Context, arg ListMemoriesFor
 	return items, nil
 }
 
+const markMemoryNominated = `-- name: MarkMemoryNominated :exec
+UPDATE memories SET promotion_status='nominated', updated_at=now() WHERE id=$1
+`
+
+func (q *Queries) MarkMemoryNominated(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, markMemoryNominated, id)
+	return err
+}
+
 const recallMemoriesByCodeVector = `-- name: RecallMemoriesByCodeVector :many
 SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,
