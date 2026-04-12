@@ -2,6 +2,7 @@ package rest
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -29,6 +30,16 @@ type createMemoryRequest struct {
 	ExpiresIn  *int            `json:"expires_in"`
 }
 
+func (r *createMemoryRequest) validate() error {
+	if r.Content == "" {
+		return errors.New("content is required")
+	}
+	if r.Scope == "" {
+		return errors.New("scope is required")
+	}
+	return nil
+}
+
 func entityRequestsToInput(reqs []entityRequest) []memory.EntityInput {
 	out := make([]memory.EntityInput, 0, len(reqs))
 	for _, e := range reqs {
@@ -45,12 +56,8 @@ func (ro *Router) createMemory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if body.Content == "" {
-		writeError(w, http.StatusBadRequest, "content is required")
-		return
-	}
-	if body.Scope == "" {
-		writeError(w, http.StatusBadRequest, "scope is required")
+	if err := body.validate(); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 

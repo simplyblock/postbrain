@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -22,20 +23,30 @@ type createArtifactRequest struct {
 	CollectionSlug string  `json:"collection_slug"`
 }
 
+func (r *createArtifactRequest) validate() error {
+	if r.Title == "" || r.Content == "" || r.KnowledgeType == "" || r.Scope == "" {
+		return errors.New("title, content, knowledge_type and scope are required")
+	}
+	return nil
+}
+
+func (r *createArtifactRequest) applyDefaults() {
+	if r.Visibility == "" {
+		r.Visibility = "team"
+	}
+}
+
 func (ro *Router) createArtifact(w http.ResponseWriter, r *http.Request) {
 	var body createArtifactRequest
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if body.Title == "" || body.Content == "" || body.KnowledgeType == "" || body.Scope == "" {
-		writeError(w, http.StatusBadRequest, "title, content, knowledge_type and scope are required")
+	if err := body.validate(); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	visibility := body.Visibility
-	if visibility == "" {
-		visibility = "team"
-	}
+	body.applyDefaults()
 
 	kind, externalID, err := parseScopeString(body.Scope)
 	if err != nil {
@@ -64,7 +75,7 @@ func (ro *Router) createArtifact(w http.ResponseWriter, r *http.Request) {
 		ArtifactKind:  artifactKind,
 		OwnerScopeID:  scope.ID,
 		AuthorID:      authorID,
-		Visibility:    visibility,
+		Visibility:    body.Visibility,
 		Title:         body.Title,
 		Content:       body.Content,
 		Summary:       body.Summary,

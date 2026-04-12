@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -22,16 +23,30 @@ type createSkillRequest struct {
 	ReviewRequired int                 `json:"review_required"`
 }
 
+func (r *createSkillRequest) validate() error {
+	if r.Scope == "" || r.Slug == "" || r.Name == "" {
+		return errors.New("scope, slug and name are required")
+	}
+	return nil
+}
+
+func (r *createSkillRequest) applyDefaults() {
+	if r.Visibility == "" {
+		r.Visibility = "team"
+	}
+}
+
 func (ro *Router) createSkill(w http.ResponseWriter, r *http.Request) {
 	var body createSkillRequest
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if body.Scope == "" || body.Slug == "" || body.Name == "" {
-		writeError(w, http.StatusBadRequest, "scope, slug and name are required")
+	if err := body.validate(); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	body.applyDefaults()
 	kind, externalID, err := parseScopeString(body.Scope)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -47,11 +62,6 @@ func (ro *Router) createSkill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	visibility := body.Visibility
-	if visibility == "" {
-		visibility = "team"
-	}
-
 	authorID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 	skill, err := ro.sklStore.Create(r.Context(), skillspkg.CreateInput{
 		ScopeID:        scope.ID,
@@ -62,7 +72,7 @@ func (ro *Router) createSkill(w http.ResponseWriter, r *http.Request) {
 		AgentTypes:     body.AgentTypes,
 		Body:           body.Body,
 		Parameters:     body.Parameters,
-		Visibility:     visibility,
+		Visibility:     body.Visibility,
 		ReviewRequired: body.ReviewRequired,
 	})
 	if err != nil {

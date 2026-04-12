@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -18,21 +19,30 @@ type createCollectionRequest struct {
 	Description *string `json:"description"`
 }
 
+func (r *createCollectionRequest) validate() error {
+	if r.Scope == "" || r.Slug == "" || r.Name == "" {
+		return errors.New("scope, slug and name are required")
+	}
+	return nil
+}
+
+func (r *createCollectionRequest) applyDefaults() {
+	if r.Visibility == "" {
+		r.Visibility = "team"
+	}
+}
+
 func (ro *Router) createCollection(w http.ResponseWriter, r *http.Request) {
 	var body createCollectionRequest
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if body.Scope == "" || body.Slug == "" || body.Name == "" {
-		writeError(w, http.StatusBadRequest, "scope, slug and name are required")
+	if err := body.validate(); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	visibility := body.Visibility
-	if visibility == "" {
-		visibility = "team"
-	}
-
+	body.applyDefaults()
 	kind, externalID, err := parseScopeString(body.Scope)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -49,7 +59,7 @@ func (ro *Router) createCollection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ownerID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
-	coll, err := ro.knwColl.Create(r.Context(), scope.ID, ownerID, body.Slug, body.Name, visibility, body.Description)
+	coll, err := ro.knwColl.Create(r.Context(), scope.ID, ownerID, body.Slug, body.Name, body.Visibility, body.Description)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
