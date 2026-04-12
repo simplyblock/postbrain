@@ -17,6 +17,7 @@ type RegisterEmbeddingModelParams struct {
 	ProviderConfig string
 	Dimensions     int
 	ContentType    string
+	ModelType      string
 	Activate       bool
 }
 
@@ -26,6 +27,7 @@ func RegisterEmbeddingModel(ctx context.Context, pool *pgxpool.Pool, params Regi
 	if pool == nil {
 		return nil, fmt.Errorf("db: register embedding model: nil pool")
 	}
+	params.ModelType = normalizeModelType(params.ModelType)
 	if err := validateRegisterEmbeddingModelParams(params); err != nil {
 		return nil, err
 	}
@@ -37,7 +39,7 @@ func RegisterEmbeddingModel(ctx context.Context, pool *pgxpool.Pool, params Regi
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	if params.Activate {
-		if err := deactivateEmbeddingModelsByType(ctx, tx, params.ContentType); err != nil {
+		if err := deactivateModelsByType(ctx, tx, params.ModelType, params.ContentType); err != nil {
 			return nil, fmt.Errorf("db: register embedding model: deactivate existing models: %w", err)
 		}
 	}
@@ -47,17 +49,19 @@ func RegisterEmbeddingModel(ctx context.Context, pool *pgxpool.Pool, params Regi
 		return nil, fmt.Errorf("db: register embedding model: upsert model: %w", err)
 	}
 
-	tableName, err := ensureEmbeddingModelTable(ctx, tx, model.ID, params.Dimensions)
-	if err != nil {
-		return nil, fmt.Errorf("db: register embedding model: provision table: %w", err)
-	}
+	if params.ModelType == "embedding" {
+		tableName, err := ensureEmbeddingModelTable(ctx, tx, model.ID, params.Dimensions)
+		if err != nil {
+			return nil, fmt.Errorf("db: register embedding model: provision table: %w", err)
+		}
 
-	if err := markEmbeddingModelReady(ctx, tx, model.ID, tableName); err != nil {
-		return nil, fmt.Errorf("db: register embedding model: set ready metadata: %w", err)
-	}
+		if err := markEmbeddingModelReady(ctx, tx, model.ID, tableName); err != nil {
+			return nil, fmt.Errorf("db: register embedding model: set ready metadata: %w", err)
+		}
 
-	if err := seedEmbeddingIndexPendingRows(ctx, tx, model.ID); err != nil {
-		return nil, fmt.Errorf("db: register embedding model: seed embedding index: %w", err)
+		if err := seedEmbeddingIndexPendingRows(ctx, tx, model.ID); err != nil {
+			return nil, fmt.Errorf("db: register embedding model: seed embedding index: %w", err)
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -82,18 +86,24 @@ func validateRegisterEmbeddingModelParams(params RegisterEmbeddingModelParams) e
 	if params.Dimensions <= 0 {
 		return fmt.Errorf("db: register embedding model: dimensions must be > 0")
 	}
-	if params.ContentType != "text" && params.ContentType != "code" {
+	if params.ModelType != "embedding" && params.ModelType != "generation" {
+		return fmt.Errorf("db: register embedding model: invalid model_type %q", params.ModelType)
+	}
+	if params.ModelType == "embedding" && params.ContentType != "text" && params.ContentType != "code" {
 		return fmt.Errorf("db: register embedding model: invalid content_type %q", params.ContentType)
+	}
+	if params.ModelType == "generation" && params.ContentType != "text" {
+		return fmt.Errorf("db: register embedding model: generation models require content_type \"text\"")
 	}
 	return nil
 }
 
-func deactivateEmbeddingModelsByType(ctx context.Context, tx DBTX, contentType string) error {
+func deactivateModelsByType(ctx context.Context, tx DBTX, modelType, contentType string) error {
 	_, err := tx.Exec(ctx, `
 		UPDATE ai_models
 		SET is_active = false
-		WHERE model_type = 'embedding' AND content_type = $1
-	`, contentType)
+		WHERE model_type = $1 AND content_type = $2
+	`, modelType, contentType)
 	return err
 }
 
@@ -103,7 +113,7 @@ func upsertEmbeddingModelTx(ctx context.Context, tx DBTX, params RegisterEmbeddi
 	}
 	row := tx.QueryRow(ctx, `
 		INSERT INTO ai_models (slug, provider, service_url, provider_model, provider_config, dimensions, content_type, model_type, is_active, is_ready)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, 'embedding', $8, false)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (slug) DO UPDATE SET
 			provider = EXCLUDED.provider,
 			service_url = EXCLUDED.service_url,
@@ -112,9 +122,10 @@ func upsertEmbeddingModelTx(ctx context.Context, tx DBTX, params RegisterEmbeddi
 			dimensions = EXCLUDED.dimensions,
 			content_type = EXCLUDED.content_type,
 			model_type = EXCLUDED.model_type,
-			is_active = EXCLUDED.is_active
+			is_active = EXCLUDED.is_active,
+			is_ready = EXCLUDED.is_ready
 		RETURNING id, slug, dimensions, content_type, is_active, description, created_at
-	`, params.Slug, params.Provider, params.ServiceURL, params.ProviderModel, params.ProviderConfig, params.Dimensions, params.ContentType, params.Activate)
+	`, params.Slug, params.Provider, params.ServiceURL, params.ProviderModel, params.ProviderConfig, params.Dimensions, params.ContentType, params.ModelType, params.Activate, params.ModelType == "generation")
 
 	model := &EmbeddingModel{}
 	if err := row.Scan(
@@ -129,6 +140,13 @@ func upsertEmbeddingModelTx(ctx context.Context, tx DBTX, params RegisterEmbeddi
 		return nil, err
 	}
 	return model, nil
+}
+
+func normalizeModelType(modelType string) string {
+	if modelType == "" {
+		return "embedding"
+	}
+	return modelType
 }
 
 func markEmbeddingModelReady(ctx context.Context, tx DBTX, modelID uuid.UUID, tableName string) error {

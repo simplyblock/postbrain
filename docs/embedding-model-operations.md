@@ -104,33 +104,30 @@ LIMIT 100;
 
 ## 5) Register/activate summary generation models
 
-Summarization/analyze routing now resolves the active `generation/text` model.
+Summarization/analyze routing resolves the active `generation/text` model.
 If none exists, Postbrain falls back to the active `embedding/text` model profile.
 
-Register a generation model:
+Register a summary model:
 
 ```bash
-postbrain --config config.yaml embedding-model register \
+postbrain --config config.yaml summary-model register \
   --slug gpt-4o-mini-summary-v1 \
   --provider-config openai-prod \
   --dimensions 1536 \
-  --content-type text
+  --activate
 ```
 
-Then set model type to generation and activate it:
+Activate an existing summary model:
 
-```sql
-UPDATE ai_models
-SET model_type = 'generation'
-WHERE slug = 'gpt-4o-mini-summary-v1';
+```bash
+postbrain --config config.yaml summary-model activate \
+  --slug gpt-4o-mini-summary-v1
+```
 
-UPDATE ai_models
-SET is_active = false
-WHERE model_type = 'generation' AND content_type = 'text';
+List registered summary models:
 
-UPDATE ai_models
-SET is_active = true
-WHERE slug = 'gpt-4o-mini-summary-v1';
+```bash
+postbrain --config config.yaml summary-model list
 ```
 
 Validate:

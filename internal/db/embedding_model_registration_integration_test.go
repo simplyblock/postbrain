@@ -234,3 +234,54 @@ func TestRegisterEmbeddingModel_RollsBackOnProvisionFailure(t *testing.T) {
 		t.Fatalf("dimensions after rollback = %d, want 8", dimensions)
 	}
 }
+
+func TestRegisterEmbeddingModel_GenerationModelTypeSkipsEmbeddingTableProvisioning(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+
+	model, err := db.RegisterEmbeddingModel(ctx, pool, db.RegisterEmbeddingModelParams{
+		Slug:          "summary-model-" + uuid.NewString(),
+		Provider:      "openai",
+		ServiceURL:    "https://api.openai.com/v1",
+		ProviderModel: "gpt-4o-mini",
+		Dimensions:    1536,
+		ContentType:   "text",
+		ModelType:     "generation",
+		Activate:      true,
+	})
+	if err != nil {
+		t.Fatalf("RegisterEmbeddingModel: %v", err)
+	}
+
+	var modelType string
+	var tableName *string
+	var isReady bool
+	if err := pool.QueryRow(ctx, `
+		SELECT model_type, table_name, is_ready
+		FROM ai_models
+		WHERE id = $1
+	`, model.ID).Scan(&modelType, &tableName, &isReady); err != nil {
+		t.Fatalf("load model metadata: %v", err)
+	}
+	if modelType != "generation" {
+		t.Fatalf("model_type = %q, want generation", modelType)
+	}
+	if tableName != nil && *tableName != "" {
+		t.Fatalf("table_name = %q, want empty for generation model", *tableName)
+	}
+	if !isReady {
+		t.Fatal("is_ready = false, want true")
+	}
+
+	var idxRows int
+	if err := pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM embedding_index
+		WHERE model_id = $1
+	`, model.ID).Scan(&idxRows); err != nil {
+		t.Fatalf("count embedding_index rows: %v", err)
+	}
+	if idxRows != 0 {
+		t.Fatalf("embedding_index rows = %d, want 0 for generation model", idxRows)
+	}
+}

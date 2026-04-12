@@ -82,7 +82,7 @@ func TestResolveProviderRegistrationFields_OpenAIDefaultServiceURL(t *testing.T)
 				TextModel: "text-embedding-3-small",
 			},
 		},
-	})
+	}, "embedding")
 	if err != nil {
 		t.Fatalf("resolveProviderRegistrationFields: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestResolveProviderRegistrationFields_MissingServiceURLFails(t *testing.T) 
 				TextModel: "nomic-embed-text",
 			},
 		},
-	})
+	}, "embedding")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -169,5 +169,124 @@ func TestEmbeddingModelListCommand_Success(t *testing.T) {
 	}
 	if got := strings.TrimSpace(out.String()); got != "slug\tprovider\ntext-1\topenai" {
 		t.Fatalf("output = %q, want list payload", got)
+	}
+}
+
+func TestSummaryModelRegisterCommand_Success(t *testing.T) {
+	old := registerSummaryModelCmdFn
+	registerSummaryModelCmdFn = func(ctx context.Context, opts embeddingModelRegisterOptions) (string, error) {
+		if opts.Slug != "summary-1" {
+			t.Fatalf("slug = %q, want summary-1", opts.Slug)
+		}
+		if opts.ProviderConfig != "default" {
+			t.Fatalf("provider-config = %q, want default", opts.ProviderConfig)
+		}
+		if opts.ContentType != "text" {
+			t.Fatalf("content-type = %q, want text", opts.ContentType)
+		}
+		return "registered model summary-1", nil
+	}
+	t.Cleanup(func() { registerSummaryModelCmdFn = old })
+
+	root := newRootCmd()
+	root.SetArgs([]string{"summary-model", "register", "--slug", "summary-1", "--dimensions", "1536"})
+
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute summary register command: %v", err)
+	}
+	if got := strings.TrimSpace(out.String()); got != "registered model summary-1" {
+		t.Fatalf("output = %q, want %q", got, "registered model summary-1")
+	}
+}
+
+func TestSummaryModelActivateCommand_Success(t *testing.T) {
+	old := activateSummaryModelCmdFn
+	activateSummaryModelCmdFn = func(ctx context.Context, opts embeddingModelActivateOptions) (string, error) {
+		if opts.Slug != "summary-1" || opts.ContentType != "text" {
+			t.Fatalf("unexpected opts: %+v", opts)
+		}
+		return "activated model summary-1 for text", nil
+	}
+	t.Cleanup(func() { activateSummaryModelCmdFn = old })
+
+	root := newRootCmd()
+	root.SetArgs([]string{"summary-model", "activate", "--slug", "summary-1"})
+
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute summary activate command: %v", err)
+	}
+	if got := strings.TrimSpace(out.String()); got != "activated model summary-1 for text" {
+		t.Fatalf("output = %q, want %q", got, "activated model summary-1 for text")
+	}
+}
+
+func TestSummaryModelListCommand_Success(t *testing.T) {
+	old := listSummaryModelCmdFn
+	listSummaryModelCmdFn = func(context.Context, embeddingModelListOptions) (string, error) {
+		return "slug\tprovider\nsummary-1\topenai", nil
+	}
+	t.Cleanup(func() { listSummaryModelCmdFn = old })
+
+	root := newRootCmd()
+	root.SetArgs([]string{"summary-model", "list"})
+
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute summary list command: %v", err)
+	}
+	if got := strings.TrimSpace(out.String()); got != "slug\tprovider\nsummary-1\topenai" {
+		t.Fatalf("output = %q, want list payload", got)
+	}
+}
+
+func TestResolveProviderRegistrationFields_GenerationUsesSummaryModel(t *testing.T) {
+	t.Parallel()
+	got, err := resolveProviderRegistrationFields(embeddingModelRegisterOptions{
+		ProviderConfig: "openai-prod",
+		ContentType:    "text",
+	}, &config.EmbeddingConfig{
+		Providers: map[string]config.EmbeddingProviderConfig{
+			"openai-prod": {
+				Backend:      "openai",
+				SummaryModel: "gpt-4o-mini",
+			},
+		},
+	}, "generation")
+	if err != nil {
+		t.Fatalf("resolveProviderRegistrationFields: %v", err)
+	}
+	if got.ProviderModel != "gpt-4o-mini" {
+		t.Fatalf("provider_model = %q, want gpt-4o-mini", got.ProviderModel)
+	}
+}
+
+func TestResolveProviderRegistrationFields_GenerationMissingSummaryModelFails(t *testing.T) {
+	t.Parallel()
+	_, err := resolveProviderRegistrationFields(embeddingModelRegisterOptions{
+		ProviderConfig: "default",
+		ContentType:    "text",
+	}, &config.EmbeddingConfig{
+		Providers: map[string]config.EmbeddingProviderConfig{
+			"default": {
+				Backend: "openai",
+			},
+		},
+	}, "generation")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "summary_model is required") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
