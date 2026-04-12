@@ -65,19 +65,19 @@ func (s *Server) handleMemoryResource(ctx context.Context, req mcpgo.ReadResourc
 	}
 
 	type memView struct {
-		ID              uuid.UUID  `json:"id"`
-		MemoryType      string     `json:"memory_type"`
-		ScopeID         uuid.UUID  `json:"scope_id"`
-		ContentKind     string     `json:"content_kind"`
-		Content         string     `json:"content"`
-		Summary         *string    `json:"summary,omitempty"`
-		Confidence      float64    `json:"confidence"`
-		Importance      float64    `json:"importance"`
-		PromotionStatus string     `json:"promotion_status"`
-		IsActive        bool       `json:"is_active"`
-		SourceRef       *string    `json:"source_ref,omitempty"`
-		CreatedAt       time.Time  `json:"created_at"`
-		UpdatedAt       time.Time  `json:"updated_at"`
+		ID              uuid.UUID `json:"id"`
+		MemoryType      string    `json:"memory_type"`
+		ScopeID         uuid.UUID `json:"scope_id"`
+		ContentKind     string    `json:"content_kind"`
+		Content         string    `json:"content"`
+		Summary         *string   `json:"summary,omitempty"`
+		Confidence      float64   `json:"confidence"`
+		Importance      float64   `json:"importance"`
+		PromotionStatus string    `json:"promotion_status"`
+		IsActive        bool      `json:"is_active"`
+		SourceRef       *string   `json:"source_ref,omitempty"`
+		CreatedAt       time.Time `json:"created_at"`
+		UpdatedAt       time.Time `json:"updated_at"`
 	}
 	out, err := json.Marshal(memView{
 		ID:              mem.ID,
