@@ -3,11 +3,13 @@ package jobs
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
@@ -45,9 +47,11 @@ func (j *ReembedJob) activeModelID(ctx context.Context, contentType string) (*uu
 		`SELECT id FROM ai_models WHERE is_active=true AND model_type='embedding' AND content_type=$1`,
 		contentType,
 	).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
 	if err != nil {
-		// No active model is not an error — just nothing to do.
-		return nil, nil //nolint:nilerr
+		return nil, fmt.Errorf("reembed: active model lookup: %w", err)
 	}
 	return &id, nil
 }
