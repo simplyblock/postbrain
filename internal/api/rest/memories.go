@@ -10,6 +10,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 	"github.com/simplyblock/postbrain/internal/memory"
+	"github.com/simplyblock/postbrain/internal/scopeutil"
 )
 
 type entityRequest struct {
@@ -396,20 +397,5 @@ func (ro *Router) handleSummarizeMemories(w http.ResponseWriter, req *http.Reque
 	})
 }
 
-// parseScopeString is duplicated here to avoid a cross-package dependency.
-// It splits "kind:external_id" into parts.
-func parseScopeString(scope string) (string, string, error) {
-	if scope == "" {
-		return "", "", errString("empty scope string")
-	}
-	for i, c := range scope {
-		if c == ':' {
-			return scope[:i], scope[i+1:], nil
-		}
-	}
-	return "", "", errString("missing ':' separator in scope: " + scope)
-}
-
-type errString string
-
-func (e errString) Error() string { return string(e) }
+// parseScopeString is a package-level alias for scopeutil.ParseScopeString.
+var parseScopeString = scopeutil.ParseScopeString

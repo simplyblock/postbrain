@@ -4,7 +4,6 @@ package mcp
 import (
 	"context"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,6 +19,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/memory"
 	"github.com/simplyblock/postbrain/internal/metrics"
 	"github.com/simplyblock/postbrain/internal/principals"
+	"github.com/simplyblock/postbrain/internal/scopeutil"
 	"github.com/simplyblock/postbrain/internal/skills"
 )
 
@@ -373,23 +373,8 @@ func (s *Server) Handler() http.Handler {
 	return h
 }
 
-// parseScopeString splits a scope string of the form "kind:external_id" into its parts.
-// Returns an error if the string is empty or missing the colon separator.
-func parseScopeString(scope string) (kind, externalID string, err error) {
-	if scope == "" {
-		return "", "", errorString("scope: empty scope string")
-	}
-	idx := strings.Index(scope, ":")
-	if idx < 0 {
-		return "", "", errorString("scope: missing ':' separator in scope string: " + scope)
-	}
-	return scope[:idx], scope[idx+1:], nil
-}
-
-// errorString is a simple error implementation to avoid importing "errors" just for this.
-type errorString string
-
-func (e errorString) Error() string { return string(e) }
+// parseScopeString is a package-level alias for scopeutil.ParseScopeString.
+var parseScopeString = scopeutil.ParseScopeString
 
 // argString returns the string value of key from args, or "" if absent or wrong type.
 func argString(args map[string]any, key string) string {
