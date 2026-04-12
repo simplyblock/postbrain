@@ -67,15 +67,6 @@ func filterByDepth(ctx context.Context, pool *pgxpool.Pool, ids []uuid.UUID, max
 	return filtered, rows.Err()
 }
 
-// ResolveScopeByExternalID finds a scope by kind and externalID.
-func ResolveScopeByExternalID(ctx context.Context, pool *pgxpool.Pool, kind, externalID string) (*db.Scope, error) {
-	s, err := db.GetScopeByExternalID(ctx, pool, kind, externalID)
-	if err != nil {
-		return nil, fmt.Errorf("memory: resolve scope: %w", err)
-	}
-	return s, nil
-}
-
 // personalScopeIDs returns the scope IDs where kind='user' AND principal_id = principalID.
 func personalScopeIDs(ctx context.Context, pool *pgxpool.Pool, principalID uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := pool.Query(ctx,
