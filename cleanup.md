@@ -629,7 +629,7 @@ func argFloat64OrDefault(args map[string]any, key string, def float64) float64 {
 
 ---
 
-### 4.5 Batch-processing loop pattern duplicated across multiple job files
+### 4.5 Batch-processing loop pattern duplicated across multiple job files ✓ Done
 
 The paginated batch-fetch-and-process loop appears in `backfill_summaries.go`, `chunk_backfill.go`, `reembed.go`, and `staleness.go`:
 
