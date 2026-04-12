@@ -38,11 +38,6 @@ func TestContradictionJob_NilClassifier_UsesNoop(t *testing.T) {
 	}
 }
 
-func TestContradictionJob_Signature(t *testing.T) {
-	// Compile-time check.
-	var _ = (*ContradictionJob)(nil).Run
-}
-
 func TestFilterByTopicSimilarity(t *testing.T) {
 	t.Parallel()
 	j := &ContradictionJob{}

@@ -38,10 +38,6 @@ func TestNewAGEBackfillJob_CustomBatchSize(t *testing.T) {
 	}
 }
 
-func TestAGEBackfillJob_Signature(t *testing.T) {
-	var _ = (*AGEBackfillJob)(nil).Run
-}
-
 func TestEntityBatchQuery_UsesKeysetWhenCursorPresent(t *testing.T) {
 	q := entityBatchQuery(true)
 	if !strings.Contains(q, "WHERE (created_at, id) > ($1, $2)") {

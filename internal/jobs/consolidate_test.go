@@ -34,7 +34,3 @@ func TestDefaultSummarizer_Empty(t *testing.T) {
 	}
 }
 
-func TestConsolidateJob_Signature(t *testing.T) {
-	// Compile-time check that Run has the expected signature.
-	var _ = (*ConsolidateJob)(nil).Run
-}
