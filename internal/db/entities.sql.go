@@ -91,6 +91,99 @@ func (q *Queries) FindEntitiesBySuffix(ctx context.Context, arg FindEntitiesBySu
 	return items, nil
 }
 
+const getEntityBatchCursor = `-- name: GetEntityBatchCursor :many
+SELECT id, scope_id, entity_type, name, canonical, created_at
+FROM entities
+WHERE (created_at, id) > ($1::timestamptz, $2::uuid)
+ORDER BY created_at, id
+LIMIT $3
+`
+
+type GetEntityBatchCursorParams struct {
+	Column1 time.Time
+	Column2 uuid.UUID
+	Limit   int32
+}
+
+type GetEntityBatchCursorRow struct {
+	ID         uuid.UUID
+	ScopeID    uuid.UUID
+	EntityType string
+	Name       string
+	Canonical  string
+	CreatedAt  time.Time
+}
+
+func (q *Queries) GetEntityBatchCursor(ctx context.Context, arg GetEntityBatchCursorParams) ([]*GetEntityBatchCursorRow, error) {
+	rows, err := q.db.Query(ctx, getEntityBatchCursor, arg.Column1, arg.Column2, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*GetEntityBatchCursorRow{}
+	for rows.Next() {
+		var i GetEntityBatchCursorRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ScopeID,
+			&i.EntityType,
+			&i.Name,
+			&i.Canonical,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getEntityBatchFirstPage = `-- name: GetEntityBatchFirstPage :many
+SELECT id, scope_id, entity_type, name, canonical, created_at
+FROM entities
+ORDER BY created_at, id
+LIMIT $1
+`
+
+type GetEntityBatchFirstPageRow struct {
+	ID         uuid.UUID
+	ScopeID    uuid.UUID
+	EntityType string
+	Name       string
+	Canonical  string
+	CreatedAt  time.Time
+}
+
+func (q *Queries) GetEntityBatchFirstPage(ctx context.Context, limit int32) ([]*GetEntityBatchFirstPageRow, error) {
+	rows, err := q.db.Query(ctx, getEntityBatchFirstPage, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*GetEntityBatchFirstPageRow{}
+	for rows.Next() {
+		var i GetEntityBatchFirstPageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ScopeID,
+			&i.EntityType,
+			&i.Name,
+			&i.Canonical,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getEntityByCanonical = `-- name: GetEntityByCanonical :one
 SELECT id, scope_id, entity_type, name, canonical, meta,
        embedding, embedding_model_id, created_at, updated_at
@@ -143,6 +236,103 @@ func (q *Queries) GetEntityByID(ctx context.Context, id uuid.UUID) (*Entity, err
 		&i.UpdatedAt,
 	)
 	return &i, err
+}
+
+const getRelationBatchCursor = `-- name: GetRelationBatchCursor :many
+SELECT id, scope_id, subject_id, predicate, object_id, confidence, created_at
+FROM relations
+WHERE (created_at, id) > ($1::timestamptz, $2::uuid)
+ORDER BY created_at, id
+LIMIT $3
+`
+
+type GetRelationBatchCursorParams struct {
+	Column1 time.Time
+	Column2 uuid.UUID
+	Limit   int32
+}
+
+type GetRelationBatchCursorRow struct {
+	ID         uuid.UUID
+	ScopeID    uuid.UUID
+	SubjectID  uuid.UUID
+	Predicate  string
+	ObjectID   uuid.UUID
+	Confidence float64
+	CreatedAt  time.Time
+}
+
+func (q *Queries) GetRelationBatchCursor(ctx context.Context, arg GetRelationBatchCursorParams) ([]*GetRelationBatchCursorRow, error) {
+	rows, err := q.db.Query(ctx, getRelationBatchCursor, arg.Column1, arg.Column2, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*GetRelationBatchCursorRow{}
+	for rows.Next() {
+		var i GetRelationBatchCursorRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ScopeID,
+			&i.SubjectID,
+			&i.Predicate,
+			&i.ObjectID,
+			&i.Confidence,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getRelationBatchFirstPage = `-- name: GetRelationBatchFirstPage :many
+SELECT id, scope_id, subject_id, predicate, object_id, confidence, created_at
+FROM relations
+ORDER BY created_at, id
+LIMIT $1
+`
+
+type GetRelationBatchFirstPageRow struct {
+	ID         uuid.UUID
+	ScopeID    uuid.UUID
+	SubjectID  uuid.UUID
+	Predicate  string
+	ObjectID   uuid.UUID
+	Confidence float64
+	CreatedAt  time.Time
+}
+
+func (q *Queries) GetRelationBatchFirstPage(ctx context.Context, limit int32) ([]*GetRelationBatchFirstPageRow, error) {
+	rows, err := q.db.Query(ctx, getRelationBatchFirstPage, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*GetRelationBatchFirstPageRow{}
+	for rows.Next() {
+		var i GetRelationBatchFirstPageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ScopeID,
+			&i.SubjectID,
+			&i.Predicate,
+			&i.ObjectID,
+			&i.Confidence,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const linkArtifactToEntity = `-- name: LinkArtifactToEntity :exec

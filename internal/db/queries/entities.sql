@@ -100,3 +100,29 @@ WHERE scope_id = $1
   )
 ORDER BY length(canonical) ASC
 LIMIT 5;
+
+-- name: GetEntityBatchFirstPage :many
+SELECT id, scope_id, entity_type, name, canonical, created_at
+FROM entities
+ORDER BY created_at, id
+LIMIT $1;
+
+-- name: GetEntityBatchCursor :many
+SELECT id, scope_id, entity_type, name, canonical, created_at
+FROM entities
+WHERE (created_at, id) > ($1::timestamptz, $2::uuid)
+ORDER BY created_at, id
+LIMIT $3;
+
+-- name: GetRelationBatchFirstPage :many
+SELECT id, scope_id, subject_id, predicate, object_id, confidence, created_at
+FROM relations
+ORDER BY created_at, id
+LIMIT $1;
+
+-- name: GetRelationBatchCursor :many
+SELECT id, scope_id, subject_id, predicate, object_id, confidence, created_at
+FROM relations
+WHERE (created_at, id) > ($1::timestamptz, $2::uuid)
+ORDER BY created_at, id
+LIMIT $3;
