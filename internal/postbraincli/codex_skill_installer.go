@@ -235,6 +235,39 @@ func InstallCodexMCPConfig(targetDir, postbrainURL string) (bool, error) {
 	content, sectionUpdated = ensureTOMLStringKey(content, "mcp_servers.postbrain", "bearer_token_env_var", "POSTBRAIN_TOKEN")
 	updatedAny = updatedAny || sectionUpdated
 
+	if !updatedAny {
+		return false, nil
+	}
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
+		return false, fmt.Errorf("write config.toml: %w", err)
+	}
+	return true, nil
+}
+
+// InstallCodexPermissions writes per-tool approval_mode = "approve" entries
+// into .codex/config.toml so Codex auto-approves all Postbrain MCP tool calls.
+// The call is idempotent.
+func InstallCodexPermissions(targetDir string) (bool, error) {
+	if strings.TrimSpace(targetDir) == "" {
+		targetDir = "."
+	}
+
+	configDir := filepath.Join(targetDir, ".codex")
+	configPath := filepath.Join(configDir, "config.toml")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		return false, fmt.Errorf("create .codex directory: %w", err)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil && !os.IsNotExist(err) {
+		return false, fmt.Errorf("read config.toml: %w", err)
+	}
+	content := string(data)
+	updatedAny := false
+
 	for _, tool := range []string{
 		"list_scopes",
 		"session_begin",
@@ -246,8 +279,8 @@ func InstallCodexMCPConfig(targetDir, postbrainURL string) (bool, error) {
 		"session_end",
 		"graph_query",
 	} {
-		section := "mcp_servers.postbrain.tools." + tool
-		content, sectionUpdated = ensureTOMLStringKey(content, section, "approval_mode", "approve")
+		var sectionUpdated bool
+		content, sectionUpdated = ensureTOMLStringKey(content, "mcp_servers.postbrain.tools."+tool, "approval_mode", "approve")
 		updatedAny = updatedAny || sectionUpdated
 	}
 

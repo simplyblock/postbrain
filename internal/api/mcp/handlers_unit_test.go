@@ -24,6 +24,23 @@ func callTool(t *testing.T, args map[string]any, fn func(context.Context, mcpgo.
 	return result
 }
 
+// callToolWithMeta builds a CallToolRequest with a custom Meta (e.g. a
+// progress token) and invokes the given handler.
+func callToolWithMeta(t *testing.T, args map[string]any, meta *mcpgo.Meta, fn func(context.Context, mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error)) *mcpgo.CallToolResult {
+	t.Helper()
+	req := mcpgo.CallToolRequest{}
+	req.Params.Arguments = args
+	req.Params.Meta = meta
+	result, err := fn(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handler returned unexpected Go error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("handler returned nil result")
+	}
+	return result
+}
+
 // assertToolError fails the test if result.IsError is not true.
 func assertToolError(t *testing.T, result *mcpgo.CallToolResult) {
 	t.Helper()
@@ -249,6 +266,25 @@ func TestHandleSummarize_EmptyScope_ReturnsToolError(t *testing.T) {
 	assertToolError(t, result)
 }
 
+func TestHandleSummarize_WithProgressToken_NilPool_ReturnsToolError(t *testing.T) {
+	// A progress token must not prevent the nil-pool error from being returned.
+	s := &Server{}
+	meta := &mcpgo.Meta{ProgressToken: "token-abc"}
+	result := callToolWithMeta(t, map[string]any{
+		"scope": "project:acme/api",
+	}, meta, s.handleSummarize)
+	assertToolError(t, result)
+}
+
+func TestHandleSummarize_NilMeta_NilPool_ReturnsToolError(t *testing.T) {
+	// Passing no Meta at all (nil) must not panic and must return a tool error.
+	s := &Server{}
+	result := callToolWithMeta(t, map[string]any{
+		"scope": "project:acme/api",
+	}, nil, s.handleSummarize)
+	assertToolError(t, result)
+}
+
 // ── handleEndorse ─────────────────────────────────────────────────────────────
 
 func TestHandleEndorse_MissingArtifactID_ReturnsToolError(t *testing.T) {
@@ -388,6 +424,33 @@ func TestHandleSynthesizeTopic_MissingSourceIDs_ReturnsToolError(t *testing.T) {
 	result := callTool(t, map[string]any{
 		"scope": "project:acme/api",
 	}, s.handleSynthesizeTopic)
+	assertToolError(t, result)
+}
+
+func TestHandleSynthesizeTopic_WithProgressToken_NilPool_ReturnsToolError(t *testing.T) {
+	// A progress token must not prevent the nil-pool error from being returned.
+	s := &Server{}
+	meta := &mcpgo.Meta{ProgressToken: "token-xyz"}
+	result := callToolWithMeta(t, map[string]any{
+		"scope": "project:acme/api",
+		"source_ids": []any{
+			"00000000-0000-0000-0000-000000000001",
+			"00000000-0000-0000-0000-000000000002",
+		},
+	}, meta, s.handleSynthesizeTopic)
+	assertToolError(t, result)
+}
+
+func TestHandleSynthesizeTopic_NilMeta_NilPool_ReturnsToolError(t *testing.T) {
+	// Passing no Meta at all (nil) must not panic and must return a tool error.
+	s := &Server{}
+	result := callToolWithMeta(t, map[string]any{
+		"scope": "project:acme/api",
+		"source_ids": []any{
+			"00000000-0000-0000-0000-000000000001",
+			"00000000-0000-0000-0000-000000000002",
+		},
+	}, nil, s.handleSynthesizeTopic)
 	assertToolError(t, result)
 }
 

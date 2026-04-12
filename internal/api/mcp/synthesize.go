@@ -16,6 +16,22 @@ import (
 // handleSynthesizeTopic synthesises multiple published knowledge artifacts into
 // a single topic digest artifact.
 func (s *Server) handleSynthesizeTopic(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+	var token mcpgo.ProgressToken
+	if req.Params.Meta != nil {
+		token = req.Params.Meta.ProgressToken
+	}
+	report := func(progress, total float64, msg string) {
+		if token == nil || s.mcpServer == nil {
+			return
+		}
+		_ = s.mcpServer.SendNotificationToClient(ctx, "notifications/progress", map[string]any{
+			"progressToken": token,
+			"progress":      progress,
+			"total":         total,
+			"message":       msg,
+		})
+	}
+
 	args := req.GetArguments()
 
 	scopeStr, ok := args["scope"].(string)
@@ -69,9 +85,11 @@ func (s *Server) handleSynthesizeTopic(ctx context.Context, req mcpgo.CallToolRe
 	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
 		return scopeAuthzToolError(ctx, "synthesize_topic", scope.ID, err), nil
 	}
+	report(1, 2, "scope verified")
 
 	authorID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 
+	report(2, 2, fmt.Sprintf("synthesising %d artifacts", len(sourceIDs)))
 	synth := knowledge.NewSynthesiser(s.pool, s.svc)
 	artifact, err := synth.Create(ctx, knowledge.SynthesisInput{
 		ScopeID:    scope.ID,
