@@ -24,9 +24,8 @@ func TestFanOut_StrictScope(t *testing.T) {
 	}
 }
 
-// TestFanOut_NonEmpty verifies that the result contains the starting scope when
-// the DB query is mocked with a known set of ancestors.
-func TestFanOut_NonEmpty(t *testing.T) {
+// TestDeduplicateScopeIDs_RemovesDuplicates verifies deduplication of scope ID slices.
+func TestDeduplicateScopeIDs_RemovesDuplicates(t *testing.T) {
 	// This test exercises the deduplication logic without a real DB.
 	scopeID := uuid.New()
 	personalID := uuid.New()
