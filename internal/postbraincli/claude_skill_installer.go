@@ -188,12 +188,24 @@ func InstallClaudePermissions(targetDir string) (bool, error) {
 
 	const rule = "mcp__postbrain__*"
 
-	perms, _ := settings["permissions"].(map[string]any)
-	if perms == nil {
+	var perms map[string]any
+	if rawPerms, ok := settings["permissions"]; ok {
+		perms, ok = rawPerms.(map[string]any)
+		if !ok {
+			return false, fmt.Errorf("invalid settings.local.json: permissions must be an object")
+		}
+	} else {
 		perms = make(map[string]any)
 		settings["permissions"] = perms
 	}
-	allow, _ := perms["allow"].([]any)
+
+	var allow []any
+	if rawAllow, ok := perms["allow"]; ok {
+		allow, ok = rawAllow.([]any)
+		if !ok {
+			return false, fmt.Errorf("invalid settings.local.json: permissions.allow must be an array")
+		}
+	}
 	for _, v := range allow {
 		if v == rule {
 			return false, nil
