@@ -17,51 +17,41 @@ import (
 func (s *Server) handlePublish(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
 
-	title, ok := args["title"].(string)
-	if !ok || title == "" {
+	title := argString(args, "title")
+	if title == "" {
 		return mcpgo.NewToolResultError("publish: 'title' is required"), nil
 	}
-	content, ok := args["content"].(string)
-	if !ok || content == "" {
+	content := argString(args, "content")
+	if content == "" {
 		return mcpgo.NewToolResultError("publish: 'content' is required"), nil
 	}
-	knowledgeType, ok := args["knowledge_type"].(string)
-	if !ok || knowledgeType == "" {
+	knowledgeType := argString(args, "knowledge_type")
+	if knowledgeType == "" {
 		return mcpgo.NewToolResultError("publish: 'knowledge_type' is required"), nil
 	}
-	scopeStr, ok := args["scope"].(string)
-	if !ok || scopeStr == "" {
+	scopeStr := argString(args, "scope")
+	if scopeStr == "" {
 		return mcpgo.NewToolResultError("publish: 'scope' is required"), nil
 	}
 
-	visibility := "team"
-	if v, ok := args["visibility"].(string); ok && v != "" {
-		visibility = v
+	visibility := argString(args, "visibility")
+	if visibility == "" {
+		visibility = "team"
 	}
 
 	var summary *string
-	if v, ok := args["summary"].(string); ok && v != "" {
+	if v := argString(args, "summary"); v != "" {
 		summary = &v
 	}
 
-	autoReview := false
-	if v, ok := args["auto_review"].(bool); ok {
-		autoReview = v
-	}
-
-	artifactKind := ""
-	if v, ok := args["artifact_kind"].(string); ok {
-		artifactKind = v
-	}
+	autoReview := argBool(args, "auto_review")
+	artifactKind := argString(args, "artifact_kind")
 	normalizedArtifactKind, err := knowledge.NormalizeArtifactKind(artifactKind)
 	if err != nil {
 		return mcpgo.NewToolResultError(fmt.Sprintf("publish: invalid artifact_kind: %v", err)), nil
 	}
 
-	collectionSlug := ""
-	if v, ok := args["collection_slug"].(string); ok {
-		collectionSlug = v
-	}
+	collectionSlug := argString(args, "collection_slug")
 
 	if s.pool == nil {
 		return mcpgo.NewToolResultError("publish: server not configured"), nil

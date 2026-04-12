@@ -16,8 +16,8 @@ import (
 func (s *Server) handleSkillSearch(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
 
-	query, ok := args["query"].(string)
-	if !ok || query == "" {
+	query := argString(args, "query")
+	if query == "" {
 		return mcpgo.NewToolResultError("skill_search: 'query' is required"), nil
 	}
 
@@ -25,19 +25,12 @@ func (s *Server) handleSkillSearch(ctx context.Context, req mcpgo.CallToolReques
 		return mcpgo.NewToolResultError("skill_search: server not configured"), nil
 	}
 
-	limit := 10
-	if v, ok := args["limit"].(float64); ok && v > 0 {
-		limit = int(v)
-	}
-
-	agentType := ""
-	if v, ok := args["agent_type"].(string); ok {
-		agentType = v
-	}
+	limit := argIntOrDefault(args, "limit", 10)
+	agentType := argString(args, "agent_type")
 
 	// Resolve scope if provided.
 	var scopeIDs []uuid.UUID
-	if scopeStr, ok := args["scope"].(string); ok && scopeStr != "" {
+	if scopeStr := argString(args, "scope"); scopeStr != "" {
 		kind, externalID, err := parseScopeString(scopeStr)
 		if err != nil {
 			return mcpgo.NewToolResultError(fmt.Sprintf("skill_search: invalid scope: %v", err)), nil

@@ -17,8 +17,8 @@ import (
 func (s *Server) handlePromote(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
 
-	memIDStr, ok := args["memory_id"].(string)
-	if !ok || memIDStr == "" {
+	memIDStr := argString(args, "memory_id")
+	if memIDStr == "" {
 		return mcpgo.NewToolResultError("promote: 'memory_id' is required"), nil
 	}
 	memID, err := uuid.Parse(memIDStr)
@@ -26,13 +26,13 @@ func (s *Server) handlePromote(ctx context.Context, req mcpgo.CallToolRequest) (
 		return mcpgo.NewToolResultError(fmt.Sprintf("promote: invalid memory_id: %v", err)), nil
 	}
 
-	targetScopeStr, ok := args["target_scope"].(string)
-	if !ok || targetScopeStr == "" {
+	targetScopeStr := argString(args, "target_scope")
+	if targetScopeStr == "" {
 		return mcpgo.NewToolResultError("promote: 'target_scope' is required"), nil
 	}
 
-	targetVisibility, ok := args["target_visibility"].(string)
-	if !ok || targetVisibility == "" {
+	targetVisibility := argString(args, "target_visibility")
+	if targetVisibility == "" {
 		return mcpgo.NewToolResultError("promote: 'target_visibility' is required"), nil
 	}
 

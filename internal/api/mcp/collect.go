@@ -16,8 +16,8 @@ import (
 func (s *Server) handleCollect(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
 
-	action, ok := args["action"].(string)
-	if !ok || action == "" {
+	action := argString(args, "action")
+	if action == "" {
 		return mcpgo.NewToolResultError("collect: 'action' is required"), nil
 	}
 
@@ -43,8 +43,8 @@ func (s *Server) collectAddToCollection(ctx context.Context, args map[string]any
 	if !authorizeToolPermission(ctx, "collections:write") {
 		return permissionToolError(), nil
 	}
-	artifactIDStr, ok := args["artifact_id"].(string)
-	if !ok || artifactIDStr == "" {
+	artifactIDStr := argString(args, "artifact_id")
+	if artifactIDStr == "" {
 		return mcpgo.NewToolResultError("collect: 'artifact_id' is required for add_to_collection"), nil
 	}
 	artifactID, err := uuid.Parse(artifactIDStr)
@@ -54,13 +54,13 @@ func (s *Server) collectAddToCollection(ctx context.Context, args map[string]any
 
 	// Resolve collection by ID or slug.
 	var collectionID uuid.UUID
-	if idStr, ok := args["collection_id"].(string); ok && idStr != "" {
+	if idStr := argString(args, "collection_id"); idStr != "" {
 		collectionID, err = uuid.Parse(idStr)
 		if err != nil {
 			return mcpgo.NewToolResultError(fmt.Sprintf("collect: invalid collection_id: %v", err)), nil
 		}
-	} else if slug, ok := args["collection_slug"].(string); ok && slug != "" {
-		scopeStr, _ := args["scope"].(string)
+	} else if slug := argString(args, "collection_slug"); slug != "" {
+		scopeStr := argString(args, "scope")
 		if scopeStr == "" {
 			return mcpgo.NewToolResultError("collect: 'scope' is required when using 'collection_slug'"), nil
 		}
@@ -99,26 +99,26 @@ func (s *Server) collectCreate(ctx context.Context, args map[string]any, callerI
 	if !authorizeToolPermission(ctx, "collections:write") {
 		return permissionToolError(), nil
 	}
-	scopeStr, ok := args["scope"].(string)
-	if !ok || scopeStr == "" {
+	scopeStr := argString(args, "scope")
+	if scopeStr == "" {
 		return mcpgo.NewToolResultError("collect: 'scope' is required for create_collection"), nil
 	}
-	name, ok := args["name"].(string)
-	if !ok || name == "" {
+	name := argString(args, "name")
+	if name == "" {
 		return mcpgo.NewToolResultError("collect: 'name' is required for create_collection"), nil
 	}
-	slug, _ := args["collection_slug"].(string)
+	slug := argString(args, "collection_slug")
 	if slug == "" {
 		return mcpgo.NewToolResultError("collect: 'collection_slug' is required for create_collection"), nil
 	}
 
-	visibility := "team"
-	if v, ok := args["visibility"].(string); ok && v != "" {
-		visibility = v
+	visibility := argString(args, "visibility")
+	if visibility == "" {
+		visibility = "team"
 	}
 
 	var description *string
-	if d, ok := args["description"].(string); ok && d != "" {
+	if d := argString(args, "description"); d != "" {
 		description = &d
 	}
 
@@ -148,8 +148,8 @@ func (s *Server) collectCreate(ctx context.Context, args map[string]any, callerI
 }
 
 func (s *Server) collectList(ctx context.Context, args map[string]any) (*mcpgo.CallToolResult, error) {
-	scopeStr, ok := args["scope"].(string)
-	if !ok || scopeStr == "" {
+	scopeStr := argString(args, "scope")
+	if scopeStr == "" {
 		return mcpgo.NewToolResultError("collect: 'scope' is required for list_collections"), nil
 	}
 

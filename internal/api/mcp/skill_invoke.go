@@ -16,12 +16,12 @@ import (
 func (s *Server) handleSkillInvoke(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
 
-	slug, ok := args["slug"].(string)
-	if !ok || slug == "" {
+	slug := argString(args, "slug")
+	if slug == "" {
 		return mcpgo.NewToolResultError("skill_invoke: 'slug' is required"), nil
 	}
-	scopeStr, ok := args["scope"].(string)
-	if !ok || scopeStr == "" {
+	scopeStr := argString(args, "scope")
+	if scopeStr == "" {
 		return mcpgo.NewToolResultError("skill_invoke: 'scope' is required"), nil
 	}
 

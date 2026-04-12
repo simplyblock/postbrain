@@ -187,11 +187,11 @@ func asCrossScopeResultJSON(scope string, results []*retrieval.Result) []map[str
 func (s *Server) handleCrossScopeContext(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
 
-	query, _ := args["query"].(string)
+	query := argString(args, "query")
 	if query == "" {
 		return mcpgo.NewToolResultError("cross_scope_context: 'query' is required"), nil
 	}
-	baselineScope, _ := args["baseline_scope"].(string)
+	baselineScope := argString(args, "baseline_scope")
 	if baselineScope == "" {
 		return mcpgo.NewToolResultError("cross_scope_context: 'baseline_scope' is required"), nil
 	}
@@ -220,20 +220,14 @@ func (s *Server) handleCrossScopeContext(ctx context.Context, req mcpgo.CallTool
 		return mcpgo.NewToolResultError("cross_scope_context: invalid time window: since must be <= until"), nil
 	}
 
-	limit := 10
-	if v, ok := args["limit_per_scope"].(float64); ok {
-		limit = int(v)
-	}
+	limit := argIntOrDefault(args, "limit_per_scope", 10)
 	if limit <= 0 {
 		return mcpgo.NewToolResultError("cross_scope_context: 'limit_per_scope' must be > 0"), nil
 	}
-	minScore := 0.0
-	if v, ok := args["min_score"].(float64); ok {
-		minScore = v
-	}
-	searchMode := "hybrid"
-	if v, ok := args["search_mode"].(string); ok && v != "" {
-		searchMode = v
+	minScore := argFloat64OrDefault(args, "min_score", 0.0)
+	searchMode := argString(args, "search_mode")
+	if searchMode == "" {
+		searchMode = "hybrid"
 	}
 	graphDepth := parseGraphDepthWithDefault(args, defaultCrossScopeGraphDepth)
 

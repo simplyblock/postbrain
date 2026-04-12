@@ -23,15 +23,8 @@ func (s *Server) handleContext(ctx context.Context, req mcpgo.CallToolRequest) (
 		return mcpgo.NewToolResultError("context: 'scope' is required"), nil
 	}
 
-	query := ""
-	if v, ok := args["query"].(string); ok {
-		query = v
-	}
-
-	maxTokens := 4000
-	if v, ok := args["max_tokens"].(float64); ok && v > 0 {
-		maxTokens = int(v)
-	}
+	query := argString(args, "query")
+	maxTokens := argIntOrDefault(args, "max_tokens", 4000)
 
 	if s.pool == nil {
 		return mcpgo.NewToolResultError("context: server not configured"), nil

@@ -20,8 +20,8 @@ func (s *Server) handleSynthesizeTopic(ctx context.Context, req mcpgo.CallToolRe
 
 	args := req.GetArguments()
 
-	scopeStr, ok := args["scope"].(string)
-	if !ok || scopeStr == "" {
+	scopeStr := argString(args, "scope")
+	if scopeStr == "" {
 		return mcpgo.NewToolResultError("synthesize_topic: 'scope' is required"), nil
 	}
 
@@ -43,15 +43,8 @@ func (s *Server) handleSynthesizeTopic(ctx context.Context, req mcpgo.CallToolRe
 		sourceIDs = append(sourceIDs, id)
 	}
 
-	title := ""
-	if v, ok := args["title"].(string); ok {
-		title = v
-	}
-
-	autoReview := false
-	if v, ok := args["auto_review"].(bool); ok {
-		autoReview = v
-	}
+	title := argString(args, "title")
+	autoReview := argBool(args, "auto_review")
 
 	if s.pool == nil {
 		return mcpgo.NewToolResultError("synthesize_topic: server not configured"), nil

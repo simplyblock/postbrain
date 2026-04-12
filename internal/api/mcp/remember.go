@@ -53,22 +53,18 @@ func (s *Server) handleRemember(ctx context.Context, req mcpgo.CallToolRequest) 
 	principalID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 
 	// Optional fields with defaults.
-	memoryType := "semantic"
-	if v, ok := args["memory_type"].(string); ok && v != "" {
-		memoryType = v
+	memoryType := argString(args, "memory_type")
+	if memoryType == "" {
+		memoryType = "semantic"
 	}
-
-	importance := 0.5
-	if v, ok := args["importance"].(float64); ok {
-		importance = v
-	}
+	importance := argFloat64OrDefault(args, "importance", 0.5)
 
 	var sourceRef *string
-	if v, ok := args["source_ref"].(string); ok && v != "" {
+	if v := argString(args, "source_ref"); v != "" {
 		sourceRef = &v
 	}
 	var summary *string
-	if v, ok := args["summary"].(string); ok && v != "" {
+	if v := argString(args, "summary"); v != "" {
 		summary = &v
 	}
 
@@ -91,7 +87,7 @@ func (s *Server) handleRemember(ctx context.Context, req mcpgo.CallToolRequest) 
 	}
 
 	var expiresIn *int
-	if v, ok := args["expires_in"].(float64); ok {
+	if v, ok := args["expires_in"].(float64); ok && v > 0 {
 		n := int(v)
 		expiresIn = &n
 	}

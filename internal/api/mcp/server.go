@@ -390,3 +390,47 @@ func parseScopeString(scope string) (kind, externalID string, err error) {
 type errorString string
 
 func (e errorString) Error() string { return string(e) }
+
+// argString returns the string value of key from args, or "" if absent or wrong type.
+func argString(args map[string]any, key string) string {
+	v, _ := args[key].(string)
+	return v
+}
+
+// argIntOrDefault returns the integer value of key from args (JSON numbers arrive as float64),
+// or def if the key is absent, zero, or negative.
+func argIntOrDefault(args map[string]any, key string, def int) int {
+	if v, ok := args[key].(float64); ok && v > 0 {
+		return int(v)
+	}
+	return def
+}
+
+// argFloat64OrDefault returns the float64 value of key from args, or def if absent.
+func argFloat64OrDefault(args map[string]any, key string, def float64) float64 {
+	if v, ok := args[key].(float64); ok {
+		return v
+	}
+	return def
+}
+
+// argBool returns the bool value of key from args, or false if absent or wrong type.
+func argBool(args map[string]any, key string) bool {
+	v, _ := args[key].(bool)
+	return v
+}
+
+// argStringSlice returns a []string from a []any value at key, filtering non-string elements.
+func argStringSlice(args map[string]any, key string) []string {
+	v, ok := args[key].([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(v))
+	for _, item := range v {
+		if s, ok := item.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}

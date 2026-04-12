@@ -15,7 +15,7 @@ import (
 // Use this after a recall result indicates full_content_available=true.
 func (s *Server) handleKnowledgeDetail(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
-	idStr, _ := args["artifact_id"].(string)
+	idStr := argString(args, "artifact_id")
 	if idStr == "" {
 		return mcpgo.NewToolResultError("knowledge_detail: artifact_id is required"), nil
 	}

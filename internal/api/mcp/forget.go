@@ -15,8 +15,8 @@ import (
 func (s *Server) handleForget(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
 
-	memIDStr, ok := args["memory_id"].(string)
-	if !ok || memIDStr == "" {
+	memIDStr := argString(args, "memory_id")
+	if memIDStr == "" {
 		return mcpgo.NewToolResultError("forget: 'memory_id' is required"), nil
 	}
 
@@ -25,10 +25,7 @@ func (s *Server) handleForget(ctx context.Context, req mcpgo.CallToolRequest) (*
 		return mcpgo.NewToolResultError(fmt.Sprintf("forget: invalid memory_id: %v", err)), nil
 	}
 
-	hard := false
-	if v, ok := args["hard"].(bool); ok {
-		hard = v
-	}
+	hard := argBool(args, "hard")
 
 	if s.memStore == nil {
 		return mcpgo.NewToolResultError("forget: server not configured (no memory store)"), nil

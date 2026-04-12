@@ -38,42 +38,20 @@ func parseGraphDepth(args map[string]any) int {
 func (s *Server) handleRecall(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
 
-	query, _ := args["query"].(string)
+	query := argString(args, "query")
 	if query == "" {
 		return mcpgo.NewToolResultError("recall: 'query' is required"), nil
 	}
-	scopeStr, _ := args["scope"].(string)
-
-	limit := 10
-	if v, ok := args["limit"].(float64); ok && v > 0 {
-		limit = int(v)
+	scopeStr := argString(args, "scope")
+	limit := argIntOrDefault(args, "limit", 10)
+	minScore := argFloat64OrDefault(args, "min_score", 0.0)
+	searchMode := argString(args, "search_mode")
+	if searchMode == "" {
+		searchMode = "hybrid"
 	}
-
-	minScore := 0.0
-	if v, ok := args["min_score"].(float64); ok {
-		minScore = v
-	}
-
-	searchMode := "hybrid"
-	if v, ok := args["search_mode"].(string); ok && v != "" {
-		searchMode = v
-	}
-
-	agentType := ""
-	if v, ok := args["agent_type"].(string); ok {
-		agentType = v
-	}
-
+	agentType := argString(args, "agent_type")
 	graphDepth := parseGraphDepth(args)
-
-	var memoryTypes []string
-	if v, ok := args["memory_types"].([]any); ok {
-		for _, mt := range v {
-			if ms, ok := mt.(string); ok {
-				memoryTypes = append(memoryTypes, ms)
-			}
-		}
-	}
+	memoryTypes := argStringSlice(args, "memory_types")
 
 	// Parse layers (default: all three).
 	activeLayers := map[retrieval.Layer]bool{

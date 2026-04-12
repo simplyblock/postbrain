@@ -15,12 +15,12 @@ import (
 func (s *Server) handleGraphQuery(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
 
-	cypher, ok := args["cypher"].(string)
-	if !ok || strings.TrimSpace(cypher) == "" {
+	cypher := argString(args, "cypher")
+	if strings.TrimSpace(cypher) == "" {
 		return mcpgo.NewToolResultError("graph_query: 'cypher' is required"), nil
 	}
-	scopeStr, ok := args["scope"].(string)
-	if !ok || strings.TrimSpace(scopeStr) == "" {
+	scopeStr := argString(args, "scope")
+	if strings.TrimSpace(scopeStr) == "" {
 		return mcpgo.NewToolResultError("graph_query: 'scope' is required"), nil
 	}
 	if s.pool == nil {

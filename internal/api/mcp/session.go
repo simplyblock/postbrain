@@ -18,8 +18,8 @@ import (
 func (s *Server) handleSessionBegin(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
 
-	scopeStr, ok := args["scope"].(string)
-	if !ok || scopeStr == "" {
+	scopeStr := argString(args, "scope")
+	if scopeStr == "" {
 		return mcpgo.NewToolResultError("session_begin: 'scope' is required"), nil
 	}
 
@@ -61,8 +61,8 @@ func (s *Server) handleSessionBegin(ctx context.Context, req mcpgo.CallToolReque
 func (s *Server) handleSessionEnd(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
 
-	sessionIDStr, ok := args["session_id"].(string)
-	if !ok || sessionIDStr == "" {
+	sessionIDStr := argString(args, "session_id")
+	if sessionIDStr == "" {
 		return mcpgo.NewToolResultError("session_end: 'session_id' is required"), nil
 	}
 	sessionID, err := uuid.Parse(sessionIDStr)

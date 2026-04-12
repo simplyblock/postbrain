@@ -19,20 +19,13 @@ func (s *Server) handleSummarize(ctx context.Context, req mcpgo.CallToolRequest)
 
 	args := req.GetArguments()
 
-	scopeStr, ok := args["scope"].(string)
-	if !ok || scopeStr == "" {
+	scopeStr := argString(args, "scope")
+	if scopeStr == "" {
 		return mcpgo.NewToolResultError("summarize: 'scope' is required"), nil
 	}
 
-	topic := ""
-	if v, ok := args["topic"].(string); ok {
-		topic = v
-	}
-
-	dryRun := false
-	if v, ok := args["dry_run"].(bool); ok {
-		dryRun = v
-	}
+	topic := argString(args, "topic")
+	dryRun := argBool(args, "dry_run")
 
 	if s.pool == nil {
 		return mcpgo.NewToolResultError("summarize: server not configured"), nil
