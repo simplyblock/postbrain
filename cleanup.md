@@ -958,7 +958,7 @@ Priority order for adding tests: `authz/resolver.go` (security) → `jobs/stalen
 
 ---
 
-### 7.6 `internal/api/mcp/scopeauth.go` and REST `authorizeRequestedScope` not sharing logic
+### 7.6 `internal/api/mcp/scopeauth.go` and REST `authorizeRequestedScope` not sharing logic ✓ Done (audit: both already call scopeauth.AuthorizeContextScope — shared path confirmed)
 
 The MCP and REST layers each maintain their own authorization check call. In `internal/api/mcp/scopeauth.go` and in REST helpers, the authorization check calls `authz.DBResolver` via slightly different call paths. If a new authorization rule is added, it needs to be added in both layers.
 
