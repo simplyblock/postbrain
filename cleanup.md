@@ -708,7 +708,7 @@ func (s *Store) Create(ctx context.Context, m *Memory) (*Memory, error) {
 
 ---
 
-### 5.2 `ContradictionJob.fetchArtifactBatch` re-implements manual row scanning
+### 5.2 `ContradictionJob.fetchArtifactBatch` re-implements manual row scanning ✓ Done
 
 **File:** `internal/jobs/staleness.go:77–122`
 
