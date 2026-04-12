@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"log/slog"
 	"math"
 	"sort"
 	"strings"
@@ -273,11 +274,20 @@ func (s *Store) Recall(ctx context.Context, input RecallInput) ([]*MemoryResult,
 		results = results[:input.Limit]
 	}
 
-	// 9. Async access count increment.
-	for _, r := range results {
-		id := r.Memory.ID
+	// 9. Async access count increment — single bounded goroutine for all results.
+	if len(results) > 0 {
+		ids := make([]uuid.UUID, len(results))
+		for i, r := range results {
+			ids[i] = r.Memory.ID
+		}
 		go func() {
-			_ = rdb.IncrementMemoryAccess(context.Background(), id)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			for _, id := range ids {
+				if err := rdb.IncrementMemoryAccess(ctx, id); err != nil {
+					slog.Warn("recall: increment memory access", "id", id, "error", err)
+				}
+			}
 		}()
 	}
 
