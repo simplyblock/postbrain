@@ -251,6 +251,28 @@ func (q *Queries) GetScopeGrantPermissions(ctx context.Context, arg GetScopeGran
 	return items, nil
 }
 
+const isScopeAllowedByTokenScopes = `-- name: IsScopeAllowedByTokenScopes :one
+SELECT EXISTS (
+    SELECT 1
+    FROM scopes target
+    JOIN scopes allowed ON allowed.path @> target.path
+    WHERE target.id = $1
+      AND allowed.id = ANY($2::uuid[])
+)
+`
+
+type IsScopeAllowedByTokenScopesParams struct {
+	ID      uuid.UUID
+	Column2 []uuid.UUID
+}
+
+func (q *Queries) IsScopeAllowedByTokenScopes(ctx context.Context, arg IsScopeAllowedByTokenScopesParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isScopeAllowedByTokenScopes, arg.ID, arg.Column2)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const principalOwnsDescendant = `-- name: PrincipalOwnsDescendant :one
 SELECT EXISTS (
     SELECT 1

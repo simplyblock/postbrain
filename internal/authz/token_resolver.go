@@ -89,23 +89,10 @@ func (tr *TokenResolver) isScopeAllowed(ctx context.Context, scopeID uuid.UUID, 
 		return false, fmt.Errorf("authz: token resolver requires DB-backed resolver for scope restrictions")
 	}
 
-	// The requested scope is allowed if any of the token's declared scope_ids
-	// is an ancestor of (or equal to) the requested scope.
-	// Using ltree: allowed.path @> target.path means allowed is ancestor of target.
-	var allowed bool
-	err := dbResolver.pool.QueryRow(ctx, `
-		SELECT EXISTS (
-			SELECT 1
-			FROM scopes target
-			JOIN scopes allowed ON allowed.path @> target.path
-			WHERE target.id = $1
-			  AND allowed.id = ANY($2)
-		)
-	`, scopeID, allowedIDs).Scan(&allowed)
-	if err != nil {
-		return false, err
-	}
-	return allowed, nil
+	return db.New(dbResolver.pool).IsScopeAllowedByTokenScopes(ctx, db.IsScopeAllowedByTokenScopesParams{
+		ID:      scopeID,
+		Column2: allowedIDs,
+	})
 }
 
 func unwrapDBResolver(r Resolver) (*DBResolver, bool) {

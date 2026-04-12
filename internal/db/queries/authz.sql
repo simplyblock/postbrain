@@ -86,6 +86,15 @@ WHERE sg.principal_id = $1
   AND descendant.id != target.id
   AND (sg.expires_at IS NULL OR sg.expires_at > now());
 
+-- name: IsScopeAllowedByTokenScopes :one
+SELECT EXISTS (
+    SELECT 1
+    FROM scopes target
+    JOIN scopes allowed ON allowed.path @> target.path
+    WHERE target.id = $1
+      AND allowed.id = ANY($2::uuid[])
+);
+
 -- name: GetReachableScopeIDs :many
 WITH RECURSIVE
 principal_ancestry AS (
