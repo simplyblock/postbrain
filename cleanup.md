@@ -104,7 +104,7 @@ The project uses sqlc for query generation (`sqlc.yaml`, `internal/db/queries/*.
 
 Infrastructure-level SQL (advisory locks in `migrate.go`, extension setup in `age_overlay.go`, dynamic DDL in `embedding_tables.go`, and Cypher-wrapping SQL in `graph/`) is legitimately beyond sqlc's scope and is excluded from these findings.
 
-### 2.1 `internal/jobs/reembed.go` — 9+ raw SQL statements
+### 2.1 `internal/jobs/reembed.go` — 9+ raw SQL statements ✓ Done
 
 **Lines:** 44–45, 68–83, 175–185, 258–262, 266–280, 287–291, 295–300, 309–314
 
@@ -151,7 +151,7 @@ The table-name string concatenation on line 287 is a latent SQL injection risk (
 
 ---
 
-### 2.2 `internal/jobs/expire.go` — raw UPDATE
+### 2.2 `internal/jobs/expire.go` — raw UPDATE ✓ Done
 
 **Lines:** 14–17
 
@@ -172,7 +172,7 @@ Then call `db.ExpireWorkingMemories(ctx, pool)`.
 
 ---
 
-### 2.3 `internal/jobs/consolidate.go` — raw SELECT
+### 2.3 `internal/jobs/consolidate.go` — raw SELECT ✓ Done
 
 **Lines:** 39–42
 
@@ -192,7 +192,7 @@ WHERE is_active = true AND importance < 0.7 AND access_count < 3;
 
 ---
 
-### 2.4 `internal/jobs/staleness.go` — 2 raw SELECTs
+### 2.4 `internal/jobs/staleness.go` — 2 raw SELECTs ✓ Done
 
 **Lines:** 78–88 (`fetchArtifactBatch`) and 224–236 (`fetchRecentMemories`)
 
@@ -205,7 +205,7 @@ Both are complex multi-column SELECTs that manually scan into `db.KnowledgeArtif
 
 ---
 
-### 2.5 `internal/jobs/promotion_notify.go` — raw SELECT
+### 2.5 `internal/jobs/promotion_notify.go` — raw SELECT ✓ Done
 
 **Lines:** 33–38
 
@@ -229,7 +229,7 @@ ORDER BY created_at;
 
 ---
 
-### 2.6 `internal/jobs/chunk_backfill.go` — 2 raw SELECTs
+### 2.6 `internal/jobs/chunk_backfill.go` — 2 raw SELECTs ✓ Done
 
 **File:** `internal/jobs/chunk_backfill.go:44–53` and `62–72`
 
@@ -258,7 +258,7 @@ rows, err := p.pool.Query(ctx,
 
 ---
 
-### 2.7 `internal/jobs/backfill_summaries.go` — raw SELECT and UPDATE
+### 2.7 `internal/jobs/backfill_summaries.go` — raw SELECT and UPDATE ✓ Done
 
 **Lines:** 32–37 and 57–59
 
@@ -277,7 +277,7 @@ _, err := p.pool.Exec(ctx,
 
 ---
 
-### 2.8 `internal/authz/resolver.go` — 7 raw queries
+### 2.8 `internal/authz/resolver.go` — 7 raw queries ✓ Done
 
 **Lines:** 48–51, 64–66, 79–100+, 138+, 171+, 188+, 223+, 276+, 285+, 301+
 
@@ -296,7 +296,7 @@ err = r.pool.QueryRow(ctx, `
 
 ---
 
-### 2.9 `internal/principals/membership.go` — 3 raw queries
+### 2.9 `internal/principals/membership.go` — 3 raw queries ✓ Done
 
 **Lines:** 79–81, 103–105, 129–143, 167–176, 194–200
 
@@ -317,7 +317,7 @@ err := m.pool.QueryRow(ctx,
 
 ---
 
-### 2.10 `internal/sharing/grants.go` — 5 raw queries
+### 2.10 `internal/sharing/grants.go` — 5 raw queries ✓ Done
 
 **Lines:** 48–52, 66–67, 77–80, 106–112, 123–129
 
@@ -327,7 +327,7 @@ All CRUD operations for sharing grants are raw SQL. A query file already exists 
 
 ---
 
-### 2.11 `internal/memory/scope.go` — 2 raw queries
+### 2.11 `internal/memory/scope.go` — 2 raw queries ✓ Done
 
 **Lines:** 50–52 (`filterByDepth`) and 81–83 (`personalScopeIDs`)
 
@@ -348,7 +348,7 @@ rows, err := pool.Query(ctx,
 
 ---
 
-### 2.12 `internal/knowledge/promote.go` — raw UPDATE
+### 2.12 `internal/knowledge/promote.go` — raw UPDATE ✓ Done
 
 **Line:** 40–43
 
@@ -363,7 +363,7 @@ _, err := p.pool.Exec(ctx,
 
 ---
 
-### 2.13 `internal/db/schema_version.go` — raw SELECT on golang-migrate table
+### 2.13 `internal/db/schema_version.go` — raw SELECT on golang-migrate table ✓ Done
 
 **Line:** 22
 
@@ -377,7 +377,7 @@ err = conn.QueryRow(ctx, "SELECT version, dirty FROM schema_migrations ORDER BY 
 
 ---
 
-### 2.14 `internal/jobs/age_backfill.go` — multiple raw queries
+### 2.14 `internal/jobs/age_backfill.go` — multiple raw queries ✓ Done
 
 **Lines:** 27–54 (SQL constants), 143, 190 (batch fetches), 267, 275 (advisory locks)
 
@@ -668,7 +668,7 @@ func RunPaginatedBatch[T any](
 
 ## 5. Overly Complicated Code Segments
 
-### 5.1 `memory.Store.Create` does 11 distinct things in one method
+### 5.1 `memory.Store.Create` does 11 distinct things in one method ✓ Done
 
 **File:** `internal/memory/store.go` (the `Create` method, approximately lines 180–300 based on the file structure)
 
@@ -937,7 +937,7 @@ Additionally, annotate or move `runPageRankSQL` to `internal/db/queries/` as a s
 
 ---
 
-### 7.5 Missing test files for substantial logic
+### 7.5 Missing test files for substantial logic ✓ Done (authz/resolver.go ReachableScopeIDs integration tests added)
 
 The following files contain substantial, non-trivial logic with no corresponding test file. These represent the highest-priority testing gaps:
 
@@ -1031,7 +1031,7 @@ func TestExtractMarkitdownPPTX(t *testing.T) {
 
 ---
 
-### 8.4 Raw SQL outside sqlc in model store path
+### 8.4 Raw SQL outside sqlc in model store path ✓ Done
 
 **File:** `internal/embedding/model_store.go:39–43`, `72–77`
 
@@ -1047,7 +1047,7 @@ Then call generated methods from `DBModelStore`.
 
 ---
 
-### 8.5 Raw SQL outside sqlc in token scope restriction check
+### 8.5 Raw SQL outside sqlc in token scope restriction check ✓ Done
 
 **File:** `internal/authz/token_resolver.go:96–104`
 
@@ -1062,7 +1062,7 @@ Call that generated query from `TokenResolver`.
 
 ---
 
-### 8.6 Raw SQL outside sqlc in principal store CRUD
+### 8.6 Raw SQL outside sqlc in principal store CRUD ✓ Done
 
 **File:** `internal/principals/store.go:58–63`, `73–78`, `96`
 
@@ -1097,7 +1097,7 @@ Both implementations duplicate:
 
 ---
 
-### 8.8 Overly complicated `OrchestrateRecall` control flow
+### 8.8 Overly complicated `OrchestrateRecall` control flow ✓ Done
 
 **File:** `internal/retrieval/orchestrate.go:50–213`
 
@@ -1118,7 +1118,7 @@ Both implementations duplicate:
 
 ---
 
-### 8.9 Read path mixes retrieval with asynchronous write side effects
+### 8.9 Read path mixes retrieval with asynchronous write side effects ✓ Done
 
 **Files:**
 - `internal/retrieval/orchestrate.go:103`
