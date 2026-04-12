@@ -611,17 +611,15 @@ func TestInstallCodexPermissions_WritesApprovalModes(t *testing.T) {
 		t.Fatalf("read config.toml: %v", err)
 	}
 	content := string(data)
-	for _, tool := range []string{
-		"list_scopes", "session_begin", "recall", "context", "knowledge_detail",
-		"publish", "remember", "session_end", "graph_query",
-	} {
-		section := "[mcp_servers.postbrain.tools." + tool + "]"
-		if !strings.Contains(content, section) {
-			t.Fatalf("config.toml missing %s", section)
-		}
-		if !strings.Contains(content, `approval_mode = "approve"`) {
-			t.Fatal("config.toml missing approval_mode = \"approve\"")
-		}
+	if !strings.Contains(content, "default_tools_enabled = true") {
+		t.Fatal("config.toml missing default_tools_enabled = true")
+	}
+	if !strings.Contains(content, `default_tools_approval_mode = "approve"`) {
+		t.Fatal(`config.toml missing default_tools_approval_mode = "approve"`)
+	}
+	// Must not fall back to per-tool sections.
+	if strings.Contains(content, "[mcp_servers.postbrain.tools.") {
+		t.Fatal("config.toml must not contain per-tool approval sections")
 	}
 }
 
@@ -669,7 +667,10 @@ func TestInstallCodexPermissions_MergesIntoExistingConfig(t *testing.T) {
 	if !strings.Contains(content, `url = "http://localhost:7433/mcp"`) {
 		t.Error("existing MCP url lost after merge")
 	}
-	if !strings.Contains(content, "[mcp_servers.postbrain.tools.recall]") {
-		t.Error("approval section for recall not added")
+	if !strings.Contains(content, "default_tools_enabled = true") {
+		t.Error("default_tools_enabled = true not added")
+	}
+	if !strings.Contains(content, `default_tools_approval_mode = "approve"`) {
+		t.Error(`default_tools_approval_mode = "approve" not added`)
 	}
 }
