@@ -103,7 +103,9 @@ func (j *ReembedJob) RunText(ctx context.Context) error {
 				return fmt.Errorf("reembed text: scan row: %w", err)
 			}
 			if strings.TrimSpace(r.content.String) == "" {
-				_ = j.markEmbeddingFailedAttempt(ctx, r.objectType, r.id, *modelID, r.retryCount, fmt.Errorf("empty content for %s %v", r.objectType, r.id))
+				if err := j.markEmbeddingFailedAttempt(ctx, r.objectType, r.id, *modelID, r.retryCount, fmt.Errorf("empty content for %s %v", r.objectType, r.id)); err != nil {
+					slog.Error("reembed text: mark failed attempt error", "object_id", r.id, "error", err)
+				}
 				continue
 			}
 			batch = append(batch, r)
@@ -120,18 +122,24 @@ func (j *ReembedJob) RunText(ctx context.Context) error {
 		for _, r := range batch {
 			vec, err := j.svc.EmbedText(ctx, r.content.String)
 			if err != nil {
-				_ = j.markEmbeddingFailedAttempt(ctx, r.objectType, r.id, *modelID, r.retryCount, err)
+				if markErr := j.markEmbeddingFailedAttempt(ctx, r.objectType, r.id, *modelID, r.retryCount, err); markErr != nil {
+					slog.Error("reembed text: mark failed attempt error", "object_id", r.id, "error", markErr)
+				}
 				slog.Error("reembed text: embed failed", "object_type", r.objectType, "object_id", r.id, "error", err)
 				continue
 			}
 			if err := j.updateTextEmbeddingByObjectType(ctx, r.objectType, r.id, vec, modelID); err != nil {
-				_ = j.markEmbeddingFailedAttempt(ctx, r.objectType, r.id, *modelID, r.retryCount, err)
+				if markErr := j.markEmbeddingFailedAttempt(ctx, r.objectType, r.id, *modelID, r.retryCount, err); markErr != nil {
+					slog.Error("reembed text: mark failed attempt error", "object_id", r.id, "error", markErr)
+				}
 				slog.Error("reembed text: update failed", "object_type", r.objectType, "object_id", r.id, "error", err)
 				continue
 			}
 			scopeID := j.resolveScopeID(ctx, r.objectType, r.id)
 			if scopeID == uuid.Nil {
-				_ = j.markEmbeddingFailedAttempt(ctx, r.objectType, r.id, *modelID, r.retryCount, fmt.Errorf("missing scope_id for %s %s", r.objectType, r.id))
+				if markErr := j.markEmbeddingFailedAttempt(ctx, r.objectType, r.id, *modelID, r.retryCount, fmt.Errorf("missing scope_id for %s %s", r.objectType, r.id)); markErr != nil {
+					slog.Error("reembed text: mark failed attempt error", "object_id", r.id, "error", markErr)
+				}
 				continue
 			}
 			if err := db.NewEmbeddingRepository(j.pool).UpsertEmbedding(ctx, db.UpsertEmbeddingInput{
@@ -141,7 +149,9 @@ func (j *ReembedJob) RunText(ctx context.Context) error {
 				ModelID:    *modelID,
 				Embedding:  vec,
 			}); err != nil {
-				_ = j.markEmbeddingFailedAttempt(ctx, r.objectType, r.id, *modelID, r.retryCount, err)
+				if markErr := j.markEmbeddingFailedAttempt(ctx, r.objectType, r.id, *modelID, r.retryCount, err); markErr != nil {
+					slog.Error("reembed text: mark failed attempt error", "object_id", r.id, "error", markErr)
+				}
 				slog.Error("reembed text: repository upsert failed", "object_type", r.objectType, "object_id", r.id, "error", err)
 				continue
 			}
@@ -218,12 +228,16 @@ func (j *ReembedJob) RunCode(ctx context.Context) error {
 		for _, r := range batch {
 			vec, err := j.svc.EmbedCode(ctx, r.content)
 			if err != nil {
-				_ = j.markEmbeddingFailedAttempt(ctx, "memory", r.id, *modelID, r.retryCount, err)
+				if markErr := j.markEmbeddingFailedAttempt(ctx, "memory", r.id, *modelID, r.retryCount, err); markErr != nil {
+					slog.Error("reembed code: mark failed attempt error", "memory_id", r.id, "error", markErr)
+				}
 				slog.Error("reembed code: embed failed", "memory_id", r.id, "error", err)
 				continue
 			}
 			if err := j.updateMemoryCodeEmbedding(ctx, r.id, vec, modelID); err != nil {
-				_ = j.markEmbeddingFailedAttempt(ctx, "memory", r.id, *modelID, r.retryCount, err)
+				if markErr := j.markEmbeddingFailedAttempt(ctx, "memory", r.id, *modelID, r.retryCount, err); markErr != nil {
+					slog.Error("reembed code: mark failed attempt error", "memory_id", r.id, "error", markErr)
+				}
 				slog.Error("reembed code: update failed", "memory_id", r.id, "error", err)
 				continue
 			}
@@ -234,7 +248,9 @@ func (j *ReembedJob) RunCode(ctx context.Context) error {
 				ModelID:    *modelID,
 				Embedding:  vec,
 			}); err != nil {
-				_ = j.markEmbeddingFailedAttempt(ctx, "memory", r.id, *modelID, r.retryCount, err)
+				if markErr := j.markEmbeddingFailedAttempt(ctx, "memory", r.id, *modelID, r.retryCount, err); markErr != nil {
+					slog.Error("reembed code: mark failed attempt error", "memory_id", r.id, "error", markErr)
+				}
 				slog.Error("reembed code: repository upsert failed", "memory_id", r.id, "error", err)
 				continue
 			}
