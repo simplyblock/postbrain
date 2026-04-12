@@ -102,12 +102,7 @@ func (j *ContradictionJob) fetchArtifactBatch(ctx context.Context, offset int) (
 			return nil, err
 		}
 		a.Summary = summary
-		if embText != nil {
-			var v pgvector.Vector
-			if err := v.Scan(*embText); err == nil {
-				a.Embedding = &v
-			}
-		}
+		a.Embedding = scanPgVector(embText)
 		artifacts = append(artifacts, &a)
 	}
 	return artifacts, rows.Err()
@@ -247,21 +242,24 @@ func (j *ContradictionJob) fetchRecentMemories(ctx context.Context, scopeID uuid
 		if err != nil {
 			return nil, err
 		}
-		if embText != nil {
-			var v pgvector.Vector
-			if err := v.Scan(*embText); err == nil {
-				m.Embedding = &v
-			}
-		}
-		if embCodeText != nil {
-			var v pgvector.Vector
-			if err := v.Scan(*embCodeText); err == nil {
-				m.EmbeddingCode = &v
-			}
-		}
+		m.Embedding = scanPgVector(embText)
+		m.EmbeddingCode = scanPgVector(embCodeText)
 		memories = append(memories, &m)
 	}
 	return memories, rows.Err()
+}
+
+// scanPgVector parses a pgvector stored as text (via ::text cast) into a
+// *pgvector.Vector. Returns nil if text is nil or the parse fails.
+func scanPgVector(text *string) *pgvector.Vector {
+	if text == nil {
+		return nil
+	}
+	var v pgvector.Vector
+	if err := v.Scan(*text); err != nil {
+		return nil
+	}
+	return &v
 }
 
 // filterByTopicSimilarity returns memories whose text embedding has cosine
