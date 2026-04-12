@@ -456,6 +456,141 @@ func TestDBResolver_InvalidMembershipRole_ReturnsError(t *testing.T) {
 	}
 }
 
+// TestDBResolver_ReachableScopeIDs_SystemAdmin verifies that a system admin
+// can reach every scope.
+func TestDBResolver_ReachableScopeIDs_SystemAdmin(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+
+	admin := testhelper.CreateTestPrincipal(t, pool, "user", "resolver-reach-sysadmin-"+uuid.New().String())
+	setSystemAdmin(t, pool, admin.ID)
+
+	owner := testhelper.CreateTestPrincipal(t, pool, "user", "resolver-reach-owner-"+uuid.New().String())
+	scope := testhelper.CreateTestScope(t, pool, "project", "resolver-reach-sa-s-"+uuid.New().String(), nil, owner.ID)
+
+	dbr := authz.NewDBResolver(pool)
+	ids, err := dbr.ReachableScopeIDs(ctx, admin.ID)
+	if err != nil {
+		t.Fatalf("ReachableScopeIDs: %v", err)
+	}
+
+	for _, id := range ids {
+		if id == scope.ID {
+			return
+		}
+	}
+	t.Errorf("system admin should be able to reach scope %s, got %v", scope.ID, ids)
+}
+
+// TestDBResolver_ReachableScopeIDs_Owner verifies that an owner can reach their own scope.
+func TestDBResolver_ReachableScopeIDs_Owner(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+
+	owner := testhelper.CreateTestPrincipal(t, pool, "user", "resolver-reach-own-u-"+uuid.New().String())
+	scope := testhelper.CreateTestScope(t, pool, "project", "resolver-reach-own-s-"+uuid.New().String(), nil, owner.ID)
+
+	dbr := authz.NewDBResolver(pool)
+	ids, err := dbr.ReachableScopeIDs(ctx, owner.ID)
+	if err != nil {
+		t.Fatalf("ReachableScopeIDs: %v", err)
+	}
+
+	for _, id := range ids {
+		if id == scope.ID {
+			return
+		}
+	}
+	t.Errorf("owner should be able to reach scope %s, got %v", scope.ID, ids)
+}
+
+// TestDBResolver_ReachableScopeIDs_ScopeGrant verifies that a direct scope grant
+// makes the scope reachable.
+func TestDBResolver_ReachableScopeIDs_ScopeGrant(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+
+	owner := testhelper.CreateTestPrincipal(t, pool, "user", "resolver-reach-grant-owner-"+uuid.New().String())
+	scope := testhelper.CreateTestScope(t, pool, "project", "resolver-reach-grant-s-"+uuid.New().String(), nil, owner.ID)
+	grantee := testhelper.CreateTestPrincipal(t, pool, "user", "resolver-reach-grant-u-"+uuid.New().String())
+
+	makeGrant(t, pool, grantee.ID, scope.ID, []string{"memories:read"}, nil)
+
+	dbr := authz.NewDBResolver(pool)
+	ids, err := dbr.ReachableScopeIDs(ctx, grantee.ID)
+	if err != nil {
+		t.Fatalf("ReachableScopeIDs: %v", err)
+	}
+
+	for _, id := range ids {
+		if id == scope.ID {
+			return
+		}
+	}
+	t.Errorf("grantee should be able to reach scope %s, got %v", scope.ID, ids)
+}
+
+// TestDBResolver_ReachableScopeIDs_Unrelated verifies that an unrelated principal
+// cannot reach a scope they have no access to.
+func TestDBResolver_ReachableScopeIDs_Unrelated(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+
+	owner := testhelper.CreateTestPrincipal(t, pool, "user", "resolver-reach-unrel-owner-"+uuid.New().String())
+	scope := testhelper.CreateTestScope(t, pool, "project", "resolver-reach-unrel-s-"+uuid.New().String(), nil, owner.ID)
+	stranger := testhelper.CreateTestPrincipal(t, pool, "user", "resolver-reach-unrel-u-"+uuid.New().String())
+
+	dbr := authz.NewDBResolver(pool)
+	ids, err := dbr.ReachableScopeIDs(ctx, stranger.ID)
+	if err != nil {
+		t.Fatalf("ReachableScopeIDs: %v", err)
+	}
+
+	for _, id := range ids {
+		if id == scope.ID {
+			t.Errorf("stranger should NOT be able to reach scope %s", scope.ID)
+			return
+		}
+	}
+}
+
+// TestDBResolver_ReachableScopeIDs_UpwardRead verifies that ancestor scopes are
+// reachable when a descendant scope is directly accessible.
+func TestDBResolver_ReachableScopeIDs_UpwardRead(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	ctx := context.Background()
+
+	owner := testhelper.CreateTestPrincipal(t, pool, "user", "resolver-reach-up-owner-"+uuid.New().String())
+	parent := testhelper.CreateTestScope(t, pool, "project", "resolver-reach-up-parent-"+uuid.New().String(), nil, owner.ID)
+	child := testhelper.CreateTestScope(t, pool, "project", "resolver-reach-up-child-"+uuid.New().String(), &parent.ID, owner.ID)
+	grantee := testhelper.CreateTestPrincipal(t, pool, "user", "resolver-reach-up-u-"+uuid.New().String())
+
+	// Grant only on the child scope.
+	makeGrant(t, pool, grantee.ID, child.ID, []string{"memories:read"}, nil)
+
+	dbr := authz.NewDBResolver(pool)
+	ids, err := dbr.ReachableScopeIDs(ctx, grantee.ID)
+	if err != nil {
+		t.Fatalf("ReachableScopeIDs: %v", err)
+	}
+
+	hasChild, hasParent := false, false
+	for _, id := range ids {
+		if id == child.ID {
+			hasChild = true
+		}
+		if id == parent.ID {
+			hasParent = true
+		}
+	}
+	if !hasChild {
+		t.Errorf("grantee should reach child scope %s", child.ID)
+	}
+	if !hasParent {
+		t.Errorf("grantee should reach parent scope %s via upward-read", parent.ID)
+	}
+}
+
 // TestDBResolver_InvalidScopeGrantPermissions_ReturnsError verifies malformed
 // scope grant permission entries are surfaced as resolver errors.
 func TestDBResolver_InvalidScopeGrantPermissions_ReturnsError(t *testing.T) {
