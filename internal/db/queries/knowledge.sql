@@ -226,3 +226,12 @@ WHERE ka.status = 'published'
   )
 ORDER BY trgm_score DESC
 LIMIT $2;
+
+-- name: GetUnsummarisedArtifacts :many
+SELECT id, content FROM knowledge_artifacts
+WHERE summary IS NULL
+ORDER BY created_at
+LIMIT $1 OFFSET $2;
+
+-- name: SetArtifactSummary :exec
+UPDATE knowledge_artifacts SET summary=$2, updated_at=now() WHERE id=$1;

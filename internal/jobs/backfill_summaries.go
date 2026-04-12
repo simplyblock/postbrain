@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/embedding"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 )
@@ -30,35 +31,25 @@ type poolBackfillStore struct {
 }
 
 func (p *poolBackfillStore) fetchUnsummarised(ctx context.Context, batchSize, offset int) ([]backfillRow, error) {
-	rows, err := p.pool.Query(ctx,
-		`SELECT id, content FROM knowledge_artifacts
-		 WHERE summary IS NULL
-		 ORDER BY created_at
-		 LIMIT $1 OFFSET $2`,
-		batchSize, offset,
-	)
+	rows, err := db.New(p.pool).GetUnsummarisedArtifacts(ctx, db.GetUnsummarisedArtifactsParams{
+		Limit:  int32(batchSize),
+		Offset: int32(offset),
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var batch []backfillRow
-	for rows.Next() {
-		var r backfillRow
-		if err := rows.Scan(&r.ID, &r.Content); err != nil {
-			return nil, err
-		}
-		batch = append(batch, r)
+	batch := make([]backfillRow, len(rows))
+	for i, r := range rows {
+		batch[i] = backfillRow{ID: r.ID, Content: r.Content}
 	}
-	return batch, rows.Err()
+	return batch, nil
 }
 
 func (p *poolBackfillStore) setSummary(ctx context.Context, id uuid.UUID, summary string) error {
-	_, err := p.pool.Exec(ctx,
-		`UPDATE knowledge_artifacts SET summary=$2, updated_at=now() WHERE id=$1`,
-		id, summary,
-	)
-	return err
+	return db.New(p.pool).SetArtifactSummary(ctx, db.SetArtifactSummaryParams{
+		ID:      id,
+		Summary: &summary,
+	})
 }
 
 const defaultBackfillBatchSize = 50

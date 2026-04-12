@@ -298,6 +298,43 @@ func (q *Queries) GetEndorsementByEndorser(ctx context.Context, arg GetEndorseme
 	return &i, err
 }
 
+const getUnsummarisedArtifacts = `-- name: GetUnsummarisedArtifacts :many
+SELECT id, content FROM knowledge_artifacts
+WHERE summary IS NULL
+ORDER BY created_at
+LIMIT $1 OFFSET $2
+`
+
+type GetUnsummarisedArtifactsParams struct {
+	Limit  int32
+	Offset int32
+}
+
+type GetUnsummarisedArtifactsRow struct {
+	ID      uuid.UUID
+	Content string
+}
+
+func (q *Queries) GetUnsummarisedArtifacts(ctx context.Context, arg GetUnsummarisedArtifactsParams) ([]*GetUnsummarisedArtifactsRow, error) {
+	rows, err := q.db.Query(ctx, getUnsummarisedArtifacts, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*GetUnsummarisedArtifactsRow{}
+	for rows.Next() {
+		var i GetUnsummarisedArtifactsRow
+		if err := rows.Scan(&i.ID, &i.Content); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const incrementArtifactAccess = `-- name: IncrementArtifactAccess :exec
 UPDATE knowledge_artifacts SET access_count=access_count+1, last_accessed=now(), updated_at=now() WHERE id=$1
 `
@@ -1100,6 +1137,20 @@ func (q *Queries) SearchArtifacts(ctx context.Context, arg SearchArtifactsParams
 		return nil, err
 	}
 	return items, nil
+}
+
+const setArtifactSummary = `-- name: SetArtifactSummary :exec
+UPDATE knowledge_artifacts SET summary=$2, updated_at=now() WHERE id=$1
+`
+
+type SetArtifactSummaryParams struct {
+	ID      uuid.UUID
+	Summary *string
+}
+
+func (q *Queries) SetArtifactSummary(ctx context.Context, arg SetArtifactSummaryParams) error {
+	_, err := q.db.Exec(ctx, setArtifactSummary, arg.ID, arg.Summary)
+	return err
 }
 
 const snapshotArtifactVersion = `-- name: SnapshotArtifactVersion :exec
