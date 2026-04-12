@@ -905,7 +905,7 @@ if err := j.markEmbeddingFailedAttempt(ctx, ...); err != nil {
 
 ---
 
-### 7.3 `internal/db/conn_test.go` — tests `pgxpool.Config` setup but not actual connectivity
+### 7.3 `internal/db/conn_test.go` — tests `pgxpool.Config` setup but not actual connectivity ✓ Done
 
 **File:** `internal/db/conn_test.go`
 
