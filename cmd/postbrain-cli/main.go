@@ -708,6 +708,7 @@ func extractSemver(input string) (semver, error) {
 
 func installClaudeSkillCmd() *cobra.Command {
 	var targetDir string
+	var autoapprove bool
 	cmd := &cobra.Command{
 		Use:   "install-claude-skill [target_dir]",
 		Short: "Install .claude/skills/postbrain/SKILL.md into a target directory",
@@ -741,16 +742,25 @@ func installClaudeSkillCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			updatedPerms := false
+			if autoapprove {
+				updatedPerms, err = postbraincli.InstallClaudePermissions(targetDir)
+				if err != nil {
+					return err
+				}
+			}
 			slog.Info("install-claude-skill: installed",
 				"path", installedPath,
 				"backend_url", backendURL,
 				"claude_updated", updatedClaude,
 				"settings_updated", updatedSettings,
-				"mcp_updated", updatedMCP)
+				"mcp_updated", updatedMCP,
+				"permissions_updated", updatedPerms)
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&targetDir, "target", ".", "target directory")
+	cmd.Flags().BoolVar(&autoapprove, "autoapprove", false, "add mcp__postbrain__* to permissions.allow in .claude/settings.local.json")
 	return cmd
 }
 

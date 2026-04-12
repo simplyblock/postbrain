@@ -161,6 +161,56 @@ func InstallClaudeHooks(targetDir, scope string) (bool, error) {
 	return true, nil
 }
 
+// InstallClaudePermissions merges a mcp__postbrain__* allow rule into
+// .claude/settings.local.json so Claude Code does not prompt for every
+// Postbrain MCP tool call. The call is idempotent.
+func InstallClaudePermissions(targetDir string) (bool, error) {
+	if strings.TrimSpace(targetDir) == "" {
+		targetDir = "."
+	}
+
+	claudeDir := filepath.Join(targetDir, ".claude")
+	settingsPath := filepath.Join(claudeDir, "settings.local.json")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		return false, fmt.Errorf("create .claude directory: %w", err)
+	}
+
+	settings := make(map[string]any)
+	data, err := os.ReadFile(settingsPath)
+	if err != nil && !os.IsNotExist(err) {
+		return false, fmt.Errorf("read settings.local.json: %w", err)
+	}
+	if len(data) > 0 {
+		if err := json.Unmarshal(data, &settings); err != nil {
+			return false, fmt.Errorf("parse settings.local.json: %w", err)
+		}
+	}
+
+	const rule = "mcp__postbrain__*"
+
+	perms, _ := settings["permissions"].(map[string]any)
+	if perms == nil {
+		perms = make(map[string]any)
+		settings["permissions"] = perms
+	}
+	allow, _ := perms["allow"].([]any)
+	for _, v := range allow {
+		if v == rule {
+			return false, nil
+		}
+	}
+	perms["allow"] = append(allow, rule)
+
+	out, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return false, fmt.Errorf("marshal settings.local.json: %w", err)
+	}
+	if err := os.WriteFile(settingsPath, append(out, '\n'), 0o644); err != nil {
+		return false, fmt.Errorf("write settings.local.json: %w", err)
+	}
+	return true, nil
+}
+
 // InstallClaudeMCPConfig ensures project-root .mcp.json includes a Postbrain
 // HTTP MCP server entry.
 func InstallClaudeMCPConfig(targetDir, postbrainURL string) (bool, error) {
