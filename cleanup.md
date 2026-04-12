@@ -468,7 +468,7 @@ func parseScopeString(scope string) (kind, externalID string, err error) {
 
 ---
 
-### 4.2 Base extractor struct duplicated across 8 language extractors
+### 4.2 Base extractor struct duplicated across 8 language extractors ✓ Done
 
 **File:** `internal/codegraph/extract_data.go:39–865`
 
