@@ -48,27 +48,19 @@ func NewContradictionJob(pool *pgxpool.Pool, svc *embedding.EmbeddingService, cl
 
 // Run executes the full contradiction detection pipeline.
 func (j *ContradictionJob) Run(ctx context.Context) error {
-	offset := 0
-	for {
-		artifacts, err := j.fetchArtifactBatch(ctx, offset)
-		if err != nil {
-			return fmt.Errorf("contradiction: fetch artifacts at offset %d: %w", offset, err)
-		}
-		if len(artifacts) == 0 {
-			break
-		}
-
-		for _, artifact := range artifacts {
+	_, err := RunPaginatedBatch(ctx, contradictionBatchSize,
+		func(ctx context.Context, limit, offset int) ([]*db.KnowledgeArtifact, error) {
+			return j.fetchArtifactBatch(ctx, offset)
+		},
+		func(ctx context.Context, artifact *db.KnowledgeArtifact) {
 			if err := j.processArtifact(ctx, artifact); err != nil {
 				slog.Error("contradiction: process artifact failed",
 					"artifact_id", artifact.ID, "error", err)
 			}
-		}
-
-		if len(artifacts) < contradictionBatchSize {
-			break
-		}
-		offset += contradictionBatchSize
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("contradiction: %w", err)
 	}
 	return nil
 }

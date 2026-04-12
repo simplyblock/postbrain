@@ -90,36 +90,21 @@ func NewBackfillSummariesJob(pool *pgxpool.Pool, svc *embedding.EmbeddingService
 
 // Run processes all unsummarised artifacts in batches.
 func (j *BackfillSummariesJob) Run(ctx context.Context) error {
-	offset := 0
-	total := 0
-	for {
-		batch, err := j.store.fetchUnsummarised(ctx, j.batchSize, offset)
-		if err != nil {
-			return fmt.Errorf("backfill summaries: fetch at offset %d: %w", offset, err)
-		}
-		if len(batch) == 0 {
-			break
-		}
-
-		for _, r := range batch {
+	updated := 0
+	_, err := RunPaginatedBatch(ctx, j.batchSize, j.store.fetchUnsummarised,
+		func(ctx context.Context, r backfillRow) {
 			sum := j.generateSummary(ctx, r.Content)
-			if err := j.store.setSummary(ctx, r.ID, sum); err != nil {
-				slog.Error("backfill summaries: update failed", "artifact_id", r.ID, "error", err)
-				continue
+			if setErr := j.store.setSummary(ctx, r.ID, sum); setErr != nil {
+				slog.Error("backfill summaries: update failed", "artifact_id", r.ID, "error", setErr)
+				return
 			}
-			total++
-		}
-
-		slog.Info("backfill summaries: batch processed",
-			"offset", offset, "count", len(batch), "total_so_far", total)
-
-		if len(batch) < j.batchSize {
-			break
-		}
-		offset += j.batchSize
+			updated++
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("backfill summaries: %w", err)
 	}
-
-	slog.Info("backfill summaries: complete", "total_updated", total)
+	slog.Info("backfill summaries: complete", "total_updated", updated)
 	return nil
 }
 
