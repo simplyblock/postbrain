@@ -832,7 +832,7 @@ This file is 2735 lines and contains what appears to be a broad legacy compatibi
 
 ---
 
-### 6.3 Validation logic in REST handlers rather than request types
+### 6.3 Validation logic in REST handlers rather than request types ✓ Done
 
 **Files:** `internal/api/rest/memories.go:42–54`, `internal/api/rest/knowledge.go:31–38`, `internal/api/rest/skills.go:31–38`, `internal/api/rest/collections.go:33–42`
 
