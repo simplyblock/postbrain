@@ -54,32 +54,28 @@ func (s *Store) Update(ctx context.Context, id uuid.UUID, displayName string, me
 	if meta == nil {
 		meta = []byte("{}")
 	}
-	var p db.Principal
-	err := s.pool.QueryRow(ctx,
-		`UPDATE principals SET display_name=$2, meta=$3, updated_at=now()
-		 WHERE id=$1
-		 RETURNING id, kind, slug, display_name, meta, created_at, updated_at`,
-		id, displayName, meta,
-	).Scan(&p.ID, &p.Kind, &p.Slug, &p.DisplayName, &p.Meta, &p.CreatedAt, &p.UpdatedAt)
+	p, err := db.New(s.pool).UpdatePrincipal(ctx, db.UpdatePrincipalParams{
+		ID:          id,
+		DisplayName: displayName,
+		Meta:        meta,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("principals: update: %w", err)
 	}
-	return &p, nil
+	return p, nil
 }
 
 // UpdateProfile updates slug and display_name of a principal, returning the updated record.
 func (s *Store) UpdateProfile(ctx context.Context, id uuid.UUID, slug, displayName string) (*db.Principal, error) {
-	var p db.Principal
-	err := s.pool.QueryRow(ctx,
-		`UPDATE principals SET slug=$2, display_name=$3, updated_at=now()
-		 WHERE id=$1
-		 RETURNING id, kind, slug, display_name, meta, created_at, updated_at`,
-		id, slug, displayName,
-	).Scan(&p.ID, &p.Kind, &p.Slug, &p.DisplayName, &p.Meta, &p.CreatedAt, &p.UpdatedAt)
+	p, err := db.New(s.pool).UpdatePrincipalProfile(ctx, db.UpdatePrincipalProfileParams{
+		ID:          id,
+		Slug:        slug,
+		DisplayName: displayName,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("principals: update profile: %w", err)
 	}
-	return &p, nil
+	return p, nil
 }
 
 // List returns principals ordered by creation time, with pagination.
@@ -93,8 +89,7 @@ func (s *Store) List(ctx context.Context, limit, offset int) ([]*db.Principal, e
 
 // Delete removes a principal by UUID.
 func (s *Store) Delete(ctx context.Context, id uuid.UUID) error {
-	_, err := s.pool.Exec(ctx, `DELETE FROM principals WHERE id = $1`, id)
-	if err != nil {
+	if err := db.New(s.pool).DeletePrincipal(ctx, id); err != nil {
 		return fmt.Errorf("principals: delete: %w", err)
 	}
 	return nil
