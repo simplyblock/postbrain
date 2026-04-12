@@ -394,7 +394,7 @@ func runListModelsCommand(ctx context.Context, opts embeddingModelListOptions, m
 		ORDER BY content_type, slug
 	`, modelType)
 	if err != nil {
-		return "", fmt.Errorf("list embedding models: %w", err)
+		return "", fmt.Errorf("list %s models: %w", modelType, err)
 	}
 	defer rows.Close()
 
@@ -412,13 +412,13 @@ func runListModelsCommand(ctx context.Context, opts embeddingModelListOptions, m
 			tableName     string
 		)
 		if err := rows.Scan(&slug, &provider, &providerModel, &contentType, &dimensions, &isActive, &isReady, &tableName); err != nil {
-			return "", fmt.Errorf("scan embedding model: %w", err)
+			return "", fmt.Errorf("scan %s model: %w", modelType, err)
 		}
 		b.WriteString(fmt.Sprintf("%s\t%s\t%s\t%s\t%d\t%t\t%t\t%s\n",
 			slug, strOrEmpty(provider), strOrEmpty(providerModel), contentType, dimensions, isActive, isReady, tableName))
 	}
 	if err := rows.Err(); err != nil {
-		return "", fmt.Errorf("iterate embedding models: %w", err)
+		return "", fmt.Errorf("iterate %s models: %w", modelType, err)
 	}
 	return strings.TrimSpace(b.String()), nil
 }
