@@ -1207,7 +1207,7 @@ The current factory stack still combines:
 
 ---
 
-### 8.14 `codegraph.IndexRepo` mixes transport/auth, diffing, extraction, and persistence
+### 8.14 `codegraph.IndexRepo` mixes transport/auth, diffing, extraction, and persistence ✓ Done
 
 **File:** `internal/codegraph/indexer.go:87–505`
 
@@ -1229,7 +1229,7 @@ The current factory stack still combines:
 
 ---
 
-### 8.15 REST router constructor is acting as both composition root and API surface owner
+### 8.15 REST router constructor is acting as both composition root and API surface owner ✓ Done
 
 **File:** `internal/api/rest/router.go:24–193`
 
@@ -1248,7 +1248,7 @@ The current factory stack still combines:
 
 ---
 
-### 8.16 MCP server has the same mixing problem as REST router
+### 8.16 MCP server has the same mixing problem as REST router ✓ Done
 
 **File:** `internal/api/mcp/server.go:26–392`
 
@@ -1267,7 +1267,7 @@ The current factory stack still combines:
 
 ---
 
-### 8.17 OAuth server file aggregates multiple protocol responsibilities
+### 8.17 OAuth server file aggregates multiple protocol responsibilities ✓ Done
 
 **File:** `internal/oauth/server.go:1–354`
 
