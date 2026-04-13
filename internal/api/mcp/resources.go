@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 // registerResources registers all MCP resource templates.
@@ -53,7 +53,7 @@ func (s *Server) handleMemoryResource(ctx context.Context, req mcpgo.ReadResourc
 	if s.pool == nil {
 		return nil, fmt.Errorf("memory resource: server not configured")
 	}
-	mem, err := db.GetMemory(ctx, s.pool, id)
+	mem, err := compat.GetMemory(ctx, s.pool, id)
 	if err != nil {
 		return nil, fmt.Errorf("memory resource: fetch: %w", err)
 	}
@@ -111,7 +111,7 @@ func (s *Server) handleKnowledgeResource(ctx context.Context, req mcpgo.ReadReso
 	if s.pool == nil {
 		return nil, fmt.Errorf("knowledge resource: server not configured")
 	}
-	artifact, err := db.GetArtifact(ctx, s.pool, id)
+	artifact, err := compat.GetArtifact(ctx, s.pool, id)
 	if err != nil {
 		return nil, fmt.Errorf("knowledge resource: fetch: %w", err)
 	}
@@ -173,7 +173,7 @@ func (s *Server) handleSessionResource(ctx context.Context, req mcpgo.ReadResour
 	if s.pool == nil {
 		return nil, fmt.Errorf("session resource: server not configured")
 	}
-	sess, err := db.GetSession(ctx, s.pool, id)
+	sess, err := compat.GetSession(ctx, s.pool, id)
 	if err != nil {
 		return nil, fmt.Errorf("session resource: fetch: %w", err)
 	}

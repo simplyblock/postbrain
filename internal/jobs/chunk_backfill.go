@@ -12,10 +12,11 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/chunking"
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/db/compat"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
-// textEmbedder is the subset of embedding.EmbeddingService used by ChunkBackfillJob.
+// textEmbedder is the subset of providers.EmbeddingService used by ChunkBackfillJob.
 type textEmbedder interface {
 	EmbedText(ctx context.Context, text string) ([]float32, error)
 }
@@ -41,61 +42,39 @@ type poolChunkBackfillStore struct {
 }
 
 func (p *poolChunkBackfillStore) fetchMemoriesWithoutChunks(ctx context.Context, batchSize, offset int) ([]chunkBackfillRow, error) {
-	rows, err := p.pool.Query(ctx,
-		`SELECT id, scope_id, author_id, content FROM memories
-		 WHERE char_length(content) > $1
-		   AND parent_memory_id IS NULL
-		   AND NOT EXISTS (
-		       SELECT 1 FROM memories c WHERE c.parent_memory_id = memories.id
-		   )
-		 ORDER BY created_at
-		 LIMIT $2 OFFSET $3`,
-		chunking.MinContentRunes, batchSize, offset,
-	)
+	dbRows, err := db.New(p.pool).GetMemoriesWithoutChunks(ctx, db.GetMemoriesWithoutChunksParams{
+		Column1: int32(chunking.MinContentRunes),
+		Limit:   int32(batchSize),
+		Offset:  int32(offset),
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanChunkBackfillRows(rows)
+	rows := make([]chunkBackfillRow, len(dbRows))
+	for i, r := range dbRows {
+		rows[i] = chunkBackfillRow{ID: r.ID, ScopeID: r.ScopeID, AuthorID: r.AuthorID, Content: r.Content}
+	}
+	return rows, nil
 }
 
 func (p *poolChunkBackfillStore) fetchArtifactsWithoutChunks(ctx context.Context, batchSize, offset int) ([]chunkBackfillRow, error) {
-	rows, err := p.pool.Query(ctx,
-		`SELECT a.id, a.owner_scope_id, a.author_id, a.content FROM knowledge_artifacts a
-		 WHERE char_length(a.content) > $1
-		   AND NOT EXISTS (
-		       SELECT 1 FROM memories m
-		       WHERE m.source_ref LIKE 'artifact:' || a.id::text || ':chunk:%'
-		   )
-		 ORDER BY a.created_at
-		 LIMIT $2 OFFSET $3`,
-		chunking.MinContentRunes, batchSize, offset,
-	)
+	dbRows, err := db.New(p.pool).GetArtifactsWithoutChunks(ctx, db.GetArtifactsWithoutChunksParams{
+		Column1: int32(chunking.MinContentRunes),
+		Limit:   int32(batchSize),
+		Offset:  int32(offset),
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanChunkBackfillRows(rows)
-}
-
-func scanChunkBackfillRows(rows interface {
-	Next() bool
-	Scan(...any) error
-	Err() error
-}) ([]chunkBackfillRow, error) {
-	var batch []chunkBackfillRow
-	for rows.Next() {
-		var r chunkBackfillRow
-		if err := rows.Scan(&r.ID, &r.ScopeID, &r.AuthorID, &r.Content); err != nil {
-			return nil, err
-		}
-		batch = append(batch, r)
+	rows := make([]chunkBackfillRow, len(dbRows))
+	for i, r := range dbRows {
+		rows[i] = chunkBackfillRow{ID: r.ID, ScopeID: r.OwnerScopeID, AuthorID: r.AuthorID, Content: r.Content}
 	}
-	return batch, rows.Err()
+	return rows, nil
 }
 
 func (p *poolChunkBackfillStore) createMemory(ctx context.Context, m *db.Memory) (*db.Memory, error) {
-	return db.CreateMemory(ctx, p.pool, m)
+	return compat.CreateMemory(ctx, p.pool, m)
 }
 
 const defaultChunkBackfillBatchSize = 20
@@ -112,7 +91,7 @@ type ChunkBackfillJob struct {
 // NewChunkBackfillJob creates a ChunkBackfillJob backed by pool.
 // svc must be non-nil for embedding; if it is nil the job is a no-op.
 // batchSize 0 defaults to 20 (smaller than summaries: each row spawns many embeds).
-func NewChunkBackfillJob(pool *pgxpool.Pool, svc *embedding.EmbeddingService, batchSize int) *ChunkBackfillJob {
+func NewChunkBackfillJob(pool *pgxpool.Pool, svc *providers.EmbeddingService, batchSize int) *ChunkBackfillJob {
 	if batchSize <= 0 {
 		batchSize = defaultChunkBackfillBatchSize
 	}

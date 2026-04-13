@@ -3,53 +3,47 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/google/uuid"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 	"github.com/simplyblock/postbrain/internal/memory"
 )
+
+func (s *Server) registerContext() {
+	s.mcpServer.AddTool(mcpgo.NewTool("context",
+		mcpgo.WithReadOnlyHintAnnotation(true),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithIdempotentHintAnnotation(true),
+		mcpgo.WithOpenWorldHintAnnotation(false),
+		mcpgo.WithDescription("Retrieve a context bundle for the current scope and query"),
+		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
+		mcpgo.WithString("query", mcpgo.Description("What you are about to work on")),
+		mcpgo.WithNumber("max_tokens", mcpgo.Description("Token budget for context (default: 4000)")),
+	), withToolMetrics("context", withToolPermission("memories:read", s.handleContext)))
+}
 
 // handleContext retrieves a structured context bundle for a new session.
 func (s *Server) handleContext(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
 
-	scopeStr, ok := args["scope"].(string)
-	if !ok || scopeStr == "" {
+	scopeStr := argString(args, "scope")
+	if scopeStr == "" {
 		return mcpgo.NewToolResultError("context: 'scope' is required"), nil
 	}
 
-	query := ""
-	if v, ok := args["query"].(string); ok {
-		query = v
-	}
-
-	maxTokens := 4000
-	if v, ok := args["max_tokens"].(float64); ok && v > 0 {
-		maxTokens = int(v)
-	}
+	query := argString(args, "query")
+	maxTokens := argIntOrDefault(args, "max_tokens", 4000)
 
 	if s.pool == nil {
 		return mcpgo.NewToolResultError("context: server not configured"), nil
 	}
 
-	kind, externalID, err := parseScopeString(scopeStr)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("context: invalid scope: %v", err)), nil
-	}
-	scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("context: scope lookup: %v", err)), nil
-	}
-	if scope == nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("context: scope '%s' not found", scopeStr)), nil
-	}
-	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-		return scopeAuthzToolError(ctx, "context", scope.ID, err), nil
+	scopeID, errResult := s.resolveScope(ctx, "context", scopeStr)
+	if errResult != nil {
+		return errResult, nil
 	}
 
 	principalID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
@@ -77,7 +71,7 @@ func (s *Server) handleContext(ctx context.Context, req mcpgo.CallToolRequest) (
 	if s.knwStore != nil {
 		arts, err := s.knwStore.Recall(ctx, s.pool, knowledge.RecallInput{
 			Query:   query,
-			ScopeID: scope.ID,
+			ScopeID: scopeID,
 			Limit:   50,
 		})
 		if err == nil {
@@ -120,7 +114,7 @@ func (s *Server) handleContext(ctx context.Context, req mcpgo.CallToolRequest) (
 	if s.memStore != nil {
 		mems, err := s.memStore.Recall(ctx, memory.RecallInput{
 			Query:              query,
-			ScopeID:            scope.ID,
+			ScopeID:            scopeID,
 			PrincipalID:        principalID,
 			AuthorizedScopeIDs: authorizedScopeIDs,
 			SearchMode:         "hybrid",

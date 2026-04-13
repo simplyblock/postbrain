@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 // FanOutScopeIDs returns all scope IDs visible from the given starting scope:
@@ -23,7 +24,7 @@ func FanOutScopeIDs(ctx context.Context, pool *pgxpool.Pool, scopeID, principalI
 		return []uuid.UUID{scopeID}, nil
 	}
 
-	ancestors, err := db.GetAncestorScopeIDs(ctx, pool, scopeID)
+	ancestors, err := compat.GetAncestorScopeIDs(ctx, pool, scopeID)
 	if err != nil {
 		return nil, fmt.Errorf("memory: fan-out ancestors: %w", err)
 	}
@@ -47,55 +48,15 @@ func FanOutScopeIDs(ctx context.Context, pool *pgxpool.Pool, scopeID, principalI
 
 // filterByDepth returns only scope IDs whose ltree path depth <= maxDepth.
 func filterByDepth(ctx context.Context, pool *pgxpool.Pool, ids []uuid.UUID, maxDepth int) ([]uuid.UUID, error) {
-	rows, err := pool.Query(ctx,
-		`SELECT id FROM scopes WHERE id = ANY($1) AND nlevel(path) <= $2`,
-		ids, maxDepth,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var filtered []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		filtered = append(filtered, id)
-	}
-	return filtered, rows.Err()
-}
-
-// ResolveScopeByExternalID finds a scope by kind and externalID.
-func ResolveScopeByExternalID(ctx context.Context, pool *pgxpool.Pool, kind, externalID string) (*db.Scope, error) {
-	s, err := db.GetScopeByExternalID(ctx, pool, kind, externalID)
-	if err != nil {
-		return nil, fmt.Errorf("memory: resolve scope: %w", err)
-	}
-	return s, nil
+	return db.New(pool).FilterScopesByDepth(ctx, db.FilterScopesByDepthParams{
+		Column1: ids,
+		Column2: int32(maxDepth),
+	})
 }
 
 // personalScopeIDs returns the scope IDs where kind='user' AND principal_id = principalID.
 func personalScopeIDs(ctx context.Context, pool *pgxpool.Pool, principalID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := pool.Query(ctx,
-		`SELECT id FROM scopes WHERE kind='user' AND principal_id = $1`,
-		principalID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var ids []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
+	return db.New(pool).GetUserScopesByPrincipal(ctx, principalID)
 }
 
 // deduplicateScopeIDs returns a slice with all duplicate UUIDs removed,
@@ -110,9 +71,4 @@ func deduplicateScopeIDs(ids []uuid.UUID) []uuid.UUID {
 		}
 	}
 	return out
-}
-
-// fanOutStrict is an internal helper exposed to tests: returns [scopeID].
-func fanOutStrict(scopeID, _ uuid.UUID) ([]uuid.UUID, error) {
-	return []uuid.UUID{scopeID}, nil
 }

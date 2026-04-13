@@ -51,3 +51,9 @@ SELECT COUNT(*) FROM scopes WHERE parent_id = $1;
 
 -- name: DeleteScope :exec
 DELETE FROM scopes WHERE id = $1;
+
+-- name: FilterScopesByDepth :many
+SELECT id FROM scopes WHERE id = ANY($1::uuid[]) AND nlevel(path) <= $2::int;
+
+-- name: GetUserScopesByPrincipal :many
+SELECT id FROM scopes WHERE kind='user' AND principal_id = $1;

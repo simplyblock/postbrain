@@ -9,8 +9,23 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/skills"
 )
+
+func (s *Server) registerSkillInstall() {
+	s.mcpServer.AddTool(mcpgo.NewTool("skill_install",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithOpenWorldHintAnnotation(false),
+		mcpgo.WithDescription("Materialise a skill into the agent command directory"),
+		mcpgo.WithString("skill_id", mcpgo.Description("UUID of the skill to install")),
+		mcpgo.WithString("slug", mcpgo.Description("Slug alternative to skill_id")),
+		mcpgo.WithString("scope", mcpgo.Description("Scope as kind:external_id")),
+		mcpgo.WithString("agent_type", mcpgo.Description("Target agent type")),
+		mcpgo.WithString("workdir", mcpgo.Description("Working directory for installation")),
+	), withToolMetrics("skill_install", withToolPermission("skills:read", s.handleSkillInstall)))
+}
 
 // handleSkillInstall materialises a skill into the agent command directory.
 func (s *Server) handleSkillInstall(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
@@ -20,19 +35,18 @@ func (s *Server) handleSkillInstall(ctx context.Context, req mcpgo.CallToolReque
 		return mcpgo.NewToolResultError("skill_install: server not configured"), nil
 	}
 
-	agentType := "claude-code"
-	if v, ok := args["agent_type"].(string); ok && v != "" {
-		agentType = v
+	agentType := argString(args, "agent_type")
+	if agentType == "" {
+		agentType = "claude-code"
 	}
-
-	workdir := "."
-	if v, ok := args["workdir"].(string); ok && v != "" {
-		workdir = v
+	workdir := argString(args, "workdir")
+	if workdir == "" {
+		workdir = "."
 	}
 
 	// Get skill by ID or slug.
 	var skill *db.Skill
-	if idStr, ok := args["skill_id"].(string); ok && idStr != "" {
+	if idStr := argString(args, "skill_id"); idStr != "" {
 		id, err := uuid.Parse(idStr)
 		if err != nil {
 			return mcpgo.NewToolResultError(fmt.Sprintf("skill_install: invalid skill_id: %v", err)), nil
@@ -42,15 +56,15 @@ func (s *Server) handleSkillInstall(ctx context.Context, req mcpgo.CallToolReque
 			return mcpgo.NewToolResultError("skill_install: skill not found"), nil
 		}
 		skill = sk
-	} else if slug, ok := args["slug"].(string); ok && slug != "" {
-		scopeStr, _ := args["scope"].(string)
+	} else if slug := argString(args, "slug"); slug != "" {
+		scopeStr := argString(args, "scope")
 		var scopeID uuid.UUID
 		if scopeStr != "" {
 			kind, externalID, err := parseScopeString(scopeStr)
 			if err != nil {
 				return mcpgo.NewToolResultError(fmt.Sprintf("skill_install: invalid scope: %v", err)), nil
 			}
-			scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
+			scope, err := compat.GetScopeByExternalID(ctx, s.pool, kind, externalID)
 			if err != nil || scope == nil {
 				return mcpgo.NewToolResultError("skill_install: scope not found"), nil
 			}

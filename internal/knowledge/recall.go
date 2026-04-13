@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 // RecallInput holds parameters for knowledge artifact recall.
@@ -75,7 +76,7 @@ func (s *Store) Recall(ctx context.Context, pool *pgxpool.Pool, input RecallInpu
 			}
 		}
 		if len(vecRows) == 0 {
-			vecRows, err = db.RecallArtifactsByVector(ctx, pool, input.ScopeID, embeddingVec, input.Limit*2, input.Since, input.Until)
+			vecRows, err = compat.RecallArtifactsByVector(ctx, pool, input.ScopeID, embeddingVec, input.Limit*2, input.Since, input.Until)
 			if err != nil {
 				return nil, fmt.Errorf("knowledge: recall by vector: %w", err)
 			}
@@ -89,7 +90,7 @@ func (s *Store) Recall(ctx context.Context, pool *pgxpool.Pool, input RecallInpu
 	}
 
 	// FTS recall.
-	ftsRows, err := db.RecallArtifactsByFTS(ctx, pool, input.ScopeID, input.Query, input.Limit*2, input.Since, input.Until)
+	ftsRows, err := compat.RecallArtifactsByFTS(ctx, pool, input.ScopeID, input.Query, input.Limit*2, input.Since, input.Until)
 	if err != nil {
 		return nil, fmt.Errorf("knowledge: recall by fts: %w", err)
 	}
@@ -105,7 +106,7 @@ func (s *Store) Recall(ctx context.Context, pool *pgxpool.Pool, input RecallInpu
 	}
 
 	// Trigram recall.
-	trgmRows, err := db.RecallArtifactsByTrigram(ctx, pool, input.ScopeID, input.Query, input.Limit*2, input.Since, input.Until)
+	trgmRows, err := compat.RecallArtifactsByTrigram(ctx, pool, input.ScopeID, input.Query, input.Limit*2, input.Since, input.Until)
 	if err != nil {
 		return nil, fmt.Errorf("knowledge: recall by trigram: %w", err)
 	}
@@ -194,7 +195,7 @@ func suppressDigestSources(ctx context.Context, pool *pgxpool.Pool, results []*A
 		return results, nil
 	}
 
-	suppressed, err := db.GetSuppressedSourceIDs(ctx, pool, digestIDs)
+	suppressed, err := compat.GetSuppressedSourceIDs(ctx, pool, digestIDs)
 	if err != nil || len(suppressed) == 0 {
 		return results, err
 	}
@@ -221,7 +222,7 @@ func (s *Store) recallArtifactsByModelTable(
 	if s.repo == nil || pool == nil || len(queryVec) == 0 {
 		return nil, nil
 	}
-	scope, err := db.GetScopeByID(ctx, pool, scopeID)
+	scope, err := compat.GetScopeByID(ctx, pool, scopeID)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +250,7 @@ func (s *Store) recallArtifactsByModelTable(
 	}
 	rows := make([]db.ArtifactScore, 0, len(hits))
 	for _, h := range hits {
-		art, err := db.GetArtifact(ctx, pool, h.ObjectID)
+		art, err := compat.GetArtifact(ctx, pool, h.ObjectID)
 		if err != nil {
 			return nil, err
 		}

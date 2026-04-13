@@ -8,16 +8,31 @@ import (
 	"github.com/google/uuid"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/skills"
 )
+
+func (s *Server) registerSkillSearch() {
+	s.mcpServer.AddTool(mcpgo.NewTool("skill_search",
+		mcpgo.WithReadOnlyHintAnnotation(true),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithIdempotentHintAnnotation(true),
+		mcpgo.WithOpenWorldHintAnnotation(false),
+		mcpgo.WithDescription("Search for skills by semantic similarity"),
+		mcpgo.WithString("query", mcpgo.Required(), mcpgo.Description("Search query")),
+		mcpgo.WithString("scope", mcpgo.Description("Scope as kind:external_id")),
+		mcpgo.WithString("agent_type", mcpgo.Description("Filter by agent compatibility")),
+		mcpgo.WithNumber("limit", mcpgo.Description("Max results (default: 10)")),
+		mcpgo.WithBoolean("installed", mcpgo.Description("Filter by installed status")),
+	), withToolMetrics("skill_search", withToolPermission("skills:read", s.handleSkillSearch)))
+}
 
 // handleSkillSearch searches for skills by semantic similarity.
 func (s *Server) handleSkillSearch(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
 
-	query, ok := args["query"].(string)
-	if !ok || query == "" {
+	query := argString(args, "query")
+	if query == "" {
 		return mcpgo.NewToolResultError("skill_search: 'query' is required"), nil
 	}
 
@@ -25,24 +40,17 @@ func (s *Server) handleSkillSearch(ctx context.Context, req mcpgo.CallToolReques
 		return mcpgo.NewToolResultError("skill_search: server not configured"), nil
 	}
 
-	limit := 10
-	if v, ok := args["limit"].(float64); ok && v > 0 {
-		limit = int(v)
-	}
-
-	agentType := ""
-	if v, ok := args["agent_type"].(string); ok {
-		agentType = v
-	}
+	limit := argIntOrDefault(args, "limit", 10)
+	agentType := argString(args, "agent_type")
 
 	// Resolve scope if provided.
 	var scopeIDs []uuid.UUID
-	if scopeStr, ok := args["scope"].(string); ok && scopeStr != "" {
+	if scopeStr := argString(args, "scope"); scopeStr != "" {
 		kind, externalID, err := parseScopeString(scopeStr)
 		if err != nil {
 			return mcpgo.NewToolResultError(fmt.Sprintf("skill_search: invalid scope: %v", err)), nil
 		}
-		scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
+		scope, err := compat.GetScopeByExternalID(ctx, s.pool, kind, externalID)
 		if err != nil || scope == nil {
 			return mcpgo.NewToolResultError("skill_search: scope not found"), nil
 		}

@@ -90,6 +90,35 @@ func (q *Queries) DeleteScope(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const filterScopesByDepth = `-- name: FilterScopesByDepth :many
+SELECT id FROM scopes WHERE id = ANY($1::uuid[]) AND nlevel(path) <= $2::int
+`
+
+type FilterScopesByDepthParams struct {
+	Column1 []uuid.UUID
+	Column2 int32
+}
+
+func (q *Queries) FilterScopesByDepth(ctx context.Context, arg FilterScopesByDepthParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, filterScopesByDepth, arg.Column1, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAncestorScopeIDs = `-- name: GetAncestorScopeIDs :many
 SELECT s2.id FROM scopes s1
 JOIN scopes s2 ON s2.path @> s1.path
@@ -201,6 +230,30 @@ func (q *Queries) GetScopeByID(ctx context.Context, id uuid.UUID) (*GetScopeByID
 		&i.CreatedAt,
 	)
 	return &i, err
+}
+
+const getUserScopesByPrincipal = `-- name: GetUserScopesByPrincipal :many
+SELECT id FROM scopes WHERE kind='user' AND principal_id = $1
+`
+
+func (q *Queries) GetUserScopesByPrincipal(ctx context.Context, principalID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, getUserScopesByPrincipal, principalID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listScopes = `-- name: ListScopes :many

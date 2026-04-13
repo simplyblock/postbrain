@@ -4,10 +4,11 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 	"github.com/simplyblock/postbrain/internal/memory"
 )
@@ -33,7 +34,7 @@ func (ro *Router) getContext(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+	scope, err := compat.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 	if err != nil || scope == nil {
 		writeError(w, http.StatusBadRequest, "scope not found")
 		return
@@ -115,4 +116,8 @@ func (ro *Router) getContext(w http.ResponseWriter, r *http.Request) {
 		"context_blocks": blocks,
 		"total_tokens":   totalTokens,
 	})
+}
+
+func (ro *Router) registerContextRoutes(r chi.Router) {
+	r.Get("/context", ro.getContext)
 }

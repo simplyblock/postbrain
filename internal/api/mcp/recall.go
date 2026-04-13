@@ -9,9 +9,28 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/retrieval"
 )
+
+func (s *Server) registerRecall() {
+	s.mcpServer.AddTool(mcpgo.NewTool("recall",
+		mcpgo.WithReadOnlyHintAnnotation(true),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithIdempotentHintAnnotation(true),
+		mcpgo.WithOpenWorldHintAnnotation(false),
+		mcpgo.WithDescription("Retrieve memories and knowledge relevant to a query"),
+		mcpgo.WithString("query", mcpgo.Required(), mcpgo.Description("Semantic search query")),
+		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
+		mcpgo.WithArray("memory_types", mcpgo.Description("Filter by memory type: semantic|episodic|procedural|working")),
+		mcpgo.WithArray("layers", mcpgo.Description("Layers to query: memory|knowledge|skill (default: all)")),
+		mcpgo.WithString("agent_type", mcpgo.Description("Filter skills by agent compatibility")),
+		mcpgo.WithNumber("limit", mcpgo.Description("Max results (default: 10)")),
+		mcpgo.WithNumber("min_score", mcpgo.Description("Min combined score 0–1 (default: 0.0)")),
+		mcpgo.WithString("search_mode", mcpgo.Description("text|code|hybrid (default: hybrid)")),
+		mcpgo.WithNumber("graph_depth", mcpgo.Description("Graph traversal depth for code results: 0=off, 1=direct neighbours (default: 1)")),
+	), withToolMetrics("recall", withToolPermission("memories:read", s.handleRecall)))
+}
 
 const defaultRecallGraphDepth = 1
 const defaultCrossScopeGraphDepth = 0
@@ -38,42 +57,20 @@ func parseGraphDepth(args map[string]any) int {
 func (s *Server) handleRecall(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
 
-	query, _ := args["query"].(string)
+	query := argString(args, "query")
 	if query == "" {
 		return mcpgo.NewToolResultError("recall: 'query' is required"), nil
 	}
-	scopeStr, _ := args["scope"].(string)
-
-	limit := 10
-	if v, ok := args["limit"].(float64); ok && v > 0 {
-		limit = int(v)
+	scopeStr := argString(args, "scope")
+	limit := argIntOrDefault(args, "limit", 10)
+	minScore := argFloat64OrDefault(args, "min_score", 0.0)
+	searchMode := argString(args, "search_mode")
+	if searchMode == "" {
+		searchMode = "hybrid"
 	}
-
-	minScore := 0.0
-	if v, ok := args["min_score"].(float64); ok {
-		minScore = v
-	}
-
-	searchMode := "hybrid"
-	if v, ok := args["search_mode"].(string); ok && v != "" {
-		searchMode = v
-	}
-
-	agentType := ""
-	if v, ok := args["agent_type"].(string); ok {
-		agentType = v
-	}
-
+	agentType := argString(args, "agent_type")
 	graphDepth := parseGraphDepth(args)
-
-	var memoryTypes []string
-	if v, ok := args["memory_types"].([]any); ok {
-		for _, mt := range v {
-			if ms, ok := mt.(string); ok {
-				memoryTypes = append(memoryTypes, ms)
-			}
-		}
-	}
+	memoryTypes := argStringSlice(args, "memory_types")
 
 	// Parse layers (default: all three).
 	activeLayers := map[retrieval.Layer]bool{
@@ -101,7 +98,7 @@ func (s *Server) handleRecall(ctx context.Context, req mcpgo.CallToolRequest) (*
 		if err != nil {
 			return mcpgo.NewToolResultError(fmt.Sprintf("recall: invalid scope: %v", err)), nil
 		}
-		scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
+		scope, err := compat.GetScopeByExternalID(ctx, s.pool, kind, externalID)
 		if err != nil {
 			return mcpgo.NewToolResultError(fmt.Sprintf("recall: scope lookup: %v", err)), nil
 		}

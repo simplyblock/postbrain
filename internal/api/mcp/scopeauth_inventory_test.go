@@ -81,21 +81,19 @@ func TestScopeTakingHandlersCallAuthorizeRequestedScope(t *testing.T) {
 	}
 }
 
-func containsAuthorizeRequestedScopeCall(fn *ast.FuncDecl) bool {
+// containsAuthorizeScopeCall reports true when fn contains a direct call to
+// authorizeRequestedScope OR to resolveScope (which calls authorizeRequestedScope
+// internally and is the canonical scope-resolution helper for MCP handlers).
+func containsAuthorizeScopeCall(fn *ast.FuncDecl) bool {
 	found := false
 	ast.Inspect(fn, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
 			return true
 		}
-		switch c := call.Fun.(type) {
-		case *ast.SelectorExpr:
-			if c.Sel != nil && c.Sel.Name == "authorizeRequestedScope" {
-				found = true
-				return false
-			}
-		case *ast.Ident:
-			if c.Name == "authorizeRequestedScope" {
+		if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel != nil {
+			switch sel.Sel.Name {
+			case "authorizeRequestedScope", "resolveScope":
 				found = true
 				return false
 			}
@@ -103,4 +101,9 @@ func containsAuthorizeRequestedScopeCall(fn *ast.FuncDecl) bool {
 		return true
 	})
 	return found
+}
+
+// Keep the old name as an alias so it remains callable from the test.
+func containsAuthorizeRequestedScopeCall(fn *ast.FuncDecl) bool {
+	return containsAuthorizeScopeCall(fn)
 }

@@ -3,10 +3,11 @@ package rest
 import (
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 type createPrincipalRequest struct {
@@ -138,7 +139,7 @@ func (ro *Router) listMembers(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid principal id")
 		return
 	}
-	members, err := db.GetMemberships(r.Context(), ro.pool, id)
+	members, err := compat.GetMemberships(r.Context(), ro.pool, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -218,4 +219,15 @@ func (ro *Router) removeMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (ro *Router) registerPrincipalRoutes(r chi.Router) {
+	r.Get("/principals", ro.listPrincipals)
+	r.Post("/principals", ro.createPrincipal)
+	r.Get("/principals/{id}", ro.getPrincipal)
+	r.Put("/principals/{id}", ro.updatePrincipal)
+	r.Delete("/principals/{id}", ro.deletePrincipal)
+	r.Get("/principals/{id}/members", ro.listMembers)
+	r.Post("/principals/{id}/members", ro.addMember)
+	r.Delete("/principals/{id}/members/{member_id}", ro.removeMember)
 }

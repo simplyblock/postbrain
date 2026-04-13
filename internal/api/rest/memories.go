@@ -2,14 +2,17 @@ package rest
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 	"github.com/simplyblock/postbrain/internal/memory"
+	"github.com/simplyblock/postbrain/internal/scopeutil"
 )
 
 type entityRequest struct {
@@ -28,6 +31,16 @@ type createMemoryRequest struct {
 	ExpiresIn  *int            `json:"expires_in"`
 }
 
+func (r *createMemoryRequest) validate() error {
+	if r.Content == "" {
+		return errors.New("content is required")
+	}
+	if r.Scope == "" {
+		return errors.New("scope is required")
+	}
+	return nil
+}
+
 func entityRequestsToInput(reqs []entityRequest) []memory.EntityInput {
 	out := make([]memory.EntityInput, 0, len(reqs))
 	for _, e := range reqs {
@@ -44,12 +57,8 @@ func (ro *Router) createMemory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if body.Content == "" {
-		writeError(w, http.StatusBadRequest, "content is required")
-		return
-	}
-	if body.Scope == "" {
-		writeError(w, http.StatusBadRequest, "scope is required")
+	if err := body.validate(); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -58,7 +67,7 @@ func (ro *Router) createMemory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+	scope, err := compat.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "scope lookup failed")
 		return
@@ -128,7 +137,7 @@ func (ro *Router) recallMemories(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+		scope, err := compat.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 		if err != nil || scope == nil {
 			writeError(w, http.StatusBadRequest, "scope not found")
 			return
@@ -160,7 +169,7 @@ func (ro *Router) getMemory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid memory id")
 		return
 	}
-	m, err := db.GetMemory(r.Context(), ro.pool, id)
+	m, err := compat.GetMemory(r.Context(), ro.pool, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -193,7 +202,7 @@ func (ro *Router) updateMemory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	existing, err := db.GetMemory(r.Context(), ro.pool, id)
+	existing, err := compat.GetMemory(r.Context(), ro.pool, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -221,7 +230,7 @@ func (ro *Router) deleteMemory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hard := r.URL.Query().Get("hard") == "true"
-	existing, err := db.GetMemory(r.Context(), ro.pool, id)
+	existing, err := compat.GetMemory(r.Context(), ro.pool, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -277,7 +286,7 @@ func (ro *Router) promoteMemory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+	scope, err := compat.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 	if err != nil || scope == nil {
 		writeError(w, http.StatusBadRequest, "target scope not found")
 		return
@@ -335,7 +344,7 @@ func (ro *Router) handleSummarizeMemories(w http.ResponseWriter, req *http.Reque
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	scope, err := db.GetScopeByExternalID(req.Context(), ro.pool, kind, externalID)
+	scope, err := compat.GetScopeByExternalID(req.Context(), ro.pool, kind, externalID)
 	if err != nil || scope == nil {
 		writeError(w, http.StatusBadRequest, "scope not found")
 		return
@@ -396,20 +405,15 @@ func (ro *Router) handleSummarizeMemories(w http.ResponseWriter, req *http.Reque
 	})
 }
 
-// parseScopeString is duplicated here to avoid a cross-package dependency.
-// It splits "kind:external_id" into parts.
-func parseScopeString(scope string) (string, string, error) {
-	if scope == "" {
-		return "", "", errString("empty scope string")
-	}
-	for i, c := range scope {
-		if c == ':' {
-			return scope[:i], scope[i+1:], nil
-		}
-	}
-	return "", "", errString("missing ':' separator in scope: " + scope)
+// parseScopeString is a package-level alias for scopeutil.ParseScopeString.
+var parseScopeString = scopeutil.ParseScopeString
+
+func (ro *Router) registerMemoryRoutes(r chi.Router) {
+	r.Post("/memories", ro.createMemory)
+	r.Post("/memories/summarize", ro.handleSummarizeMemories)
+	r.Get("/memories/recall", ro.recallMemories)
+	r.Get("/memories/{id}", ro.getMemory)
+	r.Patch("/memories/{id}", ro.updateMemory)
+	r.Delete("/memories/{id}", ro.deleteMemory)
+	r.Post("/memories/{id}/promote", ro.promoteMemory)
 }
-
-type errString string
-
-func (e errString) Error() string { return string(e) }

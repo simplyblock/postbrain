@@ -16,6 +16,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
@@ -76,7 +77,7 @@ func TestMCP_Remember_Recall_Forget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("invalid memory_id %q: %v", memIDStr, err)
 	}
-	mem, err := db.GetMemory(ctx, pool, memID)
+	mem, err := compat.GetMemory(ctx, pool, memID)
 	if err != nil {
 		t.Fatalf("GetMemory: %v", err)
 	}
@@ -112,7 +113,7 @@ func TestMCP_Remember_Recall_Forget(t *testing.T) {
 	if result2 == nil || result2.IsError {
 		t.Fatalf("remember duplicate returned error result: %+v", result2)
 	}
-	memAfter, err := db.GetMemory(ctx, pool, memID)
+	memAfter, err := compat.GetMemory(ctx, pool, memID)
 	if err != nil {
 		t.Fatalf("GetMemory after duplicate remember: %v", err)
 	}

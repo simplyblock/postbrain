@@ -5,9 +5,11 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/graph"
 )
 
@@ -36,7 +38,7 @@ func (ro *Router) listEntities(w http.ResponseWriter, r *http.Request) {
 	entityType := r.URL.Query().Get("type")
 	pg := paginationFromRequest(r)
 
-	entities, err := db.ListEntitiesByScope(r.Context(), ro.pool, scopeID, entityType, pg.Limit, pg.Offset)
+	entities, err := compat.ListEntitiesByScope(r.Context(), ro.pool, scopeID, entityType, pg.Limit, pg.Offset)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list entities")
 		return
@@ -74,12 +76,12 @@ func (ro *Router) getGraph(w http.ResponseWriter, r *http.Request) {
 
 	pg := paginationFromRequest(r)
 
-	entities, err := db.ListEntitiesByScope(r.Context(), ro.pool, scopeID, "", pg.Limit, pg.Offset)
+	entities, err := compat.ListEntitiesByScope(r.Context(), ro.pool, scopeID, "", pg.Limit, pg.Offset)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list entities")
 		return
 	}
-	relations, err := db.ListRelationsByScope(r.Context(), ro.pool, scopeID)
+	relations, err := compat.ListRelationsByScope(r.Context(), ro.pool, scopeID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list relations")
 		return
@@ -285,4 +287,14 @@ func (ro *Router) getDependents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, traversalResult(res))
+}
+
+func (ro *Router) registerGraphRoutes(r chi.Router) {
+	r.Get("/entities", ro.listEntities)
+	r.Get("/graph", ro.getGraph)
+	r.Post("/graph/query", ro.queryCypher)
+	r.Get("/graph/callers", ro.getCallers)
+	r.Get("/graph/callees", ro.getCallees)
+	r.Get("/graph/deps", ro.getDeps)
+	r.Get("/graph/dependents", ro.getDependents)
 }

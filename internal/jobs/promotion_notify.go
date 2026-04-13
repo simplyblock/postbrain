@@ -5,8 +5,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/simplyblock/postbrain/internal/db"
 )
 
 // PromotionNotifyJob notifies reviewers of pending promotion requests.
@@ -21,35 +22,10 @@ func NewPromotionNotifyJob(pool *pgxpool.Pool) *PromotionNotifyJob {
 	return &PromotionNotifyJob{pool: pool}
 }
 
-type pendingPromotion struct {
-	id            uuid.UUID
-	memoryID      uuid.UUID
-	targetScopeID uuid.UUID
-	createdAt     time.Time
-}
-
 // Run checks for pending promotion requests older than 24 hours and logs them.
 func (j *PromotionNotifyJob) Run(ctx context.Context) error {
-	rows, err := j.pool.Query(ctx,
-		`SELECT id, memory_id, target_scope_id, created_at
-		 FROM promotion_requests
-		 WHERE status = 'pending' AND created_at < now() - interval '24 hours'
-		 ORDER BY created_at`,
-	)
+	pending, err := db.New(j.pool).GetStalePromotionRequests(ctx)
 	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	var pending []pendingPromotion
-	for rows.Next() {
-		var p pendingPromotion
-		if err := rows.Scan(&p.id, &p.memoryID, &p.targetScopeID, &p.createdAt); err != nil {
-			return err
-		}
-		pending = append(pending, p)
-	}
-	if err := rows.Err(); err != nil {
 		return err
 	}
 
@@ -59,11 +35,11 @@ func (j *PromotionNotifyJob) Run(ctx context.Context) error {
 	}
 
 	for _, p := range pending {
-		age := time.Since(p.createdAt).Round(time.Minute)
+		age := time.Since(p.CreatedAt).Round(time.Minute)
 		slog.Warn("promotion notify: stale pending request",
-			"id", p.id,
-			"memory_id", p.memoryID,
-			"target_scope_id", p.targetScopeID,
+			"id", p.ID,
+			"memory_id", p.MemoryID,
+			"target_scope_id", p.TargetScopeID,
 			"age", age,
 		)
 	}

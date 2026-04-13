@@ -33,8 +33,3 @@ func TestDefaultSummarizer_Empty(t *testing.T) {
 		t.Errorf("expected empty result for nil contents, got %q", result)
 	}
 }
-
-func TestConsolidateJob_Signature(t *testing.T) {
-	// Compile-time check that Run has the expected signature.
-	var _ = (*ConsolidateJob)(nil).Run
-}

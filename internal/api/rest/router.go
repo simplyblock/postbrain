@@ -11,11 +11,11 @@ import (
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/codegraph"
 	"github.com/simplyblock/postbrain/internal/config"
-	"github.com/simplyblock/postbrain/internal/embedding"
 	"github.com/simplyblock/postbrain/internal/graph"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 	"github.com/simplyblock/postbrain/internal/memory"
 	"github.com/simplyblock/postbrain/internal/principals"
+	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/sharing"
 	"github.com/simplyblock/postbrain/internal/skills"
 )
@@ -23,7 +23,7 @@ import (
 // Router holds all dependencies and builds the chi HTTP handler.
 type Router struct {
 	pool         *pgxpool.Pool
-	svc          *embedding.EmbeddingService
+	svc          *providers.EmbeddingService
 	cfg          *config.Config
 	memStore     *memory.Store
 	knwStore     *knowledge.Store
@@ -38,31 +38,6 @@ type Router struct {
 	graphStore   *graph.Store
 	consolidator *memory.Consolidator
 	syncer       *codegraph.Syncer
-}
-
-// NewRouter creates a Router with all stores initialised.
-func NewRouter(pool *pgxpool.Pool, svc *embedding.EmbeddingService, cfg *config.Config) *Router {
-	r := &Router{
-		pool:   pool,
-		svc:    svc,
-		cfg:    cfg,
-		syncer: codegraph.NewSyncer(),
-	}
-	if pool != nil {
-		r.memStore = memory.NewStore(pool, svc)
-		r.knwStore = knowledge.NewStore(pool, svc)
-		r.sklStore = skills.NewStore(pool, svc)
-		r.membership = principals.NewMembershipStore(pool)
-		r.knwLife = knowledge.NewLifecycle(pool, r.membership)
-		r.sklLife = skills.NewLifecycle(pool, r.membership)
-		r.knwColl = knowledge.NewCollectionStore(pool)
-		r.knwProm = knowledge.NewPromoter(pool, svc)
-		r.principals = principals.NewStore(pool)
-		r.sharing = sharing.NewStore(pool)
-		r.graphStore = graph.NewStore(pool)
-		r.consolidator = memory.NewConsolidator(pool, svc)
-	}
-	return r
 }
 
 // Handler builds and returns the chi HTTP handler with all routes registered.
@@ -96,97 +71,17 @@ func (ro *Router) Handler() http.Handler {
 		r.Use(requestLoggerMiddleware)
 		r.Use(ro.scopeAuthzContextMiddleware)
 
-		// Memory endpoints.
-		r.Post("/memories", ro.createMemory)
-		r.Post("/memories/summarize", ro.handleSummarizeMemories)
-		r.Get("/memories/recall", ro.recallMemories)
-		r.Get("/memories/{id}", ro.getMemory)
-		r.Patch("/memories/{id}", ro.updateMemory)
-		r.Delete("/memories/{id}", ro.deleteMemory)
-		r.Post("/memories/{id}/promote", ro.promoteMemory)
-
-		// Knowledge endpoints.
-		r.Post("/knowledge/upload", ro.uploadKnowledge)
-		r.Post("/knowledge/synthesize", ro.synthesizeKnowledge)
-		r.Post("/knowledge", ro.createArtifact)
-		r.Get("/knowledge/search", ro.searchArtifacts)
-		r.Get("/knowledge/{id}", ro.getArtifact)
-		r.Patch("/knowledge/{id}", ro.updateArtifact)
-		r.Delete("/knowledge/{id}", ro.deleteArtifact)
-		r.Post("/knowledge/{id}/endorse", ro.endorseArtifact)
-		r.Post("/knowledge/{id}/deprecate", ro.deprecateArtifact)
-		r.Get("/knowledge/{id}/history", ro.getArtifactHistory)
-		r.Get("/knowledge/{id}/sources", ro.getArtifactSources)
-		r.Get("/knowledge/{id}/digests", ro.getArtifactDigests)
-
-		// Collections.
-		r.Post("/collections", ro.createCollection)
-		r.Get("/collections", ro.listCollections)
-		r.Get("/collections/{slug}", ro.getCollection)
-		r.Post("/collections/{id}/items", ro.addCollectionItem)
-		r.Delete("/collections/{id}/items/{artifact_id}", ro.removeCollectionItem)
-
-		// Skills.
-		r.Post("/skills", ro.createSkill)
-		r.Get("/skills/search", ro.searchSkills)
-		r.Get("/skills/{id}", ro.getSkill)
-		r.Patch("/skills/{id}", ro.updateSkill)
-		r.Post("/skills/{id}/endorse", ro.endorseSkill)
-		r.Post("/skills/{id}/deprecate", ro.deprecateSkill)
-		r.Post("/skills/{id}/install", ro.installSkill)
-		r.Post("/skills/{id}/invoke", ro.invokeSkill)
-
-		// Sharing grants.
-		r.Post("/sharing/grants", ro.createGrant)
-		r.Delete("/sharing/grants/{id}", ro.revokeGrant)
-		r.Get("/sharing/grants", ro.listGrants)
-
-		// Promotion requests.
-		r.Get("/promotions", ro.listPromotions)
-		r.Post("/promotions/{id}/approve", ro.approvePromotion)
-		r.Post("/promotions/{id}/reject", ro.rejectPromotion)
-
-		// Scopes & hierarchy.
-		r.Get("/scopes", ro.listScopes)
-		r.Post("/scopes", ro.createScope)
-		r.Get("/scopes/{id}", ro.getScope)
-		r.Put("/scopes/{id}", ro.updateScope)
-		r.Put("/scopes/{id}/owner", ro.updateScopeOwner)
-		r.Delete("/scopes/{id}", ro.deleteScope)
-		r.Post("/scopes/{id}/repo", ro.setScopeRepo)
-		r.Post("/scopes/{id}/repo/sync", ro.syncScopeRepo)
-		r.Get("/scopes/{id}/repo/sync", ro.getSyncStatus)
-
-		// Scope grants (authz delegation).
-		r.Post("/scopes/{id}/grants", ro.handleCreateScopeGrant)
-		r.Get("/scopes/{id}/grants", ro.handleListScopeGrants)
-		r.Delete("/scopes/{id}/grants/{grant_id}", ro.handleDeleteScopeGrant)
-
-		// Principals & membership.
-		r.Get("/principals", ro.listPrincipals)
-		r.Post("/principals", ro.createPrincipal)
-		r.Get("/principals/{id}", ro.getPrincipal)
-		r.Put("/principals/{id}", ro.updatePrincipal)
-		r.Delete("/principals/{id}", ro.deletePrincipal)
-		r.Get("/principals/{id}/members", ro.listMembers)
-		r.Post("/principals/{id}/members", ro.addMember)
-		r.Delete("/principals/{id}/members/{member_id}", ro.removeMember)
-
-		// Sessions.
-		r.Post("/sessions", ro.createSession)
-		r.Patch("/sessions/{id}", ro.updateSession)
-
-		// Context bundle.
-		r.Get("/context", ro.getContext)
-
-		// Graph endpoints.
-		r.Get("/entities", ro.listEntities)
-		r.Get("/graph", ro.getGraph)
-		r.Post("/graph/query", ro.queryCypher)
-		r.Get("/graph/callers", ro.getCallers)
-		r.Get("/graph/callees", ro.getCallees)
-		r.Get("/graph/deps", ro.getDeps)
-		r.Get("/graph/dependents", ro.getDependents)
+		ro.registerMemoryRoutes(r)
+		ro.registerKnowledgeRoutes(r)
+		ro.registerCollectionRoutes(r)
+		ro.registerSkillRoutes(r)
+		ro.registerSharingRoutes(r)
+		ro.registerPromotionRoutes(r)
+		ro.registerScopeRoutes(r)
+		ro.registerPrincipalRoutes(r)
+		ro.registerSessionRoutes(r)
+		ro.registerContextRoutes(r)
+		ro.registerGraphRoutes(r)
 	})
 
 	return r

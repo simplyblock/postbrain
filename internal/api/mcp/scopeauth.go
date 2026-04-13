@@ -13,8 +13,30 @@ import (
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/metrics"
 )
+
+// resolveScope parses a "kind:external_id" string, looks up the scope in the DB,
+// and checks authorization. On failure it returns a non-nil *CallToolResult error
+// and uuid.Nil; on success it returns the scope UUID and a nil result.
+func (s *Server) resolveScope(ctx context.Context, toolName, scopeStr string) (uuid.UUID, *mcpgo.CallToolResult) {
+	kind, externalID, err := parseScopeString(scopeStr)
+	if err != nil {
+		return uuid.Nil, mcpgo.NewToolResultError(fmt.Sprintf("%s: invalid scope: %v", toolName, err))
+	}
+	scope, err := compat.GetScopeByExternalID(ctx, s.pool, kind, externalID)
+	if err != nil {
+		return uuid.Nil, mcpgo.NewToolResultError(fmt.Sprintf("%s: scope lookup: %v", toolName, err))
+	}
+	if scope == nil {
+		return uuid.Nil, mcpgo.NewToolResultError(fmt.Sprintf("%s: scope '%s' not found", toolName, scopeStr))
+	}
+	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
+		return uuid.Nil, scopeAuthzToolError(ctx, toolName, scope.ID, err)
+	}
+	return scope.ID, nil
+}
 
 func (s *Server) authorizeRequestedScope(ctx context.Context, requestedScopeID uuid.UUID) error {
 	perm, _ := ctx.Value(contextKeyToolPermission{}).(authz.Permission)
@@ -30,7 +52,7 @@ func (s *Server) authorizeDeleteObjectScope(ctx context.Context, objectScopeID u
 	if err := s.authorizeRequestedScope(ctx, objectScopeID); err != nil {
 		return err
 	}
-	scope, err := db.GetScopeByID(ctx, s.pool, objectScopeID)
+	scope, err := compat.GetScopeByID(ctx, s.pool, objectScopeID)
 	if err != nil {
 		return err
 	}

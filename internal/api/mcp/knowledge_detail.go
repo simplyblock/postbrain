@@ -8,14 +8,25 @@ import (
 	"github.com/google/uuid"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
+
+func (s *Server) registerKnowledgeDetail() {
+	s.mcpServer.AddTool(mcpgo.NewTool("knowledge_detail",
+		mcpgo.WithReadOnlyHintAnnotation(true),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithIdempotentHintAnnotation(true),
+		mcpgo.WithOpenWorldHintAnnotation(false),
+		mcpgo.WithDescription("Retrieve the full content of a knowledge artifact by ID. Use when recall returns full_content_available=true and the summary is insufficient."),
+		mcpgo.WithString("artifact_id", mcpgo.Required(), mcpgo.Description("UUID of the knowledge artifact")),
+	), withToolMetrics("knowledge_detail", withToolPermission("knowledge:read", s.handleKnowledgeDetail)))
+}
 
 // handleKnowledgeDetail returns the full content of a knowledge artifact by ID.
 // Use this after a recall result indicates full_content_available=true.
 func (s *Server) handleKnowledgeDetail(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
-	idStr, _ := args["artifact_id"].(string)
+	idStr := argString(args, "artifact_id")
 	if idStr == "" {
 		return mcpgo.NewToolResultError("knowledge_detail: artifact_id is required"), nil
 	}
@@ -36,7 +47,7 @@ func (s *Server) handleKnowledgeDetail(ctx context.Context, req mcpgo.CallToolRe
 		return mcpgo.NewToolResultError(fmt.Sprintf("knowledge_detail: artifact %s not found", idStr)), nil
 	}
 
-	go func() { _ = db.IncrementArtifactAccess(context.Background(), s.pool, artifact.ID) }()
+	go func() { _ = compat.IncrementArtifactAccess(context.Background(), s.pool, artifact.ID) }()
 
 	payload, _ := json.Marshal(map[string]any{
 		"id":             artifact.ID.String(),

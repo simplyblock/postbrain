@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 // Neighbour is a resolved graph neighbour: the related entity plus the edge metadata.
@@ -31,13 +32,13 @@ func ResolveSymbol(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, s
 	// Try each code entity type with an exact canonical match first.
 	for _, etype := range []string{"function", "method", "type", "struct", "interface",
 		"class", "module", "package", "variable", "file"} {
-		e, err := db.GetEntityByCanonical(ctx, pool, scopeID, etype, symbol)
+		e, err := compat.GetEntityByCanonical(ctx, pool, scopeID, etype, symbol)
 		if err == nil && e != nil {
 			return e, nil
 		}
 	}
 	// Heuristic suffix fallback.
-	candidates, err := db.FindEntitiesBySuffix(ctx, pool, scopeID, symbol)
+	candidates, err := compat.FindEntitiesBySuffix(ctx, pool, scopeID, symbol)
 	if err != nil {
 		return nil, fmt.Errorf("graph: resolve symbol: %w", err)
 	}
@@ -56,7 +57,7 @@ func Callers(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, symbol 
 	if entity == nil {
 		return nil, nil
 	}
-	rels, err := db.ListIncomingRelations(ctx, pool, scopeID, entity.ID, "calls")
+	rels, err := compat.ListIncomingRelations(ctx, pool, scopeID, entity.ID, "calls")
 	if err != nil {
 		return nil, fmt.Errorf("graph: callers: %w", err)
 	}
@@ -72,7 +73,7 @@ func Callees(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, symbol 
 	if entity == nil {
 		return nil, nil
 	}
-	rels, err := db.ListOutgoingRelations(ctx, pool, scopeID, entity.ID, "calls")
+	rels, err := compat.ListOutgoingRelations(ctx, pool, scopeID, entity.ID, "calls")
 	if err != nil {
 		return nil, fmt.Errorf("graph: callees: %w", err)
 	}
@@ -92,7 +93,7 @@ func Dependencies(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, sy
 
 	var all []*db.Relation
 	for _, pred := range []string{"imports", "uses", "extends", "implements", "defines"} {
-		rels, err := db.ListOutgoingRelations(ctx, pool, scopeID, entity.ID, pred)
+		rels, err := compat.ListOutgoingRelations(ctx, pool, scopeID, entity.ID, pred)
 		if err != nil {
 			return nil, fmt.Errorf("graph: dependencies: %w", err)
 		}
@@ -111,7 +112,7 @@ func Dependents(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, symb
 	if entity == nil {
 		return nil, nil
 	}
-	rels, err := db.ListIncomingRelations(ctx, pool, scopeID, entity.ID, "")
+	rels, err := compat.ListIncomingRelations(ctx, pool, scopeID, entity.ID, "")
 	if err != nil {
 		return nil, fmt.Errorf("graph: dependents: %w", err)
 	}
@@ -121,15 +122,15 @@ func Dependents(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, symb
 // NeighboursForEntity fetches all direct neighbours of a known entity (both directions).
 // Used by graph-augmented recall.
 func NeighboursForEntity(ctx context.Context, pool *pgxpool.Pool, scopeID, entityID uuid.UUID) ([]Neighbour, error) {
-	entity, err := db.GetEntityByID(ctx, pool, entityID)
+	entity, err := compat.GetEntityByID(ctx, pool, entityID)
 	if err != nil || entity == nil {
 		return nil, err
 	}
-	outgoing, err := db.ListOutgoingRelations(ctx, pool, scopeID, entityID, "")
+	outgoing, err := compat.ListOutgoingRelations(ctx, pool, scopeID, entityID, "")
 	if err != nil {
 		return nil, fmt.Errorf("graph: neighbours outgoing: %w", err)
 	}
-	incoming, err := db.ListIncomingRelations(ctx, pool, scopeID, entityID, "")
+	incoming, err := compat.ListIncomingRelations(ctx, pool, scopeID, entityID, "")
 	if err != nil {
 		return nil, fmt.Errorf("graph: neighbours incoming: %w", err)
 	}
@@ -163,7 +164,7 @@ func buildResult(ctx context.Context, pool *pgxpool.Pool, entity *db.Entity, rel
 			}
 		}
 
-		neighbour, err := db.GetEntityByID(ctx, pool, neighbourID)
+		neighbour, err := compat.GetEntityByID(ctx, pool, neighbourID)
 		if err != nil || neighbour == nil {
 			continue
 		}

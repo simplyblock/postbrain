@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 // LSPResolver is the interface for optional language-server-based resolution.
@@ -57,7 +57,7 @@ func (r *Resolver) Resolve(ctx context.Context, filePath, targetName string, loc
 
 	// Stage 3: suffix fallback.
 	if r.pool != nil {
-		candidates, err := db.FindEntitiesBySuffix(ctx, r.pool, r.scopeID, targetName)
+		candidates, err := compat.FindEntitiesBySuffix(ctx, r.pool, r.scopeID, targetName)
 		if err == nil && len(candidates) > 0 {
 			return candidates[0].ID, true
 		}
@@ -77,13 +77,13 @@ func (r *Resolver) resolveViaImports(ctx context.Context, filePath, targetName s
 	fileCanon := strings.ToLower(filepath.ToSlash(filePath))
 
 	// Try to find the file entity in the database.
-	fileEntity, err := db.GetEntityByCanonical(ctx, r.pool, r.scopeID, "file", fileCanon)
+	fileEntity, err := compat.GetEntityByCanonical(ctx, r.pool, r.scopeID, "file", fileCanon)
 	if err != nil || fileEntity == nil {
 		return uuid.UUID{}, false
 	}
 
 	// Get outgoing imports edges for this file entity.
-	relations, err := db.ListOutgoingRelations(ctx, r.pool, r.scopeID, fileEntity.ID, "imports")
+	relations, err := compat.ListOutgoingRelations(ctx, r.pool, r.scopeID, fileEntity.ID, "imports")
 	if err != nil || len(relations) == 0 {
 		return uuid.UUID{}, false
 	}
@@ -93,7 +93,7 @@ func (r *Resolver) resolveViaImports(ctx context.Context, filePath, targetName s
 
 	for _, rel := range relations {
 		// Get the imported package entity.
-		pkgEntity, err := db.GetEntityByID(ctx, r.pool, rel.ObjectID)
+		pkgEntity, err := compat.GetEntityByID(ctx, r.pool, rel.ObjectID)
 		if err != nil || pkgEntity == nil {
 			continue
 		}
@@ -106,7 +106,7 @@ func (r *Resolver) resolveViaImports(ctx context.Context, filePath, targetName s
 
 		for _, cand := range candidates {
 			for _, codeType := range codeTypes {
-				ent, err := db.GetEntityByCanonical(ctx, r.pool, r.scopeID, codeType, cand)
+				ent, err := compat.GetEntityByCanonical(ctx, r.pool, r.scopeID, codeType, cand)
 				if err == nil && ent != nil {
 					return ent.ID, true
 				}
@@ -139,7 +139,7 @@ func (r *Resolver) resolveViaLSP(ctx context.Context, filePath, targetName strin
 
 	codeTypes := []string{"function", "method", "type", "struct", "interface", "class", "variable"}
 	for _, codeType := range codeTypes {
-		ent, qErr := db.GetEntityByCanonical(ctx, r.pool, r.scopeID, codeType, canonical)
+		ent, qErr := compat.GetEntityByCanonical(ctx, r.pool, r.scopeID, codeType, canonical)
 		if qErr == nil && ent != nil {
 			return ent.ID, true
 		}

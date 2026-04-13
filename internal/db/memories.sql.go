@@ -132,6 +132,19 @@ func (q *Queries) CreateMemory(ctx context.Context, arg CreateMemoryParams) (*Cr
 	return &i, err
 }
 
+const expireWorkingMemories = `-- name: ExpireWorkingMemories :execrows
+UPDATE memories SET is_active = false
+WHERE expires_at < now() AND is_active = true
+`
+
+func (q *Queries) ExpireWorkingMemories(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, expireWorkingMemories)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const findNearDuplicates = `-- name: FindNearDuplicates :many
 SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,
@@ -232,6 +245,55 @@ func (q *Queries) FindNearDuplicates(ctx context.Context, arg FindNearDuplicates
 	return items, nil
 }
 
+const getMemoriesWithoutChunks = `-- name: GetMemoriesWithoutChunks :many
+SELECT m.id, m.scope_id, m.author_id, m.content FROM memories m
+WHERE char_length(m.content) > $1::int
+  AND m.parent_memory_id IS NULL
+  AND NOT EXISTS (
+      SELECT 1 FROM memories c WHERE c.parent_memory_id = m.id
+  )
+ORDER BY m.created_at
+LIMIT $2 OFFSET $3
+`
+
+type GetMemoriesWithoutChunksParams struct {
+	Column1 int32
+	Limit   int32
+	Offset  int32
+}
+
+type GetMemoriesWithoutChunksRow struct {
+	ID       uuid.UUID
+	ScopeID  uuid.UUID
+	AuthorID uuid.UUID
+	Content  string
+}
+
+func (q *Queries) GetMemoriesWithoutChunks(ctx context.Context, arg GetMemoriesWithoutChunksParams) ([]*GetMemoriesWithoutChunksRow, error) {
+	rows, err := q.db.Query(ctx, getMemoriesWithoutChunks, arg.Column1, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*GetMemoriesWithoutChunksRow{}
+	for rows.Next() {
+		var i GetMemoriesWithoutChunksRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ScopeID,
+			&i.AuthorID,
+			&i.Content,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getMemory = `-- name: GetMemory :one
 SELECT id, memory_type, scope_id, author_id,
     content, summary, embedding, embedding_model_id,
@@ -300,6 +362,66 @@ func (q *Queries) GetMemory(ctx context.Context, id uuid.UUID) (*GetMemoryRow, e
 		&i.UpdatedAt,
 	)
 	return &i, err
+}
+
+const getRecentMemoriesForScope = `-- name: GetRecentMemoriesForScope :many
+SELECT m.id, m.content, m.embedding
+FROM memories m
+JOIN scopes s ON m.scope_id = s.id
+WHERE m.is_active=true
+  AND m.created_at > now() - INTERVAL '7 days'
+  AND s.path @> (SELECT path FROM scopes sc WHERE sc.id = $1)
+`
+
+type GetRecentMemoriesForScopeRow struct {
+	ID        uuid.UUID
+	Content   string
+	Embedding *pgvector_go.Vector
+}
+
+func (q *Queries) GetRecentMemoriesForScope(ctx context.Context, id uuid.UUID) ([]*GetRecentMemoriesForScopeRow, error) {
+	rows, err := q.db.Query(ctx, getRecentMemoriesForScope, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*GetRecentMemoriesForScopeRow{}
+	for rows.Next() {
+		var i GetRecentMemoriesForScopeRow
+		if err := rows.Scan(&i.ID, &i.Content, &i.Embedding); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getScopesWithConsolidationCandidates = `-- name: GetScopesWithConsolidationCandidates :many
+SELECT DISTINCT scope_id FROM memories
+WHERE is_active = true AND importance < 0.7 AND access_count < 3
+`
+
+func (q *Queries) GetScopesWithConsolidationCandidates(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, getScopesWithConsolidationCandidates)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var scope_id uuid.UUID
+		if err := rows.Scan(&scope_id); err != nil {
+			return nil, err
+		}
+		items = append(items, scope_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const hardDeleteMemory = `-- name: HardDeleteMemory :exec
@@ -672,6 +794,15 @@ func (q *Queries) ListMemoriesForEntity(ctx context.Context, arg ListMemoriesFor
 		return nil, err
 	}
 	return items, nil
+}
+
+const markMemoryNominated = `-- name: MarkMemoryNominated :exec
+UPDATE memories SET promotion_status='nominated', updated_at=now() WHERE id=$1
+`
+
+func (q *Queries) MarkMemoryNominated(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, markMemoryNominated, id)
+	return err
 }
 
 const recallMemoriesByCodeVector = `-- name: RecallMemoriesByCodeVector :many

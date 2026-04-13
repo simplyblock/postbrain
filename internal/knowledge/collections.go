@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 var validVisibilities = map[string]struct{}{
@@ -42,7 +43,7 @@ func (c *CollectionStore) Create(ctx context.Context, scopeID, ownerID uuid.UUID
 		Description: description,
 		Visibility:  visibility,
 	}
-	result, err := db.CreateCollection(ctx, c.pool, coll)
+	result, err := compat.CreateCollection(ctx, c.pool, coll)
 	if err != nil {
 		return nil, fmt.Errorf("knowledge: create collection: %w", err)
 	}
@@ -51,7 +52,7 @@ func (c *CollectionStore) Create(ctx context.Context, scopeID, ownerID uuid.UUID
 
 // GetByID retrieves a collection by ID. Returns nil, nil if not found.
 func (c *CollectionStore) GetByID(ctx context.Context, id uuid.UUID) (*db.KnowledgeCollection, error) {
-	result, err := db.GetCollection(ctx, c.pool, id)
+	result, err := compat.GetCollection(ctx, c.pool, id)
 	if err != nil {
 		return nil, fmt.Errorf("knowledge: get collection: %w", err)
 	}
@@ -60,7 +61,7 @@ func (c *CollectionStore) GetByID(ctx context.Context, id uuid.UUID) (*db.Knowle
 
 // GetBySlug retrieves a collection by scope + slug. Returns nil, nil if not found.
 func (c *CollectionStore) GetBySlug(ctx context.Context, scopeID uuid.UUID, slug string) (*db.KnowledgeCollection, error) {
-	result, err := db.GetCollectionBySlug(ctx, c.pool, scopeID, slug)
+	result, err := compat.GetCollectionBySlug(ctx, c.pool, scopeID, slug)
 	if err != nil {
 		return nil, fmt.Errorf("knowledge: get collection by slug: %w", err)
 	}
@@ -69,7 +70,7 @@ func (c *CollectionStore) GetBySlug(ctx context.Context, scopeID uuid.UUID, slug
 
 // List returns all collections for a given scope.
 func (c *CollectionStore) List(ctx context.Context, scopeID uuid.UUID) ([]*db.KnowledgeCollection, error) {
-	results, err := db.ListCollections(ctx, c.pool, scopeID)
+	results, err := compat.ListCollections(ctx, c.pool, scopeID)
 	if err != nil {
 		return nil, fmt.Errorf("knowledge: list collections: %w", err)
 	}
@@ -78,7 +79,7 @@ func (c *CollectionStore) List(ctx context.Context, scopeID uuid.UUID) ([]*db.Kn
 
 // AddItem adds an artifact to a collection.
 func (c *CollectionStore) AddItem(ctx context.Context, collectionID, artifactID, addedBy uuid.UUID) error {
-	if err := db.AddCollectionItem(ctx, c.pool, collectionID, artifactID, addedBy); err != nil {
+	if err := compat.AddCollectionItem(ctx, c.pool, collectionID, artifactID, addedBy); err != nil {
 		return fmt.Errorf("knowledge: add collection item: %w", err)
 	}
 	return nil
@@ -86,7 +87,7 @@ func (c *CollectionStore) AddItem(ctx context.Context, collectionID, artifactID,
 
 // RemoveItem removes an artifact from a collection.
 func (c *CollectionStore) RemoveItem(ctx context.Context, collectionID, artifactID uuid.UUID) error {
-	if err := db.RemoveCollectionItem(ctx, c.pool, collectionID, artifactID); err != nil {
+	if err := compat.RemoveCollectionItem(ctx, c.pool, collectionID, artifactID); err != nil {
 		return fmt.Errorf("knowledge: remove collection item: %w", err)
 	}
 	return nil
@@ -94,7 +95,7 @@ func (c *CollectionStore) RemoveItem(ctx context.Context, collectionID, artifact
 
 // ListItems returns the artifacts in a collection ordered by position.
 func (c *CollectionStore) ListItems(ctx context.Context, collectionID uuid.UUID) ([]*db.KnowledgeArtifact, error) {
-	results, err := db.ListCollectionItems(ctx, c.pool, collectionID)
+	results, err := compat.ListCollectionItems(ctx, c.pool, collectionID)
 	if err != nil {
 		return nil, fmt.Errorf("knowledge: list collection items: %w", err)
 	}

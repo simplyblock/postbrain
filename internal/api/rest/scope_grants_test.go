@@ -17,6 +17,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
@@ -35,7 +36,7 @@ func TestREST_ScopeGrants_CRUD(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.CreateToken(ctx, pool, owner.ID, hashToken, "sg-crud-token",
+	if _, err := compat.CreateToken(ctx, pool, owner.ID, hashToken, "sg-crud-token",
 		nil, []string{"sharing:write", "sharing:read", "sharing:delete", "memories:write", "memories:read"}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +155,7 @@ func TestREST_ScopeGrants_RequiresPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.CreateToken(ctx, pool, owner.ID, hashToken, "sg-perm-token",
+	if _, err := compat.CreateToken(ctx, pool, owner.ID, hashToken, "sg-perm-token",
 		nil, []string{"memories:read"}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +217,7 @@ func TestREST_ScopeGrants_AntiEscalation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.CreateToken(ctx, pool, owner.ID, hashToken, "sg-esc-token",
+	if _, err := compat.CreateToken(ctx, pool, owner.ID, hashToken, "sg-esc-token",
 		nil, []string{"sharing:write", "sharing:read", "memories:read"}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +296,7 @@ func TestREST_ScopeGrants_ExpiredGrantExcluded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.CreateToken(ctx, pool, owner.ID, hashToken, "sg-exp-token",
+	if _, err := compat.CreateToken(ctx, pool, owner.ID, hashToken, "sg-exp-token",
 		nil, []string{"sharing:read"}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -345,7 +346,7 @@ func TestREST_ScopeGrants_SystemAdminCanCreate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.CreateToken(ctx, pool, admin.ID, hashToken, "sg-sa-token",
+	if _, err := compat.CreateToken(ctx, pool, admin.ID, hashToken, "sg-sa-token",
 		nil, []string{"sharing:write"}, nil); err != nil {
 		t.Fatal(err)
 	}

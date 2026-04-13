@@ -179,3 +179,31 @@ func (q *Queries) UpdatePrincipal(ctx context.Context, arg UpdatePrincipalParams
 	)
 	return &i, err
 }
+
+const updatePrincipalProfile = `-- name: UpdatePrincipalProfile :one
+UPDATE principals SET slug=$2, display_name=$3, updated_at=now()
+WHERE id=$1
+RETURNING id, kind, slug, display_name, meta, created_at, updated_at, is_system_admin
+`
+
+type UpdatePrincipalProfileParams struct {
+	ID          uuid.UUID
+	Slug        string
+	DisplayName string
+}
+
+func (q *Queries) UpdatePrincipalProfile(ctx context.Context, arg UpdatePrincipalProfileParams) (*Principal, error) {
+	row := q.db.QueryRow(ctx, updatePrincipalProfile, arg.ID, arg.Slug, arg.DisplayName)
+	var i Principal
+	err := row.Scan(
+		&i.ID,
+		&i.Kind,
+		&i.Slug,
+		&i.DisplayName,
+		&i.Meta,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.IsSystemAdmin,
+	)
+	return &i, err
+}

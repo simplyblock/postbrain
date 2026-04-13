@@ -10,6 +10,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/simplyblock/postbrain/internal/db"
 )
 
 // Grant represents a sharing permission record.
@@ -44,29 +46,23 @@ func (s *Store) Create(ctx context.Context, g *Grant) (*Grant, error) {
 		return nil, ErrInvalidGrant
 	}
 
-	var result Grant
-	err := s.pool.QueryRow(ctx,
-		`INSERT INTO sharing_grants (memory_id, artifact_id, grantee_scope_id, granted_by, can_reshare, expires_at)
-		 VALUES ($1, $2, $3, $4, $5, $6)
-		 RETURNING id, memory_id, artifact_id, grantee_scope_id, granted_by, can_reshare, expires_at, created_at`,
-		g.MemoryID, g.ArtifactID, g.GranteeScopeID, g.GrantedBy, g.CanReshare, g.ExpiresAt,
-	).Scan(
-		&result.ID, &result.MemoryID, &result.ArtifactID,
-		&result.GranteeScopeID, &result.GrantedBy, &result.CanReshare,
-		&result.ExpiresAt, &result.CreatedAt,
-	)
+	row, err := db.New(s.pool).CreateSharingGrant(ctx, db.CreateSharingGrantParams{
+		MemoryID:       g.MemoryID,
+		ArtifactID:     g.ArtifactID,
+		GranteeScopeID: g.GranteeScopeID,
+		GrantedBy:      g.GrantedBy,
+		CanReshare:     g.CanReshare,
+		ExpiresAt:      g.ExpiresAt,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("sharing: create grant: %w", err)
 	}
-	return &result, nil
+	return grantFromDB(row), nil
 }
 
 // Revoke deletes a sharing grant by ID.
 func (s *Store) Revoke(ctx context.Context, grantID uuid.UUID) error {
-	_, err := s.pool.Exec(ctx,
-		`DELETE FROM sharing_grants WHERE id=$1`, grantID,
-	)
-	if err != nil {
+	if err := db.New(s.pool).RevokeSharingGrant(ctx, grantID); err != nil {
 		return fmt.Errorf("sharing: revoke grant: %w", err)
 	}
 	return nil
@@ -74,44 +70,27 @@ func (s *Store) Revoke(ctx context.Context, grantID uuid.UUID) error {
 
 // List returns sharing grants visible to a grantee scope, paginated.
 func (s *Store) List(ctx context.Context, granteeScopeID uuid.UUID, limit, offset int) ([]*Grant, error) {
-	rows, err := s.pool.Query(ctx,
-		`SELECT id, memory_id, artifact_id, grantee_scope_id, granted_by, can_reshare, expires_at, created_at
-		 FROM sharing_grants WHERE grantee_scope_id=$1
-		 ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
-		granteeScopeID, limit, offset,
-	)
+	rows, err := db.New(s.pool).ListSharingGrants(ctx, db.ListSharingGrantsParams{
+		GranteeScopeID: granteeScopeID,
+		Limit:          int32(limit),
+		Offset:         int32(offset),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("sharing: list grants: %w", err)
 	}
-	defer rows.Close()
-
-	var grants []*Grant
-	for rows.Next() {
-		var g Grant
-		if err := rows.Scan(
-			&g.ID, &g.MemoryID, &g.ArtifactID,
-			&g.GranteeScopeID, &g.GrantedBy, &g.CanReshare,
-			&g.ExpiresAt, &g.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		grants = append(grants, &g)
+	grants := make([]*Grant, len(rows))
+	for i, r := range rows {
+		grants[i] = grantFromDB(r)
 	}
-	return grants, rows.Err()
+	return grants, nil
 }
 
 // IsMemoryAccessible checks whether memoryID has been granted to requesterScopeID.
 func (s *Store) IsMemoryAccessible(ctx context.Context, memoryID, requesterScopeID uuid.UUID) (bool, error) {
-	var exists bool
-	err := s.pool.QueryRow(ctx,
-		`SELECT EXISTS (
-		    SELECT 1 FROM sharing_grants
-		    WHERE memory_id = $1
-		      AND grantee_scope_id = $2
-		      AND (expires_at IS NULL OR expires_at > now())
-		)`,
-		memoryID, requesterScopeID,
-	).Scan(&exists)
+	exists, err := db.New(s.pool).IsMemoryGranted(ctx, db.IsMemoryGrantedParams{
+		MemoryID:       &memoryID,
+		GranteeScopeID: requesterScopeID,
+	})
 	if err != nil {
 		return false, fmt.Errorf("sharing: is memory accessible: %w", err)
 	}
@@ -120,18 +99,25 @@ func (s *Store) IsMemoryAccessible(ctx context.Context, memoryID, requesterScope
 
 // IsArtifactAccessible checks whether artifactID has been granted to requesterScopeID.
 func (s *Store) IsArtifactAccessible(ctx context.Context, artifactID, requesterScopeID uuid.UUID) (bool, error) {
-	var exists bool
-	err := s.pool.QueryRow(ctx,
-		`SELECT EXISTS (
-		    SELECT 1 FROM sharing_grants
-		    WHERE artifact_id = $1
-		      AND grantee_scope_id = $2
-		      AND (expires_at IS NULL OR expires_at > now())
-		)`,
-		artifactID, requesterScopeID,
-	).Scan(&exists)
+	exists, err := db.New(s.pool).IsArtifactGranted(ctx, db.IsArtifactGrantedParams{
+		ArtifactID:     &artifactID,
+		GranteeScopeID: requesterScopeID,
+	})
 	if err != nil {
 		return false, fmt.Errorf("sharing: is artifact accessible: %w", err)
 	}
 	return exists, nil
+}
+
+func grantFromDB(g *db.SharingGrant) *Grant {
+	return &Grant{
+		ID:             g.ID,
+		MemoryID:       g.MemoryID,
+		ArtifactID:     g.ArtifactID,
+		GranteeScopeID: g.GranteeScopeID,
+		GrantedBy:      g.GrantedBy,
+		CanReshare:     g.CanReshare,
+		ExpiresAt:      g.ExpiresAt,
+		CreatedAt:      g.CreatedAt,
+	}
 }

@@ -3,16 +3,17 @@ package retrieval
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	graphpkg "github.com/simplyblock/postbrain/internal/graph"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 	"github.com/simplyblock/postbrain/internal/memory"
+	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/skills"
 )
 
@@ -27,7 +28,7 @@ type OrchestrateDeps struct {
 	MemStore *memory.Store
 	KnwStore *knowledge.Store
 	SklStore *skills.Store
-	Svc      *embedding.EmbeddingService
+	Svc      *providers.EmbeddingService
 }
 
 // OrchestrateInput configures a cross-layer recall request.
@@ -65,6 +66,17 @@ func OrchestrateRecall(ctx context.Context, deps OrchestrateDeps, input Orchestr
 		}
 	}
 
+	allResults, err := collectLayerResults(ctx, deps, input)
+	if err != nil {
+		return nil, err
+	}
+	merged := Merge(allResults, input.Limit, input.MinScore)
+	return augmentWithGraphContext(ctx, deps, input, merged)
+}
+
+// collectLayerResults gathers and maps results from all active layers.
+// It also schedules artifact access-count updates as a single bounded goroutine.
+func collectLayerResults(ctx context.Context, deps OrchestrateDeps, input OrchestrateInput) ([]*Result, error) {
 	var allResults []*Result
 
 	if input.ActiveLayers[LayerMemory] && deps.MemStore != nil {
@@ -98,9 +110,9 @@ func OrchestrateRecall(ctx context.Context, deps OrchestrateDeps, input Orchestr
 		if err != nil {
 			return nil, fmt.Errorf("knowledge recall failed: %w", err)
 		}
+		var artifactIDs []uuid.UUID
 		for _, a := range arts {
-			aid := a.Artifact.ID
-			go func() { _ = db.IncrementArtifactAccess(context.Background(), deps.Pool, aid) }()
+			artifactIDs = append(artifactIDs, a.Artifact.ID)
 			r := &Result{
 				Layer:         LayerKnowledge,
 				ID:            a.Artifact.ID,
@@ -123,6 +135,7 @@ func OrchestrateRecall(ctx context.Context, deps OrchestrateDeps, input Orchestr
 			}
 			allResults = append(allResults, r)
 		}
+		scheduleArtifactAccessUpdates(deps.Pool, artifactIDs)
 	}
 
 	if input.ActiveLayers[LayerSkill] && deps.Pool != nil && deps.Svc != nil {
@@ -145,7 +158,12 @@ func OrchestrateRecall(ctx context.Context, deps OrchestrateDeps, input Orchestr
 		}
 	}
 
-	merged := Merge(allResults, input.Limit, input.MinScore)
+	return allResults, nil
+}
+
+// augmentWithGraphContext appends graph-neighbour memories to merged results when
+// GraphDepth > 0 and at least one result has a source reference.
+func augmentWithGraphContext(ctx context.Context, deps OrchestrateDeps, input OrchestrateInput, merged []*Result) ([]*Result, error) {
 	if input.GraphDepth <= 0 || input.ScopeID == uuid.Nil || deps.Pool == nil {
 		return merged, nil
 	}
@@ -159,6 +177,7 @@ func OrchestrateRecall(ctx context.Context, deps OrchestrateDeps, input Orchestr
 	if !hasSourceRef {
 		return merged, nil
 	}
+
 	allowedGraphScopes := graphAugmentationScopeSetFn(ctx, deps.Pool, input.ScopeID, input.PrincipalID, input.AuthorizedScopeIDs)
 
 	seen := make(map[uuid.UUID]bool, len(merged))
@@ -180,7 +199,7 @@ func OrchestrateRecall(ctx context.Context, deps OrchestrateDeps, input Orchestr
 			continue
 		}
 		for _, nb := range neighbours {
-			mems, memErr := db.ListMemoriesForEntity(ctx, deps.Pool, nb.Entity.ID, 3)
+			mems, memErr := compat.ListMemoriesForEntity(ctx, deps.Pool, nb.Entity.ID, 3)
 			if memErr != nil {
 				continue
 			}
@@ -211,6 +230,23 @@ func OrchestrateRecall(ctx context.Context, deps OrchestrateDeps, input Orchestr
 		}
 	}
 	return append(merged, graphExtra...), nil
+}
+
+// scheduleArtifactAccessUpdates fires a single bounded goroutine that increments
+// access counts for all artifact IDs. Failures are logged, not silently dropped.
+func scheduleArtifactAccessUpdates(pool *pgxpool.Pool, ids []uuid.UUID) {
+	if len(ids) == 0 {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		for _, id := range ids {
+			if err := compat.IncrementArtifactAccess(ctx, pool, id); err != nil {
+				slog.Warn("orchestrate: increment artifact access", "id", id, "error", err)
+			}
+		}
+	}()
 }
 
 func orchestrateMemoryRecall(ctx context.Context, deps OrchestrateDeps, input OrchestrateInput) ([]*memory.MemoryResult, error) {

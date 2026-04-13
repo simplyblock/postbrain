@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"log/slog"
 	"math"
 	"sort"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 // RecallInput parameters for retrieving memories.
@@ -50,23 +52,23 @@ type poolRecallDB struct {
 }
 
 func (p *poolRecallDB) RecallMemoriesByVector(ctx context.Context, scopeIDs []uuid.UUID, queryVec []float32, limit int, since, until *time.Time) ([]db.MemoryScore, error) {
-	return db.RecallMemoriesByVector(ctx, p.pool, scopeIDs, queryVec, limit, since, until)
+	return compat.RecallMemoriesByVector(ctx, p.pool, scopeIDs, queryVec, limit, since, until)
 }
 
 func (p *poolRecallDB) RecallMemoriesByFTS(ctx context.Context, scopeIDs []uuid.UUID, query string, limit int, since, until *time.Time) ([]db.MemoryScore, error) {
-	return db.RecallMemoriesByFTS(ctx, p.pool, scopeIDs, query, limit, since, until)
+	return compat.RecallMemoriesByFTS(ctx, p.pool, scopeIDs, query, limit, since, until)
 }
 
 func (p *poolRecallDB) RecallMemoriesByTrigram(ctx context.Context, scopeIDs []uuid.UUID, query string, limit int, since, until *time.Time) ([]db.MemoryScore, error) {
-	return db.RecallMemoriesByTrigram(ctx, p.pool, scopeIDs, query, limit, since, until)
+	return compat.RecallMemoriesByTrigram(ctx, p.pool, scopeIDs, query, limit, since, until)
 }
 
 func (p *poolRecallDB) RecallMemoriesByCodeVector(ctx context.Context, scopeIDs []uuid.UUID, queryVec []float32, limit int, since, until *time.Time) ([]db.MemoryScore, error) {
-	return db.RecallMemoriesByCodeVector(ctx, p.pool, scopeIDs, queryVec, limit, since, until)
+	return compat.RecallMemoriesByCodeVector(ctx, p.pool, scopeIDs, queryVec, limit, since, until)
 }
 
 func (p *poolRecallDB) IncrementMemoryAccess(ctx context.Context, id uuid.UUID) error {
-	return db.IncrementMemoryAccess(ctx, p.pool, id)
+	return compat.IncrementMemoryAccess(ctx, p.pool, id)
 }
 
 // fanOutFunc is a dependency-injected fan-out function for testing.
@@ -273,11 +275,20 @@ func (s *Store) Recall(ctx context.Context, input RecallInput) ([]*MemoryResult,
 		results = results[:input.Limit]
 	}
 
-	// 9. Async access count increment.
-	for _, r := range results {
-		id := r.Memory.ID
+	// 9. Async access count increment — single bounded goroutine for all results.
+	if len(results) > 0 {
+		ids := make([]uuid.UUID, len(results))
+		for i, r := range results {
+			ids[i] = r.Memory.ID
+		}
 		go func() {
-			_ = rdb.IncrementMemoryAccess(context.Background(), id)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			for _, id := range ids {
+				if err := rdb.IncrementMemoryAccess(ctx, id); err != nil {
+					slog.Warn("recall: increment memory access", "id", id, "error", err)
+				}
+			}
 		}()
 	}
 
@@ -333,7 +344,7 @@ func (s *Store) recallMemoriesByModelTable(ctx context.Context, modelID uuid.UUI
 	}
 	byID := make(map[uuid.UUID]row)
 	for _, scopeID := range scopeIDs {
-		scope, err := db.GetScopeByID(ctx, s.pool, scopeID)
+		scope, err := compat.GetScopeByID(ctx, s.pool, scopeID)
 		if err != nil {
 			return nil, err
 		}
@@ -369,7 +380,7 @@ func (s *Store) recallMemoriesByModelTable(ctx context.Context, modelID uuid.UUI
 	}
 	rows := make([]db.MemoryScore, 0, len(byID))
 	for _, r := range byID {
-		mem, err := db.GetMemory(ctx, s.pool, r.id)
+		mem, err := compat.GetMemory(ctx, s.pool, r.id)
 		if err != nil {
 			return nil, err
 		}

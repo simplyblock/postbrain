@@ -9,16 +9,30 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 )
+
+func (s *Server) registerPromote() {
+	s.mcpServer.AddTool(mcpgo.NewTool("promote",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithOpenWorldHintAnnotation(false),
+		mcpgo.WithDescription("Nominate a memory for elevation into a knowledge artifact"),
+		mcpgo.WithString("memory_id", mcpgo.Required(), mcpgo.Description("UUID of the memory to promote")),
+		mcpgo.WithString("target_scope", mcpgo.Required(), mcpgo.Description("Target scope as kind:external_id")),
+		mcpgo.WithString("target_visibility", mcpgo.Required(), mcpgo.Description("Visibility level")),
+		mcpgo.WithString("proposed_title", mcpgo.Description("Proposed title for the knowledge artifact")),
+		mcpgo.WithString("collection_slug", mcpgo.Description("Optionally add to this collection slug")),
+	), withToolMetrics("promote", withAnyToolPermission([]authz.Permission{"promotions:write", "memories:write"}, s.handlePromote)))
+}
 
 // handlePromote nominates a memory for elevation into a knowledge artifact.
 func (s *Server) handlePromote(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
 
-	memIDStr, ok := args["memory_id"].(string)
-	if !ok || memIDStr == "" {
+	memIDStr := argString(args, "memory_id")
+	if memIDStr == "" {
 		return mcpgo.NewToolResultError("promote: 'memory_id' is required"), nil
 	}
 	memID, err := uuid.Parse(memIDStr)
@@ -26,13 +40,13 @@ func (s *Server) handlePromote(ctx context.Context, req mcpgo.CallToolRequest) (
 		return mcpgo.NewToolResultError(fmt.Sprintf("promote: invalid memory_id: %v", err)), nil
 	}
 
-	targetScopeStr, ok := args["target_scope"].(string)
-	if !ok || targetScopeStr == "" {
+	targetScopeStr := argString(args, "target_scope")
+	if targetScopeStr == "" {
 		return mcpgo.NewToolResultError("promote: 'target_scope' is required"), nil
 	}
 
-	targetVisibility, ok := args["target_visibility"].(string)
-	if !ok || targetVisibility == "" {
+	targetVisibility := argString(args, "target_visibility")
+	if targetVisibility == "" {
 		return mcpgo.NewToolResultError("promote: 'target_visibility' is required"), nil
 	}
 
@@ -40,32 +54,22 @@ func (s *Server) handlePromote(ctx context.Context, req mcpgo.CallToolRequest) (
 		return mcpgo.NewToolResultError("promote: server not configured"), nil
 	}
 
-	kind, externalID, err := parseScopeString(targetScopeStr)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("promote: invalid target_scope: %v", err)), nil
-	}
-	scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("promote: scope lookup: %v", err)), nil
-	}
-	if scope == nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("promote: scope '%s' not found", targetScopeStr)), nil
-	}
-	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-		return scopeAuthzToolError(ctx, "promote", scope.ID, err), nil
+	scopeID, errResult := s.resolveScope(ctx, "promote", targetScopeStr)
+	if errResult != nil {
+		return errResult, nil
 	}
 
 	requesterID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 
 	var proposedTitle *string
-	if v, ok := args["proposed_title"].(string); ok && v != "" {
+	if v := argString(args, "proposed_title"); v != "" {
 		proposedTitle = &v
 	}
 
 	// Optionally resolve collection by slug.
 	var collectionID *uuid.UUID
-	if collSlug, ok := args["collection_slug"].(string); ok && collSlug != "" && s.knwColl != nil {
-		coll, err := s.knwColl.GetBySlug(ctx, scope.ID, collSlug)
+	if collSlug := argString(args, "collection_slug"); collSlug != "" && s.knwColl != nil {
+		coll, err := s.knwColl.GetBySlug(ctx, scopeID, collSlug)
 		if err == nil && coll != nil {
 			collectionID = &coll.ID
 		}
@@ -74,7 +78,7 @@ func (s *Server) handlePromote(ctx context.Context, req mcpgo.CallToolRequest) (
 	promotionReq, err := s.knwProm.CreateRequest(ctx, knowledge.PromoteInput{
 		MemoryID:             memID,
 		RequestedBy:          requesterID,
-		TargetScopeID:        scope.ID,
+		TargetScopeID:        scopeID,
 		TargetVisibility:     targetVisibility,
 		ProposedTitle:        proposedTitle,
 		ProposedCollectionID: collectionID,

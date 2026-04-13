@@ -12,6 +12,7 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/chunking"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
@@ -50,7 +51,7 @@ func TestCreate_ChunkGraphEntitiesAndRelations(t *testing.T) {
 	}
 
 	artifactCanonical := fmt.Sprintf("artifact:%s", artifact.ID)
-	artifactEntity, err := db.GetEntityByCanonical(ctx, pool, scope.ID, "artifact", artifactCanonical)
+	artifactEntity, err := compat.GetEntityByCanonical(ctx, pool, scope.ID, "artifact", artifactCanonical)
 	if err != nil {
 		t.Fatalf("GetEntityByCanonical(artifact): %v", err)
 	}
@@ -61,7 +62,7 @@ func TestCreate_ChunkGraphEntitiesAndRelations(t *testing.T) {
 	chunkEntities := make([]*db.Entity, len(chunks))
 	for i := range chunks {
 		canonical := fmt.Sprintf("artifact:%s:chunk:%d", artifact.ID, i)
-		e, err := db.GetEntityByCanonical(ctx, pool, scope.ID, "artifact_chunk", canonical)
+		e, err := compat.GetEntityByCanonical(ctx, pool, scope.ID, "artifact_chunk", canonical)
 		if err != nil {
 			t.Fatalf("GetEntityByCanonical(chunk %d): %v", i, err)
 		}
@@ -70,7 +71,7 @@ func TestCreate_ChunkGraphEntitiesAndRelations(t *testing.T) {
 		}
 		chunkEntities[i] = e
 
-		rels, err := db.ListOutgoingRelations(ctx, pool, scope.ID, e.ID, "chunk_of")
+		rels, err := compat.ListOutgoingRelations(ctx, pool, scope.ID, e.ID, "chunk_of")
 		if err != nil {
 			t.Fatalf("ListOutgoingRelations(chunk_of, chunk %d): %v", i, err)
 		}
@@ -82,7 +83,7 @@ func TestCreate_ChunkGraphEntitiesAndRelations(t *testing.T) {
 		}
 	}
 
-	relsByScope, err := db.ListRelationsByScope(ctx, pool, scope.ID)
+	relsByScope, err := compat.ListRelationsByScope(ctx, pool, scope.ID)
 	if err != nil {
 		t.Fatalf("ListRelationsByScope: %v", err)
 	}
@@ -106,7 +107,7 @@ func TestCreate_ChunkGraphEntitiesAndRelations(t *testing.T) {
 	}
 
 	for i := 0; i < len(chunkEntities)-1; i++ {
-		rels, err := db.ListOutgoingRelations(ctx, pool, scope.ID, chunkEntities[i].ID, "next_chunk")
+		rels, err := compat.ListOutgoingRelations(ctx, pool, scope.ID, chunkEntities[i].ID, "next_chunk")
 		if err != nil {
 			t.Fatalf("ListOutgoingRelations(next_chunk, chunk %d): %v", i, err)
 		}
@@ -119,7 +120,7 @@ func TestCreate_ChunkGraphEntitiesAndRelations(t *testing.T) {
 	}
 
 	lastIdx := len(chunkEntities) - 1
-	lastNext, err := db.ListOutgoingRelations(ctx, pool, scope.ID, chunkEntities[lastIdx].ID, "next_chunk")
+	lastNext, err := compat.ListOutgoingRelations(ctx, pool, scope.ID, chunkEntities[lastIdx].ID, "next_chunk")
 	if err != nil {
 		t.Fatalf("ListOutgoingRelations(next_chunk, last chunk): %v", err)
 	}

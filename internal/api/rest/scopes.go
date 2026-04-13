@@ -3,11 +3,13 @@ package rest
 import (
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/codegraph"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 type createScopeRequest struct {
@@ -35,7 +37,7 @@ func (ro *Router) listScopes(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to resolve authorized scopes")
 		return
 	}
-	allScopes, err := db.GetScopesByIDs(r.Context(), ro.pool, authorizedScopeIDs)
+	allScopes, err := compat.GetScopesByIDs(r.Context(), ro.pool, authorizedScopeIDs)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -71,7 +73,7 @@ func (ro *Router) createScope(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "forbidden: scope admin required")
 		return
 	}
-	s, err := db.CreateScope(r.Context(), ro.pool, body.Kind, body.ExternalID, body.Name, body.ParentID, body.PrincipalID, body.Meta)
+	s, err := compat.CreateScope(r.Context(), ro.pool, body.Kind, body.ExternalID, body.Name, body.ParentID, body.PrincipalID, body.Meta)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -85,7 +87,7 @@ func (ro *Router) getScope(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid scope id")
 		return
 	}
-	s, err := db.GetScopeByID(r.Context(), ro.pool, id)
+	s, err := compat.GetScopeByID(r.Context(), ro.pool, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -112,7 +114,7 @@ func (ro *Router) updateScope(w http.ResponseWriter, r *http.Request) {
 		writeScopeAuthzError(w, r, id, err)
 		return
 	}
-	s, err := db.UpdateScope(r.Context(), ro.pool, id, body.Name, body.Meta)
+	s, err := compat.UpdateScope(r.Context(), ro.pool, id, body.Name, body.Meta)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -134,7 +136,7 @@ func (ro *Router) deleteScope(w http.ResponseWriter, r *http.Request) {
 		writeScopeAuthzError(w, r, id, err)
 		return
 	}
-	children, err := db.CountChildScopes(r.Context(), ro.pool, id)
+	children, err := compat.CountChildScopes(r.Context(), ro.pool, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -143,7 +145,7 @@ func (ro *Router) deleteScope(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "cannot delete scope: it has child scopes that must be deleted first")
 		return
 	}
-	if err := db.DeleteScope(r.Context(), ro.pool, id); err != nil {
+	if err := compat.DeleteScope(r.Context(), ro.pool, id); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -170,7 +172,7 @@ func (ro *Router) updateScopeOwner(w http.ResponseWriter, r *http.Request) {
 		writeScopeAuthzError(w, r, id, err)
 		return
 	}
-	s, err := db.UpdateScopeOwner(r.Context(), ro.pool, id, body.PrincipalID)
+	s, err := compat.UpdateScopeOwner(r.Context(), ro.pool, id, body.PrincipalID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -211,7 +213,7 @@ func (ro *Router) setScopeRepo(w http.ResponseWriter, r *http.Request) {
 	if body.DefaultBranch == "" {
 		body.DefaultBranch = "main"
 	}
-	s, err := db.SetScopeRepo(r.Context(), ro.pool, id, body.RepoURL, body.DefaultBranch)
+	s, err := compat.SetScopeRepo(r.Context(), ro.pool, id, body.RepoURL, body.DefaultBranch)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -236,7 +238,7 @@ func (ro *Router) syncScopeRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	scope, err := db.GetScopeByID(r.Context(), ro.pool, id)
+	scope, err := compat.GetScopeByID(r.Context(), ro.pool, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -290,4 +292,19 @@ func (ro *Router) getSyncStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, ro.syncer.Status(id))
+}
+
+func (ro *Router) registerScopeRoutes(r chi.Router) {
+	r.Get("/scopes", ro.listScopes)
+	r.Post("/scopes", ro.createScope)
+	r.Get("/scopes/{id}", ro.getScope)
+	r.Put("/scopes/{id}", ro.updateScope)
+	r.Put("/scopes/{id}/owner", ro.updateScopeOwner)
+	r.Delete("/scopes/{id}", ro.deleteScope)
+	r.Post("/scopes/{id}/repo", ro.setScopeRepo)
+	r.Post("/scopes/{id}/repo/sync", ro.syncScopeRepo)
+	r.Get("/scopes/{id}/repo/sync", ro.getSyncStatus)
+	r.Post("/scopes/{id}/grants", ro.handleCreateScopeGrant)
+	r.Get("/scopes/{id}/grants", ro.handleListScopeGrants)
+	r.Delete("/scopes/{id}/grants/{grant_id}", ro.handleDeleteScopeGrant)
 }

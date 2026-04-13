@@ -14,7 +14,7 @@ import (
 	scopeauthapi "github.com/simplyblock/postbrain/internal/api/scopeauth"
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/authz"
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/retrieval"
 )
 
@@ -95,7 +95,7 @@ func resolveScopeID(ctx context.Context, pool *pgxpool.Pool, scopeStr string) (u
 	if err != nil {
 		return uuid.Nil, err
 	}
-	scope, err := db.GetScopeByExternalID(ctx, pool, kind, externalID)
+	scope, err := compat.GetScopeByExternalID(ctx, pool, kind, externalID)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -182,16 +182,36 @@ func asCrossScopeResultJSON(scope string, results []*retrieval.Result) []map[str
 	return out
 }
 
+func (s *Server) registerCrossScopeContext() {
+	s.mcpServer.AddTool(mcpgo.NewTool("cross_scope_context",
+		mcpgo.WithReadOnlyHintAnnotation(true),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithIdempotentHintAnnotation(true),
+		mcpgo.WithOpenWorldHintAnnotation(false),
+		mcpgo.WithDescription("Retrieve and compare memory/knowledge context across baseline and comparison scopes"),
+		mcpgo.WithString("query", mcpgo.Required(), mcpgo.Description("Semantic search query")),
+		mcpgo.WithString("baseline_scope", mcpgo.Required(), mcpgo.Description("Baseline scope as kind:external_id")),
+		mcpgo.WithArray("comparison_scopes", mcpgo.Description("Comparison scopes as kind:external_id")),
+		mcpgo.WithArray("layers", mcpgo.Description("Layers to query: memory|knowledge (default: both)")),
+		mcpgo.WithString("search_mode", mcpgo.Description("text|code|hybrid (default: hybrid)")),
+		mcpgo.WithString("since", mcpgo.Description("Optional lower time bound in RFC3339")),
+		mcpgo.WithString("until", mcpgo.Description("Optional upper time bound in RFC3339")),
+		mcpgo.WithNumber("limit_per_scope", mcpgo.Description("Max results per scope (default: 10)")),
+		mcpgo.WithNumber("min_score", mcpgo.Description("Min combined score 0–1 (default: 0.0)")),
+		mcpgo.WithNumber("graph_depth", mcpgo.Description("Reserved for graph context depth (default: 0)")),
+	), withToolMetrics("cross_scope_context", withAnyToolPermission([]authz.Permission{"memories:read", "knowledge:read"}, s.handleCrossScopeContext)))
+}
+
 // handleCrossScopeContext validates cross-scope context request arguments.
 // Retrieval orchestration is implemented in subsequent phases.
 func (s *Server) handleCrossScopeContext(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
 
-	query, _ := args["query"].(string)
+	query := argString(args, "query")
 	if query == "" {
 		return mcpgo.NewToolResultError("cross_scope_context: 'query' is required"), nil
 	}
-	baselineScope, _ := args["baseline_scope"].(string)
+	baselineScope := argString(args, "baseline_scope")
 	if baselineScope == "" {
 		return mcpgo.NewToolResultError("cross_scope_context: 'baseline_scope' is required"), nil
 	}
@@ -220,20 +240,14 @@ func (s *Server) handleCrossScopeContext(ctx context.Context, req mcpgo.CallTool
 		return mcpgo.NewToolResultError("cross_scope_context: invalid time window: since must be <= until"), nil
 	}
 
-	limit := 10
-	if v, ok := args["limit_per_scope"].(float64); ok {
-		limit = int(v)
-	}
+	limit := argIntOrDefault(args, "limit_per_scope", 10)
 	if limit <= 0 {
 		return mcpgo.NewToolResultError("cross_scope_context: 'limit_per_scope' must be > 0"), nil
 	}
-	minScore := 0.0
-	if v, ok := args["min_score"].(float64); ok {
-		minScore = v
-	}
-	searchMode := "hybrid"
-	if v, ok := args["search_mode"].(string); ok && v != "" {
-		searchMode = v
+	minScore := argFloat64OrDefault(args, "min_score", 0.0)
+	searchMode := argString(args, "search_mode")
+	if searchMode == "" {
+		searchMode = "hybrid"
 	}
 	graphDepth := parseGraphDepthWithDefault(args, defaultCrossScopeGraphDepth)
 

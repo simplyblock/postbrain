@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 )
 
@@ -89,7 +89,7 @@ func (ro *Router) getArtifactDigests(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate artifact exists.
-	a, err := db.GetArtifact(r.Context(), ro.pool, id)
+	a, err := compat.GetArtifact(r.Context(), ro.pool, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

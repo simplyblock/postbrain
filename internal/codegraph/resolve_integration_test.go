@@ -10,6 +10,7 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/codegraph"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
@@ -23,7 +24,7 @@ func TestResolverStage2_ImportAware(t *testing.T) {
 
 	mustUpsert := func(entityType, name, canonical string) *db.Entity {
 		t.Helper()
-		e, err := db.UpsertEntity(ctx, pool, &db.Entity{
+		e, err := compat.UpsertEntity(ctx, pool, &db.Entity{
 			ScopeID:    scope.ID,
 			EntityType: entityType,
 			Name:       name,
@@ -43,7 +44,7 @@ func TestResolverStage2_ImportAware(t *testing.T) {
 	fnEnt := mustUpsert("function", "Println", "fmt.Println")
 
 	// Wire file → imports → package.
-	if _, err := db.UpsertRelation(ctx, pool, &db.Relation{
+	if _, err := compat.UpsertRelation(ctx, pool, &db.Relation{
 		ScopeID:    scope.ID,
 		SubjectID:  fileEnt.ID,
 		Predicate:  "imports",
@@ -75,7 +76,7 @@ func TestResolverStage3_SuffixFallback(t *testing.T) {
 
 	// A dotted canonical: FindEntitiesBySuffix matches "VerifyToken" via
 	// "canonical LIKE ('%.' || $2)".
-	fn, err := db.UpsertEntity(ctx, pool, &db.Entity{
+	fn, err := compat.UpsertEntity(ctx, pool, &db.Entity{
 		ScopeID:    scope.ID,
 		EntityType: "function",
 		Name:       "VerifyToken",

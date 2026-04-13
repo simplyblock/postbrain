@@ -9,9 +9,25 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/memory"
 )
+
+func (s *Server) registerRemember() {
+	s.mcpServer.AddTool(mcpgo.NewTool("remember",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithOpenWorldHintAnnotation(false),
+		mcpgo.WithDescription("Store a new memory or update an existing near-duplicate"),
+		mcpgo.WithString("content", mcpgo.Required(), mcpgo.Description("The memory content")),
+		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Target scope as kind:external_id, e.g. project:acme/api")),
+		mcpgo.WithString("memory_type", mcpgo.Description("semantic|episodic|procedural|working (default: semantic)")),
+		mcpgo.WithNumber("importance", mcpgo.Description("Importance score 0–1 (default: 0.5)")),
+		mcpgo.WithString("summary", mcpgo.Description("Optional memory summary")),
+		mcpgo.WithString("source_ref", mcpgo.Description("Provenance reference, e.g. file:src/main.go:42")),
+		mcpgo.WithArray("entities", mcpgo.Description("Entities to link. Each item is an object with 'name' (canonical string) and 'type' (concept|technology|file|person|service|pr|decision). Bare strings are accepted for backwards compatibility and default to type 'concept'.")),
+		mcpgo.WithNumber("expires_in", mcpgo.Description("TTL in seconds; only for memory_type=working")),
+	), withToolMetrics("remember", withToolPermission("memories:write", s.handleRemember)))
+}
 
 // handleRemember stores a new memory or updates a near-duplicate.
 func (s *Server) handleRemember(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
@@ -29,46 +45,31 @@ func (s *Server) handleRemember(ctx context.Context, req mcpgo.CallToolRequest) 
 		return mcpgo.NewToolResultError("remember: 'scope' is required"), nil
 	}
 
-	kind, externalID, err := parseScopeString(scopeStr)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("remember: invalid scope: %v", err)), nil
-	}
-
 	if s.pool == nil {
 		return mcpgo.NewToolResultError("remember: server not configured (no database connection)"), nil
 	}
 
-	scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("remember: scope lookup failed: %v", err)), nil
-	}
-	if scope == nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("remember: scope '%s' not found", scopeStr)), nil
-	}
-	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-		return scopeAuthzToolError(ctx, "remember", scope.ID, err), nil
+	scopeID, errResult := s.resolveScope(ctx, "remember", scopeStr)
+	if errResult != nil {
+		return errResult, nil
 	}
 
 	// Get principal from context.
 	principalID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 
 	// Optional fields with defaults.
-	memoryType := "semantic"
-	if v, ok := args["memory_type"].(string); ok && v != "" {
-		memoryType = v
+	memoryType := argString(args, "memory_type")
+	if memoryType == "" {
+		memoryType = "semantic"
 	}
-
-	importance := 0.5
-	if v, ok := args["importance"].(float64); ok {
-		importance = v
-	}
+	importance := argFloat64OrDefault(args, "importance", 0.5)
 
 	var sourceRef *string
-	if v, ok := args["source_ref"].(string); ok && v != "" {
+	if v := argString(args, "source_ref"); v != "" {
 		sourceRef = &v
 	}
 	var summary *string
-	if v, ok := args["summary"].(string); ok && v != "" {
+	if v := argString(args, "summary"); v != "" {
 		summary = &v
 	}
 
@@ -91,7 +92,7 @@ func (s *Server) handleRemember(ctx context.Context, req mcpgo.CallToolRequest) 
 	}
 
 	var expiresIn *int
-	if v, ok := args["expires_in"].(float64); ok {
+	if v, ok := args["expires_in"].(float64); ok && v > 0 {
 		n := int(v)
 		expiresIn = &n
 	}
@@ -100,7 +101,7 @@ func (s *Server) handleRemember(ctx context.Context, req mcpgo.CallToolRequest) 
 		Content:    content,
 		Summary:    summary,
 		MemoryType: memoryType,
-		ScopeID:    scope.ID,
+		ScopeID:    scopeID,
 		AuthorID:   principalID,
 		Importance: importance,
 		SourceRef:  sourceRef,

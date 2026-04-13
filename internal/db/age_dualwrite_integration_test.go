@@ -16,6 +16,7 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
@@ -43,7 +44,7 @@ func TestUpsertEntityAndRelation_DualWriteToAGE_WhenAvailable(t *testing.T) {
 	owner := testhelper.CreateTestPrincipal(t, pool, "user", "age-dualwrite-owner")
 	scope := testhelper.CreateTestScope(t, pool, "project", "age-dualwrite-scope", nil, owner.ID)
 
-	subject, err := db.UpsertEntity(ctx, pool, &db.Entity{
+	subject, err := compat.UpsertEntity(ctx, pool, &db.Entity{
 		ScopeID:    scope.ID,
 		EntityType: "function",
 		Name:       "Authenticate",
@@ -52,7 +53,7 @@ func TestUpsertEntityAndRelation_DualWriteToAGE_WhenAvailable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertEntity(subject): %v", err)
 	}
-	object, err := db.UpsertEntity(ctx, pool, &db.Entity{
+	object, err := compat.UpsertEntity(ctx, pool, &db.Entity{
 		ScopeID:    scope.ID,
 		EntityType: "function",
 		Name:       "IssueJWT",
@@ -62,7 +63,7 @@ func TestUpsertEntityAndRelation_DualWriteToAGE_WhenAvailable(t *testing.T) {
 		t.Fatalf("UpsertEntity(object): %v", err)
 	}
 
-	if _, err := db.UpsertRelation(ctx, pool, &db.Relation{
+	if _, err := compat.UpsertRelation(ctx, pool, &db.Relation{
 		ScopeID:    scope.ID,
 		SubjectID:  subject.ID,
 		ObjectID:   object.ID,
@@ -104,7 +105,7 @@ func TestUpsertEntity_DoesNotFailWhenAGEUnavailable(t *testing.T) {
 	owner := testhelper.CreateTestPrincipal(t, pool, "user", "age-unavailable-owner-"+uuid.NewString())
 	scope := testhelper.CreateTestScope(t, pool, "project", "age-unavailable-scope-"+uuid.NewString(), nil, owner.ID)
 
-	if _, err := db.UpsertEntity(ctx, pool, &db.Entity{
+	if _, err := compat.UpsertEntity(ctx, pool, &db.Entity{
 		ScopeID:    scope.ID,
 		EntityType: "component",
 		Name:       "Auth",
@@ -175,7 +176,7 @@ func TestUpsertEntityAndRelation_DoNotFailWhenAGEDualWriteErrors(t *testing.T) {
 	}
 	defer appPool.Close()
 
-	subject, err := db.UpsertEntity(ctx, appPool, &db.Entity{
+	subject, err := compat.UpsertEntity(ctx, appPool, &db.Entity{
 		ScopeID:    scope.ID,
 		EntityType: "function",
 		Name:       "Authenticate",
@@ -184,7 +185,7 @@ func TestUpsertEntityAndRelation_DoNotFailWhenAGEDualWriteErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertEntity(subject) should succeed even when AGE dual-write fails: %v", err)
 	}
-	object, err := db.UpsertEntity(ctx, appPool, &db.Entity{
+	object, err := compat.UpsertEntity(ctx, appPool, &db.Entity{
 		ScopeID:    scope.ID,
 		EntityType: "function",
 		Name:       "IssueJWT",
@@ -194,7 +195,7 @@ func TestUpsertEntityAndRelation_DoNotFailWhenAGEDualWriteErrors(t *testing.T) {
 		t.Fatalf("UpsertEntity(object) should succeed even when AGE dual-write fails: %v", err)
 	}
 
-	if _, err := db.UpsertRelation(ctx, appPool, &db.Relation{
+	if _, err := compat.UpsertRelation(ctx, appPool, &db.Relation{
 		ScopeID:    scope.ID,
 		SubjectID:  subject.ID,
 		ObjectID:   object.ID,
@@ -204,14 +205,14 @@ func TestUpsertEntityAndRelation_DoNotFailWhenAGEDualWriteErrors(t *testing.T) {
 		t.Fatalf("UpsertRelation should succeed even when AGE dual-write fails: %v", err)
 	}
 
-	relationalEntity, err := db.GetEntityByCanonical(ctx, appPool, scope.ID, "function", "auth.Authenticate")
+	relationalEntity, err := compat.GetEntityByCanonical(ctx, appPool, scope.ID, "function", "auth.Authenticate")
 	if err != nil {
 		t.Fatalf("GetEntityByCanonical: %v", err)
 	}
 	if relationalEntity == nil {
 		t.Fatal("expected relational entity to be persisted")
 	}
-	rels, err := db.ListRelationsForEntity(ctx, appPool, subject.ID, "depends_on")
+	rels, err := compat.ListRelationsForEntity(ctx, appPool, subject.ID, "depends_on")
 	if err != nil {
 		t.Fatalf("ListRelationsForEntity: %v", err)
 	}

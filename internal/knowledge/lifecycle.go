@@ -9,6 +9,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
+	"github.com/simplyblock/postbrain/internal/lifecyclecore"
 )
 
 // Sentinel errors for the knowledge lifecycle state machine.
@@ -22,12 +24,6 @@ var (
 // errDuplicateEndorsement is an internal sentinel used by the fake in tests;
 // the real DB path checks for pgx error code 23505 and converts it.
 var errDuplicateEndorsement = errors.New("knowledge: endorsement already exists (idempotent)")
-
-// membershipChecker can determine admin status for a principal.
-type membershipChecker interface {
-	IsScopeAdmin(ctx context.Context, principalID, scopeID uuid.UUID) (bool, error)
-	IsSystemAdmin(ctx context.Context, principalID uuid.UUID) (bool, error)
-}
 
 // lifecycleDB abstracts all database calls made by Lifecycle, enabling unit tests.
 type lifecycleDB interface {
@@ -51,7 +47,7 @@ type poolLifecycleDB struct {
 }
 
 func (p *poolLifecycleDB) getArtifact(ctx context.Context, id uuid.UUID) (*db.KnowledgeArtifact, error) {
-	return db.GetArtifact(ctx, p.pool, id)
+	return compat.GetArtifact(ctx, p.pool, id)
 }
 
 func (p *poolLifecycleDB) updateArtifactStatus(ctx context.Context, id uuid.UUID, status string, publishedAt, deprecatedAt interface{}) error {
@@ -62,11 +58,11 @@ func (p *poolLifecycleDB) updateArtifactStatus(ctx context.Context, id uuid.UUID
 	if t, ok := deprecatedAt.(*time.Time); ok {
 		dep = t
 	}
-	return db.UpdateArtifactStatus(ctx, p.pool, id, status, pub, dep)
+	return compat.UpdateArtifactStatus(ctx, p.pool, id, status, pub, dep)
 }
 
 func (p *poolLifecycleDB) createEndorsement(ctx context.Context, artifactID, endorserID uuid.UUID, note *string) (*db.KnowledgeEndorsement, error) {
-	e, err := db.CreateEndorsement(ctx, p.pool, artifactID, endorserID, note)
+	e, err := compat.CreateEndorsement(ctx, p.pool, artifactID, endorserID, note)
 	if err != nil {
 		// pgx unique violation code 23505 — treat as idempotent.
 		if isUniqueViolation(err) {
@@ -78,39 +74,39 @@ func (p *poolLifecycleDB) createEndorsement(ctx context.Context, artifactID, end
 }
 
 func (p *poolLifecycleDB) incrementEndorsementCount(ctx context.Context, artifactID uuid.UUID) error {
-	return db.IncrementArtifactEndorsementCount(ctx, p.pool, artifactID)
+	return compat.IncrementArtifactEndorsementCount(ctx, p.pool, artifactID)
 }
 
 func (p *poolLifecycleDB) getArtifactAfterEndorse(ctx context.Context, id uuid.UUID) (*db.KnowledgeArtifact, error) {
-	return db.GetArtifact(ctx, p.pool, id)
+	return compat.GetArtifact(ctx, p.pool, id)
 }
 
 func (p *poolLifecycleDB) snapshotArtifactVersion(ctx context.Context, h *db.KnowledgeHistory) error {
-	return db.SnapshotArtifactVersion(ctx, p.pool, h)
+	return compat.SnapshotArtifactVersion(ctx, p.pool, h)
 }
 
 func (p *poolLifecycleDB) flagDigestsStaleness(ctx context.Context, sourceID uuid.UUID, signal string, confidence float64, evidence []byte) error {
-	return db.FlagDigestsStaleness(ctx, p.pool, sourceID, signal, confidence, evidence)
+	return compat.FlagDigestsStaleness(ctx, p.pool, sourceID, signal, confidence, evidence)
 }
 
 func (p *poolLifecycleDB) deleteArtifactEntityLinks(ctx context.Context, artifactID uuid.UUID) error {
-	return db.DeleteArtifactEntityLinks(ctx, p.pool, artifactID)
+	return compat.DeleteArtifactEntityLinks(ctx, p.pool, artifactID)
 }
 
 func (p *poolLifecycleDB) nullPreviousVersionRefs(ctx context.Context, id uuid.UUID) error {
-	return db.NullPreviousVersionRefs(ctx, p.pool, id)
+	return compat.NullPreviousVersionRefs(ctx, p.pool, id)
 }
 
 func (p *poolLifecycleDB) nullPromotionRequestArtifactRef(ctx context.Context, id uuid.UUID) error {
-	return db.NullPromotionRequestArtifactRef(ctx, p.pool, id)
+	return compat.NullPromotionRequestArtifactRef(ctx, p.pool, id)
 }
 
 func (p *poolLifecycleDB) resetPromotedMemoryStatus(ctx context.Context, id uuid.UUID) error {
-	return db.ResetPromotedMemoryStatus(ctx, p.pool, id)
+	return compat.ResetPromotedMemoryStatus(ctx, p.pool, id)
 }
 
 func (p *poolLifecycleDB) deleteArtifact(ctx context.Context, id uuid.UUID) error {
-	return db.DeleteArtifact(ctx, p.pool, id)
+	return compat.DeleteArtifact(ctx, p.pool, id)
 }
 
 // isUniqueViolation checks if the error is a PostgreSQL unique-constraint violation (23505).
@@ -129,12 +125,12 @@ func isUniqueViolation(err error) bool {
 // Lifecycle manages state transitions for knowledge artifacts.
 type Lifecycle struct {
 	pool       *pgxpool.Pool
-	membership membershipChecker
+	membership lifecyclecore.MembershipChecker
 	dbOps      lifecycleDB
 }
 
 // NewLifecycle creates a Lifecycle backed by pool and the given membership checker.
-func NewLifecycle(pool *pgxpool.Pool, membership membershipChecker) *Lifecycle {
+func NewLifecycle(pool *pgxpool.Pool, membership lifecyclecore.MembershipChecker) *Lifecycle {
 	return &Lifecycle{
 		pool:       pool,
 		membership: membership,
@@ -142,25 +138,13 @@ func NewLifecycle(pool *pgxpool.Pool, membership membershipChecker) *Lifecycle {
 	}
 }
 
-// isEffectiveAdmin returns true if the principal is either a system admin or a
-// scope admin on the given scope. System admin is checked first.
+// isEffectiveAdmin delegates to lifecyclecore.IsEffectiveAdmin.
 func (l *Lifecycle) isEffectiveAdmin(ctx context.Context, principalID, scopeID uuid.UUID) (bool, error) {
-	if l.membership == nil {
-		return false, nil
-	}
-	sysAdmin, err := l.membership.IsSystemAdmin(ctx, principalID)
-	if err != nil || sysAdmin {
-		return sysAdmin, err
-	}
-	return l.membership.IsScopeAdmin(ctx, principalID, scopeID)
+	return lifecyclecore.IsEffectiveAdmin(ctx, l.membership, principalID, scopeID)
 }
 
 // EndorseResult carries the outcome of an Endorse call.
-type EndorseResult struct {
-	EndorsementCount int
-	Status           string
-	AutoPublished    bool
-}
+type EndorseResult = lifecyclecore.EndorseResult
 
 // SubmitForReview transitions an artifact from draft → in_review.
 // The caller must be the author or a scope admin.

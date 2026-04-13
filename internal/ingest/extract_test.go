@@ -53,16 +53,6 @@ func TestExtractMarkitdownNotInstalled(t *testing.T) {
 	}
 }
 
-func TestExtractMarkitdownPPTX(t *testing.T) {
-	if _, err := exec.LookPath("markitdown"); err != nil {
-		t.Skip("markitdown not installed")
-	}
-	// A real PPTX would be needed for a meaningful round-trip test.
-	// This just verifies the subprocess path is wired correctly with a
-	// minimal (invalid) file — markitdown will error, which is fine here.
-	_, _ = ingest.Extract("slide.pptx", []byte("not a real pptx"))
-}
-
 func TestExtractUnsupported(t *testing.T) {
 	_, err := ingest.Extract("file.xyz", []byte("data"))
 	if err == nil {

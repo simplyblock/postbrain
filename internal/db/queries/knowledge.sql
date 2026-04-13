@@ -226,3 +226,29 @@ WHERE ka.status = 'published'
   )
 ORDER BY trgm_score DESC
 LIMIT $2;
+
+-- name: GetUnsummarisedArtifacts :many
+SELECT id, content FROM knowledge_artifacts
+WHERE summary IS NULL
+ORDER BY created_at
+LIMIT $1 OFFSET $2;
+
+-- name: SetArtifactSummary :exec
+UPDATE knowledge_artifacts SET summary=$2, updated_at=now() WHERE id=$1;
+
+-- name: GetArtifactsWithoutChunks :many
+SELECT a.id, a.owner_scope_id, a.author_id, a.content FROM knowledge_artifacts a
+WHERE char_length(a.content) > $1::int
+  AND NOT EXISTS (
+      SELECT 1 FROM memories m
+      WHERE m.source_ref LIKE 'artifact:' || a.id::text || ':chunk:%'
+  )
+ORDER BY a.created_at
+LIMIT $2 OFFSET $3;
+
+-- name: GetPublishedArtifactsBatch :many
+SELECT id, owner_scope_id, title, content, embedding
+FROM knowledge_artifacts
+WHERE status='published'
+ORDER BY created_at
+LIMIT $1 OFFSET $2;

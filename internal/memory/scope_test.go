@@ -6,13 +6,13 @@ import (
 	"github.com/google/uuid"
 )
 
-// TestFanOut_StrictScope verifies that strictScope=true returns only the given scopeID.
+// TestFanOut_StrictScope verifies that strictScope=true returns only the given scopeID
+// without performing any DB call.
 func TestFanOut_StrictScope(t *testing.T) {
 	scopeID := uuid.New()
 	principalID := uuid.New()
 
-	// strictScope=true should return immediately without any DB call.
-	ids, err := fanOutStrict(scopeID, principalID)
+	ids, err := FanOutScopeIDs(t.Context(), nil, scopeID, principalID, 0, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -24,9 +24,8 @@ func TestFanOut_StrictScope(t *testing.T) {
 	}
 }
 
-// TestFanOut_NonEmpty verifies that the result contains the starting scope when
-// the DB query is mocked with a known set of ancestors.
-func TestFanOut_NonEmpty(t *testing.T) {
+// TestDeduplicateScopeIDs_RemovesDuplicates verifies deduplication of scope ID slices.
+func TestDeduplicateScopeIDs_RemovesDuplicates(t *testing.T) {
 	// This test exercises the deduplication logic without a real DB.
 	scopeID := uuid.New()
 	personalID := uuid.New()

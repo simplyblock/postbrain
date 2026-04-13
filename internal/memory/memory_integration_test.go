@@ -15,8 +15,10 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/memory"
+	"github.com/simplyblock/postbrain/internal/modelruntime"
+	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
@@ -104,7 +106,7 @@ func TestMemoryCreate_WorkingDefaultTTL(t *testing.T) {
 	}
 
 	// Fetch the memory and verify expires_at is ~1 hour from now
-	mem, err := db.GetMemory(context.Background(), pool, result.MemoryID)
+	mem, err := compat.GetMemory(context.Background(), pool, result.MemoryID)
 	if err != nil {
 		t.Fatalf("GetMemory: %v", err)
 	}
@@ -181,7 +183,7 @@ func TestMemoryHardDelete(t *testing.T) {
 		t.Fatalf("HardDelete: %v", err)
 	}
 
-	mem, err := db.GetMemory(ctx, pool, r.MemoryID)
+	mem, err := compat.GetMemory(ctx, pool, r.MemoryID)
 	if err == nil && mem != nil {
 		t.Error("expected hard-deleted memory to be gone")
 	}
@@ -231,11 +233,11 @@ func TestMemoryCreate_DualWritesToEmbeddingRepository(t *testing.T) {
 			},
 		},
 	}
-	svc, err := embedding.NewService(cfg)
+	svc, err := providers.NewService(cfg)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
-	if err := svc.EnableModelDrivenFactory(ctx, pool, cfg); err != nil {
+	if err := modelruntime.EnableModelDrivenFactory(ctx, svc, pool, cfg); err != nil {
 		t.Fatalf("EnableModelDrivenFactory: %v", err)
 	}
 

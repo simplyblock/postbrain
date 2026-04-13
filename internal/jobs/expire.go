@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/simplyblock/postbrain/internal/db"
 )
 
 // ExpireWorkingMemory soft-deletes all active memories whose expires_at < now().
@@ -11,12 +13,5 @@ import (
 // that accumulated while the server was down).
 // Returns the number of rows updated.
 func ExpireWorkingMemory(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
-	tag, err := pool.Exec(ctx,
-		`UPDATE memories SET is_active = false
-		 WHERE expires_at < now() AND is_active = true`,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return tag.RowsAffected(), nil
+	return db.New(pool).ExpireWorkingMemories(ctx)
 }

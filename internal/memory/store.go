@@ -17,11 +17,12 @@ import (
 	"github.com/simplyblock/postbrain/internal/chunking"
 	"github.com/simplyblock/postbrain/internal/codegraph"
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/graph"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
-// embeddingService is the subset of embedding.EmbeddingService used by this package.
+// embeddingService is the subset of providers.EmbeddingService used by this package.
 type embeddingService interface {
 	EmbedText(ctx context.Context, text string) ([]float32, error)
 	EmbedCode(ctx context.Context, text string) ([]float32, error)
@@ -30,26 +31,26 @@ type embeddingService interface {
 }
 
 type embeddingResultService interface {
-	EmbedTextResult(ctx context.Context, text string) (*embedding.EmbedResult, error)
-	EmbedCodeResult(ctx context.Context, text string) (*embedding.EmbedResult, error)
+	EmbedTextResult(ctx context.Context, text string) (*providers.EmbedResult, error)
+	EmbedCodeResult(ctx context.Context, text string) (*providers.EmbedResult, error)
 }
 
-// embeddingIface is the subset of embedding.Embedder needed here.
+// embeddingIface is the subset of providers.Embedder needed here.
 type embeddingIface interface {
 	ModelSlug() string
 	Dimensions() int
 }
 
-// embeddingServiceAdapter adapts *embedding.EmbeddingService to embeddingService.
+// embeddingServiceAdapter adapts *providers.EmbeddingService to embeddingService.
 type embeddingServiceAdapter struct {
-	svc *embedding.EmbeddingService
+	svc *providers.EmbeddingService
 }
 
 func (a *embeddingServiceAdapter) EmbedText(ctx context.Context, text string) ([]float32, error) {
 	return a.svc.EmbedText(ctx, text)
 }
 
-func (a *embeddingServiceAdapter) EmbedTextResult(ctx context.Context, text string) (*embedding.EmbedResult, error) {
+func (a *embeddingServiceAdapter) EmbedTextResult(ctx context.Context, text string) (*providers.EmbedResult, error) {
 	return a.svc.EmbedTextResult(ctx, text)
 }
 
@@ -57,7 +58,7 @@ func (a *embeddingServiceAdapter) EmbedCode(ctx context.Context, text string) ([
 	return a.svc.EmbedCode(ctx, text)
 }
 
-func (a *embeddingServiceAdapter) EmbedCodeResult(ctx context.Context, text string) (*embedding.EmbedResult, error) {
+func (a *embeddingServiceAdapter) EmbedCodeResult(ctx context.Context, text string) (*providers.EmbedResult, error) {
 	return a.svc.EmbedCodeResult(ctx, text)
 }
 
@@ -88,35 +89,35 @@ type poolMemoryDB struct {
 }
 
 func (p *poolMemoryDB) CreateMemory(ctx context.Context, m *db.Memory) (*db.Memory, error) {
-	return db.CreateMemory(ctx, p.pool, m)
+	return compat.CreateMemory(ctx, p.pool, m)
 }
 
 func (p *poolMemoryDB) FindNearDuplicates(ctx context.Context, scopeID uuid.UUID, embedding []float32, threshold float64, excludeID *uuid.UUID) ([]*db.Memory, error) {
-	return db.FindNearDuplicates(ctx, p.pool, scopeID, embedding, threshold, excludeID)
+	return compat.FindNearDuplicates(ctx, p.pool, scopeID, embedding, threshold, excludeID)
 }
 
 func (p *poolMemoryDB) UpdateMemoryContent(ctx context.Context, id uuid.UUID, content string, summary *string, embedding, embeddingCode []float32, textModelID, codeModelID *uuid.UUID, contentKind string, meta []byte) (*db.Memory, error) {
-	return db.UpdateMemoryContent(ctx, p.pool, id, content, summary, embedding, embeddingCode, textModelID, codeModelID, contentKind, meta)
+	return compat.UpdateMemoryContent(ctx, p.pool, id, content, summary, embedding, embeddingCode, textModelID, codeModelID, contentKind, meta)
 }
 
 func (p *poolMemoryDB) SoftDeleteMemory(ctx context.Context, id uuid.UUID) error {
-	return db.SoftDeleteMemory(ctx, p.pool, id)
+	return compat.SoftDeleteMemory(ctx, p.pool, id)
 }
 
 func (p *poolMemoryDB) UpsertEntity(ctx context.Context, e *db.Entity) (*db.Entity, error) {
-	return db.UpsertEntity(ctx, p.pool, e)
+	return compat.UpsertEntity(ctx, p.pool, e)
 }
 
 func (p *poolMemoryDB) LinkMemoryToEntity(ctx context.Context, memoryID, entityID uuid.UUID, role string) error {
-	return db.LinkMemoryToEntity(ctx, p.pool, memoryID, entityID, role)
+	return compat.LinkMemoryToEntity(ctx, p.pool, memoryID, entityID, role)
 }
 
 func (p *poolMemoryDB) UpsertRelation(ctx context.Context, r *db.Relation) (*db.Relation, error) {
-	return db.UpsertRelation(ctx, p.pool, r)
+	return compat.UpsertRelation(ctx, p.pool, r)
 }
 
 func (p *poolMemoryDB) FindEntitiesBySuffix(ctx context.Context, scopeID uuid.UUID, suffix string) ([]*db.Entity, error) {
-	return db.FindEntitiesBySuffix(ctx, p.pool, scopeID, suffix)
+	return compat.FindEntitiesBySuffix(ctx, p.pool, scopeID, suffix)
 }
 
 // Store provides memory CRUD and embedding operations.
@@ -130,7 +131,7 @@ type Store struct {
 }
 
 // NewStore creates a new Store backed by the given pool and embedding service.
-func NewStore(pool *pgxpool.Pool, svc *embedding.EmbeddingService) *Store {
+func NewStore(pool *pgxpool.Pool, svc *providers.EmbeddingService) *Store {
 	return &Store{
 		pool:    pool,
 		svc:     &embeddingServiceAdapter{svc: svc},
@@ -183,36 +184,50 @@ func withLongStyleMeta(meta []byte) []byte {
 	return encoded
 }
 
-// Create embeds, deduplicates, and persists a memory.
-func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, error) {
-	if input.Importance == 0 {
-		input.Importance = 0.5
-	}
-	input.Meta = withLongStyleMeta(input.Meta)
+// embedResult bundles the outputs of the classify-and-embed step.
+type embedResult struct {
+	contentKind string
+	textVec     []float32
+	textModelID *uuid.UUID
+	codeVec     []float32
+	codeModelID *uuid.UUID
+}
 
-	// 1. Classify content kind.
-	contentKind := embedding.ClassifyContent(input.Content, safeDeref(input.SourceRef))
+// classifyAndEmbed classifies the content kind and generates text and (optionally)
+// code embeddings.
+func (s *Store) classifyAndEmbed(ctx context.Context, input CreateInput) (embedResult, error) {
+	contentKind := providers.ClassifyContent(input.Content, safeDeref(input.SourceRef))
 
-	// 2. Embed text.
 	textVec, textModelID, err := s.embedText(ctx, input.Content)
 	if err != nil {
-		return nil, fmt.Errorf("memory: embed text: %w", err)
+		return embedResult{}, fmt.Errorf("memory: embed text: %w", err)
 	}
 	if len(textVec) == 0 {
-		return nil, fmt.Errorf("memory: embed text: embedding service returned empty vector (is the model available?)")
+		return embedResult{}, fmt.Errorf("memory: embed text: embedding service returned empty vector (is the model available?)")
 	}
 
-	// 3. Embed code if content_kind == "code" and a code embedder is available.
 	var codeVec []float32
 	var codeModelID *uuid.UUID
 	if contentKind == "code" && s.svc.CodeEmbedder() != nil {
 		codeVec, codeModelID, err = s.embedCode(ctx, input.Content)
 		if err != nil {
-			return nil, fmt.Errorf("memory: embed code: %w", err)
+			return embedResult{}, fmt.Errorf("memory: embed code: %w", err)
 		}
 	}
 
-	// 4. TTL logic.
+	return embedResult{
+		contentKind: contentKind,
+		textVec:     textVec,
+		textModelID: textModelID,
+		codeVec:     codeVec,
+		codeModelID: codeModelID,
+	}, nil
+}
+
+// insertWithDedup applies TTL logic, checks for near-duplicates, and either
+// updates the existing memory or inserts a new one. Returns the persisted memory
+// and whether it was a duplicate update.
+func (s *Store) insertWithDedup(ctx context.Context, input CreateInput, emb embedResult) (*db.Memory, bool, error) {
 	var expiresAt *time.Time
 	if input.MemoryType == "working" {
 		ttl := 3600
@@ -223,31 +238,23 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 		expiresAt = &t
 	}
 
-	// 5. Near-duplicate check.
-	dupes, err := s.creator.FindNearDuplicates(ctx, input.ScopeID, textVec, 0.05, nil)
+	dupes, err := s.creator.FindNearDuplicates(ctx, input.ScopeID, emb.textVec, 0.05, nil)
 	if err != nil {
-		return nil, fmt.Errorf("memory: find near duplicates: %w", err)
+		return nil, false, fmt.Errorf("memory: find near duplicates: %w", err)
 	}
 	if len(dupes) > 0 {
 		existing := dupes[0]
-		updated, err := s.creator.UpdateMemoryContent(ctx, existing.ID, input.Content, input.Summary, textVec, codeVec, textModelID, codeModelID, contentKind, input.Meta)
+		updated, err := s.creator.UpdateMemoryContent(ctx, existing.ID, input.Content, input.Summary, emb.textVec, emb.codeVec, emb.textModelID, emb.codeModelID, emb.contentKind, input.Meta)
 		if err != nil {
-			return nil, fmt.Errorf("memory: update duplicate: %w", err)
+			return nil, false, fmt.Errorf("memory: update duplicate: %w", err)
 		}
-		if err := s.dualWriteMemoryEmbeddings(ctx, updated.ID, updated.ScopeID, textVec, textModelID, codeVec, codeModelID); err != nil {
-			return nil, fmt.Errorf("memory: dual-write duplicate: %w", err)
+		if err := s.dualWriteMemoryEmbeddings(ctx, updated.ID, updated.ScopeID, emb.textVec, emb.textModelID, emb.codeVec, emb.codeModelID); err != nil {
+			return nil, false, fmt.Errorf("memory: dual-write duplicate: %w", err)
 		}
-		if err := s.linkEntitiesForMemory(ctx, updated.ID, input.ScopeID, input.Entities, input.Content, input.SourceRef); err != nil {
-			return nil, err
-		}
-		if contentKind == "code" && input.SourceRef != nil {
-			s.extractCodeGraph(ctx, input.Content, *input.SourceRef, input.ScopeID, updated.ID)
-		}
-		return &CreateResult{MemoryID: updated.ID, Action: "updated"}, nil
+		return updated, true, nil
 	}
 
-	// 6. Insert.
-	textVecVal := pgvector.NewVector(textVec)
+	textVecVal := pgvector.NewVector(emb.textVec)
 	m := &db.Memory{
 		MemoryType:       input.MemoryType,
 		ScopeID:          input.ScopeID,
@@ -255,42 +262,70 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, e
 		Content:          input.Content,
 		Summary:          input.Summary,
 		Embedding:        &textVecVal,
-		EmbeddingModelID: textModelID,
-		ContentKind:      contentKind,
+		EmbeddingModelID: emb.textModelID,
+		ContentKind:      emb.contentKind,
 		Meta:             input.Meta,
 		Importance:       input.Importance,
 		ExpiresAt:        expiresAt,
 		SourceRef:        input.SourceRef,
 	}
-	if len(codeVec) > 0 {
-		v := pgvector.NewVector(codeVec)
+	if len(emb.codeVec) > 0 {
+		v := pgvector.NewVector(emb.codeVec)
 		m.EmbeddingCode = &v
-		m.EmbeddingCodeModelID = codeModelID
+		m.EmbeddingCodeModelID = emb.codeModelID
 	}
 	created, err := s.creator.CreateMemory(ctx, m)
 	if err != nil {
-		return nil, fmt.Errorf("memory: create: %w", err)
+		return nil, false, fmt.Errorf("memory: create: %w", err)
 	}
-	if err := s.dualWriteMemoryEmbeddings(ctx, created.ID, created.ScopeID, textVec, textModelID, codeVec, codeModelID); err != nil {
-		return nil, fmt.Errorf("memory: dual-write create: %w", err)
+	if err := s.dualWriteMemoryEmbeddings(ctx, created.ID, created.ScopeID, emb.textVec, emb.textModelID, emb.codeVec, emb.codeModelID); err != nil {
+		return nil, false, fmt.Errorf("memory: dual-write create: %w", err)
 	}
+	return created, false, nil
+}
 
-	// 7. Create chunk child memories for large content so recall can surface
-	// specific passages rather than the whole document's averaged embedding.
-	if utf8.RuneCountInString(input.Content) > chunking.MinContentRunes {
-		s.createChunks(ctx, created.ID, created.ScopeID, created.AuthorID, input.Content, contentKind)
+// linkMetadata links entities, optionally creates chunk child memories, and
+// extracts the code graph. For duplicate-update paths isUpdate is true and chunk
+// creation is skipped (chunks already exist on the original memory).
+func (s *Store) linkMetadata(ctx context.Context, m *db.Memory, input CreateInput, contentKind string, isUpdate bool) error {
+	if !isUpdate && utf8.RuneCountInString(input.Content) > chunking.MinContentRunes {
+		s.createChunks(ctx, m.ID, m.ScopeID, m.AuthorID, input.Content, contentKind)
 	}
+	if err := s.linkEntitiesForMemory(ctx, m.ID, input.ScopeID, input.Entities, input.Content, input.SourceRef); err != nil {
+		return err
+	}
+	if contentKind == "code" && input.SourceRef != nil {
+		s.extractCodeGraph(ctx, input.Content, *input.SourceRef, input.ScopeID, m.ID)
+	}
+	return nil
+}
 
-	if err := s.linkEntitiesForMemory(ctx, created.ID, input.ScopeID, input.Entities, input.Content, input.SourceRef); err != nil {
+// Create embeds, deduplicates, and persists a memory.
+func (s *Store) Create(ctx context.Context, input CreateInput) (*CreateResult, error) {
+	if input.Importance == 0 {
+		input.Importance = 0.5
+	}
+	input.Meta = withLongStyleMeta(input.Meta)
+
+	emb, err := s.classifyAndEmbed(ctx, input)
+	if err != nil {
 		return nil, err
 	}
 
-	// 9. Code graph extraction for code memories with a file: source_ref.
-	if contentKind == "code" && input.SourceRef != nil {
-		s.extractCodeGraph(ctx, input.Content, *input.SourceRef, input.ScopeID, created.ID)
+	m, isUpdate, err := s.insertWithDedup(ctx, input, emb)
+	if err != nil {
+		return nil, err
 	}
 
-	return &CreateResult{MemoryID: created.ID, Action: "created"}, nil
+	if err := s.linkMetadata(ctx, m, input, emb.contentKind, isUpdate); err != nil {
+		return nil, err
+	}
+
+	action := "created"
+	if isUpdate {
+		action = "updated"
+	}
+	return &CreateResult{MemoryID: m.ID, Action: action}, nil
 }
 
 func (s *Store) linkEntitiesForMemory(
@@ -364,7 +399,7 @@ func (s *Store) linkEntitiesForMemory(
 
 // Update re-embeds and persists updated content for a memory.
 func (s *Store) Update(ctx context.Context, id uuid.UUID, content string, summary *string, importance float64) (*db.Memory, error) {
-	contentKind := embedding.ClassifyContent(content, "")
+	contentKind := providers.ClassifyContent(content, "")
 	meta := withLongStyleMeta(nil)
 
 	textVec, textModelID, err := s.embedText(ctx, content)
@@ -404,7 +439,7 @@ func (s *Store) HardDelete(ctx context.Context, id uuid.UUID) error {
 	if s.pool == nil {
 		return fmt.Errorf("memory: hard delete: pool is nil")
 	}
-	return db.HardDeleteMemory(ctx, s.pool, id)
+	return compat.HardDeleteMemory(ctx, s.pool, id)
 }
 
 // linkSameAs connects entID to all sibling entities in scope that share the
@@ -414,7 +449,7 @@ func (s *Store) linkSameAs(ctx context.Context, scopeID, entID uuid.UUID, canoni
 	if s.pool == nil {
 		return // no pool in test mode; best-effort only
 	}
-	siblings, err := db.ListEntitiesByCanonical(ctx, s.pool, scopeID, canonical, entityType)
+	siblings, err := compat.ListEntitiesByCanonical(ctx, s.pool, scopeID, canonical, entityType)
 	if err != nil {
 		return
 	}
@@ -423,7 +458,7 @@ func (s *Store) linkSameAs(ctx context.Context, scopeID, entID uuid.UUID, canoni
 		if bytes.Compare(subj[:], obj[:]) > 0 {
 			subj, obj = obj, subj
 		}
-		_, _ = db.UpsertRelation(ctx, s.pool, &db.Relation{
+		_, _ = compat.UpsertRelation(ctx, s.pool, &db.Relation{
 			ScopeID:    scopeID,
 			SubjectID:  subj,
 			Predicate:  "same_as",

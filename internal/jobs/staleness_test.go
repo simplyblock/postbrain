@@ -38,11 +38,6 @@ func TestContradictionJob_NilClassifier_UsesNoop(t *testing.T) {
 	}
 }
 
-func TestContradictionJob_Signature(t *testing.T) {
-	// Compile-time check.
-	var _ = (*ContradictionJob)(nil).Run
-}
-
 func TestFilterByTopicSimilarity(t *testing.T) {
 	t.Parallel()
 	j := &ContradictionJob{}
@@ -59,13 +54,13 @@ func TestFilterByTopicSimilarity(t *testing.T) {
 	artifactVec := []float32{1, 0, 0, 0}
 
 	// Identical vector → cosine sim = 1.0 > 0.6 → kept.
-	similar := &db.Memory{ID: uuid.New(), Embedding: makeVec("[1,0,0,0]")}
+	similar := &db.GetRecentMemoriesForScopeRow{ID: uuid.New(), Embedding: makeVec("[1,0,0,0]")}
 	// Orthogonal vector → cosine sim = 0.0 → filtered.
-	orthogonal := &db.Memory{ID: uuid.New(), Embedding: makeVec("[0,1,0,0]")}
+	orthogonal := &db.GetRecentMemoriesForScopeRow{ID: uuid.New(), Embedding: makeVec("[0,1,0,0]")}
 	// Nil embedding → filtered (no vector to compare).
-	nilEmb := &db.Memory{ID: uuid.New(), Embedding: nil}
+	nilEmb := &db.GetRecentMemoriesForScopeRow{ID: uuid.New(), Embedding: nil}
 
-	results := j.filterByTopicSimilarity(artifactVec, []*db.Memory{similar, orthogonal, nilEmb})
+	results := j.filterByTopicSimilarity(artifactVec, []*db.GetRecentMemoriesForScopeRow{similar, orthogonal, nilEmb})
 
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))

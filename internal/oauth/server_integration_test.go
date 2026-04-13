@@ -18,7 +18,7 @@ import (
 	restapi "github.com/simplyblock/postbrain/internal/api/rest"
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/config"
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/oauth"
 	"github.com/simplyblock/postbrain/internal/social"
 	"github.com/simplyblock/postbrain/internal/testhelper"
@@ -50,7 +50,7 @@ func TestOAuthServer_AuthorizationCodePKCERoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate session token: %v", err)
 	}
-	_, err = db.CreateToken(ctx, pool, user.ID, hashSession, "ui-session", nil, []string{
+	_, err = compat.CreateToken(ctx, pool, user.ID, hashSession, "ui-session", nil, []string{
 		oauth.ScopeMemoriesRead, oauth.ScopeMemoriesWrite,
 		oauth.ScopeKnowledgeRead, oauth.ScopeKnowledgeWrite,
 		oauth.ScopeSkillsRead, oauth.ScopeSkillsWrite,

@@ -16,6 +16,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/graph"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
@@ -32,7 +33,7 @@ func TestGraphQuery_AGEAwareBehavior(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, principal.ID, hashToken, "graph-query-token", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, principal.ID, hashToken, "graph-query-token", nil, nil, nil); err != nil {
 		t.Fatalf("CreateToken: %v", err)
 	}
 
@@ -109,7 +110,7 @@ func TestGraphQuery_DeniesTokenScopeMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, principal.ID, hashToken, "graph-query-deny-token", []uuid.UUID{allowed.ID}, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, principal.ID, hashToken, "graph-query-deny-token", []uuid.UUID{allowed.ID}, nil, nil); err != nil {
 		t.Fatalf("CreateToken restricted: %v", err)
 	}
 

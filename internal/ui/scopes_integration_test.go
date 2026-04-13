@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/principals"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
@@ -32,7 +32,7 @@ func TestScopesPage_ShowsOnlyWritableScopesForPrincipal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, userA.ID, hashSessionA, "a-session", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, userA.ID, hashSessionA, "a-session", nil, nil, nil); err != nil {
 		t.Fatalf("create userA session token: %v", err)
 	}
 
@@ -77,7 +77,7 @@ func TestScopesPage_MemberCannotAdminParentScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, childPrincipal.ID, hashSessionChild, "child-session", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, childPrincipal.ID, hashSessionChild, "child-session", nil, nil, nil); err != nil {
 		t.Fatalf("create child session token: %v", err)
 	}
 
@@ -104,7 +104,7 @@ func TestScopesPage_MemberCannotAdminParentScope(t *testing.T) {
 			t.Fatalf("expected scope admin required error, got body=%q", string(body))
 		}
 
-		scopeAfter, err := db.GetScopeByID(ctx, pool, parentScope.ID)
+		scopeAfter, err := compat.GetScopeByID(ctx, pool, parentScope.ID)
 		if err != nil {
 			t.Fatalf("get parent scope after delete attempt: %v", err)
 		}
@@ -160,7 +160,7 @@ func TestScopesPage_MemberCannotAdminParentScope(t *testing.T) {
 			t.Fatalf("expected scope admin required error, got body=%q", string(body))
 		}
 
-		scopeAfter, err := db.GetScopeByID(ctx, pool, parentScope.ID)
+		scopeAfter, err := compat.GetScopeByID(ctx, pool, parentScope.ID)
 		if err != nil {
 			t.Fatalf("get parent scope after owner change attempt: %v", err)
 		}
@@ -201,7 +201,7 @@ func TestScopesPage_MemberCannotAdminParentScope(t *testing.T) {
 			t.Fatalf("expected scope admin required error, got body=%q", string(body))
 		}
 
-		created, err := db.GetScopeByExternalID(ctx, pool, "project", form.Get("external_id"))
+		created, err := compat.GetScopeByExternalID(ctx, pool, "project", form.Get("external_id"))
 		if err != nil {
 			t.Fatalf("lookup denied subscope: %v", err)
 		}
@@ -223,7 +223,7 @@ func TestScopedSessionToken_IncludesParentScopesInDropdowns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate scoped session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, user.ID, hashSession, "ui-scoped-parent-session", []uuid.UUID{childScope.ID}, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, user.ID, hashSession, "ui-scoped-parent-session", []uuid.UUID{childScope.ID}, nil, nil); err != nil {
 		t.Fatalf("create scoped session token: %v", err)
 	}
 
@@ -270,7 +270,7 @@ func TestScopesPage_ShowsAttachedRepositoryForProjectScope(t *testing.T) {
 
 	repoURL := "https://github.com/acme/repo.git"
 	branch := "main"
-	if _, err := db.SetScopeRepo(ctx, pool, scope.ID, repoURL, branch); err != nil {
+	if _, err := compat.SetScopeRepo(ctx, pool, scope.ID, repoURL, branch); err != nil {
 		t.Fatalf("set scope repo: %v", err)
 	}
 
@@ -278,7 +278,7 @@ func TestScopesPage_ShowsAttachedRepositoryForProjectScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, user.ID, hashSession, "repo-session", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, user.ID, hashSession, "repo-session", nil, nil, nil); err != nil {
 		t.Fatalf("create session token: %v", err)
 	}
 

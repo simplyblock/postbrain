@@ -3,10 +3,11 @@ package rest
 import (
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 func (ro *Router) listPromotions(w http.ResponseWriter, r *http.Request) {
@@ -18,7 +19,7 @@ func (ro *Router) listPromotions(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+		scope, err := compat.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 		if err != nil || scope == nil {
 			writeError(w, http.StatusBadRequest, "scope not found")
 			return
@@ -30,7 +31,7 @@ func (ro *Router) listPromotions(w http.ResponseWriter, r *http.Request) {
 		targetScopeID = scope.ID
 	}
 
-	promotions, err := db.ListPendingPromotions(r.Context(), ro.pool, targetScopeID)
+	promotions, err := compat.ListPendingPromotions(r.Context(), ro.pool, targetScopeID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -72,4 +73,10 @@ func (ro *Router) rejectPromotion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"promotion_request_id": id, "status": "rejected"})
+}
+
+func (ro *Router) registerPromotionRoutes(r chi.Router) {
+	r.Get("/promotions", ro.listPromotions)
+	r.Post("/promotions/{id}/approve", ro.approvePromotion)
+	r.Post("/promotions/{id}/reject", ro.rejectPromotion)
 }

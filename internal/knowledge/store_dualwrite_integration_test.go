@@ -14,8 +14,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
 	"github.com/simplyblock/postbrain/internal/knowledge"
+	"github.com/simplyblock/postbrain/internal/modelruntime"
+	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
@@ -61,11 +62,11 @@ func TestKnowledgeCreate_DualWritesToEmbeddingRepository(t *testing.T) {
 			},
 		},
 	}
-	svc, err := embedding.NewService(cfg)
+	svc, err := providers.NewService(cfg)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
-	if err := svc.EnableModelDrivenFactory(ctx, pool, cfg); err != nil {
+	if err := modelruntime.EnableModelDrivenFactory(ctx, svc, pool, cfg); err != nil {
 		t.Fatalf("EnableModelDrivenFactory: %v", err)
 	}
 

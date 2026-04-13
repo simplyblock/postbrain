@@ -31,31 +31,37 @@ func ExtractCSS(ctx context.Context, src []byte, filename string) ([]Symbol, []E
 	if err != nil {
 		return nil, nil, err
 	}
-	e := &cssExtractor{src: src, filename: filename}
+	e := &cssExtractor{baseExtractor: baseExtractor{src: src, filename: filename}}
 	e.run(root)
 	return e.symbols, e.edges, nil
 }
 
-type cssExtractor struct {
+// baseExtractor holds the common state and helpers shared by all data-format
+// extractors (CSS, HTML, Dockerfile, HCL, Proto, SQL, TOML, YAML).
+type baseExtractor struct {
 	src      []byte
 	filename string
 	symbols  []Symbol
 	edges    []Edge
 }
 
-func (e *cssExtractor) text(n *sitter.Node) string {
+func (e *baseExtractor) text(n *sitter.Node) string {
 	return string(e.src[n.StartByte():n.EndByte()])
 }
 
-func (e *cssExtractor) addSymbol(name string, kind SymbolKind) {
+func (e *baseExtractor) addSymbol(name string, kind SymbolKind) {
 	e.symbols = append(e.symbols, Symbol{Name: name, Kind: kind, File: e.filename})
 }
 
-func (e *cssExtractor) addEdge(subject, predicate, object string) {
+func (e *baseExtractor) addEdge(subject, predicate, object string) {
 	if subject == "" || object == "" {
 		return
 	}
 	e.edges = append(e.edges, Edge{SubjectName: subject, Predicate: predicate, ObjectName: object})
+}
+
+type cssExtractor struct {
+	baseExtractor
 }
 
 func (e *cssExtractor) run(root *sitter.Node) {
@@ -178,31 +184,13 @@ func ExtractHTML(ctx context.Context, src []byte, filename string) ([]Symbol, []
 	if err != nil {
 		return nil, nil, err
 	}
-	e := &htmlExtractor{src: src, filename: filename}
+	e := &htmlExtractor{baseExtractor: baseExtractor{src: src, filename: filename}}
 	e.run(root)
 	return e.symbols, e.edges, nil
 }
 
 type htmlExtractor struct {
-	src      []byte
-	filename string
-	symbols  []Symbol
-	edges    []Edge
-}
-
-func (e *htmlExtractor) text(n *sitter.Node) string {
-	return string(e.src[n.StartByte():n.EndByte()])
-}
-
-func (e *htmlExtractor) addSymbol(name string, kind SymbolKind) {
-	e.symbols = append(e.symbols, Symbol{Name: name, Kind: kind, File: e.filename})
-}
-
-func (e *htmlExtractor) addEdge(subject, predicate, object string) {
-	if subject == "" || object == "" {
-		return
-	}
-	e.edges = append(e.edges, Edge{SubjectName: subject, Predicate: predicate, ObjectName: object})
+	baseExtractor
 }
 
 func (e *htmlExtractor) run(root *sitter.Node) {
@@ -283,31 +271,13 @@ func ExtractDockerfile(ctx context.Context, src []byte, filename string) ([]Symb
 	if err != nil {
 		return nil, nil, err
 	}
-	e := &dockerfileExtractor{src: src, filename: filename}
+	e := &dockerfileExtractor{baseExtractor: baseExtractor{src: src, filename: filename}}
 	e.run(root)
 	return e.symbols, e.edges, nil
 }
 
 type dockerfileExtractor struct {
-	src      []byte
-	filename string
-	symbols  []Symbol
-	edges    []Edge
-}
-
-func (e *dockerfileExtractor) text(n *sitter.Node) string {
-	return string(e.src[n.StartByte():n.EndByte()])
-}
-
-func (e *dockerfileExtractor) addSymbol(name string, kind SymbolKind) {
-	e.symbols = append(e.symbols, Symbol{Name: name, Kind: kind, File: e.filename})
-}
-
-func (e *dockerfileExtractor) addEdge(subject, predicate, object string) {
-	if subject == "" || object == "" {
-		return
-	}
-	e.edges = append(e.edges, Edge{SubjectName: subject, Predicate: predicate, ObjectName: object})
+	baseExtractor
 }
 
 func (e *dockerfileExtractor) run(root *sitter.Node) {
@@ -378,31 +348,13 @@ func ExtractHCL(ctx context.Context, src []byte, filename string) ([]Symbol, []E
 	if err != nil {
 		return nil, nil, err
 	}
-	e := &hclExtractor{src: src, filename: filename}
+	e := &hclExtractor{baseExtractor: baseExtractor{src: src, filename: filename}}
 	e.run(root)
 	return e.symbols, e.edges, nil
 }
 
 type hclExtractor struct {
-	src      []byte
-	filename string
-	symbols  []Symbol
-	edges    []Edge
-}
-
-func (e *hclExtractor) text(n *sitter.Node) string {
-	return string(e.src[n.StartByte():n.EndByte()])
-}
-
-func (e *hclExtractor) addSymbol(name string, kind SymbolKind) {
-	e.symbols = append(e.symbols, Symbol{Name: name, Kind: kind, File: e.filename})
-}
-
-func (e *hclExtractor) addEdge(subject, predicate, object string) {
-	if subject == "" || object == "" {
-		return
-	}
-	e.edges = append(e.edges, Edge{SubjectName: subject, Predicate: predicate, ObjectName: object})
+	baseExtractor
 }
 
 func (e *hclExtractor) run(root *sitter.Node) {
@@ -558,32 +510,18 @@ func ExtractProtobuf(ctx context.Context, src []byte, filename string) ([]Symbol
 	if err != nil {
 		return nil, nil, err
 	}
-	e := &protoExtractor{src: src, filename: filename}
+	e := &protoExtractor{baseExtractor: baseExtractor{src: src, filename: filename}}
 	e.run(root)
 	return e.symbols, e.edges, nil
 }
 
 type protoExtractor struct {
-	src      []byte
-	filename string
-	pkg      string
-	symbols  []Symbol
-	edges    []Edge
-}
-
-func (e *protoExtractor) text(n *sitter.Node) string {
-	return string(e.src[n.StartByte():n.EndByte()])
+	baseExtractor
+	pkg string
 }
 
 func (e *protoExtractor) addSymbol(name string, kind SymbolKind) {
 	e.symbols = append(e.symbols, Symbol{Name: name, Kind: kind, Package: e.pkg, File: e.filename})
-}
-
-func (e *protoExtractor) addEdge(subject, predicate, object string) {
-	if subject == "" || object == "" {
-		return
-	}
-	e.edges = append(e.edges, Edge{SubjectName: subject, Predicate: predicate, ObjectName: object})
 }
 
 func (e *protoExtractor) qual(name string) string {
@@ -739,31 +677,13 @@ func ExtractSQL(ctx context.Context, src []byte, filename string) ([]Symbol, []E
 	if err != nil {
 		return nil, nil, err
 	}
-	e := &sqlExtractor{src: src, filename: filename}
+	e := &sqlExtractor{baseExtractor: baseExtractor{src: src, filename: filename}}
 	e.run(root)
 	return e.symbols, e.edges, nil
 }
 
 type sqlExtractor struct {
-	src      []byte
-	filename string
-	symbols  []Symbol
-	edges    []Edge
-}
-
-func (e *sqlExtractor) text(n *sitter.Node) string {
-	return string(e.src[n.StartByte():n.EndByte()])
-}
-
-func (e *sqlExtractor) addSymbol(name string, kind SymbolKind) {
-	e.symbols = append(e.symbols, Symbol{Name: name, Kind: kind, File: e.filename})
-}
-
-func (e *sqlExtractor) addEdge(subject, predicate, object string) {
-	if subject == "" || object == "" {
-		return
-	}
-	e.edges = append(e.edges, Edge{SubjectName: subject, Predicate: predicate, ObjectName: object})
+	baseExtractor
 }
 
 func (e *sqlExtractor) run(root *sitter.Node) {
@@ -857,31 +777,13 @@ func ExtractTOML(ctx context.Context, src []byte, filename string) ([]Symbol, []
 	if err != nil {
 		return nil, nil, err
 	}
-	e := &tomlExtractor{src: src, filename: filename}
+	e := &tomlExtractor{baseExtractor: baseExtractor{src: src, filename: filename}}
 	e.run(root)
 	return e.symbols, e.edges, nil
 }
 
 type tomlExtractor struct {
-	src      []byte
-	filename string
-	symbols  []Symbol
-	edges    []Edge
-}
-
-func (e *tomlExtractor) text(n *sitter.Node) string {
-	return string(e.src[n.StartByte():n.EndByte()])
-}
-
-func (e *tomlExtractor) addSymbol(name string, kind SymbolKind) {
-	e.symbols = append(e.symbols, Symbol{Name: name, Kind: kind, File: e.filename})
-}
-
-func (e *tomlExtractor) addEdge(subject, predicate, object string) {
-	if subject == "" || object == "" {
-		return
-	}
-	e.edges = append(e.edges, Edge{SubjectName: subject, Predicate: predicate, ObjectName: object})
+	baseExtractor
 }
 
 func (e *tomlExtractor) run(root *sitter.Node) {
@@ -938,31 +840,13 @@ func ExtractYAML(ctx context.Context, src []byte, filename string) ([]Symbol, []
 	if err != nil {
 		return nil, nil, err
 	}
-	e := &yamlExtractor{src: src, filename: filename}
+	e := &yamlExtractor{baseExtractor: baseExtractor{src: src, filename: filename}}
 	e.run(root)
 	return e.symbols, e.edges, nil
 }
 
 type yamlExtractor struct {
-	src      []byte
-	filename string
-	symbols  []Symbol
-	edges    []Edge
-}
-
-func (e *yamlExtractor) text(n *sitter.Node) string {
-	return string(e.src[n.StartByte():n.EndByte()])
-}
-
-func (e *yamlExtractor) addSymbol(name string, kind SymbolKind) {
-	e.symbols = append(e.symbols, Symbol{Name: name, Kind: kind, File: e.filename})
-}
-
-func (e *yamlExtractor) addEdge(subject, predicate, object string) {
-	if subject == "" || object == "" {
-		return
-	}
-	e.edges = append(e.edges, Edge{SubjectName: subject, Predicate: predicate, ObjectName: object})
+	baseExtractor
 }
 
 func (e *yamlExtractor) run(root *sitter.Node) {

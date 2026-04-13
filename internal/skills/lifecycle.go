@@ -9,6 +9,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
+	"github.com/simplyblock/postbrain/internal/lifecyclecore"
 )
 
 // Sentinel errors for the skill lifecycle state machine.
@@ -18,12 +20,6 @@ var (
 	ErrForbidden         = errors.New("skills: caller does not have permission")
 	ErrInvalidTransition = errors.New("skills: invalid state transition")
 )
-
-// membershipChecker can determine admin status for a principal.
-type membershipChecker interface {
-	IsScopeAdmin(ctx context.Context, principalID, scopeID uuid.UUID) (bool, error)
-	IsSystemAdmin(ctx context.Context, principalID uuid.UUID) (bool, error)
-}
 
 // lifecycleDB abstracts all database calls made by Lifecycle, enabling unit tests.
 type lifecycleDB interface {
@@ -40,7 +36,7 @@ type poolLifecycleDB struct {
 }
 
 func (p *poolLifecycleDB) getSkill(ctx context.Context, id uuid.UUID) (*db.Skill, error) {
-	return db.GetSkill(ctx, p.pool, id)
+	return compat.GetSkill(ctx, p.pool, id)
 }
 func (p *poolLifecycleDB) updateSkillStatus(ctx context.Context, id uuid.UUID, status string, publishedAt, deprecatedAt interface{}) error {
 	var pub, dep *time.Time
@@ -50,27 +46,27 @@ func (p *poolLifecycleDB) updateSkillStatus(ctx context.Context, id uuid.UUID, s
 	if t, ok := deprecatedAt.(*time.Time); ok {
 		dep = t
 	}
-	return db.UpdateSkillStatus(ctx, p.pool, id, status, pub, dep)
+	return compat.UpdateSkillStatus(ctx, p.pool, id, status, pub, dep)
 }
 func (p *poolLifecycleDB) getSkillEndorsementByEndorser(ctx context.Context, skillID, endorserID uuid.UUID) (*db.SkillEndorsement, error) {
-	return db.GetSkillEndorsementByEndorser(ctx, p.pool, skillID, endorserID)
+	return compat.GetSkillEndorsementByEndorser(ctx, p.pool, skillID, endorserID)
 }
 func (p *poolLifecycleDB) createSkillEndorsement(ctx context.Context, skillID, endorserID uuid.UUID, note *string) (*db.SkillEndorsement, error) {
-	return db.CreateSkillEndorsement(ctx, p.pool, skillID, endorserID, note)
+	return compat.CreateSkillEndorsement(ctx, p.pool, skillID, endorserID, note)
 }
 func (p *poolLifecycleDB) countSkillEndorsements(ctx context.Context, skillID uuid.UUID) (int, error) {
-	return db.CountSkillEndorsements(ctx, p.pool, skillID)
+	return compat.CountSkillEndorsements(ctx, p.pool, skillID)
 }
 
 // Lifecycle manages state transitions for skills.
 type Lifecycle struct {
 	pool       *pgxpool.Pool
-	membership membershipChecker
+	membership lifecyclecore.MembershipChecker
 	dbOps      lifecycleDB
 }
 
 // NewLifecycle creates a Lifecycle backed by pool and the given membership checker.
-func NewLifecycle(pool *pgxpool.Pool, membership membershipChecker) *Lifecycle {
+func NewLifecycle(pool *pgxpool.Pool, membership lifecyclecore.MembershipChecker) *Lifecycle {
 	return &Lifecycle{
 		pool:       pool,
 		membership: membership,
@@ -78,25 +74,13 @@ func NewLifecycle(pool *pgxpool.Pool, membership membershipChecker) *Lifecycle {
 	}
 }
 
-// isEffectiveAdmin returns true if the principal is either a system admin or a
-// scope admin on the given scope. System admin is checked first.
+// isEffectiveAdmin delegates to lifecyclecore.IsEffectiveAdmin.
 func (l *Lifecycle) isEffectiveAdmin(ctx context.Context, principalID, scopeID uuid.UUID) (bool, error) {
-	if l.membership == nil {
-		return false, nil
-	}
-	sysAdmin, err := l.membership.IsSystemAdmin(ctx, principalID)
-	if err != nil || sysAdmin {
-		return sysAdmin, err
-	}
-	return l.membership.IsScopeAdmin(ctx, principalID, scopeID)
+	return lifecyclecore.IsEffectiveAdmin(ctx, l.membership, principalID, scopeID)
 }
 
 // EndorseResult carries the outcome of an Endorse call.
-type EndorseResult struct {
-	EndorsementCount int
-	Status           string
-	AutoPublished    bool
-}
+type EndorseResult = lifecyclecore.EndorseResult
 
 // SubmitForReview transitions a skill from draft → in_review.
 func (l *Lifecycle) SubmitForReview(ctx context.Context, skillID, callerID uuid.UUID) error {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
@@ -29,7 +30,7 @@ func TestUI_Pages_FilterScopesAndScopedData(t *testing.T) {
 	visibleArtifact := testhelper.CreateTestArtifact(t, pool, scopeA.ID, userA.ID, "VISIBLE_ARTIFACT")
 	hiddenArtifact := testhelper.CreateTestArtifact(t, pool, scopeB.ID, userB.ID, "HIDDEN_ARTIFACT")
 
-	if _, err := db.CreateCollection(ctx, pool, &db.KnowledgeCollection{
+	if _, err := compat.CreateCollection(ctx, pool, &db.KnowledgeCollection{
 		ScopeID:    scopeA.ID,
 		OwnerID:    userA.ID,
 		Slug:       "visible-collection",
@@ -38,7 +39,7 @@ func TestUI_Pages_FilterScopesAndScopedData(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create visible collection: %v", err)
 	}
-	if _, err := db.CreateCollection(ctx, pool, &db.KnowledgeCollection{
+	if _, err := compat.CreateCollection(ctx, pool, &db.KnowledgeCollection{
 		ScopeID:    scopeB.ID,
 		OwnerID:    userB.ID,
 		Slug:       "hidden-collection",
@@ -49,7 +50,7 @@ func TestUI_Pages_FilterScopesAndScopedData(t *testing.T) {
 	}
 
 	now := time.Now().UTC()
-	if _, err := db.CreateSkill(ctx, pool, &db.Skill{
+	if _, err := compat.CreateSkill(ctx, pool, &db.Skill{
 		ScopeID:        scopeA.ID,
 		AuthorID:       userA.ID,
 		Slug:           "visible-skill",
@@ -66,7 +67,7 @@ func TestUI_Pages_FilterScopesAndScopedData(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create visible skill: %v", err)
 	}
-	if _, err := db.CreateSkill(ctx, pool, &db.Skill{
+	if _, err := compat.CreateSkill(ctx, pool, &db.Skill{
 		ScopeID:        scopeB.ID,
 		AuthorID:       userB.ID,
 		Slug:           "hidden-skill",
@@ -84,7 +85,7 @@ func TestUI_Pages_FilterScopesAndScopedData(t *testing.T) {
 		t.Fatalf("create hidden skill: %v", err)
 	}
 
-	if _, err := db.CreatePromotionRequest(ctx, pool, &db.PromotionRequest{
+	if _, err := compat.CreatePromotionRequest(ctx, pool, &db.PromotionRequest{
 		MemoryID:         testhelper.CreateTestMemory(t, pool, scopeA.ID, userA.ID, "visible promotion memory").ID,
 		RequestedBy:      userA.ID,
 		TargetScopeID:    scopeA.ID,
@@ -93,7 +94,7 @@ func TestUI_Pages_FilterScopesAndScopedData(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create visible promotion: %v", err)
 	}
-	if _, err := db.CreatePromotionRequest(ctx, pool, &db.PromotionRequest{
+	if _, err := compat.CreatePromotionRequest(ctx, pool, &db.PromotionRequest{
 		MemoryID:         testhelper.CreateTestMemory(t, pool, scopeB.ID, userB.ID, "hidden promotion memory").ID,
 		RequestedBy:      userB.ID,
 		TargetScopeID:    scopeB.ID,
@@ -103,7 +104,7 @@ func TestUI_Pages_FilterScopesAndScopedData(t *testing.T) {
 		t.Fatalf("create hidden promotion: %v", err)
 	}
 
-	if _, err := db.InsertStalenessFlag(ctx, pool, &db.StalenessFlag{
+	if _, err := compat.InsertStalenessFlag(ctx, pool, &db.StalenessFlag{
 		ArtifactID: visibleArtifact.ID,
 		Signal:     "low_access_age",
 		Confidence: 0.8,
@@ -116,7 +117,7 @@ func TestUI_Pages_FilterScopesAndScopedData(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("insert visible staleness flag: %v", err)
 	}
-	if _, err := db.InsertStalenessFlag(ctx, pool, &db.StalenessFlag{
+	if _, err := compat.InsertStalenessFlag(ctx, pool, &db.StalenessFlag{
 		ArtifactID: hiddenArtifact.ID,
 		Signal:     "low_access_age",
 		Confidence: 0.8,
@@ -131,7 +132,7 @@ func TestUI_Pages_FilterScopesAndScopedData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, userA.ID, hashSessionA, "ui-filter-session", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, userA.ID, hashSessionA, "ui-filter-session", nil, nil, nil); err != nil {
 		t.Fatalf("create session token: %v", err)
 	}
 

@@ -15,6 +15,7 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/principals"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
@@ -28,10 +29,10 @@ func TestPrincipalsPage_ShowsOnlyReachablePrincipals(t *testing.T) {
 	testhelper.CreateTestPrincipal(t, pool, "user", "ui-principals-user-b")
 	adminHub := testhelper.CreateTestPrincipal(t, pool, "team", "ui-principals-admin-hub")
 
-	if _, err := db.CreateMembership(ctx, pool, userA.ID, teamA.ID, "member", nil); err != nil {
+	if _, err := compat.CreateMembership(ctx, pool, userA.ID, teamA.ID, "member", nil); err != nil {
 		t.Fatalf("create membership userA->teamA: %v", err)
 	}
-	if _, err := db.CreateMembership(ctx, pool, userA.ID, adminHub.ID, "admin", nil); err != nil {
+	if _, err := compat.CreateMembership(ctx, pool, userA.ID, adminHub.ID, "admin", nil); err != nil {
 		t.Fatalf("create admin membership userA->adminHub: %v", err)
 	}
 
@@ -39,7 +40,7 @@ func TestPrincipalsPage_ShowsOnlyReachablePrincipals(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, userA.ID, hashSessionA, "a-session", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, userA.ID, hashSessionA, "a-session", nil, nil, nil); err != nil {
 		t.Fatalf("create userA session token: %v", err)
 	}
 
@@ -79,7 +80,7 @@ func TestPrincipalsPage_RequiresAdminRole(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, user.ID, hashSession, "ui-principals-requires-admin-session", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, user.ID, hashSession, "ui-principals-requires-admin-session", nil, nil, nil); err != nil {
 		t.Fatalf("create session token: %v", err)
 	}
 
@@ -103,7 +104,7 @@ func TestSidebar_HidesPrincipalsForNonAdmin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, user.ID, hashSession, "ui-sidebar-principals-session", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, user.ID, hashSession, "ui-sidebar-principals-session", nil, nil, nil); err != nil {
 		t.Fatalf("create session token: %v", err)
 	}
 
@@ -131,7 +132,7 @@ func TestSidebar_ShowsPrincipalsForAdmin(t *testing.T) {
 
 	user := testhelper.CreateTestPrincipal(t, pool, "user", "ui-sidebar-principals-admin-user")
 	adminHub := testhelper.CreateTestPrincipal(t, pool, "team", "ui-sidebar-principals-admin-hub")
-	if _, err := db.CreateMembership(ctx, pool, user.ID, adminHub.ID, "admin", nil); err != nil {
+	if _, err := compat.CreateMembership(ctx, pool, user.ID, adminHub.ID, "admin", nil); err != nil {
 		t.Fatalf("create admin membership user->adminHub: %v", err)
 	}
 
@@ -139,7 +140,7 @@ func TestSidebar_ShowsPrincipalsForAdmin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, user.ID, hashSession, "ui-sidebar-principals-admin-session", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, user.ID, hashSession, "ui-sidebar-principals-admin-session", nil, nil, nil); err != nil {
 		t.Fatalf("create session token: %v", err)
 	}
 
@@ -173,7 +174,7 @@ func TestPrincipalsPage_PrincipalSlugChangeRequiresAdmin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, actor.ID, hashSessionActor, "ui-principal-admin-session", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, actor.ID, hashSessionActor, "ui-principal-admin-session", nil, nil, nil); err != nil {
 		t.Fatalf("create actor session token: %v", err)
 	}
 
@@ -199,7 +200,7 @@ func TestPrincipalsPage_PrincipalSlugChangeRequiresAdmin(t *testing.T) {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
 		}
 
-		after, err := db.GetPrincipalByID(ctx, pool, target.ID)
+		after, err := compat.GetPrincipalByID(ctx, pool, target.ID)
 		if err != nil {
 			t.Fatalf("get principal after denied update: %v", err)
 		}
@@ -235,7 +236,7 @@ func TestPrincipalsPage_PrincipalSlugChangeRequiresAdmin(t *testing.T) {
 			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusSeeOther)
 		}
 
-		after, err := db.GetPrincipalByID(ctx, pool, target.ID)
+		after, err := compat.GetPrincipalByID(ctx, pool, target.ID)
 		if err != nil {
 			t.Fatalf("get principal after update: %v", err)
 		}
@@ -264,7 +265,7 @@ func TestPrincipalsPage_SystemAdminCanAddMembership(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, systemAdmin.ID, hashSession, "ui-systemadmin-membership-session", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, systemAdmin.ID, hashSession, "ui-systemadmin-membership-session", nil, nil, nil); err != nil {
 		t.Fatalf("create session token: %v", err)
 	}
 
@@ -289,7 +290,7 @@ func TestPrincipalsPage_SystemAdminCanAddMembership(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusSeeOther)
 	}
 
-	memberships, err := db.GetMemberships(ctx, pool, member.ID)
+	memberships, err := compat.GetMemberships(ctx, pool, member.ID)
 	if err != nil {
 		t.Fatalf("get memberships: %v", err)
 	}
@@ -317,7 +318,7 @@ func TestPrincipalsPage_SystemAdminCanManageScopeGrants(t *testing.T) {
 		t.Fatalf("set is_system_admin: %v", err)
 	}
 
-	scope, err := db.CreateScope(
+	scope, err := compat.CreateScope(
 		ctx,
 		pool,
 		"project",
@@ -335,7 +336,7 @@ func TestPrincipalsPage_SystemAdminCanManageScopeGrants(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, systemAdmin.ID, hashSession, "ui-systemadmin-scopegrant-session", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, systemAdmin.ID, hashSession, "ui-systemadmin-scopegrant-session", nil, nil, nil); err != nil {
 		t.Fatalf("create session token: %v", err)
 	}
 

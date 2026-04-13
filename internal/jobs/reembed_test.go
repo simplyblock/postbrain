@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
 func TestNewReembedJob_DefaultBatchSize(t *testing.T) {
@@ -21,21 +21,11 @@ func TestNewReembedJob_CustomBatchSize(t *testing.T) {
 	}
 }
 
-// TestReembedJob_NoActiveModel verifies that RunText and RunCode return nil
-// (no error, no panic) when there is no pool/svc — simulated by a nil pool
-// which produces an error that is treated as "no active model".
-// Full DB behaviour is covered by integration tests.
-func TestReembedJob_Signature(t *testing.T) {
-	// Compile-time check that RunText and RunCode have the expected signatures.
-	var _ = (*ReembedJob)(nil).RunText
-	var _ = (*ReembedJob)(nil).RunCode
-}
-
 // TestNewReembedJob_FieldsSet verifies that the constructor properly stores
 // the pool and svc references.
 func TestNewReembedJob_Fields(t *testing.T) {
 	var pool *pgxpool.Pool
-	var svc *embedding.EmbeddingService
+	var svc *providers.EmbeddingService
 	j := NewReembedJob(pool, svc, 16)
 	if j.pool != pool {
 		t.Error("expected pool to be stored")

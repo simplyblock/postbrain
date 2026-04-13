@@ -11,7 +11,8 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/chunking"
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/db/compat"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
 const consolidateSummaryMaxEmbedBytes = 32_000
@@ -30,19 +31,19 @@ type poolConsolidatorDB struct {
 }
 
 func (p *poolConsolidatorDB) ListConsolidationCandidates(ctx context.Context, scopeID uuid.UUID) ([]*db.Memory, error) {
-	return db.ListConsolidationCandidates(ctx, p.pool, scopeID)
+	return compat.ListConsolidationCandidates(ctx, p.pool, scopeID)
 }
 
 func (p *poolConsolidatorDB) CreateMemory(ctx context.Context, m *db.Memory) (*db.Memory, error) {
-	return db.CreateMemory(ctx, p.pool, m)
+	return compat.CreateMemory(ctx, p.pool, m)
 }
 
 func (p *poolConsolidatorDB) SoftDeleteMemory(ctx context.Context, id uuid.UUID) error {
-	return db.SoftDeleteMemory(ctx, p.pool, id)
+	return compat.SoftDeleteMemory(ctx, p.pool, id)
 }
 
 func (p *poolConsolidatorDB) CreateConsolidation(ctx context.Context, c *db.Consolidation) (*db.Consolidation, error) {
-	return db.CreateConsolidation(ctx, p.pool, c)
+	return compat.CreateConsolidation(ctx, p.pool, c)
 }
 
 // Consolidator merges near-duplicate memories within a scope.
@@ -54,7 +55,7 @@ type Consolidator struct {
 }
 
 // NewConsolidator creates a new Consolidator backed by the given pool and embedding service.
-func NewConsolidator(pool *pgxpool.Pool, svc *embedding.EmbeddingService) *Consolidator {
+func NewConsolidator(pool *pgxpool.Pool, svc *providers.EmbeddingService) *Consolidator {
 	return &Consolidator{
 		pool: pool,
 		svc:  &embeddingServiceAdapter{svc: svc},

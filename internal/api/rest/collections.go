@@ -1,13 +1,14 @@
 package rest
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 type createCollectionRequest struct {
@@ -18,27 +19,36 @@ type createCollectionRequest struct {
 	Description *string `json:"description"`
 }
 
+func (r *createCollectionRequest) validate() error {
+	if r.Scope == "" || r.Slug == "" || r.Name == "" {
+		return errors.New("scope, slug and name are required")
+	}
+	return nil
+}
+
+func (r *createCollectionRequest) applyDefaults() {
+	if r.Visibility == "" {
+		r.Visibility = "team"
+	}
+}
+
 func (ro *Router) createCollection(w http.ResponseWriter, r *http.Request) {
 	var body createCollectionRequest
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if body.Scope == "" || body.Slug == "" || body.Name == "" {
-		writeError(w, http.StatusBadRequest, "scope, slug and name are required")
+	if err := body.validate(); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	visibility := body.Visibility
-	if visibility == "" {
-		visibility = "team"
-	}
-
+	body.applyDefaults()
 	kind, externalID, err := parseScopeString(body.Scope)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+	scope, err := compat.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 	if err != nil || scope == nil {
 		writeError(w, http.StatusBadRequest, "scope not found")
 		return
@@ -49,7 +59,7 @@ func (ro *Router) createCollection(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ownerID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
-	coll, err := ro.knwColl.Create(r.Context(), scope.ID, ownerID, body.Slug, body.Name, visibility, body.Description)
+	coll, err := ro.knwColl.Create(r.Context(), scope.ID, ownerID, body.Slug, body.Name, body.Visibility, body.Description)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -66,7 +76,7 @@ func (ro *Router) listCollections(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+		scope, err := compat.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 		if err != nil || scope == nil {
 			writeError(w, http.StatusBadRequest, "scope not found")
 			return
@@ -118,7 +128,7 @@ func (ro *Router) getCollection(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+	scope, err := compat.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 	if err != nil || scope == nil {
 		writeError(w, http.StatusBadRequest, "scope not found")
 		return
@@ -209,4 +219,12 @@ func (ro *Router) removeCollectionItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (ro *Router) registerCollectionRoutes(r chi.Router) {
+	r.Post("/collections", ro.createCollection)
+	r.Get("/collections", ro.listCollections)
+	r.Get("/collections/{slug}", ro.getCollection)
+	r.Post("/collections/{id}/items", ro.addCollectionItem)
+	r.Delete("/collections/{id}/items/{artifact_id}", ro.removeCollectionItem)
 }

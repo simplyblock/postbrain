@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 // Store provides CRUD operations for principals.
@@ -24,7 +25,7 @@ func NewStore(pool *pgxpool.Pool) *Store {
 
 // Create inserts a new principal and returns the created record.
 func (s *Store) Create(ctx context.Context, kind, slug, displayName string, meta []byte) (*db.Principal, error) {
-	p, err := db.CreatePrincipal(ctx, s.pool, kind, slug, displayName, meta)
+	p, err := compat.CreatePrincipal(ctx, s.pool, kind, slug, displayName, meta)
 	if err != nil {
 		return nil, fmt.Errorf("principals: create: %w", err)
 	}
@@ -33,7 +34,7 @@ func (s *Store) Create(ctx context.Context, kind, slug, displayName string, meta
 
 // GetByID retrieves a principal by UUID. Returns nil, nil if not found.
 func (s *Store) GetByID(ctx context.Context, id uuid.UUID) (*db.Principal, error) {
-	p, err := db.GetPrincipalByID(ctx, s.pool, id)
+	p, err := compat.GetPrincipalByID(ctx, s.pool, id)
 	if err != nil {
 		return nil, fmt.Errorf("principals: get by id: %w", err)
 	}
@@ -42,7 +43,7 @@ func (s *Store) GetByID(ctx context.Context, id uuid.UUID) (*db.Principal, error
 
 // GetBySlug retrieves a principal by slug (case-insensitive). Returns nil, nil if not found.
 func (s *Store) GetBySlug(ctx context.Context, slug string) (*db.Principal, error) {
-	p, err := db.GetPrincipalBySlug(ctx, s.pool, slug)
+	p, err := compat.GetPrincipalBySlug(ctx, s.pool, slug)
 	if err != nil {
 		return nil, fmt.Errorf("principals: get by slug: %w", err)
 	}
@@ -54,37 +55,33 @@ func (s *Store) Update(ctx context.Context, id uuid.UUID, displayName string, me
 	if meta == nil {
 		meta = []byte("{}")
 	}
-	var p db.Principal
-	err := s.pool.QueryRow(ctx,
-		`UPDATE principals SET display_name=$2, meta=$3, updated_at=now()
-		 WHERE id=$1
-		 RETURNING id, kind, slug, display_name, meta, created_at, updated_at`,
-		id, displayName, meta,
-	).Scan(&p.ID, &p.Kind, &p.Slug, &p.DisplayName, &p.Meta, &p.CreatedAt, &p.UpdatedAt)
+	p, err := db.New(s.pool).UpdatePrincipal(ctx, db.UpdatePrincipalParams{
+		ID:          id,
+		DisplayName: displayName,
+		Meta:        meta,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("principals: update: %w", err)
 	}
-	return &p, nil
+	return p, nil
 }
 
 // UpdateProfile updates slug and display_name of a principal, returning the updated record.
 func (s *Store) UpdateProfile(ctx context.Context, id uuid.UUID, slug, displayName string) (*db.Principal, error) {
-	var p db.Principal
-	err := s.pool.QueryRow(ctx,
-		`UPDATE principals SET slug=$2, display_name=$3, updated_at=now()
-		 WHERE id=$1
-		 RETURNING id, kind, slug, display_name, meta, created_at, updated_at`,
-		id, slug, displayName,
-	).Scan(&p.ID, &p.Kind, &p.Slug, &p.DisplayName, &p.Meta, &p.CreatedAt, &p.UpdatedAt)
+	p, err := db.New(s.pool).UpdatePrincipalProfile(ctx, db.UpdatePrincipalProfileParams{
+		ID:          id,
+		Slug:        slug,
+		DisplayName: displayName,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("principals: update profile: %w", err)
 	}
-	return &p, nil
+	return p, nil
 }
 
 // List returns principals ordered by creation time, with pagination.
 func (s *Store) List(ctx context.Context, limit, offset int) ([]*db.Principal, error) {
-	ps, err := db.ListPrincipals(ctx, s.pool, limit, offset)
+	ps, err := compat.ListPrincipals(ctx, s.pool, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("principals: list: %w", err)
 	}
@@ -93,8 +90,7 @@ func (s *Store) List(ctx context.Context, limit, offset int) ([]*db.Principal, e
 
 // Delete removes a principal by UUID.
 func (s *Store) Delete(ctx context.Context, id uuid.UUID) error {
-	_, err := s.pool.Exec(ctx, `DELETE FROM principals WHERE id = $1`, id)
-	if err != nil {
+	if err := db.New(s.pool).DeletePrincipal(ctx, id); err != nil {
 		return fmt.Errorf("principals: delete: %w", err)
 	}
 	return nil

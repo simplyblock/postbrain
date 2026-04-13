@@ -155,3 +155,32 @@ SELECT id, memory_type, scope_id, author_id,
 FROM memories
 WHERE parent_memory_id = $1 AND is_active = true
 ORDER BY created_at;
+
+-- name: MarkMemoryNominated :exec
+UPDATE memories SET promotion_status='nominated', updated_at=now() WHERE id=$1;
+
+-- name: ExpireWorkingMemories :execrows
+UPDATE memories SET is_active = false
+WHERE expires_at < now() AND is_active = true;
+
+-- name: GetScopesWithConsolidationCandidates :many
+SELECT DISTINCT scope_id FROM memories
+WHERE is_active = true AND importance < 0.7 AND access_count < 3;
+
+-- name: GetMemoriesWithoutChunks :many
+SELECT m.id, m.scope_id, m.author_id, m.content FROM memories m
+WHERE char_length(m.content) > $1::int
+  AND m.parent_memory_id IS NULL
+  AND NOT EXISTS (
+      SELECT 1 FROM memories c WHERE c.parent_memory_id = m.id
+  )
+ORDER BY m.created_at
+LIMIT $2 OFFSET $3;
+
+-- name: GetRecentMemoriesForScope :many
+SELECT m.id, m.content, m.embedding
+FROM memories m
+JOIN scopes s ON m.scope_id = s.id
+WHERE m.is_active=true
+  AND m.created_at > now() - INTERVAL '7 days'
+  AND s.path @> (SELECT path FROM scopes sc WHERE sc.id = $1);

@@ -9,6 +9,10 @@ import (
 	"github.com/simplyblock/postbrain/internal/db"
 )
 
+// Note: the AfterConnect hook that runs SET search_path (conn.go) fires only when a
+// real connection is established, so it is not exercised by these unit tests.
+// Coverage of that hook is provided by integration tests that use a live database.
+
 // TestNewPool_InvalidURL verifies that an invalid database URL returns an error
 // rather than panicking or returning a nil pool without error.
 func TestNewPool_InvalidURL(t *testing.T) {

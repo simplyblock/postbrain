@@ -15,7 +15,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/api/rest"
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/config"
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
@@ -31,7 +31,7 @@ func TestREST_E2E(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.CreateToken(ctx, pool, principal.ID, hashToken, "test-token", nil, nil, nil)
+	_, err = compat.CreateToken(ctx, pool, principal.ID, hashToken, "test-token", nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestREST_E2E(t *testing.T) {
 		if err != nil {
 			t.Fatalf("invalid memory_id %q: %v", createdMemoryID, err)
 		}
-		mem, err := db.GetMemory(ctx, pool, memID)
+		mem, err := compat.GetMemory(ctx, pool, memID)
 		if err != nil {
 			t.Fatalf("GetMemory: %v", err)
 		}
@@ -150,7 +150,7 @@ func TestREST_E2E(t *testing.T) {
 		if err != nil {
 			t.Fatalf("invalid memory_id %q: %v", createdMemoryID, err)
 		}
-		mem, err := db.GetMemory(ctx, pool, memID)
+		mem, err := compat.GetMemory(ctx, pool, memID)
 		if err != nil {
 			t.Fatalf("GetMemory: %v", err)
 		}
@@ -219,7 +219,7 @@ func TestScopes_CRUD(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.CreateToken(ctx, pool, principal.ID, hashToken, "scopes-test-token", nil, nil, nil)
+	_, err = compat.CreateToken(ctx, pool, principal.ID, hashToken, "scopes-test-token", nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

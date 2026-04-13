@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 // ErrInvalidRole is returned when a role other than the four valid values is supplied.
@@ -44,7 +45,7 @@ func (s *Store) UpsertEntity(ctx context.Context, scopeID uuid.UUID, entityType,
 		Canonical:  canonical,
 		Meta:       meta,
 	}
-	result, err := db.UpsertEntity(ctx, s.pool, e)
+	result, err := compat.UpsertEntity(ctx, s.pool, e)
 	if err != nil {
 		return nil, fmt.Errorf("graph: upsert entity: %w", err)
 	}
@@ -53,7 +54,7 @@ func (s *Store) UpsertEntity(ctx context.Context, scopeID uuid.UUID, entityType,
 
 // GetEntityByCanonical looks up an entity by scope, type, and canonical name.
 func (s *Store) GetEntityByCanonical(ctx context.Context, scopeID uuid.UUID, entityType, canonical string) (*db.Entity, error) {
-	result, err := db.GetEntityByCanonical(ctx, s.pool, scopeID, entityType, canonical)
+	result, err := compat.GetEntityByCanonical(ctx, s.pool, scopeID, entityType, canonical)
 	if err != nil {
 		return nil, fmt.Errorf("graph: get entity: %w", err)
 	}
@@ -70,7 +71,7 @@ func (s *Store) UpsertRelation(ctx context.Context, scopeID, subjectID uuid.UUID
 		Confidence:   confidence,
 		SourceMemory: sourceMemoryID,
 	}
-	result, err := db.UpsertRelation(ctx, s.pool, r)
+	result, err := compat.UpsertRelation(ctx, s.pool, r)
 	if err != nil {
 		return nil, fmt.Errorf("graph: upsert relation: %w", err)
 	}
@@ -83,7 +84,7 @@ func (s *Store) LinkMemoryToEntity(ctx context.Context, memoryID, entityID uuid.
 	if !validRoles[role] {
 		return ErrInvalidRole
 	}
-	err := db.LinkMemoryToEntity(ctx, s.pool, memoryID, entityID, role)
+	err := compat.LinkMemoryToEntity(ctx, s.pool, memoryID, entityID, role)
 	if err != nil {
 		return fmt.Errorf("graph: link memory to entity: %w", err)
 	}
@@ -92,7 +93,7 @@ func (s *Store) LinkMemoryToEntity(ctx context.Context, memoryID, entityID uuid.
 
 // ListRelationsForEntity returns relations where the entity is subject or object.
 func (s *Store) ListRelationsForEntity(ctx context.Context, entityID uuid.UUID, predicate string) ([]*db.Relation, error) {
-	result, err := db.ListRelationsForEntity(ctx, s.pool, entityID, predicate)
+	result, err := compat.ListRelationsForEntity(ctx, s.pool, entityID, predicate)
 	if err != nil {
 		return nil, fmt.Errorf("graph: list relations: %w", err)
 	}

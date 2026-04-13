@@ -8,8 +8,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/knowledge"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
 // backfillRow holds the minimal fields needed to generate a summary.
@@ -30,35 +31,25 @@ type poolBackfillStore struct {
 }
 
 func (p *poolBackfillStore) fetchUnsummarised(ctx context.Context, batchSize, offset int) ([]backfillRow, error) {
-	rows, err := p.pool.Query(ctx,
-		`SELECT id, content FROM knowledge_artifacts
-		 WHERE summary IS NULL
-		 ORDER BY created_at
-		 LIMIT $1 OFFSET $2`,
-		batchSize, offset,
-	)
+	rows, err := db.New(p.pool).GetUnsummarisedArtifacts(ctx, db.GetUnsummarisedArtifactsParams{
+		Limit:  int32(batchSize),
+		Offset: int32(offset),
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var batch []backfillRow
-	for rows.Next() {
-		var r backfillRow
-		if err := rows.Scan(&r.ID, &r.Content); err != nil {
-			return nil, err
-		}
-		batch = append(batch, r)
+	batch := make([]backfillRow, len(rows))
+	for i, r := range rows {
+		batch[i] = backfillRow{ID: r.ID, Content: r.Content}
 	}
-	return batch, rows.Err()
+	return batch, nil
 }
 
 func (p *poolBackfillStore) setSummary(ctx context.Context, id uuid.UUID, summary string) error {
-	_, err := p.pool.Exec(ctx,
-		`UPDATE knowledge_artifacts SET summary=$2, updated_at=now() WHERE id=$1`,
-		id, summary,
-	)
-	return err
+	return db.New(p.pool).SetArtifactSummary(ctx, db.SetArtifactSummaryParams{
+		ID:      id,
+		Summary: &summary,
+	})
 }
 
 const defaultBackfillBatchSize = 50
@@ -67,14 +58,14 @@ const defaultBackfillBatchSize = 50
 // them using AI summarization when available, falling back to extractive.
 type BackfillSummariesJob struct {
 	store      backfillSummaryStore
-	summarizer embedding.Summarizer // may be nil → extractive fallback
+	summarizer providers.Summarizer // may be nil → extractive fallback
 	batchSize  int
 }
 
 // NewBackfillSummariesJob creates a BackfillSummariesJob backed by pool.
 // svc may be nil; if non-nil and a summary model is configured, AI summarization
 // is used. If batchSize is 0 it defaults to 50.
-func NewBackfillSummariesJob(pool *pgxpool.Pool, svc *embedding.EmbeddingService, batchSize int) *BackfillSummariesJob {
+func NewBackfillSummariesJob(pool *pgxpool.Pool, svc *providers.EmbeddingService, batchSize int) *BackfillSummariesJob {
 	if batchSize <= 0 {
 		batchSize = defaultBackfillBatchSize
 	}
@@ -90,36 +81,21 @@ func NewBackfillSummariesJob(pool *pgxpool.Pool, svc *embedding.EmbeddingService
 
 // Run processes all unsummarised artifacts in batches.
 func (j *BackfillSummariesJob) Run(ctx context.Context) error {
-	offset := 0
-	total := 0
-	for {
-		batch, err := j.store.fetchUnsummarised(ctx, j.batchSize, offset)
-		if err != nil {
-			return fmt.Errorf("backfill summaries: fetch at offset %d: %w", offset, err)
-		}
-		if len(batch) == 0 {
-			break
-		}
-
-		for _, r := range batch {
+	updated := 0
+	_, err := RunPaginatedBatch(ctx, j.batchSize, j.store.fetchUnsummarised,
+		func(ctx context.Context, r backfillRow) {
 			sum := j.generateSummary(ctx, r.Content)
-			if err := j.store.setSummary(ctx, r.ID, sum); err != nil {
-				slog.Error("backfill summaries: update failed", "artifact_id", r.ID, "error", err)
-				continue
+			if setErr := j.store.setSummary(ctx, r.ID, sum); setErr != nil {
+				slog.Error("backfill summaries: update failed", "artifact_id", r.ID, "error", setErr)
+				return
 			}
-			total++
-		}
-
-		slog.Info("backfill summaries: batch processed",
-			"offset", offset, "count", len(batch), "total_so_far", total)
-
-		if len(batch) < j.batchSize {
-			break
-		}
-		offset += j.batchSize
+			updated++
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("backfill summaries: %w", err)
 	}
-
-	slog.Info("backfill summaries: complete", "total_updated", total)
+	slog.Info("backfill summaries: complete", "total_updated", updated)
 	return nil
 }
 

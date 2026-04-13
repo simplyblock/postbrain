@@ -8,10 +8,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
-// fakeEmbedder satisfies the embedding.Embedder interface without a real model.
+// fakeEmbedder satisfies the providers.Embedder interface without a real model.
 type fakeEmbedder struct{}
 
 func (f *fakeEmbedder) Embed(_ context.Context, _ string) ([]float32, error) {
@@ -52,15 +52,15 @@ func (f *fakeDB) createSkill(_ context.Context, s *db.Skill) (*db.Skill, error) 
 
 // newTestStore creates a Store with a fake creator and fake embedder for unit tests.
 func newTestStore(fdb skillCreator) *Store {
-	svc := embedding.NewServiceFromEmbedders(&fakeEmbedder{}, nil)
+	svc := providers.NewServiceFromEmbedders(&fakeEmbedder{}, nil)
 	return &Store{
 		creator: fdb,
 		svc:     svc,
 	}
 }
 
-func newTestStoreWithEmbedder(fdb skillCreator, emb embedding.Embedder) *Store {
-	svc := embedding.NewServiceFromEmbedders(emb, nil)
+func newTestStoreWithEmbedder(fdb skillCreator, emb providers.Embedder) *Store {
+	svc := providers.NewServiceFromEmbedders(emb, nil)
 	return &Store{
 		creator: fdb,
 		svc:     svc,

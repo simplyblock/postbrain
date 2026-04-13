@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 // ResolveVisibleScopeIDs returns the scope IDs from which the caller can read
@@ -18,7 +19,7 @@ import (
 // via the visibility filter in the DB layer, not here.
 func ResolveVisibleScopeIDs(ctx context.Context, pool *pgxpool.Pool, principalID uuid.UUID, requestedScopeID uuid.UUID) ([]uuid.UUID, error) {
 	// 1. Get ancestor scope IDs via ltree (includes requestedScopeID itself).
-	ancestors, err := db.GetAncestorScopeIDs(ctx, pool, requestedScopeID)
+	ancestors, err := compat.GetAncestorScopeIDs(ctx, pool, requestedScopeID)
 	if err != nil {
 		return nil, fmt.Errorf("knowledge: resolve visible scopes: %w", err)
 	}
@@ -41,7 +42,7 @@ func ResolveVisibleScopeIDs(ctx context.Context, pool *pgxpool.Pool, principalID
 
 // getPersonalScope returns the personal scope for a principal, or nil if none exists.
 func getPersonalScope(ctx context.Context, pool *pgxpool.Pool, principalID uuid.UUID) (*db.Scope, error) {
-	scope, err := db.GetScopeByExternalID(ctx, pool, "personal", principalID.String())
+	scope, err := compat.GetScopeByExternalID(ctx, pool, "personal", principalID.String())
 	if err != nil {
 		return nil, err
 	}

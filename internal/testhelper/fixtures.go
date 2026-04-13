@@ -10,13 +10,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/principals"
 )
 
 // CreateTestPrincipal inserts a principal and returns it.
 func CreateTestPrincipal(t *testing.T, pool *pgxpool.Pool, kind, slug string) *db.Principal {
 	t.Helper()
-	p, err := db.CreatePrincipal(context.Background(), pool, kind, slug, slug, []byte("{}"))
+	p, err := compat.CreatePrincipal(context.Background(), pool, kind, slug, slug, []byte("{}"))
 	if err != nil {
 		t.Fatalf("create principal %s: %v", slug, err)
 	}
@@ -26,7 +27,7 @@ func CreateTestPrincipal(t *testing.T, pool *pgxpool.Pool, kind, slug string) *d
 // CreateTestScope inserts a scope and returns it.
 func CreateTestScope(t *testing.T, pool *pgxpool.Pool, kind, externalID string, parentID *uuid.UUID, principalID uuid.UUID) *db.Scope {
 	t.Helper()
-	s, err := db.CreateScope(context.Background(), pool, kind, externalID, externalID, parentID, principalID, []byte("{}"))
+	s, err := compat.CreateScope(context.Background(), pool, kind, externalID, externalID, parentID, principalID, []byte("{}"))
 	if err != nil {
 		t.Fatalf("create scope %s: %v", externalID, err)
 	}
@@ -36,7 +37,7 @@ func CreateTestScope(t *testing.T, pool *pgxpool.Pool, kind, externalID string, 
 // CreateTestMemory inserts a minimal memory record and returns it.
 func CreateTestMemory(t *testing.T, pool *pgxpool.Pool, scopeID, authorID uuid.UUID, content string) *db.Memory {
 	t.Helper()
-	m, err := db.CreateMemory(context.Background(), pool, &db.Memory{
+	m, err := compat.CreateMemory(context.Background(), pool, &db.Memory{
 		MemoryType: "semantic",
 		ScopeID:    scopeID,
 		AuthorID:   authorID,
@@ -52,7 +53,7 @@ func CreateTestMemory(t *testing.T, pool *pgxpool.Pool, scopeID, authorID uuid.U
 // CreateTestEmbeddingModel must be called before this in the same test.
 func CreateTestArtifact(t *testing.T, pool *pgxpool.Pool, scopeID, authorID uuid.UUID, title string) *db.KnowledgeArtifact {
 	t.Helper()
-	a, err := db.CreateArtifact(context.Background(), pool, &db.KnowledgeArtifact{
+	a, err := compat.CreateArtifact(context.Background(), pool, &db.KnowledgeArtifact{
 		KnowledgeType: "semantic",
 		OwnerScopeID:  scopeID,
 		AuthorID:      authorID,

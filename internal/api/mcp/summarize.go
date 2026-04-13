@@ -9,9 +9,20 @@ import (
 	"github.com/google/uuid"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/memory"
 )
+
+func (s *Server) registerSummarize() {
+	s.mcpServer.AddTool(mcpgo.NewTool("summarize",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithOpenWorldHintAnnotation(true),
+		mcpgo.WithDescription("Consolidate memories into a higher-level semantic memory"),
+		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
+		mcpgo.WithString("topic", mcpgo.Description("Topic to cluster and summarize")),
+		mcpgo.WithBoolean("dry_run", mcpgo.Description("If true, preview without writing (default: false)")),
+	), withToolMetrics("summarize", withToolPermission("memories:write", s.handleSummarize)))
+}
 
 // handleSummarize consolidates memories for a scope/topic, or previews the plan.
 func (s *Server) handleSummarize(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
@@ -19,43 +30,26 @@ func (s *Server) handleSummarize(ctx context.Context, req mcpgo.CallToolRequest)
 
 	args := req.GetArguments()
 
-	scopeStr, ok := args["scope"].(string)
-	if !ok || scopeStr == "" {
+	scopeStr := argString(args, "scope")
+	if scopeStr == "" {
 		return mcpgo.NewToolResultError("summarize: 'scope' is required"), nil
 	}
 
-	topic := ""
-	if v, ok := args["topic"].(string); ok {
-		topic = v
-	}
-
-	dryRun := false
-	if v, ok := args["dry_run"].(bool); ok {
-		dryRun = v
-	}
+	topic := argString(args, "topic")
+	dryRun := argBool(args, "dry_run")
 
 	if s.pool == nil {
 		return mcpgo.NewToolResultError("summarize: server not configured"), nil
 	}
 
-	kind, externalID, err := parseScopeString(scopeStr)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("summarize: invalid scope: %v", err)), nil
-	}
-	scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("summarize: scope lookup: %v", err)), nil
-	}
-	if scope == nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("summarize: scope '%s' not found", scopeStr)), nil
-	}
-	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-		return scopeAuthzToolError(ctx, "summarize", scope.ID, err), nil
+	scopeID, errResult := s.resolveScope(ctx, "summarize", scopeStr)
+	if errResult != nil {
+		return errResult, nil
 	}
 	report(1, 3, "scope verified")
 
 	consolidator := memory.NewConsolidator(s.pool, s.svc)
-	clusters, err := consolidator.FindClusters(ctx, scope.ID)
+	clusters, err := consolidator.FindClusters(ctx, scopeID)
 	if err != nil {
 		return mcpgo.NewToolResultError(fmt.Sprintf("summarize: find clusters: %v", err)), nil
 	}

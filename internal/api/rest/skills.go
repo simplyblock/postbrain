@@ -1,12 +1,15 @@
 package rest
 
 import (
+	"errors"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	skillspkg "github.com/simplyblock/postbrain/internal/skills"
 )
 
@@ -22,22 +25,36 @@ type createSkillRequest struct {
 	ReviewRequired int                 `json:"review_required"`
 }
 
+func (r *createSkillRequest) validate() error {
+	if r.Scope == "" || r.Slug == "" || r.Name == "" {
+		return errors.New("scope, slug and name are required")
+	}
+	return nil
+}
+
+func (r *createSkillRequest) applyDefaults() {
+	if r.Visibility == "" {
+		r.Visibility = "team"
+	}
+}
+
 func (ro *Router) createSkill(w http.ResponseWriter, r *http.Request) {
 	var body createSkillRequest
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if body.Scope == "" || body.Slug == "" || body.Name == "" {
-		writeError(w, http.StatusBadRequest, "scope, slug and name are required")
+	if err := body.validate(); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	body.applyDefaults()
 	kind, externalID, err := parseScopeString(body.Scope)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+	scope, err := compat.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 	if err != nil || scope == nil {
 		writeError(w, http.StatusBadRequest, "scope not found")
 		return
@@ -45,11 +62,6 @@ func (ro *Router) createSkill(w http.ResponseWriter, r *http.Request) {
 	if err := ro.authorizeRequestedScope(r.Context(), scope.ID); err != nil {
 		writeScopeAuthzError(w, r, scope.ID, err)
 		return
-	}
-
-	visibility := body.Visibility
-	if visibility == "" {
-		visibility = "team"
 	}
 
 	authorID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
@@ -62,7 +74,7 @@ func (ro *Router) createSkill(w http.ResponseWriter, r *http.Request) {
 		AgentTypes:     body.AgentTypes,
 		Body:           body.Body,
 		Parameters:     body.Parameters,
-		Visibility:     visibility,
+		Visibility:     body.Visibility,
 		ReviewRequired: body.ReviewRequired,
 	})
 	if err != nil {
@@ -86,7 +98,7 @@ func (ro *Router) searchSkills(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+		scope, err := compat.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 		if err != nil || scope == nil {
 			writeError(w, http.StatusBadRequest, "scope not found")
 			return
@@ -279,4 +291,15 @@ func (ro *Router) invokeSkill(w http.ResponseWriter, r *http.Request) {
 		"slug":     skill.Slug,
 		"body":     result,
 	})
+}
+
+func (ro *Router) registerSkillRoutes(r chi.Router) {
+	r.Post("/skills", ro.createSkill)
+	r.Get("/skills/search", ro.searchSkills)
+	r.Get("/skills/{id}", ro.getSkill)
+	r.Patch("/skills/{id}", ro.updateSkill)
+	r.Post("/skills/{id}/endorse", ro.endorseSkill)
+	r.Post("/skills/{id}/deprecate", ro.deprecateSkill)
+	r.Post("/skills/{id}/install", ro.installSkill)
+	r.Post("/skills/{id}/invoke", ro.invokeSkill)
 }

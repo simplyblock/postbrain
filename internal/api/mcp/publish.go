@@ -9,77 +9,74 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 )
+
+func (s *Server) registerPublish() {
+	s.mcpServer.AddTool(mcpgo.NewTool("publish",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithOpenWorldHintAnnotation(false),
+		mcpgo.WithDescription("Create or update a knowledge artifact"),
+		mcpgo.WithString("title", mcpgo.Required(), mcpgo.Description("Artifact title")),
+		mcpgo.WithString("content", mcpgo.Required(), mcpgo.Description("Artifact content")),
+		mcpgo.WithString("knowledge_type", mcpgo.Required(), mcpgo.Description("semantic|episodic|procedural|reference")),
+		mcpgo.WithString("artifact_kind", mcpgo.Description("general|decision|meeting_note|retrospective|spec|design_doc|research (default: general)")),
+		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Owner scope as kind:external_id")),
+		mcpgo.WithString("visibility", mcpgo.Description("private|project|team|department|company (default: team)")),
+		mcpgo.WithString("summary", mcpgo.Description("Short summary")),
+		mcpgo.WithBoolean("auto_review", mcpgo.Description("Move directly to in_review (default: false)")),
+		mcpgo.WithString("collection_slug", mcpgo.Description("Add to this collection slug after creation")),
+	), withToolMetrics("publish", withToolPermission("knowledge:write", s.handlePublish)))
+}
 
 // handlePublish creates a new knowledge artifact.
 func (s *Server) handlePublish(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
 
-	title, ok := args["title"].(string)
-	if !ok || title == "" {
+	title := argString(args, "title")
+	if title == "" {
 		return mcpgo.NewToolResultError("publish: 'title' is required"), nil
 	}
-	content, ok := args["content"].(string)
-	if !ok || content == "" {
+	content := argString(args, "content")
+	if content == "" {
 		return mcpgo.NewToolResultError("publish: 'content' is required"), nil
 	}
-	knowledgeType, ok := args["knowledge_type"].(string)
-	if !ok || knowledgeType == "" {
+	knowledgeType := argString(args, "knowledge_type")
+	if knowledgeType == "" {
 		return mcpgo.NewToolResultError("publish: 'knowledge_type' is required"), nil
 	}
-	scopeStr, ok := args["scope"].(string)
-	if !ok || scopeStr == "" {
+	scopeStr := argString(args, "scope")
+	if scopeStr == "" {
 		return mcpgo.NewToolResultError("publish: 'scope' is required"), nil
 	}
 
-	visibility := "team"
-	if v, ok := args["visibility"].(string); ok && v != "" {
-		visibility = v
+	visibility := argString(args, "visibility")
+	if visibility == "" {
+		visibility = "team"
 	}
 
 	var summary *string
-	if v, ok := args["summary"].(string); ok && v != "" {
+	if v := argString(args, "summary"); v != "" {
 		summary = &v
 	}
 
-	autoReview := false
-	if v, ok := args["auto_review"].(bool); ok {
-		autoReview = v
-	}
-
-	artifactKind := ""
-	if v, ok := args["artifact_kind"].(string); ok {
-		artifactKind = v
-	}
+	autoReview := argBool(args, "auto_review")
+	artifactKind := argString(args, "artifact_kind")
 	normalizedArtifactKind, err := knowledge.NormalizeArtifactKind(artifactKind)
 	if err != nil {
 		return mcpgo.NewToolResultError(fmt.Sprintf("publish: invalid artifact_kind: %v", err)), nil
 	}
 
-	collectionSlug := ""
-	if v, ok := args["collection_slug"].(string); ok {
-		collectionSlug = v
-	}
+	collectionSlug := argString(args, "collection_slug")
 
 	if s.pool == nil {
 		return mcpgo.NewToolResultError("publish: server not configured"), nil
 	}
 
-	kind, externalID, err := parseScopeString(scopeStr)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("publish: invalid scope: %v", err)), nil
-	}
-	scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("publish: scope lookup: %v", err)), nil
-	}
-	if scope == nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("publish: scope '%s' not found", scopeStr)), nil
-	}
-	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-		return scopeAuthzToolError(ctx, "publish", scope.ID, err), nil
+	scopeID, errResult := s.resolveScope(ctx, "publish", scopeStr)
+	if errResult != nil {
+		return errResult, nil
 	}
 
 	authorID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
@@ -87,7 +84,7 @@ func (s *Server) handlePublish(ctx context.Context, req mcpgo.CallToolRequest) (
 	artifact, err := s.knwStore.Create(ctx, knowledge.CreateInput{
 		KnowledgeType: knowledgeType,
 		ArtifactKind:  normalizedArtifactKind,
-		OwnerScopeID:  scope.ID,
+		OwnerScopeID:  scopeID,
 		AuthorID:      authorID,
 		Visibility:    visibility,
 		Title:         title,
@@ -101,7 +98,7 @@ func (s *Server) handlePublish(ctx context.Context, req mcpgo.CallToolRequest) (
 
 	// Optionally add to collection.
 	if collectionSlug != "" && s.knwColl != nil {
-		coll, err := s.knwColl.GetBySlug(ctx, scope.ID, collectionSlug)
+		coll, err := s.knwColl.GetBySlug(ctx, scopeID, collectionSlug)
 		if err == nil && coll != nil {
 			_ = s.knwColl.AddItem(ctx, coll.ID, artifact.ID, authorID)
 		}

@@ -1,12 +1,14 @@
 package rest
 
 import (
+	"errors"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 )
 
@@ -22,27 +24,37 @@ type createArtifactRequest struct {
 	CollectionSlug string  `json:"collection_slug"`
 }
 
+func (r *createArtifactRequest) validate() error {
+	if r.Title == "" || r.Content == "" || r.KnowledgeType == "" || r.Scope == "" {
+		return errors.New("title, content, knowledge_type and scope are required")
+	}
+	return nil
+}
+
+func (r *createArtifactRequest) applyDefaults() {
+	if r.Visibility == "" {
+		r.Visibility = "team"
+	}
+}
+
 func (ro *Router) createArtifact(w http.ResponseWriter, r *http.Request) {
 	var body createArtifactRequest
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if body.Title == "" || body.Content == "" || body.KnowledgeType == "" || body.Scope == "" {
-		writeError(w, http.StatusBadRequest, "title, content, knowledge_type and scope are required")
+	if err := body.validate(); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	visibility := body.Visibility
-	if visibility == "" {
-		visibility = "team"
-	}
+	body.applyDefaults()
 
 	kind, externalID, err := parseScopeString(body.Scope)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+	scope, err := compat.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 	if err != nil || scope == nil {
 		writeError(w, http.StatusBadRequest, "scope not found")
 		return
@@ -64,7 +76,7 @@ func (ro *Router) createArtifact(w http.ResponseWriter, r *http.Request) {
 		ArtifactKind:  artifactKind,
 		OwnerScopeID:  scope.ID,
 		AuthorID:      authorID,
-		Visibility:    visibility,
+		Visibility:    body.Visibility,
 		Title:         body.Title,
 		Content:       body.Content,
 		Summary:       body.Summary,
@@ -98,7 +110,7 @@ func (ro *Router) searchArtifacts(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+		scope, err := compat.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 		if err != nil || scope == nil {
 			writeError(w, http.StatusBadRequest, "scope not found")
 			return
@@ -246,10 +258,25 @@ func (ro *Router) getArtifactHistory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid artifact id")
 		return
 	}
-	history, err := db.GetArtifactHistory(r.Context(), ro.pool, id)
+	history, err := compat.GetArtifactHistory(r.Context(), ro.pool, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"artifact_id": id, "history": history})
+}
+
+func (ro *Router) registerKnowledgeRoutes(r chi.Router) {
+	r.Post("/knowledge/upload", ro.uploadKnowledge)
+	r.Post("/knowledge/synthesize", ro.synthesizeKnowledge)
+	r.Post("/knowledge", ro.createArtifact)
+	r.Get("/knowledge/search", ro.searchArtifacts)
+	r.Get("/knowledge/{id}", ro.getArtifact)
+	r.Patch("/knowledge/{id}", ro.updateArtifact)
+	r.Delete("/knowledge/{id}", ro.deleteArtifact)
+	r.Post("/knowledge/{id}/endorse", ro.endorseArtifact)
+	r.Post("/knowledge/{id}/deprecate", ro.deprecateArtifact)
+	r.Get("/knowledge/{id}/history", ro.getArtifactHistory)
+	r.Get("/knowledge/{id}/sources", ro.getArtifactSources)
+	r.Get("/knowledge/{id}/digests", ro.getArtifactDigests)
 }

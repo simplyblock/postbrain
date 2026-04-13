@@ -10,7 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/db/compat"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
 // ErrAlreadyPromoted is returned when a memory is already nominated or promoted.
@@ -29,19 +30,15 @@ type poolPromoterDB struct {
 }
 
 func (p *poolPromoterDB) getMemory(ctx context.Context, id uuid.UUID) (*db.Memory, error) {
-	return db.GetMemory(ctx, p.pool, id)
+	return compat.GetMemory(ctx, p.pool, id)
 }
 
 func (p *poolPromoterDB) createPromotionRequest(ctx context.Context, req *db.PromotionRequest) (*db.PromotionRequest, error) {
-	return db.CreatePromotionRequest(ctx, p.pool, req)
+	return compat.CreatePromotionRequest(ctx, p.pool, req)
 }
 
 func (p *poolPromoterDB) markMemoryNominated(ctx context.Context, memoryID uuid.UUID) error {
-	_, err := p.pool.Exec(ctx,
-		`UPDATE memories SET promotion_status='nominated', updated_at=now() WHERE id=$1`,
-		memoryID,
-	)
-	return err
+	return db.New(p.pool).MarkMemoryNominated(ctx, memoryID)
 }
 
 // Promoter manages the memory → knowledge promotion workflow.
@@ -52,7 +49,7 @@ type Promoter struct {
 }
 
 // NewPromoter creates a new Promoter backed by the given pool and embedding service.
-func NewPromoter(pool *pgxpool.Pool, svc *embedding.EmbeddingService) *Promoter {
+func NewPromoter(pool *pgxpool.Pool, svc *providers.EmbeddingService) *Promoter {
 	return &Promoter{
 		pool:  pool,
 		svc:   &embeddingServiceAdapter{svc: svc},
@@ -160,7 +157,7 @@ func (p *Promoter) Approve(ctx context.Context, requestID, reviewerID uuid.UUID,
 	meta := []byte("{}")
 	var embeddingVal interface{}
 	if len(embeddingVec) > 0 {
-		embeddingVal = db.ExportFloat32SliceToVector(embeddingVec)
+		embeddingVal = compat.ExportFloat32SliceToVector(embeddingVec)
 	}
 	var artifact db.KnowledgeArtifact
 	if err := tx.QueryRow(ctx,

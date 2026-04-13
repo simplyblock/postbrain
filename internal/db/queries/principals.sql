@@ -25,6 +25,11 @@ FROM principals
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2;
 
+-- name: UpdatePrincipalProfile :one
+UPDATE principals SET slug=$2, display_name=$3, updated_at=now()
+WHERE id=$1
+RETURNING id, kind, slug, display_name, meta, created_at, updated_at, is_system_admin;
+
 -- name: SetSystemAdmin :exec
 UPDATE principals SET is_system_admin = $2, updated_at = now()
 WHERE id = $1;

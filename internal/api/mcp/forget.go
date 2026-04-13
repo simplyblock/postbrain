@@ -8,15 +8,26 @@ import (
 	"github.com/google/uuid"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
+
+func (s *Server) registerForget() {
+	s.mcpServer.AddTool(mcpgo.NewTool("forget",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(true),
+		mcpgo.WithOpenWorldHintAnnotation(false),
+		mcpgo.WithDescription("Deactivate or permanently delete a memory"),
+		mcpgo.WithString("memory_id", mcpgo.Required(), mcpgo.Description("UUID of the memory to delete")),
+		mcpgo.WithBoolean("hard", mcpgo.Description("true = permanent delete, false = soft-delete (default: false)")),
+	), withToolMetrics("forget", withToolPermission("memories:delete", s.handleForget)))
+}
 
 // handleForget deactivates or permanently deletes a memory.
 func (s *Server) handleForget(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
 
-	memIDStr, ok := args["memory_id"].(string)
-	if !ok || memIDStr == "" {
+	memIDStr := argString(args, "memory_id")
+	if memIDStr == "" {
 		return mcpgo.NewToolResultError("forget: 'memory_id' is required"), nil
 	}
 
@@ -25,15 +36,12 @@ func (s *Server) handleForget(ctx context.Context, req mcpgo.CallToolRequest) (*
 		return mcpgo.NewToolResultError(fmt.Sprintf("forget: invalid memory_id: %v", err)), nil
 	}
 
-	hard := false
-	if v, ok := args["hard"].(bool); ok {
-		hard = v
-	}
+	hard := argBool(args, "hard")
 
 	if s.memStore == nil {
 		return mcpgo.NewToolResultError("forget: server not configured (no memory store)"), nil
 	}
-	mem, err := db.GetMemory(ctx, s.pool, memID)
+	mem, err := compat.GetMemory(ctx, s.pool, memID)
 	if err != nil {
 		return mcpgo.NewToolResultError(fmt.Sprintf("forget: lookup memory failed: %v", err)), nil
 	}

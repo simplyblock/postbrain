@@ -9,9 +9,21 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 )
+
+func (s *Server) registerSynthesizeTopic() {
+	s.mcpServer.AddTool(mcpgo.NewTool("synthesize_topic",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithOpenWorldHintAnnotation(true),
+		mcpgo.WithDescription("Synthesise multiple published knowledge artifacts into a single topic digest artifact"),
+		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Owner scope as kind:external_id")),
+		mcpgo.WithArray("source_ids", mcpgo.Required(), mcpgo.Description("UUIDs of the source artifacts to synthesise (minimum 2, all must be published non-digest artifacts)")),
+		mcpgo.WithString("title", mcpgo.Description("Digest title; inferred from sources if omitted")),
+		mcpgo.WithBoolean("auto_review", mcpgo.Description("Move directly to in_review (default: false)")),
+	), withToolMetrics("synthesize_topic", withToolPermission("knowledge:write", s.handleSynthesizeTopic)))
+}
 
 // handleSynthesizeTopic synthesises multiple published knowledge artifacts into
 // a single topic digest artifact.
@@ -20,8 +32,8 @@ func (s *Server) handleSynthesizeTopic(ctx context.Context, req mcpgo.CallToolRe
 
 	args := req.GetArguments()
 
-	scopeStr, ok := args["scope"].(string)
-	if !ok || scopeStr == "" {
+	scopeStr := argString(args, "scope")
+	if scopeStr == "" {
 		return mcpgo.NewToolResultError("synthesize_topic: 'scope' is required"), nil
 	}
 
@@ -43,33 +55,16 @@ func (s *Server) handleSynthesizeTopic(ctx context.Context, req mcpgo.CallToolRe
 		sourceIDs = append(sourceIDs, id)
 	}
 
-	title := ""
-	if v, ok := args["title"].(string); ok {
-		title = v
-	}
-
-	autoReview := false
-	if v, ok := args["auto_review"].(bool); ok {
-		autoReview = v
-	}
+	title := argString(args, "title")
+	autoReview := argBool(args, "auto_review")
 
 	if s.pool == nil {
 		return mcpgo.NewToolResultError("synthesize_topic: server not configured"), nil
 	}
 
-	kind, externalID, err := parseScopeString(scopeStr)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("synthesize_topic: invalid scope: %v", err)), nil
-	}
-	scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
-	if err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("synthesize_topic: scope lookup: %v", err)), nil
-	}
-	if scope == nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("synthesize_topic: scope '%s' not found", scopeStr)), nil
-	}
-	if err := s.authorizeRequestedScope(ctx, scope.ID); err != nil {
-		return scopeAuthzToolError(ctx, "synthesize_topic", scope.ID, err), nil
+	scopeID, errResult := s.resolveScope(ctx, "synthesize_topic", scopeStr)
+	if errResult != nil {
+		return errResult, nil
 	}
 	report(1, 2, "scope verified")
 
@@ -78,7 +73,7 @@ func (s *Server) handleSynthesizeTopic(ctx context.Context, req mcpgo.CallToolRe
 	report(2, 2, fmt.Sprintf("synthesising %d artifacts", len(sourceIDs)))
 	synth := knowledge.NewSynthesiser(s.pool, s.svc)
 	artifact, err := synth.Create(ctx, knowledge.SynthesisInput{
-		ScopeID:    scope.ID,
+		ScopeID:    scopeID,
 		AuthorID:   authorID,
 		SourceIDs:  sourceIDs,
 		Title:      title,

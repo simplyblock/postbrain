@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 // HashToken returns the hex-encoded SHA-256 digest of raw.
@@ -50,7 +51,7 @@ func NewTokenStore(pool *pgxpool.Pool) *TokenStore {
 // Lookup finds a valid (non-revoked, non-expired) token by its hash.
 // Returns nil, nil if the token is not found.
 func (ts *TokenStore) Lookup(ctx context.Context, hash string) (*db.Token, error) {
-	t, err := db.LookupToken(ctx, ts.pool, hash)
+	t, err := compat.LookupToken(ctx, ts.pool, hash)
 	if err != nil {
 		return nil, fmt.Errorf("auth: lookup: %w", err)
 	}
@@ -70,7 +71,7 @@ func (ts *TokenStore) Lookup(ctx context.Context, hash string) (*db.Token, error
 
 // Create creates a new token record. The caller provides the hash (not the raw value).
 func (ts *TokenStore) Create(ctx context.Context, principalID uuid.UUID, hash, name string, scopeIDs []uuid.UUID, permissions []string, expiresAt *time.Time) (*db.Token, error) {
-	t, err := db.CreateToken(ctx, ts.pool, principalID, hash, name, scopeIDs, permissions, expiresAt)
+	t, err := compat.CreateToken(ctx, ts.pool, principalID, hash, name, scopeIDs, permissions, expiresAt)
 	if err != nil {
 		return nil, fmt.Errorf("auth: create token: %w", err)
 	}
@@ -79,7 +80,7 @@ func (ts *TokenStore) Create(ctx context.Context, principalID uuid.UUID, hash, n
 
 // Revoke soft-revokes a token by setting revoked_at.
 func (ts *TokenStore) Revoke(ctx context.Context, tokenID uuid.UUID) error {
-	if err := db.RevokeToken(ctx, ts.pool, tokenID); err != nil {
+	if err := compat.RevokeToken(ctx, ts.pool, tokenID); err != nil {
 		return fmt.Errorf("auth: revoke token: %w", err)
 	}
 	return nil
@@ -93,7 +94,7 @@ func (ts *TokenStore) UpdateLastUsed(pool *pgxpool.Pool, tokenID uuid.UUID) {
 		return
 	}
 	go func() {
-		if err := db.UpdateTokenLastUsed(context.Background(), pool, tokenID); err != nil {
+		if err := compat.UpdateTokenLastUsed(context.Background(), pool, tokenID); err != nil {
 			slog.Error("auth: update last used", "token_id", tokenID, "error", err)
 		}
 	}()
@@ -102,7 +103,7 @@ func (ts *TokenStore) UpdateLastUsed(pool *pgxpool.Pool, tokenID uuid.UUID) {
 // RevokeByPrincipalAndName revokes all non-revoked tokens that belong to
 // principalID and have the given name.
 func (ts *TokenStore) RevokeByPrincipalAndName(ctx context.Context, principalID uuid.UUID, name string) error {
-	tokens, err := db.ListTokens(ctx, ts.pool, &principalID)
+	tokens, err := compat.ListTokens(ctx, ts.pool, &principalID)
 	if err != nil {
 		return fmt.Errorf("auth: list tokens for revoke: %w", err)
 	}
@@ -110,7 +111,7 @@ func (ts *TokenStore) RevokeByPrincipalAndName(ctx context.Context, principalID 
 		if t.Name != name || t.RevokedAt != nil {
 			continue
 		}
-		if err := db.RevokeToken(ctx, ts.pool, t.ID); err != nil {
+		if err := compat.RevokeToken(ctx, ts.pool, t.ID); err != nil {
 			return fmt.Errorf("auth: revoke token %s: %w", t.ID, err)
 		}
 	}

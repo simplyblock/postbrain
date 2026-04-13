@@ -16,6 +16,7 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/memory"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 	uiapi "github.com/simplyblock/postbrain/internal/ui"
@@ -239,7 +240,7 @@ func TestQueryPlayground_MemoryOnly_DoesNotLeakSiblingGraphContext(t *testing.T)
 		t.Fatalf("create selected project memory: %v", err)
 	}
 
-	sourceEntity, err := db.UpsertEntity(ctx, pool, &db.Entity{
+	sourceEntity, err := compat.UpsertEntity(ctx, pool, &db.Entity{
 		ScopeID:    selectedProject.ID,
 		EntityType: "file",
 		Name:       "service.go",
@@ -248,7 +249,7 @@ func TestQueryPlayground_MemoryOnly_DoesNotLeakSiblingGraphContext(t *testing.T)
 	if err != nil {
 		t.Fatalf("upsert source entity: %v", err)
 	}
-	neighborEntity, err := db.UpsertEntity(ctx, pool, &db.Entity{
+	neighborEntity, err := compat.UpsertEntity(ctx, pool, &db.Entity{
 		ScopeID:    selectedProject.ID,
 		EntityType: "function",
 		Name:       "AuthFlow",
@@ -257,7 +258,7 @@ func TestQueryPlayground_MemoryOnly_DoesNotLeakSiblingGraphContext(t *testing.T)
 	if err != nil {
 		t.Fatalf("upsert neighbor entity: %v", err)
 	}
-	if _, err := db.UpsertRelation(ctx, pool, &db.Relation{
+	if _, err := compat.UpsertRelation(ctx, pool, &db.Relation{
 		ScopeID:   selectedProject.ID,
 		SubjectID: sourceEntity.ID,
 		Predicate: "uses",
@@ -275,7 +276,7 @@ func TestQueryPlayground_MemoryOnly_DoesNotLeakSiblingGraphContext(t *testing.T)
 	if err != nil {
 		t.Fatalf("create sibling memory: %v", err)
 	}
-	if err := db.LinkMemoryToEntity(ctx, pool, siblingMemory.MemoryID, neighborEntity.ID, "related"); err != nil {
+	if err := compat.LinkMemoryToEntity(ctx, pool, siblingMemory.MemoryID, neighborEntity.ID, "related"); err != nil {
 		t.Fatalf("link sibling memory to selected-scope neighbor: %v", err)
 	}
 

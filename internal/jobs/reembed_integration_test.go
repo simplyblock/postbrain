@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
@@ -245,7 +245,7 @@ func TestReembedJob_RunText_UsesEmbeddingIndexPendingAndMarksReady(t *testing.T)
 func TestReembedJob_RunText_FailureIncrementsRetryAndEventuallyFailed(t *testing.T) {
 	t.Parallel()
 	pool := testhelper.NewTestPool(t)
-	svc := embedding.NewServiceFromEmbedders(&failingEmbedder{}, nil)
+	svc := providers.NewServiceFromEmbedders(&failingEmbedder{}, nil)
 	ctx := context.Background()
 
 	model, err := db.RegisterEmbeddingModel(ctx, pool, db.RegisterEmbeddingModelParams{
@@ -307,7 +307,7 @@ func TestReembedJob_RunText_SkillUsesDescriptionAndBody(t *testing.T) {
 	t.Parallel()
 	pool := testhelper.NewTestPool(t)
 	rec := &recordingEmbedder{}
-	svc := embedding.NewServiceFromEmbedders(rec, nil)
+	svc := providers.NewServiceFromEmbedders(rec, nil)
 	ctx := context.Background()
 
 	model, err := db.RegisterEmbeddingModel(ctx, pool, db.RegisterEmbeddingModelParams{
@@ -563,7 +563,7 @@ func TestReembedJob_RunCode_UsesEmbeddingIndexPendingAndMarksReady(t *testing.T)
 func TestReembedJob_RunCode_FailureIncrementsRetryAndEventuallyFailed(t *testing.T) {
 	t.Parallel()
 	pool := testhelper.NewTestPool(t)
-	svc := embedding.NewServiceFromEmbedders(embedding.NewFakeEmbedder(4), &failingEmbedder{})
+	svc := providers.NewServiceFromEmbedders(providers.NewFakeEmbedder(4), &failingEmbedder{})
 	ctx := context.Background()
 
 	codeModel, err := db.RegisterEmbeddingModel(ctx, pool, db.RegisterEmbeddingModelParams{

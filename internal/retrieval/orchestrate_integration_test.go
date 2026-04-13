@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/memory"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
@@ -41,7 +42,7 @@ func TestOrchestrateRecall_GraphContextDoesNotLeakSiblingScopeMemories(t *testin
 		t.Fatalf("create selected memory: %v", err)
 	}
 
-	neighborEntity, err := db.UpsertEntity(ctx, pool, &db.Entity{
+	neighborEntity, err := compat.UpsertEntity(ctx, pool, &db.Entity{
 		ScopeID:    selectedProject.ID,
 		EntityType: "function",
 		Name:       "NeighborFn",
@@ -50,7 +51,7 @@ func TestOrchestrateRecall_GraphContextDoesNotLeakSiblingScopeMemories(t *testin
 	if err != nil {
 		t.Fatalf("upsert neighbor entity: %v", err)
 	}
-	sourceEntity, err := db.UpsertEntity(ctx, pool, &db.Entity{
+	sourceEntity, err := compat.UpsertEntity(ctx, pool, &db.Entity{
 		ScopeID:    selectedProject.ID,
 		EntityType: "file",
 		Name:       "selected.go",
@@ -59,7 +60,7 @@ func TestOrchestrateRecall_GraphContextDoesNotLeakSiblingScopeMemories(t *testin
 	if err != nil {
 		t.Fatalf("upsert source entity: %v", err)
 	}
-	if _, err := db.UpsertRelation(ctx, pool, &db.Relation{
+	if _, err := compat.UpsertRelation(ctx, pool, &db.Relation{
 		ScopeID:   selectedProject.ID,
 		SubjectID: sourceEntity.ID,
 		Predicate: "uses",
@@ -77,7 +78,7 @@ func TestOrchestrateRecall_GraphContextDoesNotLeakSiblingScopeMemories(t *testin
 	if err != nil {
 		t.Fatalf("create sibling memory: %v", err)
 	}
-	if err := db.LinkMemoryToEntity(ctx, pool, siblingMemory.MemoryID, neighborEntity.ID, "related"); err != nil {
+	if err := compat.LinkMemoryToEntity(ctx, pool, siblingMemory.MemoryID, neighborEntity.ID, "related"); err != nil {
 		t.Fatalf("link sibling memory to selected neighbor entity: %v", err)
 	}
 

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
@@ -108,4 +109,10 @@ func (ro *Router) listGrants(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"grants": grants})
+}
+
+func (ro *Router) registerSharingRoutes(r chi.Router) {
+	r.Post("/sharing/grants", ro.createGrant)
+	r.Delete("/sharing/grants/{id}", ro.revokeGrant)
+	r.Get("/sharing/grants", ro.listGrants)
 }
