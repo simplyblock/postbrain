@@ -12,6 +12,18 @@ import (
 	"github.com/simplyblock/postbrain/internal/memory"
 )
 
+func (s *Server) registerSummarize() {
+	s.mcpServer.AddTool(mcpgo.NewTool("summarize",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithOpenWorldHintAnnotation(true),
+		mcpgo.WithDescription("Consolidate memories into a higher-level semantic memory"),
+		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
+		mcpgo.WithString("topic", mcpgo.Description("Topic to cluster and summarize")),
+		mcpgo.WithBoolean("dry_run", mcpgo.Description("If true, preview without writing (default: false)")),
+	), withToolMetrics("summarize", withToolPermission("memories:write", s.handleSummarize)))
+}
+
 // handleSummarize consolidates memories for a scope/topic, or previews the plan.
 func (s *Server) handleSummarize(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	report := s.progressReporter(ctx, req)

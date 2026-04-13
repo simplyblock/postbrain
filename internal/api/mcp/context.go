@@ -12,6 +12,19 @@ import (
 	"github.com/simplyblock/postbrain/internal/memory"
 )
 
+func (s *Server) registerContext() {
+	s.mcpServer.AddTool(mcpgo.NewTool("context",
+		mcpgo.WithReadOnlyHintAnnotation(true),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithIdempotentHintAnnotation(true),
+		mcpgo.WithOpenWorldHintAnnotation(false),
+		mcpgo.WithDescription("Retrieve a context bundle for the current scope and query"),
+		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
+		mcpgo.WithString("query", mcpgo.Description("What you are about to work on")),
+		mcpgo.WithNumber("max_tokens", mcpgo.Description("Token budget for context (default: 4000)")),
+	), withToolMetrics("context", withToolPermission("memories:read", s.handleContext)))
+}
+
 // handleContext retrieves a structured context bundle for a new session.
 func (s *Server) handleContext(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()

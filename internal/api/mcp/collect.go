@@ -12,6 +12,22 @@ import (
 	"github.com/simplyblock/postbrain/internal/db"
 )
 
+func (s *Server) registerCollect() {
+	s.mcpServer.AddTool(mcpgo.NewTool("collect",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithOpenWorldHintAnnotation(false),
+		mcpgo.WithDescription("Add artifact to collection, create collection, or list collections"),
+		mcpgo.WithString("action", mcpgo.Required(), mcpgo.Description("add_to_collection|create_collection|list_collections")),
+		mcpgo.WithString("artifact_id", mcpgo.Description("UUID of the artifact (for add_to_collection)")),
+		mcpgo.WithString("collection_id", mcpgo.Description("UUID of the collection (for add_to_collection)")),
+		mcpgo.WithString("collection_slug", mcpgo.Description("Slug alternative to collection_id")),
+		mcpgo.WithString("scope", mcpgo.Description("Scope as kind:external_id (required for create_collection and when using collection_slug)")),
+		mcpgo.WithString("name", mcpgo.Description("Collection name (required for create_collection)")),
+		mcpgo.WithString("description", mcpgo.Description("Collection description (optional)")),
+	), withToolMetrics("collect", withToolPermission("collections:read", s.handleCollect)))
+}
+
 // handleCollect dispatches collection actions.
 func (s *Server) handleCollect(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()

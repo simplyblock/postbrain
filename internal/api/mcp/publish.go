@@ -12,6 +12,24 @@ import (
 	"github.com/simplyblock/postbrain/internal/knowledge"
 )
 
+func (s *Server) registerPublish() {
+	s.mcpServer.AddTool(mcpgo.NewTool("publish",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithOpenWorldHintAnnotation(false),
+		mcpgo.WithDescription("Create or update a knowledge artifact"),
+		mcpgo.WithString("title", mcpgo.Required(), mcpgo.Description("Artifact title")),
+		mcpgo.WithString("content", mcpgo.Required(), mcpgo.Description("Artifact content")),
+		mcpgo.WithString("knowledge_type", mcpgo.Required(), mcpgo.Description("semantic|episodic|procedural|reference")),
+		mcpgo.WithString("artifact_kind", mcpgo.Description("general|decision|meeting_note|retrospective|spec|design_doc|research (default: general)")),
+		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Owner scope as kind:external_id")),
+		mcpgo.WithString("visibility", mcpgo.Description("private|project|team|department|company (default: team)")),
+		mcpgo.WithString("summary", mcpgo.Description("Short summary")),
+		mcpgo.WithBoolean("auto_review", mcpgo.Description("Move directly to in_review (default: false)")),
+		mcpgo.WithString("collection_slug", mcpgo.Description("Add to this collection slug after creation")),
+	), withToolMetrics("publish", withToolPermission("knowledge:write", s.handlePublish)))
+}
+
 // handlePublish creates a new knowledge artifact.
 func (s *Server) handlePublish(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()

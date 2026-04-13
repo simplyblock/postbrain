@@ -12,6 +12,20 @@ import (
 	"github.com/simplyblock/postbrain/internal/skills"
 )
 
+func (s *Server) registerSkillInstall() {
+	s.mcpServer.AddTool(mcpgo.NewTool("skill_install",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithOpenWorldHintAnnotation(false),
+		mcpgo.WithDescription("Materialise a skill into the agent command directory"),
+		mcpgo.WithString("skill_id", mcpgo.Description("UUID of the skill to install")),
+		mcpgo.WithString("slug", mcpgo.Description("Slug alternative to skill_id")),
+		mcpgo.WithString("scope", mcpgo.Description("Scope as kind:external_id")),
+		mcpgo.WithString("agent_type", mcpgo.Description("Target agent type")),
+		mcpgo.WithString("workdir", mcpgo.Description("Working directory for installation")),
+	), withToolMetrics("skill_install", withToolPermission("skills:read", s.handleSkillInstall)))
+}
+
 // handleSkillInstall materialises a skill into the agent command directory.
 func (s *Server) handleSkillInstall(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()

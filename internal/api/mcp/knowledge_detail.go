@@ -11,6 +11,17 @@ import (
 	"github.com/simplyblock/postbrain/internal/db"
 )
 
+func (s *Server) registerKnowledgeDetail() {
+	s.mcpServer.AddTool(mcpgo.NewTool("knowledge_detail",
+		mcpgo.WithReadOnlyHintAnnotation(true),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithIdempotentHintAnnotation(true),
+		mcpgo.WithOpenWorldHintAnnotation(false),
+		mcpgo.WithDescription("Retrieve the full content of a knowledge artifact by ID. Use when recall returns full_content_available=true and the summary is insufficient."),
+		mcpgo.WithString("artifact_id", mcpgo.Required(), mcpgo.Description("UUID of the knowledge artifact")),
+	), withToolMetrics("knowledge_detail", withToolPermission("knowledge:read", s.handleKnowledgeDetail)))
+}
+
 // handleKnowledgeDetail returns the full content of a knowledge artifact by ID.
 // Use this after a recall result indicates full_content_available=true.
 func (s *Server) handleKnowledgeDetail(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {

@@ -182,6 +182,26 @@ func asCrossScopeResultJSON(scope string, results []*retrieval.Result) []map[str
 	return out
 }
 
+func (s *Server) registerCrossScopeContext() {
+	s.mcpServer.AddTool(mcpgo.NewTool("cross_scope_context",
+		mcpgo.WithReadOnlyHintAnnotation(true),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithIdempotentHintAnnotation(true),
+		mcpgo.WithOpenWorldHintAnnotation(false),
+		mcpgo.WithDescription("Retrieve and compare memory/knowledge context across baseline and comparison scopes"),
+		mcpgo.WithString("query", mcpgo.Required(), mcpgo.Description("Semantic search query")),
+		mcpgo.WithString("baseline_scope", mcpgo.Required(), mcpgo.Description("Baseline scope as kind:external_id")),
+		mcpgo.WithArray("comparison_scopes", mcpgo.Description("Comparison scopes as kind:external_id")),
+		mcpgo.WithArray("layers", mcpgo.Description("Layers to query: memory|knowledge (default: both)")),
+		mcpgo.WithString("search_mode", mcpgo.Description("text|code|hybrid (default: hybrid)")),
+		mcpgo.WithString("since", mcpgo.Description("Optional lower time bound in RFC3339")),
+		mcpgo.WithString("until", mcpgo.Description("Optional upper time bound in RFC3339")),
+		mcpgo.WithNumber("limit_per_scope", mcpgo.Description("Max results per scope (default: 10)")),
+		mcpgo.WithNumber("min_score", mcpgo.Description("Min combined score 0–1 (default: 0.0)")),
+		mcpgo.WithNumber("graph_depth", mcpgo.Description("Reserved for graph context depth (default: 0)")),
+	), withToolMetrics("cross_scope_context", withAnyToolPermission([]authz.Permission{"memories:read", "knowledge:read"}, s.handleCrossScopeContext)))
+}
+
 // handleCrossScopeContext validates cross-scope context request arguments.
 // Retrieval orchestration is implemented in subsequent phases.
 func (s *Server) handleCrossScopeContext(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {

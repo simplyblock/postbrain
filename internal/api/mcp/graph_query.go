@@ -11,6 +11,21 @@ import (
 	"github.com/simplyblock/postbrain/internal/graph"
 )
 
+func (s *Server) registerGraphQuery() {
+	if !s.ageEnabled {
+		return
+	}
+	s.mcpServer.AddTool(mcpgo.NewTool("graph_query",
+		mcpgo.WithReadOnlyHintAnnotation(true),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithIdempotentHintAnnotation(true),
+		mcpgo.WithOpenWorldHintAnnotation(false),
+		mcpgo.WithDescription("Execute a scoped Cypher query against the AGE graph overlay"),
+		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
+		mcpgo.WithString("cypher", mcpgo.Required(), mcpgo.Description("Cypher query body to execute")),
+	), withToolMetrics("graph_query", withToolPermission("graph:read", s.handleGraphQuery)))
+}
+
 func (s *Server) handleGraphQuery(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()
 

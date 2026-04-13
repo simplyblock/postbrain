@@ -12,6 +12,21 @@ import (
 	"github.com/simplyblock/postbrain/internal/skills"
 )
 
+func (s *Server) registerSkillSearch() {
+	s.mcpServer.AddTool(mcpgo.NewTool("skill_search",
+		mcpgo.WithReadOnlyHintAnnotation(true),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithIdempotentHintAnnotation(true),
+		mcpgo.WithOpenWorldHintAnnotation(false),
+		mcpgo.WithDescription("Search for skills by semantic similarity"),
+		mcpgo.WithString("query", mcpgo.Required(), mcpgo.Description("Search query")),
+		mcpgo.WithString("scope", mcpgo.Description("Scope as kind:external_id")),
+		mcpgo.WithString("agent_type", mcpgo.Description("Filter by agent compatibility")),
+		mcpgo.WithNumber("limit", mcpgo.Description("Max results (default: 10)")),
+		mcpgo.WithBoolean("installed", mcpgo.Description("Filter by installed status")),
+	), withToolMetrics("skill_search", withToolPermission("skills:read", s.handleSkillSearch)))
+}
+
 // handleSkillSearch searches for skills by semantic similarity.
 func (s *Server) handleSkillSearch(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()

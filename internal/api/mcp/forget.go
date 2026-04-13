@@ -11,6 +11,17 @@ import (
 	"github.com/simplyblock/postbrain/internal/db"
 )
 
+func (s *Server) registerForget() {
+	s.mcpServer.AddTool(mcpgo.NewTool("forget",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(true),
+		mcpgo.WithOpenWorldHintAnnotation(false),
+		mcpgo.WithDescription("Deactivate or permanently delete a memory"),
+		mcpgo.WithString("memory_id", mcpgo.Required(), mcpgo.Description("UUID of the memory to delete")),
+		mcpgo.WithBoolean("hard", mcpgo.Description("true = permanent delete, false = soft-delete (default: false)")),
+	), withToolMetrics("forget", withToolPermission("memories:delete", s.handleForget)))
+}
+
 // handleForget deactivates or permanently deletes a memory.
 func (s *Server) handleForget(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()

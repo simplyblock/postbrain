@@ -13,6 +13,25 @@ import (
 	"github.com/simplyblock/postbrain/internal/retrieval"
 )
 
+func (s *Server) registerRecall() {
+	s.mcpServer.AddTool(mcpgo.NewTool("recall",
+		mcpgo.WithReadOnlyHintAnnotation(true),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithIdempotentHintAnnotation(true),
+		mcpgo.WithOpenWorldHintAnnotation(false),
+		mcpgo.WithDescription("Retrieve memories and knowledge relevant to a query"),
+		mcpgo.WithString("query", mcpgo.Required(), mcpgo.Description("Semantic search query")),
+		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
+		mcpgo.WithArray("memory_types", mcpgo.Description("Filter by memory type: semantic|episodic|procedural|working")),
+		mcpgo.WithArray("layers", mcpgo.Description("Layers to query: memory|knowledge|skill (default: all)")),
+		mcpgo.WithString("agent_type", mcpgo.Description("Filter skills by agent compatibility")),
+		mcpgo.WithNumber("limit", mcpgo.Description("Max results (default: 10)")),
+		mcpgo.WithNumber("min_score", mcpgo.Description("Min combined score 0–1 (default: 0.0)")),
+		mcpgo.WithString("search_mode", mcpgo.Description("text|code|hybrid (default: hybrid)")),
+		mcpgo.WithNumber("graph_depth", mcpgo.Description("Graph traversal depth for code results: 0=off, 1=direct neighbours (default: 1)")),
+	), withToolMetrics("recall", withToolPermission("memories:read", s.handleRecall)))
+}
+
 const defaultRecallGraphDepth = 1
 const defaultCrossScopeGraphDepth = 0
 

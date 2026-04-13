@@ -9,8 +9,23 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/simplyblock/postbrain/internal/auth"
+	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 )
+
+func (s *Server) registerPromote() {
+	s.mcpServer.AddTool(mcpgo.NewTool("promote",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithOpenWorldHintAnnotation(false),
+		mcpgo.WithDescription("Nominate a memory for elevation into a knowledge artifact"),
+		mcpgo.WithString("memory_id", mcpgo.Required(), mcpgo.Description("UUID of the memory to promote")),
+		mcpgo.WithString("target_scope", mcpgo.Required(), mcpgo.Description("Target scope as kind:external_id")),
+		mcpgo.WithString("target_visibility", mcpgo.Required(), mcpgo.Description("Visibility level")),
+		mcpgo.WithString("proposed_title", mcpgo.Description("Proposed title for the knowledge artifact")),
+		mcpgo.WithString("collection_slug", mcpgo.Description("Optionally add to this collection slug")),
+	), withToolMetrics("promote", withAnyToolPermission([]authz.Permission{"promotions:write", "memories:write"}, s.handlePromote)))
+}
 
 // handlePromote nominates a memory for elevation into a knowledge artifact.
 func (s *Server) handlePromote(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {

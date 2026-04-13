@@ -12,6 +12,20 @@ import (
 	"github.com/simplyblock/postbrain/internal/skills"
 )
 
+func (s *Server) registerSkillInvoke() {
+	s.mcpServer.AddTool(mcpgo.NewTool("skill_invoke",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithOpenWorldHintAnnotation(false),
+		mcpgo.WithDescription("Look up a skill by slug, substitute params, return expanded body"),
+		mcpgo.WithString("slug", mcpgo.Required(), mcpgo.Description("Skill slug")),
+		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Scope as kind:external_id")),
+		mcpgo.WithString("agent_type", mcpgo.Description("Agent type for filtering")),
+		mcpgo.WithObject("params", mcpgo.Description("Parameter map for substitution")),
+		mcpgo.WithString("session_id", mcpgo.Description("Session ID from session_begin; used to correlate invocation events")),
+	), withToolMetrics("skill_invoke", withToolPermission("skills:read", s.handleSkillInvoke)))
+}
+
 // handleSkillInvoke looks up a skill by slug, substitutes params, and returns the expanded body.
 func (s *Server) handleSkillInvoke(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	args := req.GetArguments()

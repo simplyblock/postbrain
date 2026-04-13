@@ -9,7 +9,19 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/simplyblock/postbrain/internal/auth"
+	"github.com/simplyblock/postbrain/internal/authz"
 )
+
+func (s *Server) registerEndorse() {
+	s.mcpServer.AddTool(mcpgo.NewTool("endorse",
+		mcpgo.WithReadOnlyHintAnnotation(false),
+		mcpgo.WithDestructiveHintAnnotation(false),
+		mcpgo.WithOpenWorldHintAnnotation(false),
+		mcpgo.WithDescription("Endorse a knowledge artifact or skill"),
+		mcpgo.WithString("artifact_id", mcpgo.Required(), mcpgo.Description("UUID of the artifact or skill to endorse")),
+		mcpgo.WithString("note", mcpgo.Description("Optional endorsement note")),
+	), withToolMetrics("endorse", withAnyToolPermission([]authz.Permission{"knowledge:write", "skills:write"}, s.handleEndorse)))
+}
 
 // handleEndorse endorses a knowledge artifact or skill.
 func (s *Server) handleEndorse(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
