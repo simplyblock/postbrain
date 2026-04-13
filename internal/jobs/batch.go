@@ -15,6 +15,9 @@ func RunPaginatedBatch[T any](
 	fetch func(context.Context, int, int) ([]T, error),
 	process func(context.Context, T),
 ) (int, error) {
+	if batchSize <= 0 {
+		return 0, fmt.Errorf("batchSize must be > 0, got %d", batchSize)
+	}
 	offset, total := 0, 0
 	for {
 		batch, err := fetch(ctx, batchSize, offset)
