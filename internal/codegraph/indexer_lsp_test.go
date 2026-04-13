@@ -133,3 +133,32 @@ func TestLSPClientForIndex_TypeScript_Enabled_TSGoFlag(t *testing.T) {
 		t.Fatal("expected returned TypeScript client from factory")
 	}
 }
+
+func TestLSPClientForIndex_Clangd_Enabled(t *testing.T) {
+	want := &stubLSPClient{lang: ".c"}
+	prev := newLSPClientForExt
+	newLSPClientForExt = func(ext, rootDir string, timeout time.Duration, opts lsp.ClientOptions) (lsp.Client, error) {
+		if ext != ".c" {
+			t.Fatalf("ext = %q, want %q", ext, ".c")
+		}
+		if rootDir != "/tmp/crepo" {
+			t.Fatalf("rootDir = %q, want %q", rootDir, "/tmp/crepo")
+		}
+		if timeout != 2*time.Second {
+			t.Fatalf("timeout = %v, want %v", timeout, 2*time.Second)
+		}
+		if opts.UseTSGo {
+			t.Fatal("UseTSGo must be false for clangd")
+		}
+		return want, nil
+	}
+	t.Cleanup(func() { newLSPClientForExt = prev })
+
+	got := lspClientForIndex(context.Background(), IndexOptions{
+		ClangdLSPRootDir: "/tmp/crepo",
+		ClangdLSPTimeout: 2 * time.Second,
+	})
+	if got != want {
+		t.Fatal("expected returned clangd client from factory")
+	}
+}

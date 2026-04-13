@@ -13,12 +13,21 @@ type ClientOptions struct {
 }
 
 var (
-	newGoplsClient                    = func(rootDir string, timeout time.Duration) (Client, error) { return NewGoplsClient(rootDir, timeout) }
-	newPyrightClient                  = func(rootDir string, timeout time.Duration) (Client, error) { return NewPyrightClient(rootDir, timeout) }
+	newGoplsClient = func(rootDir string, timeout time.Duration) (Client, error) {
+		return NewGoplsClient(rootDir, timeout)
+	}
+	newPyrightClient = func(rootDir string, timeout time.Duration) (Client, error) {
+		return NewPyrightClient(rootDir, timeout)
+	}
+	newClangdClient = func(rootDir string, timeout time.Duration) (Client, error) {
+		return NewClangdClient(rootDir, timeout)
+	}
 	newTypeScriptLanguageServerClient = func(rootDir string, timeout time.Duration) (Client, error) {
 		return NewTypeScriptLanguageServerClient(rootDir, timeout)
 	}
-	newTSGoClient = func(rootDir string, timeout time.Duration) (Client, error) { return NewTSGoClient(rootDir, timeout) }
+	newTSGoClient = func(rootDir string, timeout time.Duration) (Client, error) {
+		return NewTSGoClient(rootDir, timeout)
+	}
 )
 
 // NewClientForExt creates a Client for the given file extension (e.g. ".go").
@@ -30,6 +39,8 @@ func NewClientForExt(ext, rootDir string, timeout time.Duration, opts ClientOpti
 		return newGoplsClient(rootDir, timeout)
 	case ".py":
 		return newPyrightClient(rootDir, timeout)
+	case ".c", ".h", ".hpp", ".hh", ".cpp", ".cc", ".cxx":
+		return newClangdClient(rootDir, timeout)
 	case ".ts", ".tsx", ".js", ".jsx":
 		if opts.UseTSGo {
 			return newTSGoClient(rootDir, timeout)

@@ -32,7 +32,7 @@ func TestEnrichCallEdges_ReplacesCallEdgesWithLSP(t *testing.T) {
 	}
 
 	original := []Edge{
-		{SubjectName: "mypkg.Caller", Predicate: "calls", ObjectName: "Helper"},   // heuristic, unqualified
+		{SubjectName: "mypkg.Caller", Predicate: "calls", ObjectName: "Helper"},         // heuristic, unqualified
 		{SubjectName: "mypkg.Caller", Predicate: "defines", ObjectName: "mypkg.Caller"}, // non-call: kept
 		{SubjectName: "mypkg.Caller", Predicate: "imports", ObjectName: "otherpkg"},     // non-call: kept
 	}

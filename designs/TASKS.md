@@ -25,6 +25,23 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-13: Implemented `clangd` stdio LSP backend for C/C++ (TDD-first):
+  - Added `internal/codegraph/lsp/clangd.go`:
+    - `NewClangdClient(...)` using `clangd` in stdio mode,
+    - `ClangdClient.Imports(...)` include-parser for `#include <...>` and
+      `#include "..."` directives.
+  - Extended LSP factory routing in
+    `internal/codegraph/lsp/factory.go` for C/C++ extensions:
+    - `.c`, `.h`, `.hpp`, `.hh`, `.cpp`, `.cc`, `.cxx`.
+  - Wired indexer-level clangd options:
+    - `ClangdLSPRootDir`
+    - `ClangdLSPTimeout`
+    - plus runtime selection in `internal/codegraph/source.go`.
+  - Added regression coverage:
+    - `internal/codegraph/lsp/clangd_test.go`
+    - `internal/codegraph/lsp/factory_test.go` (C/C++ factory selection)
+    - `internal/codegraph/indexer_lsp_test.go` (indexer clangd option wiring).
+
 - [x] 2026-04-13: Extended Docker images with TypeScript/Python LSP toolchain:
   - Updated `Dockerfile` and `Dockerfile.release` to include:
     - `pyright` (npm global install),

@@ -58,6 +58,12 @@ type IndexOptions struct {
 	// TypeScriptLSPUseTSGo selects tsgo (`tsgo --lsp`) instead of
 	// typescript-language-server for TypeScript/JavaScript extensions.
 	TypeScriptLSPUseTSGo bool
+	// ClangdLSPRootDir enables optional C/C++ LSP resolution via clangd.
+	// It must be the absolute path to the checked-out source tree.
+	// Empty disables clangd for this run.
+	ClangdLSPRootDir string
+	// ClangdLSPTimeout controls per-request timeouts for the clangd subprocess.
+	ClangdLSPTimeout time.Duration
 }
 
 const defaultMaxBytes int64 = 512 * 1024

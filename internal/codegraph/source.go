@@ -59,6 +59,16 @@ func lspClientForIndex(ctx context.Context, opts IndexOptions) lsp.Client {
 		return client
 	}
 
+	if opts.ClangdLSPRootDir != "" {
+		client, err := newLSPClientForExt(".c", opts.ClangdLSPRootDir, opts.ClangdLSPTimeout, lsp.ClientOptions{})
+		if err != nil {
+			slog.WarnContext(ctx, "codegraph: clangd client unavailable; continuing without lsp",
+				"root", opts.ClangdLSPRootDir, "err", err)
+			return nil
+		}
+		return client
+	}
+
 	return nil
 }
 
@@ -71,6 +81,8 @@ func lspRootDirForClient(opts IndexOptions, client lsp.Client) string {
 		return opts.GoLSPRootDir
 	case ".ts":
 		return opts.TypeScriptLSPRootDir
+	case ".c":
+		return opts.ClangdLSPRootDir
 	default:
 		return ""
 	}

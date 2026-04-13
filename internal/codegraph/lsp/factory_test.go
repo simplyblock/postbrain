@@ -58,3 +58,23 @@ func TestNewClientForExt_TypeScript_UsesTSGoWhenFlagEnabled(t *testing.T) {
 		t.Fatal("expected nil client on constructor error")
 	}
 }
+
+func TestNewClientForExt_CCpp_UsesClangd(t *testing.T) {
+	t.Parallel()
+
+	origClangd := newClangdClient
+	newClangdClient = func(rootDir string, timeout time.Duration) (Client, error) {
+		return &PyrightClient{}, nil
+	}
+	t.Cleanup(func() {
+		newClangdClient = origClangd
+	})
+
+	got, err := NewClientForExt(".cpp", "/tmp/repo", 3*time.Second, ClientOptions{})
+	if err != nil {
+		t.Fatalf("NewClientForExt: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected client")
+	}
+}

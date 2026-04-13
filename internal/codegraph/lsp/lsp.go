@@ -51,15 +51,15 @@ type Location struct {
 type SymbolKind uint8
 
 const (
-	KindUnknown   SymbolKind = 0
-	KindFile      SymbolKind = 1
-	KindModule    SymbolKind = 2  // package / namespace / module
-	KindClass     SymbolKind = 3  // class, struct (OO languages)
-	KindMethod    SymbolKind = 4  // method bound to a type
-	KindFunction  SymbolKind = 5  // free / static function
-	KindVariable  SymbolKind = 6  // field, global, constant
-	KindInterface SymbolKind = 7  // interface, protocol, abstract class
-	KindType      SymbolKind = 8  // type alias, typedef, enum
+	KindUnknown     SymbolKind = 0
+	KindFile        SymbolKind = 1
+	KindModule      SymbolKind = 2 // package / namespace / module
+	KindClass       SymbolKind = 3 // class, struct (OO languages)
+	KindMethod      SymbolKind = 4 // method bound to a type
+	KindFunction    SymbolKind = 5 // free / static function
+	KindVariable    SymbolKind = 6 // field, global, constant
+	KindInterface   SymbolKind = 7 // interface, protocol, abstract class
+	KindType        SymbolKind = 8 // type alias, typedef, enum
 	KindConstructor SymbolKind = 9
 )
 
