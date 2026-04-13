@@ -25,6 +25,23 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-13: Improved `postbrain-cli snapshot` memory content quality for hook events (TDD-first):
+  - Added structured snapshot description builder in
+    `cmd/postbrain-cli/main.go` (`buildSnapshotDescription` + helpers).
+  - Snapshot content now includes compact, high-signal tool input context
+    instead of only generic "Tool X called" text, including:
+    - `command` summary (truncated),
+    - path/query/pattern/limit style scalar fields,
+    - write/edit size hints (`content_bytes`, `old_string_bytes`,
+      `new_string_bytes`),
+    - fallback `input_keys=<n>` when no scalar details are available.
+  - Updated `runSnapshot` to use the new description builder.
+  - Added regression tests in `cmd/postbrain-cli/main_test.go` covering:
+    - Write snapshots include content-size hints,
+    - command summarization + truncation,
+    - known-field extraction,
+    - key-count fallback behavior.
+
 - [x] 2026-04-13: Implemented `clangd` stdio LSP backend for C/C++ (TDD-first):
   - Added `internal/codegraph/lsp/clangd.go`:
     - `NewClangdClient(...)` using `clangd` in stdio mode,

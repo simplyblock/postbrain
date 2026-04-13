@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -337,6 +338,77 @@ func TestCheckUpdateCommand_DevBuild(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "unable to compare dev build") {
 		t.Fatalf("unexpected output: %q", out.String())
+	}
+}
+
+func TestBuildSnapshotDescription_WriteIncludesContentSize(t *testing.T) {
+	t.Parallel()
+
+	desc := buildSnapshotDescription("Write", map[string]any{
+		"file_path": "/tmp/main.go",
+		"content":   "package main\n\nfunc main() {}\n",
+	}, "file:/tmp/main.go")
+
+	if !strings.Contains(desc, "Tool Write called on file:/tmp/main.go") {
+		t.Fatalf("description missing source ref: %q", desc)
+	}
+	if !strings.Contains(desc, "content_bytes=") {
+		t.Fatalf("description missing content size hint: %q", desc)
+	}
+}
+
+func TestBuildSnapshotDescription_BashIncludesCommandAndTruncates(t *testing.T) {
+	t.Parallel()
+
+	cmdText := strings.Repeat("echo very-long-command ", 20)
+	desc := buildSnapshotDescription("Bash", map[string]any{
+		"command": cmdText,
+	}, "")
+
+	if !strings.Contains(desc, "Tool Bash called") {
+		t.Fatalf("description missing tool call prefix: %q", desc)
+	}
+	if !strings.Contains(desc, "command=") {
+		t.Fatalf("description missing command summary: %q", desc)
+	}
+	if strings.Contains(desc, cmdText) {
+		t.Fatalf("description should truncate very long command: %q", desc)
+	}
+}
+
+func TestBuildSnapshotDescription_UsesKnownInputFields(t *testing.T) {
+	t.Parallel()
+
+	desc := buildSnapshotDescription("Read", map[string]any{
+		"path":    "/tmp/readme.md",
+		"pattern": "TODO",
+		"limit":   25,
+	}, "")
+
+	wantParts := []string{
+		"Tool Read called",
+		"path=/tmp/readme.md",
+		"pattern=TODO",
+		"limit=25",
+	}
+	for _, part := range wantParts {
+		if !strings.Contains(desc, part) {
+			t.Fatalf("description missing %q: %q", part, desc)
+		}
+	}
+}
+
+func TestBuildSnapshotDescription_LargeInputFallsBackToKeyCount(t *testing.T) {
+	t.Parallel()
+
+	input := map[string]any{}
+	for i := 0; i < 40; i++ {
+		input[fmt.Sprintf("k%d", i)] = i
+	}
+
+	desc := buildSnapshotDescription("Edit", input, "")
+	if !strings.Contains(desc, "input_keys=40") {
+		t.Fatalf("description missing key-count fallback: %q", desc)
 	}
 }
 

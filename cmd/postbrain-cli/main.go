@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -209,11 +210,8 @@ func runSnapshot(cmd *cobra.Command, args []string) error {
 		sourceRef = "file:" + fp
 	}
 
-	// Build description.
-	desc := fmt.Sprintf("Tool %s called", hookData.ToolName)
-	if sourceRef != "" {
-		desc = fmt.Sprintf("Tool %s called on %s", hookData.ToolName, sourceRef)
-	}
+	// Build a compact, useful summary for memory content.
+	desc := buildSnapshotDescription(hookData.ToolName, hookData.ToolInput, sourceRef)
 
 	// 60s dedup check: query recent memories with same source_ref.
 	if sourceRef != "" {
@@ -250,6 +248,133 @@ func runSnapshot(cmd *cobra.Command, args []string) error {
 	defer closeutil.Log(resp.Body, "snapshot create memory response body")
 	slog.Info("snapshot: memory recorded", "tool", hookData.ToolName, "source_ref", sourceRef)
 	return nil
+}
+
+func buildSnapshotDescription(toolName string, toolInput map[string]any, sourceRef string) string {
+	desc := fmt.Sprintf("Tool %s called", toolName)
+	if sourceRef != "" {
+		desc += " on " + sourceRef
+	}
+
+	details := snapshotInputDetails(toolInput)
+	if len(details) == 0 {
+		return desc
+	}
+	return fmt.Sprintf("%s (%s)", desc, strings.Join(details, ", "))
+}
+
+func snapshotInputDetails(toolInput map[string]any) []string {
+	if len(toolInput) == 0 {
+		return nil
+	}
+
+	details := make([]string, 0, 6)
+	added := map[string]struct{}{}
+	add := func(key, value string) {
+		if strings.TrimSpace(value) == "" {
+			return
+		}
+		if _, ok := added[key]; ok {
+			return
+		}
+		details = append(details, fmt.Sprintf("%s=%s", key, value))
+		added[key] = struct{}{}
+	}
+
+	if cmd := snapshotStringValue(toolInput["command"]); cmd != "" {
+		add("command", snapshotQuote(snapshotTruncateWhitespace(cmd, 120)))
+	}
+	if cmd := snapshotStringValue(toolInput["cmd"]); cmd != "" {
+		add("command", snapshotQuote(snapshotTruncateWhitespace(cmd, 120)))
+	}
+	if content := snapshotStringValue(toolInput["content"]); content != "" {
+		add("content_bytes", strconv.Itoa(len(content)))
+	}
+	if oldString := snapshotStringValue(toolInput["old_string"]); oldString != "" {
+		add("old_string_bytes", strconv.Itoa(len(oldString)))
+	}
+	if newString := snapshotStringValue(toolInput["new_string"]); newString != "" {
+		add("new_string_bytes", strconv.Itoa(len(newString)))
+	}
+
+	orderedKeys := []string{
+		"file_path", "path", "url", "query", "pattern", "target",
+		"line", "lineno", "limit", "id", "name",
+	}
+	for _, key := range orderedKeys {
+		if value, ok := snapshotScalarString(toolInput[key]); ok {
+			add(key, snapshotTruncateWhitespace(value, 80))
+		}
+	}
+
+	if len(details) == 0 {
+		add("input_keys", strconv.Itoa(len(toolInput)))
+		return details
+	}
+
+	// Include a small deterministic tail of scalar keys for extra context.
+	var extraKeys []string
+	for key := range toolInput {
+		if _, ok := added[key]; ok {
+			continue
+		}
+		if _, ok := snapshotScalarString(toolInput[key]); !ok {
+			continue
+		}
+		extraKeys = append(extraKeys, key)
+	}
+	sort.Strings(extraKeys)
+	for _, key := range extraKeys {
+		if len(details) >= 6 {
+			break
+		}
+		if value, ok := snapshotScalarString(toolInput[key]); ok {
+			add(key, snapshotTruncateWhitespace(value, 80))
+		}
+	}
+	return details
+}
+
+func snapshotStringValue(v any) string {
+	s, _ := v.(string)
+	return s
+}
+
+func snapshotScalarString(v any) (string, bool) {
+	switch val := v.(type) {
+	case string:
+		return val, true
+	case bool:
+		return strconv.FormatBool(val), true
+	case float64:
+		return strconv.FormatFloat(val, 'f', -1, 64), true
+	case int:
+		return strconv.Itoa(val), true
+	case int64:
+		return strconv.FormatInt(val, 10), true
+	case json.Number:
+		return val.String(), true
+	default:
+		return "", false
+	}
+}
+
+func snapshotTruncateWhitespace(s string, max int) string {
+	clean := strings.Join(strings.Fields(strings.TrimSpace(s)), " ")
+	if max <= 0 || len(clean) <= max {
+		return clean
+	}
+	if max <= 3 {
+		return clean[:max]
+	}
+	return clean[:max-3] + "..."
+}
+
+func snapshotQuote(s string) string {
+	if s == "" {
+		return ""
+	}
+	return strconv.Quote(s)
 }
 
 func summarizeSessionCmd() *cobra.Command {
