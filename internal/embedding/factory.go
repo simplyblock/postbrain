@@ -9,17 +9,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/simplyblock/postbrain/internal/config"
+	"github.com/simplyblock/postbrain/internal/modelstore"
 )
 
-// ModelConfig contains the provider/runtime settings for one embedding model.
-type ModelConfig struct {
-	ID             uuid.UUID
-	Provider       string
-	ProviderConfig string
-	ServiceURL     string
-	ProviderModel  string
-	Dimensions     int
-}
+// ModelConfig is an alias for modelstore.ModelConfig.
+type ModelConfig = modelstore.ModelConfig
 
 // ModelConfigStore loads model configuration for a model ID.
 type ModelConfigStore interface {

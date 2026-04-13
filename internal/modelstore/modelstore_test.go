@@ -1,4 +1,4 @@
-package embedding
+package modelstore
 
 import (
 	"context"
@@ -47,10 +47,7 @@ type fakeQueryer struct {
 	rows []fakeRow
 }
 
-func (q *fakeQueryer) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
-	_ = ctx
-	_ = sql
-	_ = args
+func (q *fakeQueryer) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row {
 	if len(q.rows) == 0 {
 		return fakeRow{err: pgx.ErrNoRows}
 	}

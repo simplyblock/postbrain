@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/simplyblock/postbrain/internal/config"
+	"github.com/simplyblock/postbrain/internal/modelstore"
 )
 
 // EnableModelDrivenFactory configures model-aware embedder resolution from DB.
@@ -18,8 +19,8 @@ func (s *EmbeddingService) EnableModelDrivenFactory(ctx context.Context, pool *p
 		return fmt.Errorf("embedding model factory: nil pool")
 	}
 
-	embStore := NewEmbeddingModelStore(pool)
-	genStore := NewGenerationModelStore(pool)
+	embStore := modelstore.NewEmbeddingModelStore(pool)
+	genStore := modelstore.NewGenerationModelStore(pool)
 	textModelID, err := embStore.ActiveModelIDByContentType(ctx, "text")
 	if err != nil {
 		return err

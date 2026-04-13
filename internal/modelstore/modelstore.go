@@ -1,4 +1,7 @@
-package embedding
+// Package modelstore provides DB-backed stores for resolving AI model metadata.
+// It is intentionally separate from internal/embedding so that generation/summary
+// consumers can depend on model lookup without importing embedding provider code.
+package modelstore
 
 import (
 	"context"
@@ -10,6 +13,16 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/db"
 )
+
+// ModelConfig contains the provider/runtime settings for one AI model.
+type ModelConfig struct {
+	ID             uuid.UUID
+	Provider       string
+	ProviderConfig string
+	ServiceURL     string
+	ProviderModel  string
+	Dimensions     int
+}
 
 // EmbeddingModelStore resolves embedding model metadata.
 type EmbeddingModelStore interface {
@@ -23,8 +36,8 @@ type GenerationModelStore interface {
 	ActiveGenerationModelIDByContentType(ctx context.Context, contentType string) (*uuid.UUID, error)
 }
 
-// DBModelStore resolves model metadata from ai_models.
-// It implements both EmbeddingModelStore and GenerationModelStore.
+// DBModelStore is a DB-backed implementation of both EmbeddingModelStore and
+// GenerationModelStore.
 type DBModelStore struct {
 	q db.DBTX
 }
@@ -47,7 +60,7 @@ func NewGenerationModelStore(q db.DBTX) GenerationModelStore {
 // GetModelConfig loads one model's runtime configuration by ID.
 func (s *DBModelStore) GetModelConfig(ctx context.Context, modelID uuid.UUID) (*ModelConfig, error) {
 	if s == nil || s.q == nil {
-		return nil, fmt.Errorf("embedding model store: queryer is not configured")
+		return nil, fmt.Errorf("model store: queryer is not configured")
 	}
 
 	row, err := db.New(s.q).GetAIModelRuntimeConfigByID(ctx, modelID)
@@ -55,7 +68,7 @@ func (s *DBModelStore) GetModelConfig(ctx context.Context, modelID uuid.UUID) (*
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("embedding model store: query model %s: %w", modelID, err)
+		return nil, fmt.Errorf("model store: query model %s: %w", modelID, err)
 	}
 
 	cfg := &ModelConfig{
@@ -79,7 +92,7 @@ func (s *DBModelStore) GetModelConfig(ctx context.Context, modelID uuid.UUID) (*
 // Returns (nil, nil) when no active model is registered.
 func (s *DBModelStore) ActiveModelIDByTypeAndContent(ctx context.Context, modelType, contentType string) (*uuid.UUID, error) {
 	if s == nil || s.q == nil {
-		return nil, fmt.Errorf("embedding model store: queryer is not configured")
+		return nil, fmt.Errorf("model store: queryer is not configured")
 	}
 
 	id, err := db.New(s.q).GetActiveAIModelIDByTypeAndContent(ctx, db.GetActiveAIModelIDByTypeAndContentParams{
@@ -90,7 +103,7 @@ func (s *DBModelStore) ActiveModelIDByTypeAndContent(ctx context.Context, modelT
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("embedding model store: query active %s/%s model: %w", modelType, contentType, err)
+		return nil, fmt.Errorf("model store: query active %s/%s model: %w", modelType, contentType, err)
 	}
 	return &id, nil
 }
