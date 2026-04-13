@@ -15,7 +15,6 @@ import (
 	"github.com/simplyblock/postbrain/internal/api/rest"
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/config"
-	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )

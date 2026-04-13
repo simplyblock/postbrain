@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
@@ -71,7 +72,7 @@ func TestContradictionJob_Run_ContradictionFlagInserted(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	hasFlag, err := db.HasOpenStalenessFlag(ctx, pool, artifact.ID, "contradiction_detected")
+	hasFlag, err := compat.HasOpenStalenessFlag(ctx, pool, artifact.ID, "contradiction_detected")
 	if err != nil {
 		t.Fatalf("HasOpenStalenessFlag: %v", err)
 	}

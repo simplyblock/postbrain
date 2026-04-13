@@ -14,6 +14,7 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
@@ -135,7 +136,7 @@ func TestEnsureAGEOverlay_GrantsAGESchemaUsage_ForRestrictedRole(t *testing.T) {
 	}
 	defer appPool.Close()
 
-	if _, err := db.UpsertEntity(ctx, appPool, &db.Entity{
+	if _, err := compat.UpsertEntity(ctx, appPool, &db.Entity{
 		ScopeID:    scope.ID,
 		EntityType: "concept",
 		Name:       "age grants test",

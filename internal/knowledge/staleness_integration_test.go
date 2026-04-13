@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
@@ -40,7 +41,7 @@ func TestStalenessFlag_SourceModified(t *testing.T) {
 		Evidence:   []byte(`{"files": ["src/auth.go"]}`),
 		Status:     "open",
 	}
-	inserted, err := db.InsertStalenessFlag(ctx, pool, flag)
+	inserted, err := compat.InsertStalenessFlag(ctx, pool, flag)
 	if err != nil {
 		t.Fatalf("InsertStalenessFlag: %v", err)
 	}
@@ -49,7 +50,7 @@ func TestStalenessFlag_SourceModified(t *testing.T) {
 	}
 
 	// The HasOpenStalenessFlag check should find our flag.
-	hasFlag, err := db.HasOpenStalenessFlag(ctx, pool, artifactID, "source_modified")
+	hasFlag, err := compat.HasOpenStalenessFlag(ctx, pool, artifactID, "source_modified")
 	if err != nil {
 		t.Fatalf("HasOpenStalenessFlag: %v", err)
 	}
@@ -58,7 +59,7 @@ func TestStalenessFlag_SourceModified(t *testing.T) {
 	}
 
 	// A different signal should not be detected.
-	hasOther, err := db.HasOpenStalenessFlag(ctx, pool, artifactID, "contradiction_detected")
+	hasOther, err := compat.HasOpenStalenessFlag(ctx, pool, artifactID, "contradiction_detected")
 	if err != nil {
 		t.Fatalf("HasOpenStalenessFlag other signal: %v", err)
 	}

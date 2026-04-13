@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 	"github.com/simplyblock/postbrain/internal/principals"
 	"github.com/simplyblock/postbrain/internal/testhelper"
@@ -117,7 +117,7 @@ func TestLifecycle_SubmitForReview_RetractToDraft(t *testing.T) {
 	if err := lc.SubmitForReview(ctx, artifact.ID, author.ID); err != nil {
 		t.Fatalf("SubmitForReview: %v", err)
 	}
-	got, err := db.GetArtifact(ctx, pool, artifact.ID)
+	got, err := compat.GetArtifact(ctx, pool, artifact.ID)
 	if err != nil {
 		t.Fatalf("GetArtifact after SubmitForReview: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestLifecycle_SubmitForReview_RetractToDraft(t *testing.T) {
 	if err := lc.RetractToDraft(ctx, artifact.ID, author.ID); err != nil {
 		t.Fatalf("RetractToDraft: %v", err)
 	}
-	got, err = db.GetArtifact(ctx, pool, artifact.ID)
+	got, err = compat.GetArtifact(ctx, pool, artifact.ID)
 	if err != nil {
 		t.Fatalf("GetArtifact after RetractToDraft: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestLifecycle_Republish(t *testing.T) {
 		t.Fatalf("Republish: %v", err)
 	}
 
-	got, err := db.GetArtifact(ctx, pool, artifact.ID)
+	got, err := compat.GetArtifact(ctx, pool, artifact.ID)
 	if err != nil {
 		t.Fatalf("GetArtifact after Republish: %v", err)
 	}
@@ -222,7 +222,7 @@ func TestLifecycle_Delete(t *testing.T) {
 		t.Fatalf("Delete: %v", err)
 	}
 
-	got, err := db.GetArtifact(ctx, pool, artifact.ID)
+	got, err := compat.GetArtifact(ctx, pool, artifact.ID)
 	if err != nil {
 		t.Fatalf("GetArtifact after Delete: %v", err)
 	}

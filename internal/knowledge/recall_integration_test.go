@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
@@ -158,7 +159,7 @@ func TestRecall_DigestSuppression(t *testing.T) {
 	digest := makePublished(t, ctx, store, scope.ID, principal.ID, "digest", recallText)
 
 	// Record the digest → source relationship.
-	if err := db.InsertDigestSources(ctx, pool, digest.ID, []uuid.UUID{source.ID}); err != nil {
+	if err := compat.InsertDigestSources(ctx, pool, digest.ID, []uuid.UUID{source.ID}); err != nil {
 		t.Fatalf("InsertDigestSources: %v", err)
 	}
 

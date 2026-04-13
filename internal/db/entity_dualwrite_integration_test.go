@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
@@ -35,7 +36,7 @@ func TestUpsertEntity_DualWritesToEmbeddingRepository(t *testing.T) {
 	}
 
 	vec := pgvector.NewVector([]float32{0.1, 0.2, 0.3, 0.4})
-	entity, err := db.UpsertEntity(ctx, pool, &db.Entity{
+	entity, err := compat.UpsertEntity(ctx, pool, &db.Entity{
 		ScopeID:          scope.ID,
 		EntityType:       "component",
 		Name:             "Auth",

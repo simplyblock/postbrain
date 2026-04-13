@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 	uiapi "github.com/simplyblock/postbrain/internal/ui"

@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/graph"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
@@ -37,7 +38,7 @@ func setupFixtures(t *testing.T, pool *pgxpool.Pool) fixtures {
 	scope := testhelper.CreateTestScope(t, pool, "team", "travtest-"+uuid.New().String(), nil, principal.ID)
 
 	ins := func(name, etype, canonical string) *db.Entity {
-		e, err := db.UpsertEntity(ctx, pool, &db.Entity{
+		e, err := compat.UpsertEntity(ctx, pool, &db.Entity{
 			ScopeID:    scope.ID,
 			EntityType: etype,
 			Name:       name,
@@ -62,7 +63,7 @@ func setupFixtures(t *testing.T, pool *pgxpool.Pool) fixtures {
 	}
 
 	rel := func(subj *db.Entity, pred string, obj *db.Entity) {
-		_, err := db.UpsertRelation(ctx, pool, &db.Relation{
+		_, err := compat.UpsertRelation(ctx, pool, &db.Relation{
 			ScopeID:    scope.ID,
 			SubjectID:  subj.ID,
 			Predicate:  pred,

@@ -18,6 +18,7 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/codegraph"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
@@ -91,7 +92,7 @@ func Caller() { Target() }
 func seedCompetingSuffixEntities(t *testing.T, ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID) {
 	t.Helper()
 	for _, canonical := range []string{lspBogusCanonical, lspPkgTargetCanonical} {
-		if _, err := db.UpsertEntity(ctx, pool, &db.Entity{
+		if _, err := compat.UpsertEntity(ctx, pool, &db.Entity{
 			ScopeID:    scopeID,
 			EntityType: "function",
 			Name:       canonical,

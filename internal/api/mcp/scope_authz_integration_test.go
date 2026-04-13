@@ -19,6 +19,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/principals"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
@@ -36,7 +37,7 @@ func TestMCP_ScopeAuthz_ScopeTakingTools(t *testing.T) {
 	artifactA := testhelper.CreateTestArtifact(t, pool, allowed.ID, principal.ID, "scope authz source artifact a")
 	artifactB := testhelper.CreateTestArtifact(t, pool, allowed.ID, principal.ID, "scope authz source artifact b")
 	collectionSlug := "scope-authz-collection-" + uuid.New().String()
-	_, err := db.CreateCollection(ctx, pool, &db.KnowledgeCollection{
+	_, err := compat.CreateCollection(ctx, pool, &db.KnowledgeCollection{
 		ScopeID:    allowed.ID,
 		OwnerID:    principal.ID,
 		Slug:       collectionSlug,
@@ -52,7 +53,7 @@ func TestMCP_ScopeAuthz_ScopeTakingTools(t *testing.T) {
 		t.Fatalf("marshal skill parameters: %v", err)
 	}
 	now := time.Now().UTC()
-	_, err = db.CreateSkill(ctx, pool, &db.Skill{
+	_, err = compat.CreateSkill(ctx, pool, &db.Skill{
 		ScopeID:        allowed.ID,
 		AuthorID:       principal.ID,
 		Slug:           skillSlug,
