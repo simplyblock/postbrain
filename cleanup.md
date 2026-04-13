@@ -1079,7 +1079,7 @@ Use generated methods in `principals.Store`.
 
 ---
 
-### 8.7 High duplication between knowledge and skill lifecycle state machines
+### 8.7 High duplication between knowledge and skill lifecycle state machines ✓ Done
 
 **Files:**
 - `internal/knowledge/lifecycle.go:145–343`
