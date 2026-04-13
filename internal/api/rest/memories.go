@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
@@ -406,3 +407,13 @@ func (ro *Router) handleSummarizeMemories(w http.ResponseWriter, req *http.Reque
 
 // parseScopeString is a package-level alias for scopeutil.ParseScopeString.
 var parseScopeString = scopeutil.ParseScopeString
+
+func (ro *Router) registerMemoryRoutes(r chi.Router) {
+	r.Post("/memories", ro.createMemory)
+	r.Post("/memories/summarize", ro.handleSummarizeMemories)
+	r.Get("/memories/recall", ro.recallMemories)
+	r.Get("/memories/{id}", ro.getMemory)
+	r.Patch("/memories/{id}", ro.updateMemory)
+	r.Delete("/memories/{id}", ro.deleteMemory)
+	r.Post("/memories/{id}/promote", ro.promoteMemory)
+}

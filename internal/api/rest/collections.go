@@ -220,3 +220,11 @@ func (ro *Router) removeCollectionItem(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (ro *Router) registerCollectionRoutes(r chi.Router) {
+	r.Post("/collections", ro.createCollection)
+	r.Get("/collections", ro.listCollections)
+	r.Get("/collections/{slug}", ro.getCollection)
+	r.Post("/collections/{id}/items", ro.addCollectionItem)
+	r.Delete("/collections/{id}/items/{artifact_id}", ro.removeCollectionItem)
+}

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
@@ -101,4 +102,9 @@ func (ro *Router) updateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, session)
+}
+
+func (ro *Router) registerSessionRoutes(r chi.Router) {
+	r.Post("/sessions", ro.createSession)
+	r.Patch("/sessions/{id}", ro.updateSession)
 }

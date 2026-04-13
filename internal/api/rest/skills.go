@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
@@ -289,4 +290,15 @@ func (ro *Router) invokeSkill(w http.ResponseWriter, r *http.Request) {
 		"slug":     skill.Slug,
 		"body":     result,
 	})
+}
+
+func (ro *Router) registerSkillRoutes(r chi.Router) {
+	r.Post("/skills", ro.createSkill)
+	r.Get("/skills/search", ro.searchSkills)
+	r.Get("/skills/{id}", ro.getSkill)
+	r.Patch("/skills/{id}", ro.updateSkill)
+	r.Post("/skills/{id}/endorse", ro.endorseSkill)
+	r.Post("/skills/{id}/deprecate", ro.deprecateSkill)
+	r.Post("/skills/{id}/install", ro.installSkill)
+	r.Post("/skills/{id}/invoke", ro.invokeSkill)
 }

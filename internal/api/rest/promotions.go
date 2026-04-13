@@ -3,6 +3,7 @@ package rest
 import (
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
@@ -72,4 +73,10 @@ func (ro *Router) rejectPromotion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"promotion_request_id": id, "status": "rejected"})
+}
+
+func (ro *Router) registerPromotionRoutes(r chi.Router) {
+	r.Get("/promotions", ro.listPromotions)
+	r.Post("/promotions/{id}/approve", ro.approvePromotion)
+	r.Post("/promotions/{id}/reject", ro.rejectPromotion)
 }

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
@@ -115,4 +116,8 @@ func (ro *Router) getContext(w http.ResponseWriter, r *http.Request) {
 		"context_blocks": blocks,
 		"total_tokens":   totalTokens,
 	})
+}
+
+func (ro *Router) registerContextRoutes(r chi.Router) {
+	r.Get("/context", ro.getContext)
 }

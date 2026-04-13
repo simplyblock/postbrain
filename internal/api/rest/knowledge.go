@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
@@ -263,4 +264,19 @@ func (ro *Router) getArtifactHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"artifact_id": id, "history": history})
+}
+
+func (ro *Router) registerKnowledgeRoutes(r chi.Router) {
+	r.Post("/knowledge/upload", ro.uploadKnowledge)
+	r.Post("/knowledge/synthesize", ro.synthesizeKnowledge)
+	r.Post("/knowledge", ro.createArtifact)
+	r.Get("/knowledge/search", ro.searchArtifacts)
+	r.Get("/knowledge/{id}", ro.getArtifact)
+	r.Patch("/knowledge/{id}", ro.updateArtifact)
+	r.Delete("/knowledge/{id}", ro.deleteArtifact)
+	r.Post("/knowledge/{id}/endorse", ro.endorseArtifact)
+	r.Post("/knowledge/{id}/deprecate", ro.deprecateArtifact)
+	r.Get("/knowledge/{id}/history", ro.getArtifactHistory)
+	r.Get("/knowledge/{id}/sources", ro.getArtifactSources)
+	r.Get("/knowledge/{id}/digests", ro.getArtifactDigests)
 }

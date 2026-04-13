@@ -3,6 +3,7 @@ package rest
 import (
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
@@ -290,4 +291,19 @@ func (ro *Router) getSyncStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, ro.syncer.Status(id))
+}
+
+func (ro *Router) registerScopeRoutes(r chi.Router) {
+	r.Get("/scopes", ro.listScopes)
+	r.Post("/scopes", ro.createScope)
+	r.Get("/scopes/{id}", ro.getScope)
+	r.Put("/scopes/{id}", ro.updateScope)
+	r.Put("/scopes/{id}/owner", ro.updateScopeOwner)
+	r.Delete("/scopes/{id}", ro.deleteScope)
+	r.Post("/scopes/{id}/repo", ro.setScopeRepo)
+	r.Post("/scopes/{id}/repo/sync", ro.syncScopeRepo)
+	r.Get("/scopes/{id}/repo/sync", ro.getSyncStatus)
+	r.Post("/scopes/{id}/grants", ro.handleCreateScopeGrant)
+	r.Get("/scopes/{id}/grants", ro.handleListScopeGrants)
+	r.Delete("/scopes/{id}/grants/{grant_id}", ro.handleDeleteScopeGrant)
 }

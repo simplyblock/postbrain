@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/db"
@@ -285,4 +286,14 @@ func (ro *Router) getDependents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, traversalResult(res))
+}
+
+func (ro *Router) registerGraphRoutes(r chi.Router) {
+	r.Get("/entities", ro.listEntities)
+	r.Get("/graph", ro.getGraph)
+	r.Post("/graph/query", ro.queryCypher)
+	r.Get("/graph/callers", ro.getCallers)
+	r.Get("/graph/callees", ro.getCallees)
+	r.Get("/graph/deps", ro.getDeps)
+	r.Get("/graph/dependents", ro.getDependents)
 }
