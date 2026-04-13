@@ -64,10 +64,9 @@ func TestParseScopeString(t *testing.T) {
 			wantExtID: "b",
 		},
 		{
-			name:      "empty external ID",
-			input:     "team:",
-			wantKind:  "team",
-			wantExtID: "",
+			name:       "empty external ID",
+			input:      "team:",
+			wantErrMsg: "empty external_id",
 		},
 		{
 			name:       "missing colon",
