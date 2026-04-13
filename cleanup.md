@@ -782,7 +782,7 @@ Or, even better, move these three queries to sqlc (see §2.1).
 
 ## 6. Code That Should Be Split (Separation of Concerns)
 
-### 6.1 `internal/ui/handler.go` — 2469-line monolithic HTTP handler
+### 6.1 `internal/ui/handler.go` — 2469-line monolithic HTTP handler ✓ Done
 
 **File:** `internal/ui/handler.go`
 
