@@ -28,6 +28,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/embedding"
 	"github.com/simplyblock/postbrain/internal/jobs"
+	"github.com/simplyblock/postbrain/internal/modelruntime"
 	"github.com/simplyblock/postbrain/internal/oauth"
 	"github.com/simplyblock/postbrain/internal/social"
 	uiapi "github.com/simplyblock/postbrain/internal/ui"
@@ -126,7 +127,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("embedding service: %w", err)
 	}
 	slog.Info("startup service initialized", "service", "embedding_service")
-	if err := svc.EnableModelDrivenFactory(ctx, pool, &cfg.Embedding); err != nil {
+	if err := modelruntime.EnableModelDrivenFactory(ctx, svc, pool, &cfg.Embedding); err != nil {
 		return fmt.Errorf("embedding model factory: %w", err)
 	}
 	slog.Info("startup service initialized", "service", "embedding_model_factory")

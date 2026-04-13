@@ -35,6 +35,9 @@ func NewOllamaEmbedder(cfg *config.EmbeddingConfig, modelSlug string, serviceURL
 // ModelSlug returns the model identifier.
 func (e *OllamaEmbedder) ModelSlug() string { return e.modelSlug }
 
+// ServiceURL returns the configured service URL (may be empty, meaning default is used).
+func (e *OllamaEmbedder) ServiceURL() string { return e.serviceURL }
+
 // Dimensions returns the embedding dimension, or -1 if not yet determined.
 func (e *OllamaEmbedder) Dimensions() int {
 	e.mu.Lock()

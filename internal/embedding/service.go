@@ -2,7 +2,6 @@ package embedding
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -16,14 +15,22 @@ type EmbeddingService struct {
 	code       Embedder   // may be nil if no code model is configured
 	summarizer Summarizer // may be nil if no summary model is configured
 
-	factory              modelEmbedderResolver
+	embedFactory         EmbedderResolver
+	sumFactory           SummarizerResolver
 	activeTextModelID    *uuid.UUID
 	activeCodeModelID    *uuid.UUID
 	activeSummaryModelID *uuid.UUID
 }
 
-type modelEmbedderResolver interface {
+// EmbedderResolver creates Embedder instances by model ID.
+type EmbedderResolver interface {
 	EmbedderForModel(ctx context.Context, modelID uuid.UUID) (Embedder, error)
+}
+
+// SummarizerResolver creates Summarizer instances by model ID.
+// SummarizerForModel returns (nil, nil) when no summary model is configured for
+// the given model ID — callers should fall back to a static summarizer.
+type SummarizerResolver interface {
 	SummarizerForModel(ctx context.Context, modelID uuid.UUID) (Summarizer, error)
 }
 
@@ -114,8 +121,8 @@ func (s *EmbeddingService) EmbedCode(ctx context.Context, text string) ([]float3
 // EmbedTextResult embeds text and also reports the model ID when model-aware
 // factory resolution is configured.
 func (s *EmbeddingService) EmbedTextResult(ctx context.Context, text string) (*EmbedResult, error) {
-	if s.factory != nil && s.activeTextModelID != nil {
-		emb, err := s.factory.EmbedderForModel(ctx, *s.activeTextModelID)
+	if s.embedFactory != nil && s.activeTextModelID != nil {
+		emb, err := s.embedFactory.EmbedderForModel(ctx, *s.activeTextModelID)
 		if err != nil {
 			return nil, err
 		}
@@ -136,8 +143,8 @@ func (s *EmbeddingService) EmbedTextResult(ctx context.Context, text string) (*E
 // EmbedCodeResult embeds code and also reports the model ID when model-aware
 // factory resolution is configured.
 func (s *EmbeddingService) EmbedCodeResult(ctx context.Context, text string) (*EmbedResult, error) {
-	if s.factory != nil && s.activeCodeModelID != nil {
-		emb, err := s.factory.EmbedderForModel(ctx, *s.activeCodeModelID)
+	if s.embedFactory != nil && s.activeCodeModelID != nil {
+		emb, err := s.embedFactory.EmbedderForModel(ctx, *s.activeCodeModelID)
 		if err != nil {
 			return nil, err
 		}
@@ -165,18 +172,15 @@ func (s *EmbeddingService) EmbedCodeResult(ctx context.Context, text string) (*E
 // Returns an empty string (and no error) when no summary model is configured,
 // allowing callers to fall back to extractive summarization.
 func (s *EmbeddingService) Summarize(ctx context.Context, text string) (string, error) {
-	if s.factory != nil && s.activeSummaryModelID != nil {
-		sum, err := s.factory.SummarizerForModel(ctx, *s.activeSummaryModelID)
+	if s.sumFactory != nil && s.activeSummaryModelID != nil {
+		sum, err := s.sumFactory.SummarizerForModel(ctx, *s.activeSummaryModelID)
 		if err != nil {
-			if errors.Is(err, errSummaryModelNotConfigured) {
-				if s.summarizer == nil {
-					return "", nil
-				}
-				return s.summarizer.Summarize(ctx, text)
-			}
 			return "", err
 		}
-		return sum.Summarize(ctx, text)
+		if sum != nil {
+			return sum.Summarize(ctx, text)
+		}
+		// sum == nil: no summary model configured; fall through to static summarizer.
 	}
 	if s.summarizer == nil {
 		return "", nil
@@ -188,18 +192,15 @@ func (s *EmbeddingService) Summarize(ctx context.Context, text string) (string, 
 // configured summary model. Returns nil, nil when no summary model is configured,
 // allowing callers to fall back to heuristic extraction.
 func (s *EmbeddingService) Analyze(ctx context.Context, text string) (*DocumentAnalysis, error) {
-	if s.factory != nil && s.activeSummaryModelID != nil {
-		sum, err := s.factory.SummarizerForModel(ctx, *s.activeSummaryModelID)
+	if s.sumFactory != nil && s.activeSummaryModelID != nil {
+		sum, err := s.sumFactory.SummarizerForModel(ctx, *s.activeSummaryModelID)
 		if err != nil {
-			if errors.Is(err, errSummaryModelNotConfigured) {
-				if s.summarizer == nil {
-					return nil, nil
-				}
-				return s.summarizer.Analyze(ctx, text)
-			}
 			return nil, err
 		}
-		return sum.Analyze(ctx, text)
+		if sum != nil {
+			return sum.Analyze(ctx, text)
+		}
+		// sum == nil: no summary model configured; fall through to static summarizer.
 	}
 	if s.summarizer == nil {
 		return nil, nil
@@ -220,9 +221,10 @@ func NewServiceFromEmbedders(text Embedder, code Embedder) *EmbeddingService {
 	return &EmbeddingService{text: text, code: code}
 }
 
-// SetModelFactory configures optional model-aware embedder resolution.
-func (s *EmbeddingService) SetModelFactory(factory modelEmbedderResolver, activeTextModelID, activeCodeModelID, activeSummaryModelID *uuid.UUID) {
-	s.factory = factory
+// SetModelFactory configures optional model-aware embedder and summarizer resolution.
+func (s *EmbeddingService) SetModelFactory(embedFactory EmbedderResolver, sumFactory SummarizerResolver, activeTextModelID, activeCodeModelID, activeSummaryModelID *uuid.UUID) {
+	s.embedFactory = embedFactory
+	s.sumFactory = sumFactory
 	s.activeTextModelID = activeTextModelID
 	s.activeCodeModelID = activeCodeModelID
 	s.activeSummaryModelID = activeSummaryModelID

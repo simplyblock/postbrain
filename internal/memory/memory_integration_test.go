@@ -17,6 +17,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/embedding"
 	"github.com/simplyblock/postbrain/internal/memory"
+	"github.com/simplyblock/postbrain/internal/modelruntime"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
@@ -235,7 +236,7 @@ func TestMemoryCreate_DualWritesToEmbeddingRepository(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
-	if err := svc.EnableModelDrivenFactory(ctx, pool, cfg); err != nil {
+	if err := modelruntime.EnableModelDrivenFactory(ctx, svc, pool, cfg); err != nil {
 		t.Fatalf("EnableModelDrivenFactory: %v", err)
 	}
 

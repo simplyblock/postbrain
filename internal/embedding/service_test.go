@@ -52,7 +52,6 @@ func (m *mockSummarizer) Analyze(_ context.Context, _ string) (*DocumentAnalysis
 type mockRuntimeResolver struct {
 	embedder   Embedder
 	summarizer Summarizer
-	summaryErr error
 }
 
 func (m mockRuntimeResolver) EmbedderForModel(_ context.Context, _ uuid.UUID) (Embedder, error) {
@@ -60,7 +59,7 @@ func (m mockRuntimeResolver) EmbedderForModel(_ context.Context, _ uuid.UUID) (E
 }
 
 func (m mockRuntimeResolver) SummarizerForModel(_ context.Context, _ uuid.UUID) (Summarizer, error) {
-	return m.summarizer, m.summaryErr
+	return m.summarizer, nil
 }
 
 func ollamaCfgForService(textModel, codeModel string) *config.EmbeddingConfig {
@@ -191,15 +190,6 @@ func TestNewService_UnsupportedBackendReturnsError(t *testing.T) {
 	}
 }
 
-func TestEnableModelDrivenFactory_NilPoolReturnsError(t *testing.T) {
-	t.Parallel()
-
-	svc := NewServiceFromEmbedders(&mockEmbedder{vec: []float32{1}}, nil)
-	err := svc.EnableModelDrivenFactory(context.Background(), nil, &config.EmbeddingConfig{})
-	if err == nil {
-		t.Fatal("expected error for nil pool, got nil")
-	}
-}
 
 // --- EmbedText / EmbedCode tests using injected mock embedders ---
 
@@ -275,17 +265,13 @@ func TestAnalyze_UsesModelDrivenSummarizerWhenConfigured(t *testing.T) {
 	svc.summarizer = &mockSummarizer{
 		analysis: &DocumentAnalysis{Summary: "default"},
 	}
-	svc.SetModelFactory(
-		mockRuntimeResolver{
-			embedder: &mockEmbedder{vec: []float32{1}},
-			summarizer: &mockSummarizer{
-				analysis: &DocumentAnalysis{Summary: "model-driven"},
-			},
+	mock := mockRuntimeResolver{
+		embedder: &mockEmbedder{vec: []float32{1}},
+		summarizer: &mockSummarizer{
+			analysis: &DocumentAnalysis{Summary: "model-driven"},
 		},
-		&modelID,
-		nil,
-		&modelID,
-	)
+	}
+	svc.SetModelFactory(mock, mock, &modelID, nil, &modelID)
 
 	out, err := svc.Analyze(context.Background(), "hello")
 	if err != nil {
@@ -302,13 +288,12 @@ func TestAnalyze_UsesModelDrivenSummarizerWhenConfigured(t *testing.T) {
 func TestSummarize_MissingModelDrivenSummaryModel_ReturnsEmptyWithoutError(t *testing.T) {
 	t.Parallel()
 
+	// sumFactory returns (nil, nil) when no summary model is configured.
 	modelID := uuid.New()
 	svc := NewServiceFromEmbedders(&mockEmbedder{vec: []float32{1}}, nil)
 	svc.SetModelFactory(
-		mockRuntimeResolver{
-			embedder:   &mockEmbedder{vec: []float32{1}},
-			summaryErr: errSummaryModelNotConfigured,
-		},
+		mockRuntimeResolver{embedder: &mockEmbedder{vec: []float32{1}}},
+		mockRuntimeResolver{}, // returns (nil, nil) for summarizer
 		&modelID,
 		nil,
 		&modelID,
@@ -326,13 +311,12 @@ func TestSummarize_MissingModelDrivenSummaryModel_ReturnsEmptyWithoutError(t *te
 func TestAnalyze_MissingModelDrivenSummaryModel_ReturnsNilWithoutError(t *testing.T) {
 	t.Parallel()
 
+	// sumFactory returns (nil, nil) when no summary model is configured.
 	modelID := uuid.New()
 	svc := NewServiceFromEmbedders(&mockEmbedder{vec: []float32{1}}, nil)
 	svc.SetModelFactory(
-		mockRuntimeResolver{
-			embedder:   &mockEmbedder{vec: []float32{1}},
-			summaryErr: errSummaryModelNotConfigured,
-		},
+		mockRuntimeResolver{embedder: &mockEmbedder{vec: []float32{1}}},
+		mockRuntimeResolver{}, // returns (nil, nil) for summarizer
 		&modelID,
 		nil,
 		&modelID,

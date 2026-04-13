@@ -169,6 +169,12 @@ func NewOpenAISummarizer(cfg *config.EmbeddingConfig, modelSlug string, baseURL 
 	return &OpenAISummarizer{cfg: cfg, modelSlug: modelSlug, baseURL: baseURL, apiKey: apiKey}
 }
 
+// BaseURL returns the configured API base URL.
+func (s *OpenAISummarizer) BaseURL() string { return s.baseURL }
+
+// ModelSlug returns the model identifier used for generation.
+func (s *OpenAISummarizer) ModelSlug() string { return s.modelSlug }
+
 // Summarize sends the document to the OpenAI chat completions endpoint and returns the summary.
 func (s *OpenAISummarizer) Summarize(ctx context.Context, text string) (string, error) {
 	if s.cfg.RequestTimeout > 0 {

@@ -46,6 +46,9 @@ func NewOpenAIEmbedder(cfg *config.EmbeddingConfig, modelSlug string, baseURL st
 // ModelSlug returns the model identifier.
 func (e *OpenAIEmbedder) ModelSlug() string { return e.modelSlug }
 
+// BaseURL returns the configured API base URL.
+func (e *OpenAIEmbedder) BaseURL() string { return e.baseURL }
+
 // Dimensions returns the embedding dimension, or -1 if not yet determined.
 func (e *OpenAIEmbedder) Dimensions() int {
 	e.mu.Lock()
