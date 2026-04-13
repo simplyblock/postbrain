@@ -1181,7 +1181,7 @@ Both paths spawn goroutines with `context.Background()` and intentionally ignore
 
 ---
 
-### 8.13 Factory layer also mixes embedding and summary responsibilities
+### 8.13 Factory layer also mixes embedding and summary responsibilities ✓ Done
 
 **Files:**
 - `internal/embedding/factory.go:30–219`
