@@ -27,11 +27,23 @@ func syncEntityToAGEIfAvailable(ctx context.Context, pool *pgxpool.Pool, entity 
 	return syncEntityToAGE(ctx, pool, entity)
 }
 
+// SyncEntityToAGEIfAvailable is the exported version of syncEntityToAGEIfAvailable
+// for use by the compat subpackage.
+func SyncEntityToAGEIfAvailable(ctx context.Context, pool *pgxpool.Pool, entity *Entity) error {
+	return syncEntityToAGEIfAvailable(ctx, pool, entity)
+}
+
 func syncRelationToAGEIfAvailable(ctx context.Context, pool *pgxpool.Pool, rel *Relation) error {
 	if rel == nil || !ageAvailable(ctx, pool) {
 		return nil
 	}
 	return syncRelationToAGE(ctx, pool, rel)
+}
+
+// SyncRelationToAGEIfAvailable is the exported version of syncRelationToAGEIfAvailable
+// for use by the compat subpackage.
+func SyncRelationToAGEIfAvailable(ctx context.Context, pool *pgxpool.Pool, rel *Relation) error {
+	return syncRelationToAGEIfAvailable(ctx, pool, rel)
 }
 
 func syncEntityToAGE(ctx context.Context, pool *pgxpool.Pool, entity *Entity) error {

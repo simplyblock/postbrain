@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 // handlePromotions serves GET /ui/promotions.
@@ -60,7 +61,7 @@ func (h *Handler) handlePromotions(w http.ResponseWriter, r *http.Request) {
 		if data.Status != "all" {
 			statusFilter = data.Status
 		}
-		proms, err := db.ListPromotions(r.Context(), h.pool, targetScopeID, statusFilter, 500)
+		proms, err := compat.ListPromotions(r.Context(), h.pool, targetScopeID, statusFilter, 500)
 		if err != nil {
 			http.Error(w, "failed to load promotions", http.StatusInternalServerError)
 			return
@@ -117,11 +118,11 @@ func (h *Handler) handleStaleness(w http.ResponseWriter, r *http.Request) {
 
 	if h.pool != nil {
 		_, scopeSet := h.authorizedScopesForRequest(r.Context(), r)
-		flags, err := db.ListStalenessFlags(r.Context(), h.pool, "open", 50, 0)
+		flags, err := compat.ListStalenessFlags(r.Context(), h.pool, "open", 50, 0)
 		if err == nil {
 			filtered := make([]*db.StalenessFlag, 0, len(flags))
 			for _, f := range flags {
-				art, getErr := db.GetArtifact(r.Context(), h.pool, f.ArtifactID)
+				art, getErr := compat.GetArtifact(r.Context(), h.pool, f.ArtifactID)
 				if getErr != nil || art == nil {
 					continue
 				}

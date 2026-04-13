@@ -18,6 +18,7 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/chunking"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/graph"
 )
@@ -74,18 +75,18 @@ func (a *embeddingServiceAdapter) TextEmbedder() embeddingIface {
 	return a.svc.TextEmbedder()
 }
 
-// artifactCreator abstracts db.CreateArtifact so the store can be unit-tested
+// artifactCreator abstracts compat.CreateArtifact so the store can be unit-tested
 // without a real database connection.
 type artifactCreator interface {
 	createArtifact(ctx context.Context, a *db.KnowledgeArtifact) (*db.KnowledgeArtifact, error)
 }
 
-// artifactGetter abstracts db.GetArtifact.
+// artifactGetter abstracts compat.GetArtifact.
 type artifactGetter interface {
 	getArtifact(ctx context.Context, id uuid.UUID) (*db.KnowledgeArtifact, error)
 }
 
-// artifactUpdater abstracts db.UpdateArtifact so the store can be unit-tested
+// artifactUpdater abstracts compat.UpdateArtifact so the store can be unit-tested
 // without a real database connection.
 type artifactUpdater interface {
 	updateArtifact(ctx context.Context, id uuid.UUID, title, content string, summary *string, embedding []float32, modelID *uuid.UUID) (*db.KnowledgeArtifact, error)
@@ -97,7 +98,7 @@ type poolArtifactCreator struct {
 }
 
 func (p *poolArtifactCreator) createArtifact(ctx context.Context, a *db.KnowledgeArtifact) (*db.KnowledgeArtifact, error) {
-	return db.CreateArtifact(ctx, p.pool, a)
+	return compat.CreateArtifact(ctx, p.pool, a)
 }
 
 // poolArtifactGetter wraps a real pgxpool.Pool to implement artifactGetter.
@@ -106,7 +107,7 @@ type poolArtifactGetter struct {
 }
 
 func (p *poolArtifactGetter) getArtifact(ctx context.Context, id uuid.UUID) (*db.KnowledgeArtifact, error) {
-	return db.GetArtifact(ctx, p.pool, id)
+	return compat.GetArtifact(ctx, p.pool, id)
 }
 
 // poolArtifactUpdater wraps a real pgxpool.Pool to implement artifactUpdater.
@@ -115,7 +116,7 @@ type poolArtifactUpdater struct {
 }
 
 func (p *poolArtifactUpdater) updateArtifact(ctx context.Context, id uuid.UUID, title, content string, summary *string, embedding []float32, modelID *uuid.UUID) (*db.KnowledgeArtifact, error) {
-	return db.UpdateArtifact(ctx, p.pool, id, title, content, summary, embedding, modelID)
+	return compat.UpdateArtifact(ctx, p.pool, id, title, content, summary, embedding, modelID)
 }
 
 // Store provides knowledge artifact CRUD operations.
@@ -255,7 +256,7 @@ func (s *Store) Update(ctx context.Context, id, callerID uuid.UUID, title, conte
 
 	// Snapshot before update when in_review (informational; not strictly enforced here).
 	if existing.Status == "in_review" && s.pool != nil {
-		_ = db.SnapshotArtifactVersion(ctx, s.pool, &db.KnowledgeHistory{
+		_ = compat.SnapshotArtifactVersion(ctx, s.pool, &db.KnowledgeHistory{
 			ArtifactID: id,
 			Version:    existing.Version,
 			Content:    existing.Content,
@@ -275,7 +276,7 @@ func (s *Store) Update(ctx context.Context, id, callerID uuid.UUID, title, conte
 	// Flag covering digests stale when a published source is updated — non-fatal.
 	if existing.Status == "published" && s.pool != nil {
 		evidence := []byte(`{"signal":"source_modified"}`)
-		_ = db.FlagDigestsStaleness(ctx, s.pool, id, "source_modified", 0.8, evidence)
+		_ = compat.FlagDigestsStaleness(ctx, s.pool, id, "source_modified", 0.8, evidence)
 	}
 
 	// Re-extract entities from updated content — best-effort, non-fatal.
@@ -343,16 +344,16 @@ func (s *Store) linkExtractedEntities(ctx context.Context, artifactID, scopeID u
 	linkedIDs := make([]uuid.UUID, 0, len(entities))
 	for _, e := range entities {
 		e.ScopeID = scopeID
-		upserted, err := db.UpsertEntity(ctx, s.pool, e)
+		upserted, err := compat.UpsertEntity(ctx, s.pool, e)
 		if err != nil {
 			continue
 		}
-		_ = db.LinkArtifactToEntity(ctx, s.pool, artifactID, upserted.ID, "related")
+		_ = compat.LinkArtifactToEntity(ctx, s.pool, artifactID, upserted.ID, "related")
 		linkedIDs = append(linkedIDs, upserted.ID)
 
 		// Connect to sibling entities that share the same canonical but a
 		// different type (e.g. concept:postgresql ↔ technology:postgresql).
-		siblings, err := db.ListEntitiesByCanonical(ctx, s.pool, scopeID, e.Canonical, e.EntityType)
+		siblings, err := compat.ListEntitiesByCanonical(ctx, s.pool, scopeID, e.Canonical, e.EntityType)
 		if err == nil {
 			for _, sib := range siblings {
 				// Always store with the lesser ID as subject to avoid
@@ -361,7 +362,7 @@ func (s *Store) linkExtractedEntities(ctx context.Context, artifactID, scopeID u
 				if bytes.Compare(subj[:], obj[:]) > 0 {
 					subj, obj = obj, subj
 				}
-				if _, relErr := db.UpsertRelation(ctx, s.pool, &db.Relation{
+				if _, relErr := compat.UpsertRelation(ctx, s.pool, &db.Relation{
 					ScopeID:    scopeID,
 					SubjectID:  subj,
 					Predicate:  "same_as",
@@ -377,7 +378,7 @@ func (s *Store) linkExtractedEntities(ctx context.Context, artifactID, scopeID u
 	artID := artifactID
 	for i := 0; i < len(linkedIDs); i++ {
 		for j := i + 1; j < len(linkedIDs); j++ {
-			if _, relErr := db.UpsertRelation(ctx, s.pool, &db.Relation{
+			if _, relErr := compat.UpsertRelation(ctx, s.pool, &db.Relation{
 				ScopeID:        scopeID,
 				SubjectID:      linkedIDs[i],
 				Predicate:      "co_occurs_with",
@@ -393,7 +394,7 @@ func (s *Store) linkExtractedEntities(ctx context.Context, artifactID, scopeID u
 
 // GetByID retrieves a knowledge artifact by ID. Returns nil, nil if not found.
 func (s *Store) GetByID(ctx context.Context, id uuid.UUID) (*db.KnowledgeArtifact, error) {
-	a, err := db.GetArtifact(ctx, s.pool, id)
+	a, err := compat.GetArtifact(ctx, s.pool, id)
 	if err != nil {
 		return nil, fmt.Errorf("knowledge: get by id: %w", err)
 	}
@@ -477,7 +478,7 @@ func (s *Store) createChunks(ctx context.Context, artifactID, scopeID, authorID 
 		return
 	}
 	artifactCanonical := fmt.Sprintf("artifact:%s", artifactID)
-	artifactEntity, err := db.UpsertEntity(ctx, s.pool, &db.Entity{
+	artifactEntity, err := compat.UpsertEntity(ctx, s.pool, &db.Entity{
 		ScopeID:    scopeID,
 		EntityType: "artifact",
 		Name:       artifactID.String(),
@@ -487,7 +488,7 @@ func (s *Store) createChunks(ctx context.Context, artifactID, scopeID, authorID 
 		slog.WarnContext(ctx, "knowledge: artifact entity upsert failed", "artifact_id", artifactID, "err", err)
 	}
 	if artifactEntity != nil {
-		if linkErr := db.LinkArtifactToEntity(ctx, s.pool, artifactID, artifactEntity.ID, "related"); linkErr != nil {
+		if linkErr := compat.LinkArtifactToEntity(ctx, s.pool, artifactID, artifactEntity.ID, "related"); linkErr != nil {
 			slog.WarnContext(ctx, "knowledge: artifact entity link failed", "artifact_id", artifactID, "err", linkErr)
 		}
 	}
@@ -510,13 +511,13 @@ func (s *Store) createChunks(ctx context.Context, artifactID, scopeID, authorID 
 			SourceRef:       &ref,
 			PromotionStatus: "none",
 		}
-		if _, err := db.CreateMemory(ctx, s.pool, m); err != nil {
+		if _, err := compat.CreateMemory(ctx, s.pool, m); err != nil {
 			slog.WarnContext(ctx, "knowledge: chunk store failed", "artifact_id", artifactID, "chunk", i, "err", err)
 		}
 		if artifactEntity == nil {
 			continue
 		}
-		chunkEntity, err := db.UpsertEntity(ctx, s.pool, &db.Entity{
+		chunkEntity, err := compat.UpsertEntity(ctx, s.pool, &db.Entity{
 			ScopeID:    scopeID,
 			EntityType: "artifact_chunk",
 			Name:       fmt.Sprintf("chunk-%d", i),
@@ -527,10 +528,10 @@ func (s *Store) createChunks(ctx context.Context, artifactID, scopeID, authorID 
 			continue
 		}
 		chunkEntityIDs = append(chunkEntityIDs, chunkEntity.ID)
-		if linkErr := db.LinkArtifactToEntity(ctx, s.pool, artifactID, chunkEntity.ID, "related"); linkErr != nil {
+		if linkErr := compat.LinkArtifactToEntity(ctx, s.pool, artifactID, chunkEntity.ID, "related"); linkErr != nil {
 			slog.WarnContext(ctx, "knowledge: chunk entity link failed", "artifact_id", artifactID, "chunk", i, "err", linkErr)
 		}
-		if _, relErr := db.UpsertRelation(ctx, s.pool, &db.Relation{
+		if _, relErr := compat.UpsertRelation(ctx, s.pool, &db.Relation{
 			ScopeID:        scopeID,
 			SubjectID:      chunkEntity.ID,
 			Predicate:      "chunk_of",
@@ -542,7 +543,7 @@ func (s *Store) createChunks(ctx context.Context, artifactID, scopeID, authorID 
 		}
 	}
 	for i := 0; i < len(chunkEntityIDs)-1; i++ {
-		if _, err := db.UpsertRelation(ctx, s.pool, &db.Relation{
+		if _, err := compat.UpsertRelation(ctx, s.pool, &db.Relation{
 			ScopeID:        scopeID,
 			SubjectID:      chunkEntityIDs[i],
 			Predicate:      "next_chunk",

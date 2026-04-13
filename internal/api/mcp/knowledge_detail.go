@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 func (s *Server) registerKnowledgeDetail() {
@@ -47,7 +47,7 @@ func (s *Server) handleKnowledgeDetail(ctx context.Context, req mcpgo.CallToolRe
 		return mcpgo.NewToolResultError(fmt.Sprintf("knowledge_detail: artifact %s not found", idStr)), nil
 	}
 
-	go func() { _ = db.IncrementArtifactAccess(context.Background(), s.pool, artifact.ID) }()
+	go func() { _ = compat.IncrementArtifactAccess(context.Background(), s.pool, artifact.ID) }()
 
 	payload, _ := json.Marshal(map[string]any{
 		"id":             artifact.ID.String(),

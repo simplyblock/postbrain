@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 // SyncState describes the current state of a repository sync for one scope.
@@ -95,5 +95,5 @@ func (s *Syncer) run(pool *pgxpool.Pool, opts IndexOptions, st *SyncStatus) {
 	st.RelationsUpserted = result.RelationsUpserted
 
 	// Persist the newly indexed commit SHA.
-	_ = db.SetLastIndexedCommit(context.Background(), pool, opts.ScopeID, result.CommitSHA)
+	_ = compat.SetLastIndexedCommit(context.Background(), pool, opts.ScopeID, result.CommitSHA)
 }

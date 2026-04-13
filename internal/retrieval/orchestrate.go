@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/providers"
 	graphpkg "github.com/simplyblock/postbrain/internal/graph"
 	"github.com/simplyblock/postbrain/internal/knowledge"
@@ -199,7 +199,7 @@ func augmentWithGraphContext(ctx context.Context, deps OrchestrateDeps, input Or
 			continue
 		}
 		for _, nb := range neighbours {
-			mems, memErr := db.ListMemoriesForEntity(ctx, deps.Pool, nb.Entity.ID, 3)
+			mems, memErr := compat.ListMemoriesForEntity(ctx, deps.Pool, nb.Entity.ID, 3)
 			if memErr != nil {
 				continue
 			}
@@ -242,7 +242,7 @@ func scheduleArtifactAccessUpdates(pool *pgxpool.Pool, ids []uuid.UUID) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		for _, id := range ids {
-			if err := db.IncrementArtifactAccess(ctx, pool, id); err != nil {
+			if err := compat.IncrementArtifactAccess(ctx, pool, id); err != nil {
 				slog.Warn("orchestrate: increment artifact access", "id", id, "error", err)
 			}
 		}

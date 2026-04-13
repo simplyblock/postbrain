@@ -16,6 +16,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
@@ -50,7 +51,7 @@ func TestREST_DirectScopeGrant_AllowsAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.CreateToken(ctx, pool, grantee.ID, hashToken, "sg-token", nil, []string{"memories:write"}, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, grantee.ID, hashToken, "sg-token", nil, []string{"memories:write"}, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -95,7 +96,7 @@ func TestREST_MembershipInAncestor_AllowsChildScopeAccess(t *testing.T) {
 	scope := testhelper.CreateTestScope(t, pool, "project", "ma-scope-"+uuid.NewString(), nil, parent.ID)
 
 	// Add member as a member of parent.
-	if _, err := db.CreateMembership(ctx, pool, member.ID, parent.ID, "member", nil); err != nil {
+	if _, err := compat.CreateMembership(ctx, pool, member.ID, parent.ID, "member", nil); err != nil {
 		t.Fatalf("CreateMembership: %v", err)
 	}
 
@@ -104,7 +105,7 @@ func TestREST_MembershipInAncestor_AllowsChildScopeAccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Token with memories:write (member role includes this permission).
-	if _, err := db.CreateToken(ctx, pool, member.ID, hashToken, "ma-token", nil, []string{"memories:write"}, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, member.ID, hashToken, "ma-token", nil, []string{"memories:write"}, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -151,7 +152,7 @@ func TestREST_TokenScopeIDs_BlocksSiblingScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Token restricted to allowedScope only.
-	if _, err := db.CreateToken(ctx, pool, principal.ID, hashToken, "ts-token",
+	if _, err := compat.CreateToken(ctx, pool, principal.ID, hashToken, "ts-token",
 		[]uuid.UUID{allowedScope.ID}, []string{"memories:write"}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +238,7 @@ func TestREST_UpwardRead_ParentScopeInList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.CreateToken(ctx, pool, grantee.ID, hashToken, "ur-token", nil, []string{"scopes:read", "memories:read"}, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, grantee.ID, hashToken, "ur-token", nil, []string{"scopes:read", "memories:read"}, nil); err != nil {
 		t.Fatal(err)
 	}
 

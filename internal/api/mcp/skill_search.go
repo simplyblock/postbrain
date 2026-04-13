@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/skills"
 )
 
@@ -50,7 +50,7 @@ func (s *Server) handleSkillSearch(ctx context.Context, req mcpgo.CallToolReques
 		if err != nil {
 			return mcpgo.NewToolResultError(fmt.Sprintf("skill_search: invalid scope: %v", err)), nil
 		}
-		scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
+		scope, err := compat.GetScopeByExternalID(ctx, s.pool, kind, externalID)
 		if err != nil || scope == nil {
 			return mcpgo.NewToolResultError("skill_search: scope not found"), nil
 		}

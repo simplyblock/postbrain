@@ -9,7 +9,7 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 
@@ -55,7 +55,7 @@ func (s *Server) handleSessionBegin(ctx context.Context, req mcpgo.CallToolReque
 
 	principalID, _ := ctx.Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 
-	session, err := db.CreateSession(ctx, s.pool, scopeID, principalID, nil)
+	session, err := compat.CreateSession(ctx, s.pool, scopeID, principalID, nil)
 	if err != nil {
 		return mcpgo.NewToolResultError(fmt.Sprintf("session_begin: %v", err)), nil
 	}
@@ -85,7 +85,7 @@ func (s *Server) handleSessionEnd(ctx context.Context, req mcpgo.CallToolRequest
 		return mcpgo.NewToolResultError("session_end: server not configured (no database connection)"), nil
 	}
 
-	session, err := db.EndSession(ctx, s.pool, sessionID, nil)
+	session, err := compat.EndSession(ctx, s.pool, sessionID, nil)
 	if err != nil {
 		return mcpgo.NewToolResultError(fmt.Sprintf("session_end: %v", err)), nil
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/providers"
 )
 
@@ -68,20 +69,20 @@ func (s *Store) Recall(ctx context.Context, svc *providers.EmbeddingService, inp
 		}
 	}
 	if len(vecResults) == 0 {
-		vecResults, err = db.RecallSkillsByVector(ctx, s.pool, input.ScopeIDs, queryVec, input.AgentType, input.Limit*2)
+		vecResults, err = compat.RecallSkillsByVector(ctx, s.pool, input.ScopeIDs, queryVec, input.AgentType, input.Limit*2)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	// FTS recall.
-	ftsResults, err := db.RecallSkillsByFTS(ctx, s.pool, input.ScopeIDs, input.Query, input.AgentType, input.Limit*2)
+	ftsResults, err := compat.RecallSkillsByFTS(ctx, s.pool, input.ScopeIDs, input.Query, input.AgentType, input.Limit*2)
 	if err != nil {
 		return nil, err
 	}
 
 	// Trigram recall.
-	trgmResults, err := db.RecallSkillsByTrigram(ctx, s.pool, input.ScopeIDs, input.Query, input.AgentType, input.Limit*2)
+	trgmResults, err := compat.RecallSkillsByTrigram(ctx, s.pool, input.ScopeIDs, input.Query, input.AgentType, input.Limit*2)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +187,7 @@ func (s *Store) recallSkillsByModelTable(
 	}
 	byID := make(map[uuid.UUID]row)
 	for _, scopeID := range scopeIDs {
-		scope, err := db.GetScopeByID(ctx, s.pool, scopeID)
+		scope, err := compat.GetScopeByID(ctx, s.pool, scopeID)
 		if err != nil {
 			return nil, err
 		}
@@ -216,7 +217,7 @@ func (s *Store) recallSkillsByModelTable(
 	}
 	rows := make([]db.SkillScore, 0, len(byID))
 	for _, r := range byID {
-		skill, err := db.GetSkill(ctx, s.pool, r.id)
+		skill, err := compat.GetSkill(ctx, s.pool, r.id)
 		if err != nil {
 			return nil, err
 		}

@@ -13,6 +13,7 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 	uiapi "github.com/simplyblock/postbrain/internal/ui"
 )
@@ -25,7 +26,7 @@ func TestLoginPOST_WithNext_RedirectsToNext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
 	}
-	_, err = db.CreateToken(context.Background(), pool, user.ID, hashToken, "ui-login-next", nil, []string{"read"}, nil)
+	_, err = compat.CreateToken(context.Background(), pool, user.ID, hashToken, "ui-login-next", nil, []string{"read"}, nil)
 	if err != nil {
 		t.Fatalf("create token: %v", err)
 	}
@@ -78,7 +79,7 @@ func TestLogoutPOST_ClearsSessionAndRequiresLoginAgain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
 	}
-	_, err = db.CreateToken(context.Background(), pool, user.ID, hashToken, "ui-logout", nil, []string{"read"}, nil)
+	_, err = compat.CreateToken(context.Background(), pool, user.ID, hashToken, "ui-logout", nil, []string{"read"}, nil)
 	if err != nil {
 		t.Fatalf("create token: %v", err)
 	}

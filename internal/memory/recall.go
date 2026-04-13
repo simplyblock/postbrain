@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 // RecallInput parameters for retrieving memories.
@@ -51,23 +52,23 @@ type poolRecallDB struct {
 }
 
 func (p *poolRecallDB) RecallMemoriesByVector(ctx context.Context, scopeIDs []uuid.UUID, queryVec []float32, limit int, since, until *time.Time) ([]db.MemoryScore, error) {
-	return db.RecallMemoriesByVector(ctx, p.pool, scopeIDs, queryVec, limit, since, until)
+	return compat.RecallMemoriesByVector(ctx, p.pool, scopeIDs, queryVec, limit, since, until)
 }
 
 func (p *poolRecallDB) RecallMemoriesByFTS(ctx context.Context, scopeIDs []uuid.UUID, query string, limit int, since, until *time.Time) ([]db.MemoryScore, error) {
-	return db.RecallMemoriesByFTS(ctx, p.pool, scopeIDs, query, limit, since, until)
+	return compat.RecallMemoriesByFTS(ctx, p.pool, scopeIDs, query, limit, since, until)
 }
 
 func (p *poolRecallDB) RecallMemoriesByTrigram(ctx context.Context, scopeIDs []uuid.UUID, query string, limit int, since, until *time.Time) ([]db.MemoryScore, error) {
-	return db.RecallMemoriesByTrigram(ctx, p.pool, scopeIDs, query, limit, since, until)
+	return compat.RecallMemoriesByTrigram(ctx, p.pool, scopeIDs, query, limit, since, until)
 }
 
 func (p *poolRecallDB) RecallMemoriesByCodeVector(ctx context.Context, scopeIDs []uuid.UUID, queryVec []float32, limit int, since, until *time.Time) ([]db.MemoryScore, error) {
-	return db.RecallMemoriesByCodeVector(ctx, p.pool, scopeIDs, queryVec, limit, since, until)
+	return compat.RecallMemoriesByCodeVector(ctx, p.pool, scopeIDs, queryVec, limit, since, until)
 }
 
 func (p *poolRecallDB) IncrementMemoryAccess(ctx context.Context, id uuid.UUID) error {
-	return db.IncrementMemoryAccess(ctx, p.pool, id)
+	return compat.IncrementMemoryAccess(ctx, p.pool, id)
 }
 
 // fanOutFunc is a dependency-injected fan-out function for testing.
@@ -343,7 +344,7 @@ func (s *Store) recallMemoriesByModelTable(ctx context.Context, modelID uuid.UUI
 	}
 	byID := make(map[uuid.UUID]row)
 	for _, scopeID := range scopeIDs {
-		scope, err := db.GetScopeByID(ctx, s.pool, scopeID)
+		scope, err := compat.GetScopeByID(ctx, s.pool, scopeID)
 		if err != nil {
 			return nil, err
 		}
@@ -379,7 +380,7 @@ func (s *Store) recallMemoriesByModelTable(ctx context.Context, modelID uuid.UUI
 	}
 	rows := make([]db.MemoryScore, 0, len(byID))
 	for _, r := range byID {
-		mem, err := db.GetMemory(ctx, s.pool, r.id)
+		mem, err := compat.GetMemory(ctx, s.pool, r.id)
 		if err != nil {
 			return nil, err
 		}

@@ -17,6 +17,7 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 	uiapi "github.com/simplyblock/postbrain/internal/ui"
 )
@@ -32,13 +33,13 @@ func TestTokensPage_ShowsOnlyCurrentPrincipalTokens(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, userA.ID, hashSessionA, "a-session", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, userA.ID, hashSessionA, "a-session", nil, nil, nil); err != nil {
 		t.Fatalf("create userA session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, userA.ID, auth.HashToken("pb_a_visible"), "a-visible", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, userA.ID, auth.HashToken("pb_a_visible"), "a-visible", nil, nil, nil); err != nil {
 		t.Fatalf("create userA visible token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, userB.ID, auth.HashToken("pb_b_hidden"), "b-hidden", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, userB.ID, auth.HashToken("pb_b_hidden"), "b-hidden", nil, nil, nil); err != nil {
 		t.Fatalf("create userB hidden token: %v", err)
 	}
 
@@ -77,10 +78,10 @@ func TestRevokeToken_OtherPrincipalToken_ReturnsForbidden(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, userA.ID, hashSessionA, "a-session", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, userA.ID, hashSessionA, "a-session", nil, nil, nil); err != nil {
 		t.Fatalf("create userA session token: %v", err)
 	}
-	tokenB, err := db.CreateToken(ctx, pool, userB.ID, auth.HashToken("pb_b_keep"), "b-keep", nil, nil, nil)
+	tokenB, err := compat.CreateToken(ctx, pool, userB.ID, auth.HashToken("pb_b_keep"), "b-keep", nil, nil, nil)
 	if err != nil {
 		t.Fatalf("create userB token: %v", err)
 	}
@@ -100,7 +101,7 @@ func TestRevokeToken_OtherPrincipalToken_ReturnsForbidden(t *testing.T) {
 		t.Fatalf("revoke status = %d, want %d", resp.StatusCode, http.StatusForbidden)
 	}
 
-	tokens, err := db.ListTokens(ctx, pool, nil)
+	tokens, err := compat.ListTokens(ctx, pool, nil)
 	if err != nil {
 		t.Fatalf("list tokens: %v", err)
 	}
@@ -127,11 +128,11 @@ func TestUpdateTokenScopes_OwnToken_UpdatesScopeIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, user.ID, hashSession, "session", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, user.ID, hashSession, "session", nil, nil, nil); err != nil {
 		t.Fatalf("create session token: %v", err)
 	}
 
-	tokenToEdit, err := db.CreateToken(ctx, pool, user.ID, auth.HashToken("pb_edit_scope"), "editable", []uuid.UUID{scopeA.ID}, nil, nil)
+	tokenToEdit, err := compat.CreateToken(ctx, pool, user.ID, auth.HashToken("pb_edit_scope"), "editable", []uuid.UUID{scopeA.ID}, nil, nil)
 	if err != nil {
 		t.Fatalf("create editable token: %v", err)
 	}
@@ -155,7 +156,7 @@ func TestUpdateTokenScopes_OwnToken_UpdatesScopeIDs(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusSeeOther)
 	}
 
-	tokens, err := db.ListTokens(ctx, pool, &user.ID)
+	tokens, err := compat.ListTokens(ctx, pool, &user.ID)
 	if err != nil {
 		t.Fatalf("list tokens: %v", err)
 	}
@@ -182,12 +183,12 @@ func TestUpdateTokenScopes_OtherPrincipalToken_ReturnsForbidden(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, userA.ID, hashSessionA, "a-session", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, userA.ID, hashSessionA, "a-session", nil, nil, nil); err != nil {
 		t.Fatalf("create userA session token: %v", err)
 	}
 
 	scopeB := testhelper.CreateTestScope(t, pool, "project", "ui-update-scope-forbidden", nil, userB.ID)
-	tokenB, err := db.CreateToken(ctx, pool, userB.ID, auth.HashToken("pb_update_scope_other"), "b-editable", []uuid.UUID{scopeB.ID}, nil, nil)
+	tokenB, err := compat.CreateToken(ctx, pool, userB.ID, auth.HashToken("pb_update_scope_other"), "b-editable", []uuid.UUID{scopeB.ID}, nil, nil)
 	if err != nil {
 		t.Fatalf("create userB token: %v", err)
 	}
@@ -221,10 +222,10 @@ func TestTokensPage_UsesDialogForScopeEditing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, user.ID, hashSession, "session", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, user.ID, hashSession, "session", nil, nil, nil); err != nil {
 		t.Fatalf("create session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, user.ID, auth.HashToken("pb_dialog_scope"), "editable", []uuid.UUID{scope.ID}, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, user.ID, auth.HashToken("pb_dialog_scope"), "editable", []uuid.UUID{scope.ID}, nil, nil); err != nil {
 		t.Fatalf("create editable token: %v", err)
 	}
 
@@ -263,7 +264,7 @@ func TestCreateToken_UsesSelectedPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, user.ID, hashSession, "session", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, user.ID, hashSession, "session", nil, nil, nil); err != nil {
 		t.Fatalf("create session token: %v", err)
 	}
 
@@ -287,7 +288,7 @@ func TestCreateToken_UsesSelectedPermissions(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 
-	tokens, err := db.ListTokens(ctx, pool, &user.ID)
+	tokens, err := compat.ListTokens(ctx, pool, &user.ID)
 	if err != nil {
 		t.Fatalf("list tokens: %v", err)
 	}
@@ -312,10 +313,10 @@ func TestTokensPage_ShowsTokenPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, user.ID, hashSession, "session", nil, []string{"tokens:read"}, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, user.ID, hashSession, "session", nil, []string{"tokens:read"}, nil); err != nil {
 		t.Fatalf("create session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, user.ID, auth.HashToken("pb_token_perms_visible"), "permissions-visible", nil, []string{"memories:read", "memories:write"}, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, user.ID, auth.HashToken("pb_token_perms_visible"), "permissions-visible", nil, []string{"memories:read", "memories:write"}, nil); err != nil {
 		t.Fatalf("create visible token: %v", err)
 	}
 
@@ -353,10 +354,10 @@ func TestTokensPage_EditScopes_ShowsPrincipalEffectiveScopes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, user.ID, hashSession, "session-scoped-a", []uuid.UUID{scopeA.ID}, []string{"tokens:read", "scopes:read"}, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, user.ID, hashSession, "session-scoped-a", []uuid.UUID{scopeA.ID}, []string{"tokens:read", "scopes:read"}, nil); err != nil {
 		t.Fatalf("create scoped session token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, user.ID, auth.HashToken("pb_edit_scope_multi"), "editable-multi", []uuid.UUID{scopeA.ID, scopeB.ID}, []string{"memories:read", "memories:write"}, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, user.ID, auth.HashToken("pb_edit_scope_multi"), "editable-multi", []uuid.UUID{scopeA.ID, scopeB.ID}, []string{"memories:read", "memories:write"}, nil); err != nil {
 		t.Fatalf("create editable token: %v", err)
 	}
 

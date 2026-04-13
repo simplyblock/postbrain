@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/simplyblock/postbrain/internal/closeutil"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/ingest"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 )
@@ -66,11 +67,11 @@ func (h *Handler) handleKnowledge(w http.ResponseWriter, r *http.Request) {
 		var err error
 		if scopeAllowed {
 			if q != "" {
-				arts, err = db.SearchArtifacts(r.Context(), h.pool, q, status, scopeID, knowledgePageSize+1, cursor)
+				arts, err = compat.SearchArtifacts(r.Context(), h.pool, q, status, scopeID, knowledgePageSize+1, cursor)
 			} else if status != "" {
-				arts, err = db.ListArtifactsByStatus(r.Context(), h.pool, status, scopeID, knowledgePageSize+1, cursor)
+				arts, err = compat.ListArtifactsByStatus(r.Context(), h.pool, status, scopeID, knowledgePageSize+1, cursor)
 			} else {
-				arts, err = db.ListAllArtifacts(r.Context(), h.pool, scopeID, knowledgePageSize+1, cursor)
+				arts, err = compat.ListAllArtifacts(r.Context(), h.pool, scopeID, knowledgePageSize+1, cursor)
 			}
 			if err == nil {
 				filtered := make([]*db.KnowledgeArtifact, 0, len(arts))
@@ -118,7 +119,7 @@ func (h *Handler) handleKnowledgeDetail(w http.ResponseWriter, r *http.Request) 
 	}{}
 
 	if h.pool != nil {
-		art, err := db.GetArtifact(r.Context(), h.pool, id)
+		art, err := compat.GetArtifact(r.Context(), h.pool, id)
 		if err != nil || art == nil {
 			http.NotFound(w, r)
 			return
@@ -126,14 +127,14 @@ func (h *Handler) handleKnowledgeDetail(w http.ResponseWriter, r *http.Request) 
 		data.Artifact = art
 
 		if art.KnowledgeType == "digest" {
-			sources, err := db.ListDigestSources(r.Context(), h.pool, id)
+			sources, err := compat.ListDigestSources(r.Context(), h.pool, id)
 			if err != nil {
 				http.Error(w, "failed to load digest sources", http.StatusInternalServerError)
 				return
 			}
 			data.Sources = sources
 		} else {
-			digests, err := db.ListDigestsForSource(r.Context(), h.pool, id)
+			digests, err := compat.ListDigestsForSource(r.Context(), h.pool, id)
 			if err != nil {
 				http.Error(w, "failed to load digests", http.StatusInternalServerError)
 				return
@@ -160,13 +161,13 @@ func (h *Handler) handleKnowledgeHistory(w http.ResponseWriter, r *http.Request)
 	}{}
 
 	if h.pool != nil {
-		art, err := db.GetArtifact(r.Context(), h.pool, id)
+		art, err := compat.GetArtifact(r.Context(), h.pool, id)
 		if err != nil || art == nil {
 			http.NotFound(w, r)
 			return
 		}
 		data.Artifact = art
-		history, _ := db.GetArtifactHistory(r.Context(), h.pool, id)
+		history, _ := compat.GetArtifactHistory(r.Context(), h.pool, id)
 		data.History = history
 	}
 
@@ -391,7 +392,7 @@ func (h *Handler) handleUploadKnowledge(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "scope must be kind:external_id", http.StatusBadRequest)
 		return
 	}
-	scope, err := db.GetScopeByExternalID(r.Context(), h.pool, parts[0], parts[1])
+	scope, err := compat.GetScopeByExternalID(r.Context(), h.pool, parts[0], parts[1])
 	if err != nil || scope == nil {
 		http.Error(w, "scope not found", http.StatusBadRequest)
 		return

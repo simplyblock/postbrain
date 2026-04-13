@@ -11,6 +11,7 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
@@ -23,7 +24,7 @@ func TestUI_PermissionAuthz_ReadVsWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate read token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, user.ID, hashRead, "ui-read-session", nil, []string{"tokens:read"}, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, user.ID, hashRead, "ui-read-session", nil, []string{"tokens:read"}, nil); err != nil {
 		t.Fatalf("create read token: %v", err)
 	}
 
@@ -31,7 +32,7 @@ func TestUI_PermissionAuthz_ReadVsWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate write token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, user.ID, hashWrite, "ui-write-session", nil, []string{"tokens:write", "memories:read", "memories:write"}, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, user.ID, hashWrite, "ui-write-session", nil, []string{"tokens:write", "memories:read", "memories:write"}, nil); err != nil {
 		t.Fatalf("create write token: %v", err)
 	}
 

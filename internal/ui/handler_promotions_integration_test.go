@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 	uiapi "github.com/simplyblock/postbrain/internal/ui"
 )
@@ -31,7 +32,7 @@ func TestPromotionsPage_FiltersByScopeID(t *testing.T) {
 	memoryA := testhelper.CreateTestMemory(t, pool, scopeA.ID, principal.ID, "scope A memory")
 	memoryB := testhelper.CreateTestMemory(t, pool, scopeB.ID, principal.ID, "scope B memory")
 
-	if _, err := db.CreatePromotionRequest(ctx, pool, &db.PromotionRequest{
+	if _, err := compat.CreatePromotionRequest(ctx, pool, &db.PromotionRequest{
 		MemoryID:         memoryA.ID,
 		RequestedBy:      principal.ID,
 		TargetScopeID:    scopeA.ID,
@@ -39,7 +40,7 @@ func TestPromotionsPage_FiltersByScopeID(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create promotion for scope A: %v", err)
 	}
-	if _, err := db.CreatePromotionRequest(ctx, pool, &db.PromotionRequest{
+	if _, err := compat.CreatePromotionRequest(ctx, pool, &db.PromotionRequest{
 		MemoryID:         memoryB.ID,
 		RequestedBy:      principal.ID,
 		TargetScopeID:    scopeB.ID,
@@ -52,7 +53,7 @@ func TestPromotionsPage_FiltersByScopeID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, principal.ID, hashToken, "ui-promotions-token", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, principal.ID, hashToken, "ui-promotions-token", nil, nil, nil); err != nil {
 		t.Fatalf("create token: %v", err)
 	}
 
@@ -121,7 +122,7 @@ func TestPromotionsPage_ShowsApprovedWhenStatusAll(t *testing.T) {
 	scope := testhelper.CreateTestScope(t, pool, "project", "ui-promotions-status-scope-"+suffix, nil, principal.ID)
 	memory := testhelper.CreateTestMemory(t, pool, scope.ID, principal.ID, "approved promotion memory")
 
-	prom, err := db.CreatePromotionRequest(ctx, pool, &db.PromotionRequest{
+	prom, err := compat.CreatePromotionRequest(ctx, pool, &db.PromotionRequest{
 		MemoryID:         memory.ID,
 		RequestedBy:      principal.ID,
 		TargetScopeID:    scope.ID,
@@ -143,7 +144,7 @@ func TestPromotionsPage_ShowsApprovedWhenStatusAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, principal.ID, hashToken, "ui-promotions-status-token", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, principal.ID, hashToken, "ui-promotions-status-token", nil, nil, nil); err != nil {
 		t.Fatalf("create token: %v", err)
 	}
 

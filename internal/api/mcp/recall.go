@@ -9,7 +9,7 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/retrieval"
 )
 
@@ -98,7 +98,7 @@ func (s *Server) handleRecall(ctx context.Context, req mcpgo.CallToolRequest) (*
 		if err != nil {
 			return mcpgo.NewToolResultError(fmt.Sprintf("recall: invalid scope: %v", err)), nil
 		}
-		scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
+		scope, err := compat.GetScopeByExternalID(ctx, s.pool, kind, externalID)
 		if err != nil {
 			return mcpgo.NewToolResultError(fmt.Sprintf("recall: scope lookup: %v", err)), nil
 		}

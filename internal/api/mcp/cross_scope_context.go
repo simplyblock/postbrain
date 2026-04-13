@@ -14,7 +14,7 @@ import (
 	scopeauthapi "github.com/simplyblock/postbrain/internal/api/scopeauth"
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/authz"
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/retrieval"
 )
 
@@ -95,7 +95,7 @@ func resolveScopeID(ctx context.Context, pool *pgxpool.Pool, scopeStr string) (u
 	if err != nil {
 		return uuid.Nil, err
 	}
-	scope, err := db.GetScopeByExternalID(ctx, pool, kind, externalID)
+	scope, err := compat.GetScopeByExternalID(ctx, pool, kind, externalID)
 	if err != nil {
 		return uuid.Nil, err
 	}

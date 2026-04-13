@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 type createCollectionRequest struct {
@@ -48,7 +48,7 @@ func (ro *Router) createCollection(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+	scope, err := compat.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 	if err != nil || scope == nil {
 		writeError(w, http.StatusBadRequest, "scope not found")
 		return
@@ -76,7 +76,7 @@ func (ro *Router) listCollections(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+		scope, err := compat.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 		if err != nil || scope == nil {
 			writeError(w, http.StatusBadRequest, "scope not found")
 			return
@@ -128,7 +128,7 @@ func (ro *Router) getCollection(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+	scope, err := compat.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 	if err != nil || scope == nil {
 		writeError(w, http.StatusBadRequest, "scope not found")
 		return

@@ -19,6 +19,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/memory"
 	"github.com/simplyblock/postbrain/internal/principals"
 	"github.com/simplyblock/postbrain/internal/testhelper"
@@ -39,7 +40,7 @@ func TestREST_ScopeAuthz_WriteEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.CreateToken(ctx, pool, principal.ID, hashToken, "rest-scope-authz-token", []uuid.UUID{allowed.ID}, nil, nil)
+	_, err = compat.CreateToken(ctx, pool, principal.ID, hashToken, "rest-scope-authz-token", []uuid.UUID{allowed.ID}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +255,7 @@ func TestREST_ScopeAuthz_IDBasedEndpoints(t *testing.T) {
 
 	allowedArtifact := testhelper.CreateTestArtifact(t, pool, allowed.ID, principal.ID, "allowed artifact")
 	blockedArtifact := testhelper.CreateTestArtifact(t, pool, blocked.ID, principal.ID, "blocked artifact")
-	allowedDraftArtifact, err := db.CreateArtifact(ctx, pool, &db.KnowledgeArtifact{
+	allowedDraftArtifact, err := compat.CreateArtifact(ctx, pool, &db.KnowledgeArtifact{
 		KnowledgeType: "semantic",
 		OwnerScopeID:  allowed.ID,
 		AuthorID:      principal.ID,
@@ -266,7 +267,7 @@ func TestREST_ScopeAuthz_IDBasedEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	blockedDraftArtifact, err := db.CreateArtifact(ctx, pool, &db.KnowledgeArtifact{
+	blockedDraftArtifact, err := compat.CreateArtifact(ctx, pool, &db.KnowledgeArtifact{
 		KnowledgeType: "semantic",
 		OwnerScopeID:  blocked.ID,
 		AuthorID:      principal.ID,
@@ -284,7 +285,7 @@ func TestREST_ScopeAuthz_IDBasedEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	allowedSkill, err := db.CreateSkill(ctx, pool, &db.Skill{
+	allowedSkill, err := compat.CreateSkill(ctx, pool, &db.Skill{
 		ScopeID:        allowed.ID,
 		AuthorID:       principal.ID,
 		Slug:           "allowed-skill-" + uuid.New().String(),
@@ -302,7 +303,7 @@ func TestREST_ScopeAuthz_IDBasedEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	blockedSkill, err := db.CreateSkill(ctx, pool, &db.Skill{
+	blockedSkill, err := compat.CreateSkill(ctx, pool, &db.Skill{
 		ScopeID:        blocked.ID,
 		AuthorID:       principal.ID,
 		Slug:           "blocked-skill-" + uuid.New().String(),
@@ -321,7 +322,7 @@ func TestREST_ScopeAuthz_IDBasedEndpoints(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	allowedColl, err := db.CreateCollection(ctx, pool, &db.KnowledgeCollection{
+	allowedColl, err := compat.CreateCollection(ctx, pool, &db.KnowledgeCollection{
 		ScopeID:    allowed.ID,
 		OwnerID:    principal.ID,
 		Slug:       "allowed-coll-" + uuid.New().String(),
@@ -331,7 +332,7 @@ func TestREST_ScopeAuthz_IDBasedEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	blockedColl, err := db.CreateCollection(ctx, pool, &db.KnowledgeCollection{
+	blockedColl, err := compat.CreateCollection(ctx, pool, &db.KnowledgeCollection{
 		ScopeID:    blocked.ID,
 		OwnerID:    principal.ID,
 		Slug:       "blocked-coll-" + uuid.New().String(),
@@ -341,10 +342,10 @@ func TestREST_ScopeAuthz_IDBasedEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AddCollectionItem(ctx, pool, allowedColl.ID, allowedArtifact.ID, principal.ID); err != nil {
+	if err := compat.AddCollectionItem(ctx, pool, allowedColl.ID, allowedArtifact.ID, principal.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AddCollectionItem(ctx, pool, blockedColl.ID, blockedArtifact.ID, principal.ID); err != nil {
+	if err := compat.AddCollectionItem(ctx, pool, blockedColl.ID, blockedArtifact.ID, principal.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -352,7 +353,7 @@ func TestREST_ScopeAuthz_IDBasedEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.CreateToken(ctx, pool, principal.ID, hashToken, "rest-scope-id-authz-token", []uuid.UUID{allowed.ID}, nil, nil)
+	_, err = compat.CreateToken(ctx, pool, principal.ID, hashToken, "rest-scope-id-authz-token", []uuid.UUID{allowed.ID}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -619,7 +620,7 @@ func TestREST_ScopeAuthz_MultiHopPrincipalChain(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					_, err = db.CreateToken(ctx, pool, tc.principalID, hashToken, "chain-token-"+tc.name+"-"+uuid.New().String(), nil, nil, nil)
+					_, err = compat.CreateToken(ctx, pool, tc.principalID, hashToken, "chain-token-"+tc.name+"-"+uuid.New().String(), nil, nil, nil)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -707,7 +708,7 @@ func TestREST_ScopeAuthz_WriteParentAllowed_DeleteParentDenied(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, childPrincipal.ID, hashToken, "rest-delete-parent-check", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, childPrincipal.ID, hashToken, "rest-delete-parent-check", nil, nil, nil); err != nil {
 		t.Fatalf("create token: %v", err)
 	}
 
@@ -821,7 +822,7 @@ func TestREST_Recall_IncludesAncestorScopeMemories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.CreateToken(ctx, pool, user.ID, hashToken, "fanout-ancestor-token", nil, nil, nil)
+	_, err = compat.CreateToken(ctx, pool, user.ID, hashToken, "fanout-ancestor-token", nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -902,7 +903,7 @@ func TestREST_ScopeAuthz_WriteEndpoints_MultiHopChainMatrix(t *testing.T) {
 		t.Fatal(err)
 	}
 	// nil scope_ids keeps token unrestricted so this test exercises principal-chain authz.
-	_, err = db.CreateToken(ctx, pool, graph.UserPrincipal.ID, hashToken, "rest-scope-multihop-token", nil, nil, nil)
+	_, err = compat.CreateToken(ctx, pool, graph.UserPrincipal.ID, hashToken, "rest-scope-multihop-token", nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

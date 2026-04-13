@@ -6,7 +6,7 @@ import (
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 func (s *Server) registerListScopes() {
@@ -30,7 +30,7 @@ func (s *Server) handleListScopes(ctx context.Context, req mcpgo.CallToolRequest
 	if err != nil {
 		return mcpgo.NewToolResultError("list_scopes: " + err.Error()), nil
 	}
-	scopes, err := db.GetScopesByIDs(ctx, s.pool, authorizedScopeIDs)
+	scopes, err := compat.GetScopesByIDs(ctx, s.pool, authorizedScopeIDs)
 	if err != nil {
 		return mcpgo.NewToolResultError("list_scopes: " + err.Error()), nil
 	}

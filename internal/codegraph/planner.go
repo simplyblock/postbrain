@@ -9,7 +9,7 @@ import (
 	merkletrie "github.com/go-git/go-git/v5/utils/merkletrie"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 // indexFullTree walks every file in the tree and upserts symbols/relations.
@@ -36,7 +36,7 @@ func indexDiff(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, prevT
 		}
 		switch action {
 		case merkletrie.Delete:
-			_ = db.DeleteRelationsBySourceFile(ctx, pool, opts.ScopeID, change.From.Name)
+			_ = compat.DeleteRelationsBySourceFile(ctx, pool, opts.ScopeID, change.From.Name)
 
 		case merkletrie.Insert:
 			f, err := currTree.File(change.To.Name)
@@ -48,7 +48,7 @@ func indexDiff(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, prevT
 			}
 
 		case merkletrie.Modify:
-			_ = db.DeleteRelationsBySourceFile(ctx, pool, opts.ScopeID, change.To.Name)
+			_ = compat.DeleteRelationsBySourceFile(ctx, pool, opts.ScopeID, change.To.Name)
 			f, err := currTree.File(change.To.Name)
 			if err != nil {
 				continue

@@ -13,6 +13,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/metrics"
 )
 
@@ -24,7 +25,7 @@ func (s *Server) resolveScope(ctx context.Context, toolName, scopeStr string) (u
 	if err != nil {
 		return uuid.Nil, mcpgo.NewToolResultError(fmt.Sprintf("%s: invalid scope: %v", toolName, err))
 	}
-	scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
+	scope, err := compat.GetScopeByExternalID(ctx, s.pool, kind, externalID)
 	if err != nil {
 		return uuid.Nil, mcpgo.NewToolResultError(fmt.Sprintf("%s: scope lookup: %v", toolName, err))
 	}
@@ -51,7 +52,7 @@ func (s *Server) authorizeDeleteObjectScope(ctx context.Context, objectScopeID u
 	if err := s.authorizeRequestedScope(ctx, objectScopeID); err != nil {
 		return err
 	}
-	scope, err := db.GetScopeByID(ctx, s.pool, objectScopeID)
+	scope, err := compat.GetScopeByID(ctx, s.pool, objectScopeID)
 	if err != nil {
 		return err
 	}

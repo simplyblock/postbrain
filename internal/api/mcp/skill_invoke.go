@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/skills"
 )
 
@@ -77,7 +77,7 @@ func (s *Server) handleSkillInvoke(ctx context.Context, req mcpgo.CallToolReques
 			}
 		}
 		payload, _ := json.Marshal(map[string]any{"skill_id": skill.ID.String()})
-		_ = db.InsertEvent(context.Background(), s.pool, sessionID, scopeID, "skill_invoked", payload)
+		_ = compat.InsertEvent(context.Background(), s.pool, sessionID, scopeID, "skill_invoked", payload)
 	}()
 
 	out, _ := json.Marshal(map[string]any{

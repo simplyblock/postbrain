@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 // Sentinel errors returned by MembershipStore.
@@ -44,7 +45,7 @@ func (m *MembershipStore) AddMembership(ctx context.Context, memberID, parentID 
 
 	// Cycle detection: if memberID already appears in the ancestor chain of parentID,
 	// inserting memberID→parentID would form a cycle.
-	ancestors, err := db.GetAllParentIDs(ctx, m.pool, parentID)
+	ancestors, err := compat.GetAllParentIDs(ctx, m.pool, parentID)
 	if err != nil {
 		return fmt.Errorf("principals: cycle check: %w", err)
 	}
@@ -54,7 +55,7 @@ func (m *MembershipStore) AddMembership(ctx context.Context, memberID, parentID 
 		}
 	}
 
-	_, err = db.CreateMembership(ctx, m.pool, memberID, parentID, role, grantedBy)
+	_, err = compat.CreateMembership(ctx, m.pool, memberID, parentID, role, grantedBy)
 	if err != nil {
 		return fmt.Errorf("principals: add membership: %w", err)
 	}
@@ -63,7 +64,7 @@ func (m *MembershipStore) AddMembership(ctx context.Context, memberID, parentID 
 
 // RemoveMembership removes a direct membership between memberID and parentID.
 func (m *MembershipStore) RemoveMembership(ctx context.Context, memberID, parentID uuid.UUID) error {
-	if err := db.DeleteMembership(ctx, m.pool, memberID, parentID); err != nil {
+	if err := compat.DeleteMembership(ctx, m.pool, memberID, parentID); err != nil {
 		return fmt.Errorf("principals: remove membership: %w", err)
 	}
 	return nil
@@ -72,7 +73,7 @@ func (m *MembershipStore) RemoveMembership(ctx context.Context, memberID, parent
 // EffectiveScopeIDs returns all scope IDs accessible to a principal via memberships.
 // This includes scopes owned by the principal itself and by all ancestor principals.
 func (m *MembershipStore) EffectiveScopeIDs(ctx context.Context, principalID uuid.UUID) ([]uuid.UUID, error) {
-	allPrincipalIDs, err := db.GetAllParentIDs(ctx, m.pool, principalID)
+	allPrincipalIDs, err := compat.GetAllParentIDs(ctx, m.pool, principalID)
 	if err != nil {
 		return nil, fmt.Errorf("principals: effective scope ids: %w", err)
 	}
@@ -106,7 +107,7 @@ func (m *MembershipStore) IsScopeAdmin(ctx context.Context, principalID, scopeID
 		return true, nil
 	}
 
-	ancestorScopeIDs, err := db.GetAncestorScopeIDs(ctx, m.pool, scopeID)
+	ancestorScopeIDs, err := compat.GetAncestorScopeIDs(ctx, m.pool, scopeID)
 	if err != nil {
 		return false, fmt.Errorf("principals: is scope admin: %w", err)
 	}
@@ -132,7 +133,7 @@ func (m *MembershipStore) IsPrincipalAdmin(ctx context.Context, principalID, tar
 		return true, nil
 	}
 
-	ancestorPrincipalIDs, err := db.GetAllParentIDs(ctx, m.pool, targetPrincipalID)
+	ancestorPrincipalIDs, err := compat.GetAllParentIDs(ctx, m.pool, targetPrincipalID)
 	if err != nil {
 		return false, fmt.Errorf("principals: is principal admin: %w", err)
 	}

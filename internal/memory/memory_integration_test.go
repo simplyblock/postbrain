@@ -15,6 +15,7 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/memory"
 	"github.com/simplyblock/postbrain/internal/modelruntime"
@@ -105,7 +106,7 @@ func TestMemoryCreate_WorkingDefaultTTL(t *testing.T) {
 	}
 
 	// Fetch the memory and verify expires_at is ~1 hour from now
-	mem, err := db.GetMemory(context.Background(), pool, result.MemoryID)
+	mem, err := compat.GetMemory(context.Background(), pool, result.MemoryID)
 	if err != nil {
 		t.Fatalf("GetMemory: %v", err)
 	}
@@ -182,7 +183,7 @@ func TestMemoryHardDelete(t *testing.T) {
 		t.Fatalf("HardDelete: %v", err)
 	}
 
-	mem, err := db.GetMemory(ctx, pool, r.MemoryID)
+	mem, err := compat.GetMemory(ctx, pool, r.MemoryID)
 	if err == nil && mem != nil {
 		t.Error("expected hard-deleted memory to be gone")
 	}

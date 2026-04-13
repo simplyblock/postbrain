@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
@@ -27,12 +28,12 @@ func TestEndSession_EndedAtIsNeverZero(t *testing.T) {
 
 	before := time.Now().Add(-time.Second)
 
-	session, err := db.CreateSession(ctx, pool, scope.ID, principal.ID, nil)
+	session, err := compat.CreateSession(ctx, pool, scope.ID, principal.ID, nil)
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 
-	ended, err := db.EndSession(ctx, pool, session.ID, nil)
+	ended, err := compat.EndSession(ctx, pool, session.ID, nil)
 	if err != nil {
 		t.Fatalf("EndSession: %v", err)
 	}

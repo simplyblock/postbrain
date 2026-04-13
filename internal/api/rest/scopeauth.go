@@ -13,6 +13,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/metrics"
 )
 
@@ -39,7 +40,7 @@ func (ro *Router) authorizeDeleteObjectScope(ctx context.Context, objectScopeID 
 		return err
 	}
 
-	scope, err := db.GetScopeByID(ctx, ro.pool, objectScopeID)
+	scope, err := compat.GetScopeByID(ctx, ro.pool, objectScopeID)
 	if err != nil {
 		return err
 	}

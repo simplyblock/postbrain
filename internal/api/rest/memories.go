@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 	"github.com/simplyblock/postbrain/internal/memory"
 	"github.com/simplyblock/postbrain/internal/scopeutil"
@@ -67,7 +67,7 @@ func (ro *Router) createMemory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+	scope, err := compat.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "scope lookup failed")
 		return
@@ -137,7 +137,7 @@ func (ro *Router) recallMemories(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+		scope, err := compat.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 		if err != nil || scope == nil {
 			writeError(w, http.StatusBadRequest, "scope not found")
 			return
@@ -169,7 +169,7 @@ func (ro *Router) getMemory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid memory id")
 		return
 	}
-	m, err := db.GetMemory(r.Context(), ro.pool, id)
+	m, err := compat.GetMemory(r.Context(), ro.pool, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -202,7 +202,7 @@ func (ro *Router) updateMemory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	existing, err := db.GetMemory(r.Context(), ro.pool, id)
+	existing, err := compat.GetMemory(r.Context(), ro.pool, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -230,7 +230,7 @@ func (ro *Router) deleteMemory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hard := r.URL.Query().Get("hard") == "true"
-	existing, err := db.GetMemory(r.Context(), ro.pool, id)
+	existing, err := compat.GetMemory(r.Context(), ro.pool, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -286,7 +286,7 @@ func (ro *Router) promoteMemory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+	scope, err := compat.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 	if err != nil || scope == nil {
 		writeError(w, http.StatusBadRequest, "target scope not found")
 		return
@@ -344,7 +344,7 @@ func (ro *Router) handleSummarizeMemories(w http.ResponseWriter, req *http.Reque
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	scope, err := db.GetScopeByExternalID(req.Context(), ro.pool, kind, externalID)
+	scope, err := compat.GetScopeByExternalID(req.Context(), ro.pool, kind, externalID)
 	if err != nil || scope == nil {
 		writeError(w, http.StatusBadRequest, "scope not found")
 		return

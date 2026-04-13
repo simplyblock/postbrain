@@ -17,6 +17,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/codegraph"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/principals"
 )
 
@@ -75,7 +76,7 @@ func (h *Handler) renderScopes(w http.ResponseWriter, r *http.Request, scopeErr 
 
 	if h.pool != nil {
 		scopes, writable := h.authorizedScopesForRequest(r.Context(), r)
-		principals, err := db.ListPrincipals(r.Context(), h.pool, 50, 0)
+		principals, err := compat.ListPrincipals(r.Context(), h.pool, 50, 0)
 		if err == nil {
 			data.Principals = principals
 			for _, p := range principals {
@@ -92,7 +93,7 @@ func (h *Handler) renderScopes(w http.ResponseWriter, r *http.Request, scopeErr 
 			if st.State != codegraph.SyncIdle || st.CommitSHA != "" || st.Error != "" {
 				data.SyncStatus[s.ID.String()] = st
 			}
-			if n, err := db.CountChildScopes(r.Context(), h.pool, s.ID); err == nil && n > 0 {
+			if n, err := compat.CountChildScopes(r.Context(), h.pool, s.ID); err == nil && n > 0 {
 				data.ChildCount[s.ID.String()] = n
 			}
 			canManage := h.hasScopeAdminAccess(r.Context(), r, s.ID)
@@ -141,7 +142,7 @@ func (h *Handler) renderPrincipals(
 
 	if h.pool != nil {
 		reachable := h.reachablePrincipalIDSet(r.Context(), r)
-		principals, err := db.ListPrincipals(r.Context(), h.pool, 50, 0)
+		principals, err := compat.ListPrincipals(r.Context(), h.pool, 50, 0)
 		if err == nil {
 			if reachable == nil {
 				// nil means show all (system admin).
@@ -157,7 +158,7 @@ func (h *Handler) renderPrincipals(
 				data.Principals = filtered
 			}
 		}
-		memberships, err := db.ListAllMemberships(r.Context(), h.pool)
+		memberships, err := compat.ListAllMemberships(r.Context(), h.pool)
 		if err == nil {
 			if reachable == nil {
 				data.Memberships = memberships
@@ -255,7 +256,7 @@ func (h *Handler) handleDeleteScope(w http.ResponseWriter, r *http.Request) {
 		h.renderScopes(w, r, "scope admin required")
 		return
 	}
-	children, err := db.CountChildScopes(r.Context(), h.pool, id)
+	children, err := compat.CountChildScopes(r.Context(), h.pool, id)
 	if err != nil {
 		h.renderScopes(w, r, "could not check for child scopes")
 		return
@@ -264,7 +265,7 @@ func (h *Handler) handleDeleteScope(w http.ResponseWriter, r *http.Request) {
 		h.renderScopes(w, r, "cannot delete scope: it has child scopes that must be deleted first")
 		return
 	}
-	if err := db.DeleteScope(r.Context(), h.pool, id); err != nil {
+	if err := compat.DeleteScope(r.Context(), h.pool, id); err != nil {
 		h.renderScopes(w, r, err.Error())
 		return
 	}
@@ -302,7 +303,7 @@ func (h *Handler) handleSetScopeOwner(w http.ResponseWriter, r *http.Request) {
 		h.renderScopes(w, r, "scope admin required")
 		return
 	}
-	if _, err := db.UpdateScopeOwner(r.Context(), h.pool, id, principalID); err != nil {
+	if _, err := compat.UpdateScopeOwner(r.Context(), h.pool, id, principalID); err != nil {
 		h.renderScopes(w, r, err.Error())
 		return
 	}
@@ -410,7 +411,7 @@ func (h *Handler) handleCreateScope(w http.ResponseWriter, r *http.Request) {
 		h.renderScopes(w, r, "scope admin required")
 		return
 	}
-	if _, err := db.CreateScope(r.Context(), h.pool, kind, externalID, name, parentID, principalID, nil); err != nil {
+	if _, err := compat.CreateScope(r.Context(), h.pool, kind, externalID, name, parentID, principalID, nil); err != nil {
 		h.renderScopes(w, r, err.Error())
 		return
 	}
@@ -447,7 +448,7 @@ func (h *Handler) handleSetScopeRepo(w http.ResponseWriter, r *http.Request) {
 		h.renderScopes(w, r, "scope admin required")
 		return
 	}
-	if _, err := db.SetScopeRepo(r.Context(), h.pool, id, repoURL, defaultBranch); err != nil {
+	if _, err := compat.SetScopeRepo(r.Context(), h.pool, id, repoURL, defaultBranch); err != nil {
 		h.renderScopes(w, r, err.Error())
 		return
 	}
@@ -472,7 +473,7 @@ func (h *Handler) handleSyncScopeRepo(w http.ResponseWriter, r *http.Request) {
 		h.renderScopes(w, r, "scope admin required")
 		return
 	}
-	scope, err := db.GetScopeByID(r.Context(), h.pool, id)
+	scope, err := compat.GetScopeByID(r.Context(), h.pool, id)
 	if err != nil || scope == nil {
 		h.renderScopes(w, r, "scope not found")
 		return
@@ -586,7 +587,7 @@ func (h *Handler) handleDeleteMembership(w http.ResponseWriter, r *http.Request)
 		h.renderPrincipals(w, r, "", "", "principal admin required", "")
 		return
 	}
-	if err := db.DeleteMembership(r.Context(), h.pool, memberID, parentID); err != nil {
+	if err := compat.DeleteMembership(r.Context(), h.pool, memberID, parentID); err != nil {
 		h.renderPrincipals(w, r, "", "", err.Error(), "")
 		return
 	}
@@ -635,7 +636,7 @@ func (h *Handler) handleCreateScopeGrant(w http.ResponseWriter, r *http.Request)
 		h.renderPrincipals(w, r, "", "", "", "service unavailable")
 		return
 	}
-	callerPrincipal, err := db.GetPrincipalByID(r.Context(), h.pool, callerToken.PrincipalID)
+	callerPrincipal, err := compat.GetPrincipalByID(r.Context(), h.pool, callerToken.PrincipalID)
 	if err != nil {
 		h.renderPrincipals(w, r, "", "", "", err.Error())
 		return

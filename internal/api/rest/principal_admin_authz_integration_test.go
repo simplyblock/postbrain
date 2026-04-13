@@ -16,6 +16,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/principals"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
@@ -34,7 +35,7 @@ func TestREST_PrincipalAdminAuthz_MutationsRequireAdmin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
 	}
-	if _, err := db.CreateToken(ctx, pool, actor.ID, hashToken, "rest-principal-admin-actor-token", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(ctx, pool, actor.ID, hashToken, "rest-principal-admin-actor-token", nil, nil, nil); err != nil {
 		t.Fatalf("create token: %v", err)
 	}
 

@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 )
 
@@ -54,7 +54,7 @@ func (ro *Router) createArtifact(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+	scope, err := compat.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 	if err != nil || scope == nil {
 		writeError(w, http.StatusBadRequest, "scope not found")
 		return
@@ -110,7 +110,7 @@ func (ro *Router) searchArtifacts(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+		scope, err := compat.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 		if err != nil || scope == nil {
 			writeError(w, http.StatusBadRequest, "scope not found")
 			return
@@ -258,7 +258,7 @@ func (ro *Router) getArtifactHistory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid artifact id")
 		return
 	}
-	history, err := db.GetArtifactHistory(r.Context(), ro.pool, id)
+	history, err := compat.GetArtifactHistory(r.Context(), ro.pool, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

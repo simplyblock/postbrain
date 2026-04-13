@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 	"github.com/simplyblock/postbrain/internal/memory"
 	"github.com/simplyblock/postbrain/internal/testhelper"
@@ -51,7 +52,7 @@ func TestPromotionWorkflow(t *testing.T) {
 	}
 
 	// Verify memory is marked nominated.
-	mem, err := db.GetMemory(ctx, pool, r.MemoryID)
+	mem, err := compat.GetMemory(ctx, pool, r.MemoryID)
 	if err != nil {
 		t.Fatalf("GetMemory: %v", err)
 	}
@@ -69,7 +70,7 @@ func TestPromotionWorkflow(t *testing.T) {
 	}
 
 	// Verify memory is marked promoted.
-	mem, err = db.GetMemory(ctx, pool, r.MemoryID)
+	mem, err = compat.GetMemory(ctx, pool, r.MemoryID)
 	if err != nil {
 		t.Fatalf("GetMemory after approve: %v", err)
 	}

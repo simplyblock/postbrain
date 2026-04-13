@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/retrieval"
 )
@@ -116,7 +117,7 @@ func (j *ContradictionJob) processArtifact(ctx context.Context, artifact *db.Get
 	}
 
 	// Check if there is already an open contradiction flag.
-	hasFlag, err := db.HasOpenStalenessFlag(ctx, j.pool, artifact.ID, "contradiction_detected")
+	hasFlag, err := compat.HasOpenStalenessFlag(ctx, j.pool, artifact.ID, "contradiction_detected")
 	if err != nil {
 		return fmt.Errorf("check open flag: %w", err)
 	}
@@ -155,7 +156,7 @@ func (j *ContradictionJob) processArtifact(ctx context.Context, artifact *db.Get
 			Confidence: confidence,
 			Evidence:   evidence,
 		}
-		if _, err := db.InsertStalenessFlag(ctx, j.pool, flag); err != nil {
+		if _, err := compat.InsertStalenessFlag(ctx, j.pool, flag); err != nil {
 			slog.Error("contradiction: insert staleness flag failed",
 				"artifact_id", artifact.ID, "error", err)
 		} else {

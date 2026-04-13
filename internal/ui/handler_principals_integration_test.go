@@ -12,6 +12,7 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/principals"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
@@ -49,7 +50,7 @@ func TestHandleUpdatePrincipal_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
-	if _, err := db.CreateToken(t.Context(), pool, actor.ID, hashSession, "ui-principal-edit-session", nil, nil, nil); err != nil {
+	if _, err := compat.CreateToken(t.Context(), pool, actor.ID, hashSession, "ui-principal-edit-session", nil, nil, nil); err != nil {
 		t.Fatalf("CreateToken: %v", err)
 	}
 

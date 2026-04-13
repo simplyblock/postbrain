@@ -9,6 +9,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/principals"
 )
 
@@ -76,7 +77,7 @@ func (h *Handler) hasAnyPrincipalAdminRole(ctx context.Context, r *http.Request)
 		return false
 	}
 	// System admins always have full access.
-	if p, err := db.GetPrincipalByID(ctx, h.pool, token.PrincipalID); err == nil && p != nil && p.IsSystemAdmin {
+	if p, err := compat.GetPrincipalByID(ctx, h.pool, token.PrincipalID); err == nil && p != nil && p.IsSystemAdmin {
 		return true
 	}
 	ms := principals.NewMembershipStore(h.pool)
@@ -105,7 +106,7 @@ func (h *Handler) authorizedScopesForRequest(ctx context.Context, r *http.Reques
 		allowed := make(map[uuid.UUID]struct{}, len(token.ScopeIds))
 		for _, id := range token.ScopeIds {
 			allowed[id] = struct{}{}
-			ancestorIDs, err := db.GetAncestorScopeIDs(ctx, h.pool, id)
+			ancestorIDs, err := compat.GetAncestorScopeIDs(ctx, h.pool, id)
 			if err == nil {
 				for _, ancestorID := range ancestorIDs {
 					allowed[ancestorID] = struct{}{}
@@ -127,7 +128,7 @@ func (h *Handler) authorizedScopesForRequest(ctx context.Context, r *http.Reques
 		}
 		ids = intersected
 	}
-	scopes, err := db.GetScopesByIDs(ctx, h.pool, ids)
+	scopes, err := compat.GetScopesByIDs(ctx, h.pool, ids)
 	if err != nil {
 		return []*db.Scope{}, out
 	}
@@ -154,7 +155,7 @@ func (h *Handler) effectivePrincipalScopesForRequest(ctx context.Context, r *htt
 	if err != nil {
 		return []*db.Scope{}, out
 	}
-	scopes, err := db.GetScopesByIDs(ctx, h.pool, ids)
+	scopes, err := compat.GetScopesByIDs(ctx, h.pool, ids)
 	if err != nil {
 		return []*db.Scope{}, out
 	}
@@ -178,11 +179,11 @@ func (h *Handler) reachablePrincipalIDSet(ctx context.Context, r *http.Request) 
 		return out
 	}
 	// System admins see everything.
-	if p, err := db.GetPrincipalByID(ctx, h.pool, principalID); err == nil && p != nil && p.IsSystemAdmin {
+	if p, err := compat.GetPrincipalByID(ctx, h.pool, principalID); err == nil && p != nil && p.IsSystemAdmin {
 		return nil
 	}
 	// Self + all ancestor principals.
-	ids, err := db.GetAllParentIDs(ctx, h.pool, principalID)
+	ids, err := compat.GetAllParentIDs(ctx, h.pool, principalID)
 	if err != nil {
 		return out
 	}

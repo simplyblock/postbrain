@@ -9,6 +9,7 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	skillspkg "github.com/simplyblock/postbrain/internal/skills"
 )
 
@@ -53,7 +54,7 @@ func (ro *Router) createSkill(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+	scope, err := compat.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 	if err != nil || scope == nil {
 		writeError(w, http.StatusBadRequest, "scope not found")
 		return
@@ -97,7 +98,7 @@ func (ro *Router) searchSkills(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+		scope, err := compat.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 		if err != nil || scope == nil {
 			writeError(w, http.StatusBadRequest, "scope not found")
 			return

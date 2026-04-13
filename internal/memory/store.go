@@ -17,6 +17,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/chunking"
 	"github.com/simplyblock/postbrain/internal/codegraph"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/graph"
 )
@@ -88,35 +89,35 @@ type poolMemoryDB struct {
 }
 
 func (p *poolMemoryDB) CreateMemory(ctx context.Context, m *db.Memory) (*db.Memory, error) {
-	return db.CreateMemory(ctx, p.pool, m)
+	return compat.CreateMemory(ctx, p.pool, m)
 }
 
 func (p *poolMemoryDB) FindNearDuplicates(ctx context.Context, scopeID uuid.UUID, embedding []float32, threshold float64, excludeID *uuid.UUID) ([]*db.Memory, error) {
-	return db.FindNearDuplicates(ctx, p.pool, scopeID, embedding, threshold, excludeID)
+	return compat.FindNearDuplicates(ctx, p.pool, scopeID, embedding, threshold, excludeID)
 }
 
 func (p *poolMemoryDB) UpdateMemoryContent(ctx context.Context, id uuid.UUID, content string, summary *string, embedding, embeddingCode []float32, textModelID, codeModelID *uuid.UUID, contentKind string, meta []byte) (*db.Memory, error) {
-	return db.UpdateMemoryContent(ctx, p.pool, id, content, summary, embedding, embeddingCode, textModelID, codeModelID, contentKind, meta)
+	return compat.UpdateMemoryContent(ctx, p.pool, id, content, summary, embedding, embeddingCode, textModelID, codeModelID, contentKind, meta)
 }
 
 func (p *poolMemoryDB) SoftDeleteMemory(ctx context.Context, id uuid.UUID) error {
-	return db.SoftDeleteMemory(ctx, p.pool, id)
+	return compat.SoftDeleteMemory(ctx, p.pool, id)
 }
 
 func (p *poolMemoryDB) UpsertEntity(ctx context.Context, e *db.Entity) (*db.Entity, error) {
-	return db.UpsertEntity(ctx, p.pool, e)
+	return compat.UpsertEntity(ctx, p.pool, e)
 }
 
 func (p *poolMemoryDB) LinkMemoryToEntity(ctx context.Context, memoryID, entityID uuid.UUID, role string) error {
-	return db.LinkMemoryToEntity(ctx, p.pool, memoryID, entityID, role)
+	return compat.LinkMemoryToEntity(ctx, p.pool, memoryID, entityID, role)
 }
 
 func (p *poolMemoryDB) UpsertRelation(ctx context.Context, r *db.Relation) (*db.Relation, error) {
-	return db.UpsertRelation(ctx, p.pool, r)
+	return compat.UpsertRelation(ctx, p.pool, r)
 }
 
 func (p *poolMemoryDB) FindEntitiesBySuffix(ctx context.Context, scopeID uuid.UUID, suffix string) ([]*db.Entity, error) {
-	return db.FindEntitiesBySuffix(ctx, p.pool, scopeID, suffix)
+	return compat.FindEntitiesBySuffix(ctx, p.pool, scopeID, suffix)
 }
 
 // Store provides memory CRUD and embedding operations.
@@ -438,7 +439,7 @@ func (s *Store) HardDelete(ctx context.Context, id uuid.UUID) error {
 	if s.pool == nil {
 		return fmt.Errorf("memory: hard delete: pool is nil")
 	}
-	return db.HardDeleteMemory(ctx, s.pool, id)
+	return compat.HardDeleteMemory(ctx, s.pool, id)
 }
 
 // linkSameAs connects entID to all sibling entities in scope that share the
@@ -448,7 +449,7 @@ func (s *Store) linkSameAs(ctx context.Context, scopeID, entID uuid.UUID, canoni
 	if s.pool == nil {
 		return // no pool in test mode; best-effort only
 	}
-	siblings, err := db.ListEntitiesByCanonical(ctx, s.pool, scopeID, canonical, entityType)
+	siblings, err := compat.ListEntitiesByCanonical(ctx, s.pool, scopeID, canonical, entityType)
 	if err != nil {
 		return
 	}
@@ -457,7 +458,7 @@ func (s *Store) linkSameAs(ctx context.Context, scopeID, entID uuid.UUID, canoni
 		if bytes.Compare(subj[:], obj[:]) > 0 {
 			subj, obj = obj, subj
 		}
-		_, _ = db.UpsertRelation(ctx, s.pool, &db.Relation{
+		_, _ = compat.UpsertRelation(ctx, s.pool, &db.Relation{
 			ScopeID:    scopeID,
 			SubjectID:  subj,
 			Predicate:  "same_as",

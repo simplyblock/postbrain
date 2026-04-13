@@ -9,7 +9,7 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 func (s *Server) registerCollect() {
@@ -84,7 +84,7 @@ func (s *Server) collectAddToCollection(ctx context.Context, args map[string]any
 		if err != nil {
 			return mcpgo.NewToolResultError(fmt.Sprintf("collect: invalid scope: %v", err)), nil
 		}
-		scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
+		scope, err := compat.GetScopeByExternalID(ctx, s.pool, kind, externalID)
 		if err != nil || scope == nil {
 			return mcpgo.NewToolResultError("collect: scope not found"), nil
 		}
@@ -142,7 +142,7 @@ func (s *Server) collectCreate(ctx context.Context, args map[string]any, callerI
 	if err != nil {
 		return mcpgo.NewToolResultError(fmt.Sprintf("collect: invalid scope: %v", err)), nil
 	}
-	scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
+	scope, err := compat.GetScopeByExternalID(ctx, s.pool, kind, externalID)
 	if err != nil || scope == nil {
 		return mcpgo.NewToolResultError("collect: scope not found"), nil
 	}
@@ -173,7 +173,7 @@ func (s *Server) collectList(ctx context.Context, args map[string]any) (*mcpgo.C
 	if err != nil {
 		return mcpgo.NewToolResultError(fmt.Sprintf("collect: invalid scope: %v", err)), nil
 	}
-	scope, err := db.GetScopeByExternalID(ctx, s.pool, kind, externalID)
+	scope, err := compat.GetScopeByExternalID(ctx, s.pool, kind, externalID)
 	if err != nil || scope == nil {
 		return mcpgo.NewToolResultError("collect: scope not found"), nil
 	}

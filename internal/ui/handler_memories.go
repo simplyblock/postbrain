@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 const memoriesPageSize = 50
@@ -46,7 +47,7 @@ func (h *Handler) handleMemories(w http.ResponseWriter, r *http.Request) {
 				if _, ok := scopeSet[sid]; !ok {
 					goto doneMemories
 				}
-				mems, err := db.ListMemoriesByScope(r.Context(), h.pool, sid, memoriesPageSize+1, offset)
+				mems, err := compat.ListMemoriesByScope(r.Context(), h.pool, sid, memoriesPageSize+1, offset)
 				if err == nil {
 					if len(mems) > memoriesPageSize {
 						data.Memories = mems[:memoriesPageSize]
@@ -81,7 +82,7 @@ func (h *Handler) handleMemoryDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mem, err := db.GetMemory(r.Context(), h.pool, id)
+	mem, err := compat.GetMemory(r.Context(), h.pool, id)
 	if err != nil || mem == nil {
 		http.NotFound(w, r)
 		return
@@ -103,7 +104,7 @@ func (h *Handler) handleMemoryForget(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	if err := db.SoftDeleteMemory(r.Context(), h.pool, id); err != nil {
+	if err := compat.SoftDeleteMemory(r.Context(), h.pool, id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

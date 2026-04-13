@@ -11,6 +11,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 // handleTokens serves GET /ui/tokens.
@@ -29,7 +30,7 @@ func (h *Handler) renderTokens(w http.ResponseWriter, r *http.Request, formErr, 
 	if h.pool != nil {
 		principalID := h.principalFromCookie(r)
 		if principalID != uuid.Nil {
-			tokens, err := db.ListTokens(r.Context(), h.pool, &principalID)
+			tokens, err := compat.ListTokens(r.Context(), h.pool, &principalID)
 			if err == nil {
 				data.Tokens = tokens
 			}
@@ -127,7 +128,7 @@ func parseScopeIDs(values []string) ([]uuid.UUID, error) {
 }
 
 func (h *Handler) ownedTokenByID(ctx context.Context, principalID, tokenID uuid.UUID) (*db.Token, error) {
-	tokens, err := db.ListTokens(ctx, h.pool, &principalID)
+	tokens, err := compat.ListTokens(ctx, h.pool, &principalID)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +177,7 @@ func (h *Handler) handleUpdateTokenScopes(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	ok, err := db.UpdateTokenScopes(r.Context(), h.pool, id, principalID, scopeIDs)
+	ok, err := compat.UpdateTokenScopes(r.Context(), h.pool, id, principalID, scopeIDs)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

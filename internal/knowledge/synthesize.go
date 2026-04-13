@@ -11,6 +11,7 @@ import (
 	pgvector "github.com/pgvector/pgvector-go"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/providers"
 )
 
@@ -59,7 +60,7 @@ func (s *Synthesiser) Create(ctx context.Context, input SynthesisInput) (*db.Kno
 	// Fetch and validate each source.
 	sources := make([]*db.KnowledgeArtifact, 0, len(input.SourceIDs))
 	for _, id := range input.SourceIDs {
-		a, err := db.GetArtifact(ctx, s.pool, id)
+		a, err := compat.GetArtifact(ctx, s.pool, id)
 		if err != nil {
 			return nil, fmt.Errorf("knowledge: fetch source %v: %w", id, err)
 		}
@@ -129,18 +130,18 @@ func (s *Synthesiser) Create(ctx context.Context, input SynthesisInput) (*db.Kno
 		Version:          1,
 	}
 
-	created, err := db.CreateArtifact(ctx, s.pool, artifact)
+	created, err := compat.CreateArtifact(ctx, s.pool, artifact)
 	if err != nil {
 		return nil, fmt.Errorf("knowledge: create digest artifact: %w", err)
 	}
 
 	// Record source links.
-	if err := db.InsertDigestSources(ctx, s.pool, created.ID, input.SourceIDs); err != nil {
+	if err := compat.InsertDigestSources(ctx, s.pool, created.ID, input.SourceIDs); err != nil {
 		return nil, fmt.Errorf("knowledge: record digest sources: %w", err)
 	}
 
 	// Audit log.
-	if err := db.InsertDigestLog(ctx, s.pool, &db.DigestLog{
+	if err := compat.InsertDigestLog(ctx, s.pool, &db.DigestLog{
 		ScopeID:       input.ScopeID,
 		DigestID:      created.ID,
 		SourceIDs:     input.SourceIDs,
@@ -155,12 +156,12 @@ func (s *Synthesiser) Create(ctx context.Context, input SynthesisInput) (*db.Kno
 
 // ListSources returns the source artifacts for a digest.
 func (s *Synthesiser) ListSources(ctx context.Context, digestID uuid.UUID) ([]*db.KnowledgeArtifact, error) {
-	return db.ListDigestSources(ctx, s.pool, digestID)
+	return compat.ListDigestSources(ctx, s.pool, digestID)
 }
 
 // ListDigests returns published digests that cover a given source artifact.
 func (s *Synthesiser) ListDigests(ctx context.Context, sourceID uuid.UUID) ([]*db.KnowledgeArtifact, error) {
-	return db.ListDigestsForSource(ctx, s.pool, sourceID)
+	return compat.ListDigestsForSource(ctx, s.pool, sourceID)
 }
 
 // validateLineage checks every source scope is an ancestor or descendant of the digest scope.
@@ -169,7 +170,7 @@ func (s *Synthesiser) validateLineage(ctx context.Context, digestScopeID uuid.UU
 		if src.OwnerScopeID == digestScopeID {
 			continue
 		}
-		ok, err := db.ScopeInLineage(ctx, s.pool, digestScopeID, src.OwnerScopeID)
+		ok, err := compat.ScopeInLineage(ctx, s.pool, digestScopeID, src.OwnerScopeID)
 		if err != nil {
 			return fmt.Errorf("knowledge: scope lineage check: %w", err)
 		}

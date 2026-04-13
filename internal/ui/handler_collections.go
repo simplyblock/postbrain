@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 // handleCollections serves GET /ui/collections.
@@ -28,10 +29,10 @@ func (h *Handler) handleCollections(w http.ResponseWriter, r *http.Request) {
 					h.render(w, r, "collections", "Collections", data)
 					return
 				}
-				colls, err = db.ListCollections(r.Context(), h.pool, sid)
+				colls, err = compat.ListCollections(r.Context(), h.pool, sid)
 			}
 		} else {
-			colls, err = db.ListAllCollections(r.Context(), h.pool)
+			colls, err = compat.ListAllCollections(r.Context(), h.pool)
 		}
 		if err != nil {
 			http.Error(w, "failed to load collections", http.StatusInternalServerError)
@@ -63,12 +64,12 @@ func (h *Handler) handleCollectionDetail(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	coll, err := db.GetCollection(r.Context(), h.pool, id)
+	coll, err := compat.GetCollection(r.Context(), h.pool, id)
 	if err != nil || coll == nil {
 		http.NotFound(w, r)
 		return
 	}
-	arts, err := db.ListCollectionItems(r.Context(), h.pool, id)
+	arts, err := compat.ListCollectionItems(r.Context(), h.pool, id)
 	if err != nil {
 		http.Error(w, "failed to load collection items", http.StatusInternalServerError)
 		return
@@ -136,7 +137,7 @@ func (h *Handler) handleCreateCollection(w http.ResponseWriter, r *http.Request)
 		visibility = "team"
 	}
 	ownerID := h.principalFromCookie(r)
-	coll, err := db.CreateCollection(r.Context(), h.pool, &db.KnowledgeCollection{
+	coll, err := compat.CreateCollection(r.Context(), h.pool, &db.KnowledgeCollection{
 		ScopeID:    scopeID,
 		OwnerID:    ownerID,
 		Name:       name,

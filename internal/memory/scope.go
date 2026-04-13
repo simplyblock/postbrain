@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 // FanOutScopeIDs returns all scope IDs visible from the given starting scope:
@@ -23,7 +24,7 @@ func FanOutScopeIDs(ctx context.Context, pool *pgxpool.Pool, scopeID, principalI
 		return []uuid.UUID{scopeID}, nil
 	}
 
-	ancestors, err := db.GetAncestorScopeIDs(ctx, pool, scopeID)
+	ancestors, err := compat.GetAncestorScopeIDs(ctx, pool, scopeID)
 	if err != nil {
 		return nil, fmt.Errorf("memory: fan-out ancestors: %w", err)
 	}

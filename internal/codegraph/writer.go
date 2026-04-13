@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 // persistFileMemory creates a file-level semantic memory for src.
@@ -18,7 +19,7 @@ func persistFileMemory(ctx context.Context, pool *pgxpool.Pool, opts IndexOption
 		return nil
 	}
 	fileSourceRef := "file:" + fileName
-	fileMem, err := db.CreateMemory(ctx, pool, &db.Memory{
+	fileMem, err := compat.CreateMemory(ctx, pool, &db.Memory{
 		MemoryType:      "semantic",
 		ScopeID:         opts.ScopeID,
 		AuthorID:        opts.AuthorID,
@@ -46,7 +47,7 @@ func persistSymbolEntities(ctx context.Context, pool *pgxpool.Pool, opts IndexOp
 		if sym.Package != "" {
 			canonical = sym.Package + "." + sym.Name
 		}
-		ent, uErr := db.UpsertEntity(ctx, pool, &db.Entity{
+		ent, uErr := compat.UpsertEntity(ctx, pool, &db.Entity{
 			ScopeID:    opts.ScopeID,
 			EntityType: string(sym.Kind),
 			Name:       sym.Name,
@@ -60,7 +61,7 @@ func persistSymbolEntities(ctx context.Context, pool *pgxpool.Pool, opts IndexOp
 		symToID[canonical] = ent.ID
 
 		if sym.Kind == KindFile && fileMemoryID != nil {
-			if lErr := db.LinkMemoryToEntity(ctx, pool, *fileMemoryID, ent.ID, ""); lErr != nil {
+			if lErr := compat.LinkMemoryToEntity(ctx, pool, *fileMemoryID, ent.ID, ""); lErr != nil {
 				slog.WarnContext(ctx, "codegraph: link file memory to entity", "err", lErr)
 			}
 		}
@@ -86,7 +87,7 @@ func persistChunkMemories(ctx context.Context, pool *pgxpool.Pool, opts IndexOpt
 			}
 			chunkContent := string(src[sym.StartByte:sym.EndByte])
 			chunkSourceRef := fmt.Sprintf("file:%s:%d", fileName, sym.StartLine+1)
-			_, cErr := db.CreateMemory(ctx, pool, &db.Memory{
+			_, cErr := compat.CreateMemory(ctx, pool, &db.Memory{
 				MemoryType:      "semantic",
 				ScopeID:         opts.ScopeID,
 				AuthorID:        opts.AuthorID,
@@ -117,7 +118,7 @@ func persistRelations(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions
 			continue
 		}
 
-		_, rErr := db.UpsertRelation(ctx, pool, &db.Relation{
+		_, rErr := compat.UpsertRelation(ctx, pool, &db.Relation{
 			ScopeID:    opts.ScopeID,
 			SubjectID:  subjectID,
 			Predicate:  edge.Predicate,

@@ -13,12 +13,13 @@ import (
 	pgvector "github.com/pgvector/pgvector-go"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/providers"
 )
 
 var ErrEmptyEmbedding = errors.New("skills: empty embedding result")
 
-// skillCreator abstracts the db.CreateSkill call so the store can be unit-tested
+// skillCreator abstracts the compat.CreateSkill call so the store can be unit-tested
 // without a real database connection.
 type skillCreator interface {
 	createSkill(ctx context.Context, s *db.Skill) (*db.Skill, error)
@@ -30,7 +31,7 @@ type poolCreator struct {
 }
 
 func (p *poolCreator) createSkill(ctx context.Context, s *db.Skill) (*db.Skill, error) {
-	return db.CreateSkill(ctx, p.pool, s)
+	return compat.CreateSkill(ctx, p.pool, s)
 }
 
 // Store provides skill CRUD and related operations.
@@ -119,7 +120,7 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.Skill, error
 
 // Update re-embeds, snapshots the current version to history, then updates the skill.
 func (s *Store) Update(ctx context.Context, id uuid.UUID, callerID uuid.UUID, body string, params []db.SkillParameter) (*db.Skill, error) {
-	existing, err := db.GetSkill(ctx, s.pool, id)
+	existing, err := compat.GetSkill(ctx, s.pool, id)
 	if err != nil {
 		return nil, fmt.Errorf("skills: update get: %w", err)
 	}
@@ -128,7 +129,7 @@ func (s *Store) Update(ctx context.Context, id uuid.UUID, callerID uuid.UUID, bo
 	}
 
 	// Snapshot the current version.
-	if err := db.SnapshotSkillVersion(ctx, s.pool, &db.SkillHistory{
+	if err := compat.SnapshotSkillVersion(ctx, s.pool, &db.SkillHistory{
 		SkillID:    id,
 		Version:    existing.Version,
 		Body:       existing.Body,
@@ -148,7 +149,7 @@ func (s *Store) Update(ctx context.Context, id uuid.UUID, callerID uuid.UUID, bo
 		return nil, fmt.Errorf("skills: embed: %w", err)
 	}
 
-	updated, err := db.UpdateSkillContent(ctx, s.pool, id, body, paramsJSON, embeddingVec, modelID)
+	updated, err := compat.UpdateSkillContent(ctx, s.pool, id, body, paramsJSON, embeddingVec, modelID)
 	if err != nil {
 		return nil, fmt.Errorf("skills: update content: %w", err)
 	}
@@ -160,7 +161,7 @@ func (s *Store) Update(ctx context.Context, id uuid.UUID, callerID uuid.UUID, bo
 
 // GetBySlug retrieves a skill by scope + slug. Returns nil, nil if not found.
 func (s *Store) GetBySlug(ctx context.Context, scopeID uuid.UUID, slug string) (*db.Skill, error) {
-	skill, err := db.GetSkillBySlug(ctx, s.pool, scopeID, slug)
+	skill, err := compat.GetSkillBySlug(ctx, s.pool, scopeID, slug)
 	if err != nil {
 		return nil, fmt.Errorf("skills: get by slug: %w", err)
 	}
@@ -169,7 +170,7 @@ func (s *Store) GetBySlug(ctx context.Context, scopeID uuid.UUID, slug string) (
 
 // GetByID retrieves a skill by ID. Returns nil, nil if not found.
 func (s *Store) GetByID(ctx context.Context, id uuid.UUID) (*db.Skill, error) {
-	skill, err := db.GetSkill(ctx, s.pool, id)
+	skill, err := compat.GetSkill(ctx, s.pool, id)
 	if err != nil {
 		return nil, fmt.Errorf("skills: get by id: %w", err)
 	}

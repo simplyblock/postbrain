@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 type createSessionRequest struct {
@@ -33,7 +33,7 @@ func (ro *Router) createSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	scope, err := db.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
+	scope, err := compat.GetScopeByExternalID(r.Context(), ro.pool, kind, externalID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "scope lookup failed")
 		return
@@ -54,7 +54,7 @@ func (ro *Router) createSession(w http.ResponseWriter, r *http.Request) {
 		meta, _ = json.Marshal(body.Meta)
 	}
 
-	session, err := db.CreateSession(r.Context(), ro.pool, scope.ID, principalID, meta)
+	session, err := compat.CreateSession(r.Context(), ro.pool, scope.ID, principalID, meta)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -96,7 +96,7 @@ func (ro *Router) updateSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = endedAt // EndSession uses COALESCE($2, now()) — pass nil to use now()
-	session, err := db.EndSession(r.Context(), ro.pool, id, meta)
+	session, err := compat.EndSession(r.Context(), ro.pool, id, meta)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

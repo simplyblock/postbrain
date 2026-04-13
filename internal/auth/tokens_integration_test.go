@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
@@ -39,7 +40,7 @@ func TestTokenStore_Lookup_ValidToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.CreateToken(ctx, pool, principal.ID, hash, "test-token", nil, nil, nil)
+	_, err = compat.CreateToken(ctx, pool, principal.ID, hash, "test-token", nil, nil, nil)
 	if err != nil {
 		t.Fatalf("CreateToken: %v", err)
 	}
@@ -66,11 +67,11 @@ func TestTokenStore_Lookup_RevokedToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tok, err := db.CreateToken(ctx, pool, principal.ID, hash, "revoke-test", nil, nil, nil)
+	tok, err := compat.CreateToken(ctx, pool, principal.ID, hash, "revoke-test", nil, nil, nil)
 	if err != nil {
 		t.Fatalf("CreateToken: %v", err)
 	}
-	if err := db.RevokeToken(ctx, pool, tok.ID); err != nil {
+	if err := compat.RevokeToken(ctx, pool, tok.ID); err != nil {
 		t.Fatalf("RevokeToken: %v", err)
 	}
 
@@ -94,7 +95,7 @@ func TestTokenStore_Lookup_ExpiredToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	past := time.Now().Add(-time.Hour)
-	_, err = db.CreateToken(ctx, pool, principal.ID, hash, "expired-test", nil, nil, &past)
+	_, err = compat.CreateToken(ctx, pool, principal.ID, hash, "expired-test", nil, nil, &past)
 	if err != nil {
 		t.Fatalf("CreateToken: %v", err)
 	}

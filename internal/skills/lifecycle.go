@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/lifecyclecore"
 )
 
@@ -36,7 +37,7 @@ type poolLifecycleDB struct {
 }
 
 func (p *poolLifecycleDB) getSkill(ctx context.Context, id uuid.UUID) (*db.Skill, error) {
-	return db.GetSkill(ctx, p.pool, id)
+	return compat.GetSkill(ctx, p.pool, id)
 }
 func (p *poolLifecycleDB) updateSkillStatus(ctx context.Context, id uuid.UUID, status string, publishedAt, deprecatedAt interface{}) error {
 	var pub, dep *time.Time
@@ -46,16 +47,16 @@ func (p *poolLifecycleDB) updateSkillStatus(ctx context.Context, id uuid.UUID, s
 	if t, ok := deprecatedAt.(*time.Time); ok {
 		dep = t
 	}
-	return db.UpdateSkillStatus(ctx, p.pool, id, status, pub, dep)
+	return compat.UpdateSkillStatus(ctx, p.pool, id, status, pub, dep)
 }
 func (p *poolLifecycleDB) getSkillEndorsementByEndorser(ctx context.Context, skillID, endorserID uuid.UUID) (*db.SkillEndorsement, error) {
-	return db.GetSkillEndorsementByEndorser(ctx, p.pool, skillID, endorserID)
+	return compat.GetSkillEndorsementByEndorser(ctx, p.pool, skillID, endorserID)
 }
 func (p *poolLifecycleDB) createSkillEndorsement(ctx context.Context, skillID, endorserID uuid.UUID, note *string) (*db.SkillEndorsement, error) {
-	return db.CreateSkillEndorsement(ctx, p.pool, skillID, endorserID, note)
+	return compat.CreateSkillEndorsement(ctx, p.pool, skillID, endorserID, note)
 }
 func (p *poolLifecycleDB) countSkillEndorsements(ctx context.Context, skillID uuid.UUID) (int, error) {
-	return db.CountSkillEndorsements(ctx, p.pool, skillID)
+	return compat.CountSkillEndorsements(ctx, p.pool, skillID)
 }
 
 // Lifecycle manages state transitions for skills.

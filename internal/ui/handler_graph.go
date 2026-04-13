@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 // graphNode is the JSON shape consumed by the D3 force simulation.
@@ -84,7 +85,7 @@ func (h *Handler) graphViewData(r *http.Request, scopeStr string) struct {
 			nodes := []graphNode{}
 			links := []graphLink{}
 
-			ents, err := db.ListEntitiesByScope(r.Context(), h.pool, sid, "", 100000, 0)
+			ents, err := compat.ListEntitiesByScope(r.Context(), h.pool, sid, "", 100000, 0)
 			if err == nil {
 				for _, e := range ents {
 					nodes = append(nodes, graphNode{
@@ -100,7 +101,7 @@ func (h *Handler) graphViewData(r *http.Request, scopeStr string) struct {
 				nodeIDs[n.ID] = true
 			}
 
-			if rels, err := db.ListRelationsByScope(r.Context(), h.pool, sid); err == nil {
+			if rels, err := compat.ListRelationsByScope(r.Context(), h.pool, sid); err == nil {
 				for _, rel := range rels {
 					src, tgt := rel.SubjectID.String(), rel.ObjectID.String()
 					if !nodeIDs[src] || !nodeIDs[tgt] {

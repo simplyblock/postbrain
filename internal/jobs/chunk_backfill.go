@@ -12,6 +12,7 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/chunking"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/providers"
 )
 
@@ -73,7 +74,7 @@ func (p *poolChunkBackfillStore) fetchArtifactsWithoutChunks(ctx context.Context
 }
 
 func (p *poolChunkBackfillStore) createMemory(ctx context.Context, m *db.Memory) (*db.Memory, error) {
-	return db.CreateMemory(ctx, p.pool, m)
+	return compat.CreateMemory(ctx, p.pool, m)
 }
 
 const defaultChunkBackfillBatchSize = 20

@@ -26,6 +26,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/jobs"
 	"github.com/simplyblock/postbrain/internal/modelruntime"
@@ -555,7 +556,7 @@ func tokenCreateCmd() *cobra.Command {
 			}
 			defer pool.Close()
 
-			principal, err := db.GetPrincipalBySlug(ctx, pool, principalSlug)
+			principal, err := compat.GetPrincipalBySlug(ctx, pool, principalSlug)
 			if err != nil {
 				return fmt.Errorf("lookup principal: %w", err)
 			}
@@ -572,7 +573,7 @@ func tokenCreateCmd() *cobra.Command {
 				permissions = []string{"read", "write"}
 			}
 
-			t, err := db.CreateToken(ctx, pool, principal.ID, hash, name, nil, permissions, nil)
+			t, err := compat.CreateToken(ctx, pool, principal.ID, hash, name, nil, permissions, nil)
 			if err != nil {
 				return fmt.Errorf("create token: %w", err)
 			}
@@ -611,19 +612,19 @@ func tokenListCmd() *cobra.Command {
 
 			var tokens []*db.Token
 			if principalSlug != "" {
-				principal, err := db.GetPrincipalBySlug(ctx, pool, principalSlug)
+				principal, err := compat.GetPrincipalBySlug(ctx, pool, principalSlug)
 				if err != nil {
 					return fmt.Errorf("lookup principal: %w", err)
 				}
 				if principal == nil {
 					return fmt.Errorf("principal %q not found", principalSlug)
 				}
-				tokens, err = db.ListTokens(ctx, pool, &principal.ID)
+				tokens, err = compat.ListTokens(ctx, pool, &principal.ID)
 				if err != nil {
 					return fmt.Errorf("list tokens: %w", err)
 				}
 			} else {
-				tokens, err = db.ListTokens(ctx, pool, nil)
+				tokens, err = compat.ListTokens(ctx, pool, nil)
 				if err != nil {
 					return fmt.Errorf("list tokens: %w", err)
 				}
@@ -683,7 +684,7 @@ func tokenRevokeCmd() *cobra.Command {
 				return fmt.Errorf("invalid token ID: %w", err)
 			}
 
-			if err := db.RevokeToken(ctx, pool, tid); err != nil {
+			if err := compat.RevokeToken(ctx, pool, tid); err != nil {
 				return fmt.Errorf("revoke token: %w", err)
 			}
 			fmt.Printf("Token %s revoked.\n", tid)
@@ -752,7 +753,7 @@ POSTBRAIN_DATABASE_URL env var (or a config file with database.url set).`,
 
 			// ── Guard: refuse if tokens already exist ────────────────────────
 			if !force {
-				existing, err := db.ListTokens(ctx, pool, nil)
+				existing, err := compat.ListTokens(ctx, pool, nil)
 				if err != nil {
 					return fmt.Errorf("check existing tokens: %w", err)
 				}
@@ -778,14 +779,14 @@ POSTBRAIN_DATABASE_URL env var (or a config file with database.url set).`,
 
 			// ── 3. Admin principal ───────────────────────────────────────────
 			fmt.Printf("Creating principal %q ... ", adminSlug)
-			principal, err := db.GetPrincipalBySlug(ctx, pool, adminSlug)
+			principal, err := compat.GetPrincipalBySlug(ctx, pool, adminSlug)
 			if err != nil {
 				return fmt.Errorf("look up principal: %w", err)
 			}
 			if principal != nil {
 				fmt.Printf("already exists (%s)\n", principal.ID)
 			} else {
-				principal, err = db.CreatePrincipal(ctx, pool, "user", adminSlug, displayName, nil)
+				principal, err = compat.CreatePrincipal(ctx, pool, "user", adminSlug, displayName, nil)
 				if err != nil {
 					return fmt.Errorf("create principal: %w", err)
 				}
@@ -795,14 +796,14 @@ POSTBRAIN_DATABASE_URL env var (or a config file with database.url set).`,
 			// ── 4. Personal scope ────────────────────────────────────────────
 			scopeExternalID := adminSlug
 			fmt.Printf("Creating scope user:%s ... ", scopeExternalID)
-			scope, err := db.GetScopeByExternalID(ctx, pool, "user", scopeExternalID)
+			scope, err := compat.GetScopeByExternalID(ctx, pool, "user", scopeExternalID)
 			if err != nil {
 				return fmt.Errorf("look up scope: %w", err)
 			}
 			if scope != nil {
 				fmt.Printf("already exists (%s)\n", scope.ID)
 			} else {
-				scope, err = db.CreateScope(ctx, pool, "user", scopeExternalID, displayName, nil, principal.ID, nil)
+				scope, err = compat.CreateScope(ctx, pool, "user", scopeExternalID, displayName, nil, principal.ID, nil)
 				if err != nil {
 					return fmt.Errorf("create scope: %w", err)
 				}
@@ -847,7 +848,7 @@ POSTBRAIN_DATABASE_URL env var (or a config file with database.url set).`,
 			if err != nil {
 				return err
 			}
-			token, err := db.CreateToken(ctx, pool, principal.ID, hash, tokenName, nil,
+			token, err := compat.CreateToken(ctx, pool, principal.ID, hash, tokenName, nil,
 				[]string{"read", "write", "admin"}, nil)
 			if err != nil {
 				return fmt.Errorf("create token: %w", err)

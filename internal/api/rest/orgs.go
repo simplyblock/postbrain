@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 type createPrincipalRequest struct {
@@ -139,7 +139,7 @@ func (ro *Router) listMembers(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid principal id")
 		return
 	}
-	members, err := db.GetMemberships(r.Context(), ro.pool, id)
+	members, err := compat.GetMemberships(r.Context(), ro.pool, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

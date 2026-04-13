@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 // handleSkills serves GET /ui/skills.
@@ -21,7 +22,7 @@ func (h *Handler) handleSkills(w http.ResponseWriter, r *http.Request) {
 		for _, s := range scopes {
 			authorizedScopeIDs = append(authorizedScopeIDs, s.ID)
 		}
-		skills, err := db.ListPublishedSkillsForAgent(r.Context(), h.pool, authorizedScopeIDs, "any")
+		skills, err := compat.ListPublishedSkillsForAgent(r.Context(), h.pool, authorizedScopeIDs, "any")
 		if err == nil {
 			filtered := make([]*db.Skill, 0, len(skills))
 			for _, s := range skills {
@@ -50,7 +51,7 @@ func (h *Handler) handleSkillDetail(w http.ResponseWriter, r *http.Request) {
 	}{}
 
 	if h.pool != nil {
-		skill, err := db.GetSkill(r.Context(), h.pool, id)
+		skill, err := compat.GetSkill(r.Context(), h.pool, id)
 		if err != nil || skill == nil {
 			http.NotFound(w, r)
 			return
@@ -76,13 +77,13 @@ func (h *Handler) handleSkillHistory(w http.ResponseWriter, r *http.Request) {
 	}{}
 
 	if h.pool != nil {
-		skill, err := db.GetSkill(r.Context(), h.pool, id)
+		skill, err := compat.GetSkill(r.Context(), h.pool, id)
 		if err != nil || skill == nil {
 			http.NotFound(w, r)
 			return
 		}
 		data.Skill = skill
-		history, _ := db.GetSkillHistory(r.Context(), h.pool, id)
+		history, _ := compat.GetSkillHistory(r.Context(), h.pool, id)
 		data.History = history
 	}
 

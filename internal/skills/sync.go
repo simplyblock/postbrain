@@ -14,6 +14,7 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/closeutil"
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
 // SyncResult summarises the outcome of a Sync operation.
@@ -34,7 +35,7 @@ type poolSyncDB struct {
 }
 
 func (p *poolSyncDB) listPublishedSkillsForAgent(ctx context.Context, scopeIDs []uuid.UUID, agentType string) ([]*db.Skill, error) {
-	return db.ListPublishedSkillsForAgent(ctx, p.pool, scopeIDs, agentType)
+	return compat.ListPublishedSkillsForAgent(ctx, p.pool, scopeIDs, agentType)
 }
 
 // Sync compares the local agent command directory against the published skill registry
