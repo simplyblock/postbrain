@@ -41,13 +41,11 @@ type IndexOptions struct {
 	// Depth controls the git clone depth. 0 defaults to 1 (shallow, production default).
 	// Set higher in tests to make previous commits reachable for incremental diffs.
 	Depth int
-	// GoLSPAddr enables optional Go LSP resolution via a TCP gopls endpoint.
-	// Example: "127.0.0.1:37373". Empty disables LSP for this run.
-	GoLSPAddr string
-	// GoLSPRootURI is the LSP workspace root URI used during initialize.
-	// If empty and RepoURL points at a local path, a file:// URI is derived.
-	GoLSPRootURI string
-	// GoLSPTimeout controls request/dial timeouts for GoLSPAddr.
+	// GoLSPRootDir enables optional Go LSP resolution via a local gopls process.
+	// It must be the absolute path to the checked-out source tree that gopls
+	// should index.  Empty disables LSP for this run.
+	GoLSPRootDir string
+	// GoLSPTimeout controls per-request timeouts for the gopls subprocess.
 	GoLSPTimeout time.Duration
 }
 

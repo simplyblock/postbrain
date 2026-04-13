@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -20,11 +18,12 @@ import (
 	"golang.org/x/crypto/ssh/agent"
 
 	"github.com/simplyblock/postbrain/internal/closeutil"
+	"github.com/simplyblock/postbrain/internal/codegraph/lsp"
 )
 
-var newGoplsTCPResolverFn = func(addr string, timeout time.Duration, rootURI string) (LSPResolver, error) {
-	return NewGoplsTCPResolver(addr, timeout, rootURI)
-}
+// newLSPClientForExt is the factory used to create an lsp.Client for a given
+// file extension.  It is a package-level variable so tests can inject fakes.
+var newLSPClientForExt = lsp.NewClientForExt
 
 // buildCloneAuth returns the go-git auth method for opts, or nil if no auth is configured.
 func buildCloneAuth(opts IndexOptions) (transport.AuthMethod, error) {
@@ -38,20 +37,19 @@ func buildCloneAuth(opts IndexOptions) (transport.AuthMethod, error) {
 }
 
 func lspResolverForIndex(ctx context.Context, opts IndexOptions) LSPResolver {
-	if opts.GoLSPAddr == "" {
+	if opts.GoLSPRootDir == "" {
 		return nil
 	}
-	rootURI := opts.GoLSPRootURI
-	if rootURI == "" && filepath.IsAbs(opts.RepoURL) {
-		rootURI = (&url.URL{Scheme: "file", Path: filepath.ToSlash(opts.RepoURL)}).String()
-	}
-	resolver, err := newGoplsTCPResolverFn(opts.GoLSPAddr, opts.GoLSPTimeout, rootURI)
+	client, err := newLSPClientForExt(".go", opts.GoLSPRootDir, opts.GoLSPTimeout)
 	if err != nil {
-		slog.WarnContext(ctx, "codegraph: gopls resolver unavailable; continuing without lsp",
-			"addr", opts.GoLSPAddr, "err", err)
+		slog.WarnContext(ctx, "codegraph: gopls client unavailable; continuing without lsp",
+			"root", opts.GoLSPRootDir, "err", err)
 		return nil
 	}
-	return resolver
+	if client == nil {
+		return nil
+	}
+	return &lspClientAdapter{client: client, rootDir: opts.GoLSPRootDir}
 }
 
 // isSSHURL reports whether u is an SSH clone URL (git@ SCP syntax or ssh:// scheme).
