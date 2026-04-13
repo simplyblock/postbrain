@@ -1161,7 +1161,7 @@ Both paths spawn goroutines with `context.Background()` and intentionally ignore
 
 ---
 
-### 8.12 `DBModelStore` mixes embedding and summary model responsibilities
+### 8.12 `DBModelStore` mixes embedding and summary model responsibilities ✓ Done
 
 **File:** `internal/embedding/model_store.go:26–90`
 
