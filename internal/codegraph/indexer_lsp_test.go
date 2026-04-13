@@ -12,7 +12,7 @@ import (
 func TestLSPClientForIndex_EmptyRootDir_Disabled(t *testing.T) {
 	called := false
 	prev := newLSPClientForExt
-	newLSPClientForExt = func(string, string, time.Duration) (lsp.Client, error) {
+	newLSPClientForExt = func(string, string, time.Duration, lsp.ClientOptions) (lsp.Client, error) {
 		called = true
 		return nil, nil
 	}
@@ -30,7 +30,7 @@ func TestLSPClientForIndex_EmptyRootDir_Disabled(t *testing.T) {
 func TestLSPClientForIndex_Enabled_ReturnsClient(t *testing.T) {
 	want := &stubLSPClient{lang: ".go"}
 	prev := newLSPClientForExt
-	newLSPClientForExt = func(ext, rootDir string, timeout time.Duration) (lsp.Client, error) {
+	newLSPClientForExt = func(ext, rootDir string, timeout time.Duration, opts lsp.ClientOptions) (lsp.Client, error) {
 		if ext != ".go" {
 			t.Fatalf("ext = %q, want %q", ext, ".go")
 		}
@@ -39,6 +39,9 @@ func TestLSPClientForIndex_Enabled_ReturnsClient(t *testing.T) {
 		}
 		if timeout != 3*time.Second {
 			t.Fatalf("timeout = %v, want %v", timeout, 3*time.Second)
+		}
+		if opts.UseTSGo {
+			t.Fatal("UseTSGo must be false for Go LSP")
 		}
 		return want, nil
 	}
@@ -55,7 +58,7 @@ func TestLSPClientForIndex_Enabled_ReturnsClient(t *testing.T) {
 
 func TestLSPClientForIndex_FactoryError_FallsBackToNil(t *testing.T) {
 	prev := newLSPClientForExt
-	newLSPClientForExt = func(string, string, time.Duration) (lsp.Client, error) {
+	newLSPClientForExt = func(string, string, time.Duration, lsp.ClientOptions) (lsp.Client, error) {
 		return nil, errors.New("gopls not found")
 	}
 	t.Cleanup(func() { newLSPClientForExt = prev })
@@ -68,7 +71,7 @@ func TestLSPClientForIndex_FactoryError_FallsBackToNil(t *testing.T) {
 
 func TestLSPClientForIndex_NilClient_ReturnsNil(t *testing.T) {
 	prev := newLSPClientForExt
-	newLSPClientForExt = func(string, string, time.Duration) (lsp.Client, error) {
+	newLSPClientForExt = func(string, string, time.Duration, lsp.ClientOptions) (lsp.Client, error) {
 		return nil, nil // unsupported extension
 	}
 	t.Cleanup(func() { newLSPClientForExt = prev })
@@ -76,5 +79,57 @@ func TestLSPClientForIndex_NilClient_ReturnsNil(t *testing.T) {
 	got := lspClientForIndex(context.Background(), IndexOptions{GoLSPRootDir: "/tmp/repo"})
 	if got != nil {
 		t.Fatal("expected nil client when factory returns nil")
+	}
+}
+
+func TestLSPClientForIndex_TypeScript_Enabled_DefaultBackend(t *testing.T) {
+	want := &stubLSPClient{lang: ".ts"}
+	prev := newLSPClientForExt
+	newLSPClientForExt = func(ext, rootDir string, timeout time.Duration, opts lsp.ClientOptions) (lsp.Client, error) {
+		if ext != ".ts" {
+			t.Fatalf("ext = %q, want %q", ext, ".ts")
+		}
+		if rootDir != "/tmp/tsrepo" {
+			t.Fatalf("rootDir = %q, want %q", rootDir, "/tmp/tsrepo")
+		}
+		if timeout != 4*time.Second {
+			t.Fatalf("timeout = %v, want %v", timeout, 4*time.Second)
+		}
+		if opts.UseTSGo {
+			t.Fatal("UseTSGo must be false by default")
+		}
+		return want, nil
+	}
+	t.Cleanup(func() { newLSPClientForExt = prev })
+
+	got := lspClientForIndex(context.Background(), IndexOptions{
+		TypeScriptLSPRootDir: "/tmp/tsrepo",
+		TypeScriptLSPTimeout: 4 * time.Second,
+	})
+	if got != want {
+		t.Fatal("expected returned TypeScript client from factory")
+	}
+}
+
+func TestLSPClientForIndex_TypeScript_Enabled_TSGoFlag(t *testing.T) {
+	want := &stubLSPClient{lang: ".ts"}
+	prev := newLSPClientForExt
+	newLSPClientForExt = func(ext, rootDir string, timeout time.Duration, opts lsp.ClientOptions) (lsp.Client, error) {
+		if ext != ".ts" {
+			t.Fatalf("ext = %q, want %q", ext, ".ts")
+		}
+		if !opts.UseTSGo {
+			t.Fatal("UseTSGo must be true when TypeScriptLSPUseTSGo is set")
+		}
+		return want, nil
+	}
+	t.Cleanup(func() { newLSPClientForExt = prev })
+
+	got := lspClientForIndex(context.Background(), IndexOptions{
+		TypeScriptLSPRootDir: "/tmp/tsrepo",
+		TypeScriptLSPUseTSGo: true,
+	})
+	if got != want {
+		t.Fatal("expected returned TypeScript client from factory")
 	}
 }

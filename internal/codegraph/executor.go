@@ -48,7 +48,7 @@ func indexFile(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, f *ob
 	// OutgoingCalls gives fully-qualified caller/callee names, so the
 	// resulting edges resolve directly without the multi-stage fallback chain.
 	if lspClient != nil && strings.EqualFold(filepath.Ext(f.Name), lspClient.Language()) {
-		absFile := filepath.Join(opts.GoLSPRootDir, filepath.FromSlash(f.Name))
+		absFile := filepath.Join(lspRootDirForClient(opts, lspClient), filepath.FromSlash(f.Name))
 		edges = enrichCallEdges(ctx, lspClient, absFile, edges)
 	}
 
@@ -58,7 +58,7 @@ func indexFile(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, f *ob
 	symToID := persistSymbolEntities(ctx, pool, opts, syms, fileMemoryID, res)
 	persistChunkMemories(ctx, pool, opts, f.Name, src, syms, fileMemoryID, res)
 
-	resolver := NewResolver(pool, opts.ScopeID, lspClient, opts.GoLSPRootDir)
+	resolver := NewResolver(pool, opts.ScopeID, lspClient, lspRootDirForClient(opts, lspClient))
 	persistRelations(ctx, pool, opts, f.Name, edges, resolver, symToID, res)
 
 	return nil

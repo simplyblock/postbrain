@@ -47,6 +47,17 @@ type IndexOptions struct {
 	GoLSPRootDir string
 	// GoLSPTimeout controls per-request timeouts for the gopls subprocess.
 	GoLSPTimeout time.Duration
+	// TypeScriptLSPRootDir enables optional TypeScript/JavaScript LSP
+	// resolution via a local stdio language server process.
+	// It must be the absolute path to the checked-out source tree.
+	// Empty disables TypeScript LSP for this run.
+	TypeScriptLSPRootDir string
+	// TypeScriptLSPTimeout controls per-request timeouts for the TypeScript
+	// language server subprocess.
+	TypeScriptLSPTimeout time.Duration
+	// TypeScriptLSPUseTSGo selects tsgo (`tsgo --lsp`) instead of
+	// typescript-language-server for TypeScript/JavaScript extensions.
+	TypeScriptLSPUseTSGo bool
 }
 
 const defaultMaxBytes int64 = 512 * 1024

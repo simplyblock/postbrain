@@ -21,7 +21,6 @@ import (
 	"github.com/simplyblock/postbrain/internal/codegraph/lsp"
 )
 
-
 // newLSPClientForExt is the factory used to create an lsp.Client for a given
 // file extension.  It is a package-level variable so tests can inject fakes.
 var newLSPClientForExt = lsp.NewClientForExt
@@ -38,16 +37,43 @@ func buildCloneAuth(opts IndexOptions) (transport.AuthMethod, error) {
 }
 
 func lspClientForIndex(ctx context.Context, opts IndexOptions) lsp.Client {
-	if opts.GoLSPRootDir == "" {
-		return nil
+	if opts.GoLSPRootDir != "" {
+		client, err := newLSPClientForExt(".go", opts.GoLSPRootDir, opts.GoLSPTimeout, lsp.ClientOptions{})
+		if err != nil {
+			slog.WarnContext(ctx, "codegraph: gopls client unavailable; continuing without lsp",
+				"root", opts.GoLSPRootDir, "err", err)
+			return nil
+		}
+		return client
 	}
-	client, err := newLSPClientForExt(".go", opts.GoLSPRootDir, opts.GoLSPTimeout)
-	if err != nil {
-		slog.WarnContext(ctx, "codegraph: gopls client unavailable; continuing without lsp",
-			"root", opts.GoLSPRootDir, "err", err)
-		return nil
+
+	if opts.TypeScriptLSPRootDir != "" {
+		client, err := newLSPClientForExt(".ts", opts.TypeScriptLSPRootDir, opts.TypeScriptLSPTimeout, lsp.ClientOptions{
+			UseTSGo: opts.TypeScriptLSPUseTSGo,
+		})
+		if err != nil {
+			slog.WarnContext(ctx, "codegraph: typescript lsp client unavailable; continuing without lsp",
+				"root", opts.TypeScriptLSPRootDir, "use_tsgo", opts.TypeScriptLSPUseTSGo, "err", err)
+			return nil
+		}
+		return client
 	}
-	return client
+
+	return nil
+}
+
+func lspRootDirForClient(opts IndexOptions, client lsp.Client) string {
+	if client == nil {
+		return ""
+	}
+	switch strings.ToLower(client.Language()) {
+	case ".go":
+		return opts.GoLSPRootDir
+	case ".ts":
+		return opts.TypeScriptLSPRootDir
+	default:
+		return ""
+	}
 }
 
 // isSSHURL reports whether u is an SSH clone URL (git@ SCP syntax or ssh:// scheme).

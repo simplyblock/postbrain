@@ -25,6 +25,26 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-13: Added TypeScript stdio LSP backend selection with `tsgo` flag (TDD-first):
+  - Extended `internal/codegraph/lsp/factory.go` with `ClientOptions` and
+    TypeScript backend selection:
+    - default: `typescript-language-server --stdio`
+    - opt-in: `tsgo --lsp` when `UseTSGo=true`.
+  - Added stdio TypeScript clients:
+    - `internal/codegraph/lsp/typescript.go`
+    - `internal/codegraph/lsp/tsgo.go`
+    - both reuse TS/JS import parsing for `Imports(...)`.
+  - Added factory selection tests in
+    `internal/codegraph/lsp/factory_test.go`.
+  - Extended codegraph index options and wiring for TypeScript LSP:
+    - `TypeScriptLSPRootDir`
+    - `TypeScriptLSPTimeout`
+    - `TypeScriptLSPUseTSGo`
+  - Updated indexer/source/executor LSP routing to use language-specific root
+    directories (`.go` vs `.ts`), and added coverage in
+    `internal/codegraph/indexer_lsp_test.go` for default TS backend and
+    `tsgo`-flag behavior.
+
 - [x] 2026-04-13: Fixed codegraph Go LSP call-target regression that broke integration tests (TDD-first):
   - Added LSP decoder regression coverage for `DocumentSymbol` payloads using
     `selectionRange` in `internal/codegraph/lsp/client_test.go`.
