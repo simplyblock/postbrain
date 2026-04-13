@@ -13,7 +13,7 @@ import (
 	pgvector "github.com/pgvector/pgvector-go"
 
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
 var ErrEmptyEmbedding = errors.New("skills: empty embedding result")
@@ -36,13 +36,13 @@ func (p *poolCreator) createSkill(ctx context.Context, s *db.Skill) (*db.Skill, 
 // Store provides skill CRUD and related operations.
 type Store struct {
 	pool    *pgxpool.Pool
-	svc     *embedding.EmbeddingService
+	svc     *providers.EmbeddingService
 	creator skillCreator // injectable for tests
 	repo    *db.EmbeddingRepository
 }
 
 // NewStore creates a new Store backed by the given pool and embedding service.
-func NewStore(pool *pgxpool.Pool, svc *embedding.EmbeddingService) *Store {
+func NewStore(pool *pgxpool.Pool, svc *providers.EmbeddingService) *Store {
 	return &Store{
 		pool:    pool,
 		svc:     svc,

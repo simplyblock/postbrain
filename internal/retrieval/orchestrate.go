@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 	graphpkg "github.com/simplyblock/postbrain/internal/graph"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 	"github.com/simplyblock/postbrain/internal/memory"
@@ -28,7 +28,7 @@ type OrchestrateDeps struct {
 	MemStore *memory.Store
 	KnwStore *knowledge.Store
 	SklStore *skills.Store
-	Svc      *embedding.EmbeddingService
+	Svc      *providers.EmbeddingService
 }
 
 // OrchestrateInput configures a cross-layer recall request.

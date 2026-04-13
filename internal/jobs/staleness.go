@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/retrieval"
 )
 
@@ -24,7 +24,7 @@ const (
 // artifacts that appear to be contradicted by recent observations.
 type ContradictionJob struct {
 	pool *pgxpool.Pool
-	svc  *embedding.EmbeddingService
+	svc  *providers.EmbeddingService
 	// classify is injected to allow testing without a real LLM.
 	// It returns one of: "CONTRADICTS", "CONSISTENT", "UNRELATED"
 	classify func(ctx context.Context, artifactContent, memoryContent string) (verdict, reasoning string, err error)
@@ -33,7 +33,7 @@ type ContradictionJob struct {
 // NewContradictionJob creates a new ContradictionJob. If classify is nil, a
 // no-op classifier that always returns "CONSISTENT" is used (safe default for
 // deployments without LLM).
-func NewContradictionJob(pool *pgxpool.Pool, svc *embedding.EmbeddingService, classify func(ctx context.Context, artifact, memory string) (string, string, error)) *ContradictionJob {
+func NewContradictionJob(pool *pgxpool.Pool, svc *providers.EmbeddingService, classify func(ctx context.Context, artifact, memory string) (string, string, error)) *ContradictionJob {
 	if classify == nil {
 		classify = noopClassifier
 	}

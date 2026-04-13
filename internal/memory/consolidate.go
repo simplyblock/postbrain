@@ -11,7 +11,7 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/chunking"
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
 const consolidateSummaryMaxEmbedBytes = 32_000
@@ -54,7 +54,7 @@ type Consolidator struct {
 }
 
 // NewConsolidator creates a new Consolidator backed by the given pool and embedding service.
-func NewConsolidator(pool *pgxpool.Pool, svc *embedding.EmbeddingService) *Consolidator {
+func NewConsolidator(pool *pgxpool.Pool, svc *providers.EmbeddingService) *Consolidator {
 	return &Consolidator{
 		pool: pool,
 		svc:  &embeddingServiceAdapter{svc: svc},

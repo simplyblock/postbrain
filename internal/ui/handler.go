@@ -29,7 +29,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/codegraph"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/ingest"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 	"github.com/simplyblock/postbrain/internal/memory"
@@ -54,7 +54,7 @@ type Handler struct {
 	knwStore   *knowledge.Store
 	knwProm    *knowledge.Promoter
 	memStore   *memory.Store
-	svc        *embedding.EmbeddingService
+	svc        *providers.EmbeddingService
 	syncer     *codegraph.Syncer
 	oauthCfg   config.OAuthConfig
 	providers  map[string]social.Provider
@@ -66,7 +66,7 @@ type Handler struct {
 }
 
 // NewHandler creates a UI Handler with parsed templates.
-func NewHandler(pool *pgxpool.Pool, svc *embedding.EmbeddingService) (*Handler, error) {
+func NewHandler(pool *pgxpool.Pool, svc *providers.EmbeddingService) (*Handler, error) {
 	funcMap := template.FuncMap{
 		"truncate":    truncate,
 		"timeAgo":     timeAgo,
@@ -118,7 +118,7 @@ func NewHandler(pool *pgxpool.Pool, svc *embedding.EmbeddingService) (*Handler, 
 // NewHandlerWithOAuth creates a UI handler with OAuth/social dependencies wired.
 func NewHandlerWithOAuth(
 	pool *pgxpool.Pool,
-	svc *embedding.EmbeddingService,
+	svc *providers.EmbeddingService,
 	oauthCfg config.OAuthConfig,
 	providers map[string]social.Provider,
 	stateStore *oauth.StateStore,

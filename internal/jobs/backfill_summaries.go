@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 )
 
@@ -58,14 +58,14 @@ const defaultBackfillBatchSize = 50
 // them using AI summarization when available, falling back to extractive.
 type BackfillSummariesJob struct {
 	store      backfillSummaryStore
-	summarizer embedding.Summarizer // may be nil → extractive fallback
+	summarizer providers.Summarizer // may be nil → extractive fallback
 	batchSize  int
 }
 
 // NewBackfillSummariesJob creates a BackfillSummariesJob backed by pool.
 // svc may be nil; if non-nil and a summary model is configured, AI summarization
 // is used. If batchSize is 0 it defaults to 50.
-func NewBackfillSummariesJob(pool *pgxpool.Pool, svc *embedding.EmbeddingService, batchSize int) *BackfillSummariesJob {
+func NewBackfillSummariesJob(pool *pgxpool.Pool, svc *providers.EmbeddingService, batchSize int) *BackfillSummariesJob {
 	if batchSize <= 0 {
 		batchSize = defaultBackfillBatchSize
 	}

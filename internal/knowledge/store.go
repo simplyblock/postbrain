@@ -18,7 +18,7 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/chunking"
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/graph"
 )
 
@@ -29,36 +29,36 @@ var (
 	ErrInvalidArtifactKind = errors.New("knowledge: invalid artifact kind")
 )
 
-// embeddingService is the subset of embedding.EmbeddingService used by this package.
+// embeddingService is the subset of providers.EmbeddingService used by this package.
 type embeddingService interface {
 	EmbedText(ctx context.Context, text string) ([]float32, error)
 	Summarize(ctx context.Context, text string) (string, error)
-	Analyze(ctx context.Context, text string) (*embedding.DocumentAnalysis, error)
+	Analyze(ctx context.Context, text string) (*providers.DocumentAnalysis, error)
 	TextEmbedder() embeddingIface
 }
 
 type embeddingResultService interface {
-	EmbedTextResult(ctx context.Context, text string) (*embedding.EmbedResult, error)
+	EmbedTextResult(ctx context.Context, text string) (*providers.EmbedResult, error)
 }
 
-// embeddingIface is the subset of embedding.Embedder needed to read the model slug.
-// embedding.Embedder satisfies this interface.
+// embeddingIface is the subset of providers.Embedder needed to read the model slug.
+// providers.Embedder satisfies this interface.
 type embeddingIface interface {
 	ModelSlug() string
 }
 
-// embeddingServiceAdapter wraps *embedding.EmbeddingService to satisfy embeddingService.
-// This is needed because TextEmbedder() returns embedding.Embedder (a concrete interface)
+// embeddingServiceAdapter wraps *providers.EmbeddingService to satisfy embeddingService.
+// This is needed because TextEmbedder() returns providers.Embedder (a concrete interface)
 // while our local embeddingService expects the narrower embeddingIface.
 type embeddingServiceAdapter struct {
-	svc *embedding.EmbeddingService
+	svc *providers.EmbeddingService
 }
 
 func (a *embeddingServiceAdapter) EmbedText(ctx context.Context, text string) ([]float32, error) {
 	return a.svc.EmbedText(ctx, text)
 }
 
-func (a *embeddingServiceAdapter) EmbedTextResult(ctx context.Context, text string) (*embedding.EmbedResult, error) {
+func (a *embeddingServiceAdapter) EmbedTextResult(ctx context.Context, text string) (*providers.EmbedResult, error) {
 	return a.svc.EmbedTextResult(ctx, text)
 }
 
@@ -66,7 +66,7 @@ func (a *embeddingServiceAdapter) Summarize(ctx context.Context, text string) (s
 	return a.svc.Summarize(ctx, text)
 }
 
-func (a *embeddingServiceAdapter) Analyze(ctx context.Context, text string) (*embedding.DocumentAnalysis, error) {
+func (a *embeddingServiceAdapter) Analyze(ctx context.Context, text string) (*providers.DocumentAnalysis, error) {
 	return a.svc.Analyze(ctx, text)
 }
 
@@ -129,7 +129,7 @@ type Store struct {
 }
 
 // NewStore creates a new Store backed by the given pool and embedding service.
-func NewStore(pool *pgxpool.Pool, svc *embedding.EmbeddingService) *Store {
+func NewStore(pool *pgxpool.Pool, svc *providers.EmbeddingService) *Store {
 	return &Store{
 		pool:    pool,
 		svc:     &embeddingServiceAdapter{svc: svc},
@@ -421,7 +421,7 @@ func (s *Store) embedContent(ctx context.Context, text string) ([]float32, *uuid
 			q := db.New(s.pool)
 			model, err := q.GetActiveTextModel(ctx)
 			if err == nil && model != nil {
-				res.Embedding = embedding.FitDimensions(res.Embedding, int(model.Dimensions))
+				res.Embedding = providers.FitDimensions(res.Embedding, int(model.Dimensions))
 			}
 		}
 		if res.ModelID != uuid.Nil {
@@ -444,7 +444,7 @@ func (s *Store) embedContent(ctx context.Context, text string) ([]float32, *uuid
 		q := db.New(s.pool)
 		model, err := q.GetActiveTextModel(ctx)
 		if err == nil && model != nil {
-			vec = embedding.FitDimensions(vec, int(model.Dimensions))
+			vec = providers.FitDimensions(vec, int(model.Dimensions))
 			if model.Slug == slug {
 				return vec, &model.ID, nil
 			}

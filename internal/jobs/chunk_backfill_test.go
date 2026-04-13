@@ -11,7 +11,7 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/chunking"
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
 // ── fakeChunkBackfillStore ────────────────────────────────────────────────────
@@ -56,13 +56,13 @@ func (f *fakeChunkBackfillStore) createMemory(_ context.Context, m *db.Memory) (
 
 // ── fakeTextEmbedder ─────────────────────────────────────────────────────────
 
-// fakeTextEmbedder wraps embedding.FakeEmbedder to satisfy the local textEmbedder interface.
+// fakeTextEmbedder wraps providers.FakeEmbedder to satisfy the local textEmbedder interface.
 type fakeTextEmbedder struct {
-	inner *embedding.FakeEmbedder
+	inner *providers.FakeEmbedder
 }
 
 func newFakeTextEmbedder() *fakeTextEmbedder {
-	return &fakeTextEmbedder{inner: embedding.NewFakeEmbedder(4)}
+	return &fakeTextEmbedder{inner: providers.NewFakeEmbedder(4)}
 }
 
 func (f *fakeTextEmbedder) EmbedText(ctx context.Context, text string) ([]float32, error) {

@@ -1,4 +1,4 @@
-package embedding
+package providers
 
 // FitDimensions returns a vector resized to dims.
 // If dims <= 0, vec is returned unchanged.

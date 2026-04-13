@@ -12,7 +12,7 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"github.com/simplyblock/postbrain/internal/config"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/metrics"
 )
 
@@ -20,13 +20,13 @@ import (
 type Scheduler struct {
 	cron *cron.Cron
 	pool *pgxpool.Pool
-	svc  *embedding.EmbeddingService
+	svc  *providers.EmbeddingService
 	cfg  *config.JobsConfig
 }
 
 // NewScheduler creates a new Scheduler with the given database pool,
 // embedding service, and jobs configuration.
-func NewScheduler(pool *pgxpool.Pool, svc *embedding.EmbeddingService, cfg *config.JobsConfig) *Scheduler {
+func NewScheduler(pool *pgxpool.Pool, svc *providers.EmbeddingService, cfg *config.JobsConfig) *Scheduler {
 	return &Scheduler{
 		cron: cron.New(),
 		pool: pool,

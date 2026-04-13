@@ -14,7 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/skills"
 	"github.com/simplyblock/postbrain/internal/modelruntime"
 	"github.com/simplyblock/postbrain/internal/testhelper"
@@ -62,7 +62,7 @@ func TestSkillsCreate_DualWritesToEmbeddingRepository(t *testing.T) {
 			},
 		},
 	}
-	svc, err := embedding.NewService(cfg)
+	svc, err := providers.NewService(cfg)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}

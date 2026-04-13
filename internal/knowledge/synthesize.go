@@ -11,7 +11,7 @@ import (
 	pgvector "github.com/pgvector/pgvector-go"
 
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
 // Sentinel errors for synthesis validation.
@@ -39,7 +39,7 @@ type Synthesiser struct {
 }
 
 // NewSynthesiser creates a Synthesiser backed by the given pool and embedding service.
-func NewSynthesiser(pool *pgxpool.Pool, svc *embedding.EmbeddingService) *Synthesiser {
+func NewSynthesiser(pool *pgxpool.Pool, svc *providers.EmbeddingService) *Synthesiser {
 	return &Synthesiser{
 		pool: pool,
 		svc:  &embeddingServiceAdapter{svc: svc},
@@ -235,7 +235,7 @@ func (s *Synthesiser) embedContent(ctx context.Context, text string) ([]float32,
 		q := db.New(s.pool)
 		model, err := q.GetActiveTextModel(ctx)
 		if err == nil && model != nil {
-			vec = embedding.FitDimensions(vec, int(model.Dimensions))
+			vec = providers.FitDimensions(vec, int(model.Dimensions))
 			if model.Slug == slug {
 				return vec, &model.ID, nil
 			}

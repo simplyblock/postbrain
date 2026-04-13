@@ -12,10 +12,10 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/chunking"
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
-// textEmbedder is the subset of embedding.EmbeddingService used by ChunkBackfillJob.
+// textEmbedder is the subset of providers.EmbeddingService used by ChunkBackfillJob.
 type textEmbedder interface {
 	EmbedText(ctx context.Context, text string) ([]float32, error)
 }
@@ -90,7 +90,7 @@ type ChunkBackfillJob struct {
 // NewChunkBackfillJob creates a ChunkBackfillJob backed by pool.
 // svc must be non-nil for embedding; if it is nil the job is a no-op.
 // batchSize 0 defaults to 20 (smaller than summaries: each row spawns many embeds).
-func NewChunkBackfillJob(pool *pgxpool.Pool, svc *embedding.EmbeddingService, batchSize int) *ChunkBackfillJob {
+func NewChunkBackfillJob(pool *pgxpool.Pool, svc *providers.EmbeddingService, batchSize int) *ChunkBackfillJob {
 	if batchSize <= 0 {
 		batchSize = defaultChunkBackfillBatchSize
 	}

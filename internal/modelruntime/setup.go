@@ -7,13 +7,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/config"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/modelstore"
 )
 
 // EnableModelDrivenFactory configures model-aware embedder and summarizer
 // resolution on svc, loading the currently active model IDs from the DB.
-func EnableModelDrivenFactory(ctx context.Context, svc *embedding.EmbeddingService, pool *pgxpool.Pool, cfg *config.EmbeddingConfig) error {
+func EnableModelDrivenFactory(ctx context.Context, svc *providers.EmbeddingService, pool *pgxpool.Pool, cfg *config.EmbeddingConfig) error {
 	if svc == nil {
 		return fmt.Errorf("embedding service is nil")
 	}

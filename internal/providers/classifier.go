@@ -1,4 +1,4 @@
-package embedding
+package providers
 
 import (
 	"strings"

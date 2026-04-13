@@ -1,6 +1,6 @@
 // Package modelruntime provides model-aware factory construction for embedders
 // and summarizers. It bridges model registry lookup (modelstore) with provider
-// implementations (embedding) and is the correct injection point for
+// implementations (providers) and is the correct injection point for
 // model-driven factory wiring.
 package modelruntime
 
@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/config"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/modelstore"
 )
 
@@ -26,13 +26,13 @@ type ModelConfigStore interface {
 }
 
 // EmbeddingFactory creates Embedder instances by model ID.
-// Implements embedding.EmbedderResolver.
+// Implements providers.EmbedderResolver.
 type EmbeddingFactory struct {
 	baseCfg *config.EmbeddingConfig
 	store   ModelConfigStore
 
 	mu    sync.Mutex
-	cache map[uuid.UUID]embedding.Embedder
+	cache map[uuid.UUID]providers.Embedder
 }
 
 // NewEmbeddingFactory constructs a model-aware embedder factory.
@@ -45,12 +45,12 @@ func NewEmbeddingFactory(baseCfg *config.EmbeddingConfig, store ModelConfigStore
 	return &EmbeddingFactory{
 		baseCfg: cfg,
 		store:   store,
-		cache:   make(map[uuid.UUID]embedding.Embedder),
+		cache:   make(map[uuid.UUID]providers.Embedder),
 	}
 }
 
 // EmbedderForModel resolves provider settings by model ID and returns an Embedder.
-func (f *EmbeddingFactory) EmbedderForModel(ctx context.Context, modelID uuid.UUID) (embedding.Embedder, error) {
+func (f *EmbeddingFactory) EmbedderForModel(ctx context.Context, modelID uuid.UUID) (providers.Embedder, error) {
 	if f == nil || f.store == nil {
 		return nil, fmt.Errorf("embedding factory: model store is not configured")
 	}
@@ -78,13 +78,13 @@ func (f *EmbeddingFactory) EmbedderForModel(ctx context.Context, modelID uuid.UU
 }
 
 // SummaryFactory creates Summarizer instances by model ID.
-// Implements embedding.SummarizerResolver.
+// Implements providers.SummarizerResolver.
 type SummaryFactory struct {
 	baseCfg *config.EmbeddingConfig
 	store   ModelConfigStore
 
 	mu    sync.Mutex
-	cache map[uuid.UUID]embedding.Summarizer
+	cache map[uuid.UUID]providers.Summarizer
 }
 
 // NewSummaryFactory constructs a model-aware summarizer factory.
@@ -97,14 +97,14 @@ func NewSummaryFactory(baseCfg *config.EmbeddingConfig, store ModelConfigStore) 
 	return &SummaryFactory{
 		baseCfg: cfg,
 		store:   store,
-		cache:   make(map[uuid.UUID]embedding.Summarizer),
+		cache:   make(map[uuid.UUID]providers.Summarizer),
 	}
 }
 
 // SummarizerForModel resolves provider settings by model ID and returns a Summarizer.
 // Returns (nil, nil) when no summary_model is configured for the model's provider
 // profile — callers should fall back to a static summarizer in that case.
-func (f *SummaryFactory) SummarizerForModel(ctx context.Context, modelID uuid.UUID) (embedding.Summarizer, error) {
+func (f *SummaryFactory) SummarizerForModel(ctx context.Context, modelID uuid.UUID) (providers.Summarizer, error) {
 	if f == nil || f.store == nil {
 		return nil, fmt.Errorf("summary factory: model store is not configured")
 	}
@@ -134,7 +134,7 @@ func (f *SummaryFactory) SummarizerForModel(ctx context.Context, modelID uuid.UU
 	return sum, nil
 }
 
-func newEmbedderForConfig(baseCfg *config.EmbeddingConfig, model *modelstore.ModelConfig) (embedding.Embedder, error) {
+func newEmbedderForConfig(baseCfg *config.EmbeddingConfig, model *modelstore.ModelConfig) (providers.Embedder, error) {
 	provider, serviceURL, apiKey, _, providerModel, err := resolveProviderConfig(baseCfg, model)
 	if err != nil {
 		return nil, err
@@ -142,7 +142,7 @@ func newEmbedderForConfig(baseCfg *config.EmbeddingConfig, model *modelstore.Mod
 	cfg := *baseCfg
 	switch provider {
 	case "ollama":
-		return embedding.NewOllamaEmbedder(&cfg, providerModel, serviceURL), nil
+		return providers.NewOllamaEmbedder(&cfg, providerModel, serviceURL), nil
 	case "openai":
 		baseURL := serviceURL
 		if baseURL == "" {
@@ -151,13 +151,13 @@ func newEmbedderForConfig(baseCfg *config.EmbeddingConfig, model *modelstore.Mod
 		if apiKey == "" && baseURL == defaultOpenAIBaseURL {
 			return nil, fmt.Errorf("embedding factory: api_key is required for default OpenAI URL")
 		}
-		return embedding.NewOpenAIEmbedder(&cfg, providerModel, baseURL, apiKey), nil
+		return providers.NewOpenAIEmbedder(&cfg, providerModel, baseURL, apiKey), nil
 	default:
 		return nil, fmt.Errorf("embedding factory: unsupported provider %q", provider)
 	}
 }
 
-func newSummarizerForConfig(baseCfg *config.EmbeddingConfig, model *modelstore.ModelConfig) (embedding.Summarizer, error) {
+func newSummarizerForConfig(baseCfg *config.EmbeddingConfig, model *modelstore.ModelConfig) (providers.Summarizer, error) {
 	provider, serviceURL, apiKey, summaryModel, _, err := resolveProviderConfig(baseCfg, model)
 	if err != nil {
 		return nil, err
@@ -169,7 +169,7 @@ func newSummarizerForConfig(baseCfg *config.EmbeddingConfig, model *modelstore.M
 	cfg := *baseCfg
 	switch provider {
 	case "ollama":
-		return embedding.NewOllamaSummarizer(&cfg, summaryModel, serviceURL), nil
+		return providers.NewOllamaSummarizer(&cfg, summaryModel, serviceURL), nil
 	case "openai":
 		baseURL := serviceURL
 		if baseURL == "" {
@@ -178,7 +178,7 @@ func newSummarizerForConfig(baseCfg *config.EmbeddingConfig, model *modelstore.M
 		if apiKey == "" && baseURL == defaultOpenAIBaseURL {
 			return nil, fmt.Errorf("summary factory: api_key is required for default OpenAI URL")
 		}
-		return embedding.NewOpenAISummarizer(&cfg, summaryModel, baseURL, apiKey), nil
+		return providers.NewOpenAISummarizer(&cfg, summaryModel, baseURL, apiKey), nil
 	default:
 		return nil, fmt.Errorf("summary factory: unsupported provider %q", provider)
 	}

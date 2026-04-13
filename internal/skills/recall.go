@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
 // RecallInput specifies a skill recall query.
@@ -45,7 +45,7 @@ func importanceFromInvocations(count int) float64 {
 }
 
 // Recall performs hybrid vector + FTS recall of published skills.
-func (s *Store) Recall(ctx context.Context, svc *embedding.EmbeddingService, input RecallInput) ([]*SkillResult, error) {
+func (s *Store) Recall(ctx context.Context, svc *providers.EmbeddingService, input RecallInput) ([]*SkillResult, error) {
 	if input.Limit <= 0 {
 		input.Limit = 20
 	}

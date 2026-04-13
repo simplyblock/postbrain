@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/config"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/modelruntime"
 	"github.com/simplyblock/postbrain/internal/modelstore"
 )
@@ -54,9 +54,9 @@ func TestEmbeddingFactory_EmbedderForModel_OpenAI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EmbedderForModel: %v", err)
 	}
-	oa, ok := emb.(*embedding.OpenAIEmbedder)
+	oa, ok := emb.(*providers.OpenAIEmbedder)
 	if !ok {
-		t.Fatalf("embedder type = %T, want *embedding.OpenAIEmbedder", emb)
+		t.Fatalf("embedder type = %T, want *providers.OpenAIEmbedder", emb)
 	}
 	if oa.BaseURL() != "http://localhost:8080/v1" {
 		t.Fatalf("BaseURL = %q, want model service URL", oa.BaseURL())
@@ -91,9 +91,9 @@ func TestEmbeddingFactory_EmbedderForModel_UsesProfileOverride(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EmbedderForModel: %v", err)
 	}
-	ool, ok := emb.(*embedding.OllamaEmbedder)
+	ool, ok := emb.(*providers.OllamaEmbedder)
 	if !ok {
-		t.Fatalf("embedder type = %T, want *embedding.OllamaEmbedder", emb)
+		t.Fatalf("embedder type = %T, want *providers.OllamaEmbedder", emb)
 	}
 	if ool.ServiceURL() != "http://localhost:11434" {
 		t.Fatalf("ServiceURL = %q, want profile service URL", ool.ServiceURL())
@@ -118,9 +118,9 @@ func TestEmbeddingFactory_EmbedderForModel_Ollama(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EmbedderForModel: %v", err)
 	}
-	ool, ok := emb.(*embedding.OllamaEmbedder)
+	ool, ok := emb.(*providers.OllamaEmbedder)
 	if !ok {
-		t.Fatalf("embedder type = %T, want *embedding.OllamaEmbedder", emb)
+		t.Fatalf("embedder type = %T, want *providers.OllamaEmbedder", emb)
 	}
 	if ool.ServiceURL() != "http://localhost:11434" {
 		t.Fatalf("ServiceURL = %q, want model service URL", ool.ServiceURL())
@@ -159,9 +159,9 @@ func TestSummaryFactory_SummarizerForModel_UsesProfileSummaryModel(t *testing.T)
 	if err != nil {
 		t.Fatalf("SummarizerForModel: %v", err)
 	}
-	oa, ok := sum.(*embedding.OpenAISummarizer)
+	oa, ok := sum.(*providers.OpenAISummarizer)
 	if !ok {
-		t.Fatalf("summarizer type = %T, want *embedding.OpenAISummarizer", sum)
+		t.Fatalf("summarizer type = %T, want *providers.OpenAISummarizer", sum)
 	}
 	if oa.BaseURL() != "https://api.openai.com/v1" {
 		t.Fatalf("BaseURL = %q, want profile service URL", oa.BaseURL())
@@ -205,7 +205,7 @@ func TestSummaryFactory_SummarizerForModel_NoSummaryModelReturnsNil(t *testing.T
 func TestEnableModelDrivenFactory_NilPoolReturnsError(t *testing.T) {
 	t.Parallel()
 
-	svc, err := embedding.NewService(&config.EmbeddingConfig{
+	svc, err := providers.NewService(&config.EmbeddingConfig{
 		Providers: map[string]config.EmbeddingProviderConfig{
 			"default": {Backend: "ollama", TextModel: "nomic-embed-text"},
 		},

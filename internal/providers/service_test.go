@@ -1,4 +1,4 @@
-package embedding
+package providers
 
 import (
 	"context"
@@ -189,7 +189,6 @@ func TestNewService_UnsupportedBackendReturnsError(t *testing.T) {
 		t.Errorf("error message %q does not contain 'unsupported embedding backend'", err.Error())
 	}
 }
-
 
 // --- EmbedText / EmbedCode tests using injected mock embedders ---
 

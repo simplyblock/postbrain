@@ -13,7 +13,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/config"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/graph"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 	"github.com/simplyblock/postbrain/internal/memory"
@@ -27,7 +27,7 @@ import (
 type Server struct {
 	mcpServer  *mcpserver.MCPServer
 	pool       *pgxpool.Pool
-	svc        *embedding.EmbeddingService
+	svc        *providers.EmbeddingService
 	tokenStore *auth.TokenStore
 	cfg        *config.Config
 	// layer stores
@@ -43,7 +43,7 @@ type Server struct {
 }
 
 // NewServer creates all stores, registers all 13 tools, and returns the Server.
-func NewServer(pool *pgxpool.Pool, svc *embedding.EmbeddingService, cfg *config.Config) *Server {
+func NewServer(pool *pgxpool.Pool, svc *providers.EmbeddingService, cfg *config.Config) *Server {
 	s := &Server{
 		pool: pool,
 		svc:  svc,

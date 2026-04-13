@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
 func TestNewReembedJob_DefaultBatchSize(t *testing.T) {
@@ -25,7 +25,7 @@ func TestNewReembedJob_CustomBatchSize(t *testing.T) {
 // the pool and svc references.
 func TestNewReembedJob_Fields(t *testing.T) {
 	var pool *pgxpool.Pool
-	var svc *embedding.EmbeddingService
+	var svc *providers.EmbeddingService
 	j := NewReembedJob(pool, svc, 16)
 	if j.pool != pool {
 		t.Error("expected pool to be stored")

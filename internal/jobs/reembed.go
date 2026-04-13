@@ -13,7 +13,7 @@ import (
 	pgvector "github.com/pgvector/pgvector-go"
 
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
 const defaultReembedBatchSize = 64
@@ -23,12 +23,12 @@ const maxEmbeddingRetries = 3
 // does not match the current active model.
 type ReembedJob struct {
 	pool      *pgxpool.Pool
-	svc       *embedding.EmbeddingService
+	svc       *providers.EmbeddingService
 	batchSize int
 }
 
 // NewReembedJob creates a new ReembedJob. If batchSize is 0, it defaults to 64.
-func NewReembedJob(pool *pgxpool.Pool, svc *embedding.EmbeddingService, batchSize int) *ReembedJob {
+func NewReembedJob(pool *pgxpool.Pool, svc *providers.EmbeddingService, batchSize int) *ReembedJob {
 	if batchSize <= 0 {
 		batchSize = defaultReembedBatchSize
 	}

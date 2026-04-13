@@ -9,20 +9,20 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/memory"
 )
 
 // ConsolidateJob runs LLM-assisted memory consolidation for all scopes.
 type ConsolidateJob struct {
 	pool      *pgxpool.Pool
-	svc       *embedding.EmbeddingService
+	svc       *providers.EmbeddingService
 	summarize func(ctx context.Context, contents []string) (string, error)
 }
 
 // NewConsolidateJob creates a new ConsolidateJob. If summarize is nil, a default
 // summarizer that concatenates contents with a separator is used.
-func NewConsolidateJob(pool *pgxpool.Pool, svc *embedding.EmbeddingService, summarize func(ctx context.Context, contents []string) (string, error)) *ConsolidateJob {
+func NewConsolidateJob(pool *pgxpool.Pool, svc *providers.EmbeddingService, summarize func(ctx context.Context, contents []string) (string, error)) *ConsolidateJob {
 	if summarize == nil {
 		summarize = defaultSummarizer
 	}

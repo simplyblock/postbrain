@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
 // ErrAlreadyPromoted is returned when a memory is already nominated or promoted.
@@ -48,7 +48,7 @@ type Promoter struct {
 }
 
 // NewPromoter creates a new Promoter backed by the given pool and embedding service.
-func NewPromoter(pool *pgxpool.Pool, svc *embedding.EmbeddingService) *Promoter {
+func NewPromoter(pool *pgxpool.Pool, svc *providers.EmbeddingService) *Promoter {
 	return &Promoter{
 		pool:  pool,
 		svc:   &embeddingServiceAdapter{svc: svc},

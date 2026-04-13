@@ -7,15 +7,15 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
 // ── embedding service helpers ─────────────────────────────────────────────────
 
-// newFakeEmbeddingService returns an embeddingService backed by embedding.FakeEmbedder.
+// newFakeEmbeddingService returns an embeddingService backed by providers.FakeEmbedder.
 // Different input texts produce distinct, deterministic vectors.
 func newFakeEmbeddingService() embeddingService {
-	svc := embedding.NewServiceFromEmbedders(embedding.NewFakeEmbedder(4), nil)
+	svc := providers.NewServiceFromEmbedders(providers.NewFakeEmbedder(4), nil)
 	return &embeddingServiceAdapter{svc: svc}
 }
 
@@ -27,7 +27,7 @@ func (noopEmbeddingService) EmbedText(_ context.Context, _ string) ([]float32, e
 	return []float32{0.1, 0.2, 0.3, 0.4}, nil
 }
 func (noopEmbeddingService) Summarize(_ context.Context, _ string) (string, error) { return "", nil }
-func (noopEmbeddingService) Analyze(_ context.Context, _ string) (*embedding.DocumentAnalysis, error) {
+func (noopEmbeddingService) Analyze(_ context.Context, _ string) (*providers.DocumentAnalysis, error) {
 	return nil, nil
 }
 func (noopEmbeddingService) TextEmbedder() embeddingIface { return &fakeEmbedderIface{slug: "noop"} }

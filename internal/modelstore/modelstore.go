@@ -1,5 +1,5 @@
 // Package modelstore provides DB-backed stores for resolving AI model metadata.
-// It is intentionally separate from internal/embedding so that generation/summary
+// It is intentionally separate from internal/providers so that generation/summary
 // consumers can depend on model lookup without importing embedding provider code.
 package modelstore
 

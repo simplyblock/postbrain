@@ -13,18 +13,18 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/chunking"
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
 // ── embedding service helpers ─────────────────────────────────────────────────
 
-func newFakeEmbeddingService(withCode bool) *embedding.EmbeddingService {
-	text := embedding.NewFakeEmbedder(4)
+func newFakeEmbeddingService(withCode bool) *providers.EmbeddingService {
+	text := providers.NewFakeEmbedder(4)
 	if withCode {
-		code := embedding.NewFakeEmbedder(4)
-		return embedding.NewServiceFromEmbedders(text, code)
+		code := providers.NewFakeEmbedder(4)
+		return providers.NewServiceFromEmbedders(text, code)
 	}
-	return embedding.NewServiceFromEmbedders(text, nil)
+	return providers.NewServiceFromEmbedders(text, nil)
 }
 
 // newMockEmbeddingService is an alias kept for compatibility with consolidate_test.go
@@ -42,7 +42,7 @@ func (noopMemoryEmbeddingService) EmbedCode(_ context.Context, _ string) ([]floa
 	return []float32{0.1, 0.2, 0.3, 0.4}, nil
 }
 func (noopMemoryEmbeddingService) TextEmbedder() embeddingIface {
-	return embedding.NewFakeEmbedder(4)
+	return providers.NewFakeEmbedder(4)
 }
 func (noopMemoryEmbeddingService) CodeEmbedder() embeddingIface { return nil }
 

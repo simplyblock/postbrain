@@ -17,11 +17,11 @@ import (
 	"github.com/simplyblock/postbrain/internal/chunking"
 	"github.com/simplyblock/postbrain/internal/codegraph"
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/graph"
 )
 
-// embeddingService is the subset of embedding.EmbeddingService used by this package.
+// embeddingService is the subset of providers.EmbeddingService used by this package.
 type embeddingService interface {
 	EmbedText(ctx context.Context, text string) ([]float32, error)
 	EmbedCode(ctx context.Context, text string) ([]float32, error)
@@ -30,26 +30,26 @@ type embeddingService interface {
 }
 
 type embeddingResultService interface {
-	EmbedTextResult(ctx context.Context, text string) (*embedding.EmbedResult, error)
-	EmbedCodeResult(ctx context.Context, text string) (*embedding.EmbedResult, error)
+	EmbedTextResult(ctx context.Context, text string) (*providers.EmbedResult, error)
+	EmbedCodeResult(ctx context.Context, text string) (*providers.EmbedResult, error)
 }
 
-// embeddingIface is the subset of embedding.Embedder needed here.
+// embeddingIface is the subset of providers.Embedder needed here.
 type embeddingIface interface {
 	ModelSlug() string
 	Dimensions() int
 }
 
-// embeddingServiceAdapter adapts *embedding.EmbeddingService to embeddingService.
+// embeddingServiceAdapter adapts *providers.EmbeddingService to embeddingService.
 type embeddingServiceAdapter struct {
-	svc *embedding.EmbeddingService
+	svc *providers.EmbeddingService
 }
 
 func (a *embeddingServiceAdapter) EmbedText(ctx context.Context, text string) ([]float32, error) {
 	return a.svc.EmbedText(ctx, text)
 }
 
-func (a *embeddingServiceAdapter) EmbedTextResult(ctx context.Context, text string) (*embedding.EmbedResult, error) {
+func (a *embeddingServiceAdapter) EmbedTextResult(ctx context.Context, text string) (*providers.EmbedResult, error) {
 	return a.svc.EmbedTextResult(ctx, text)
 }
 
@@ -57,7 +57,7 @@ func (a *embeddingServiceAdapter) EmbedCode(ctx context.Context, text string) ([
 	return a.svc.EmbedCode(ctx, text)
 }
 
-func (a *embeddingServiceAdapter) EmbedCodeResult(ctx context.Context, text string) (*embedding.EmbedResult, error) {
+func (a *embeddingServiceAdapter) EmbedCodeResult(ctx context.Context, text string) (*providers.EmbedResult, error) {
 	return a.svc.EmbedCodeResult(ctx, text)
 }
 
@@ -130,7 +130,7 @@ type Store struct {
 }
 
 // NewStore creates a new Store backed by the given pool and embedding service.
-func NewStore(pool *pgxpool.Pool, svc *embedding.EmbeddingService) *Store {
+func NewStore(pool *pgxpool.Pool, svc *providers.EmbeddingService) *Store {
 	return &Store{
 		pool:    pool,
 		svc:     &embeddingServiceAdapter{svc: svc},
@@ -195,7 +195,7 @@ type embedResult struct {
 // classifyAndEmbed classifies the content kind and generates text and (optionally)
 // code embeddings.
 func (s *Store) classifyAndEmbed(ctx context.Context, input CreateInput) (embedResult, error) {
-	contentKind := embedding.ClassifyContent(input.Content, safeDeref(input.SourceRef))
+	contentKind := providers.ClassifyContent(input.Content, safeDeref(input.SourceRef))
 
 	textVec, textModelID, err := s.embedText(ctx, input.Content)
 	if err != nil {
@@ -398,7 +398,7 @@ func (s *Store) linkEntitiesForMemory(
 
 // Update re-embeds and persists updated content for a memory.
 func (s *Store) Update(ctx context.Context, id uuid.UUID, content string, summary *string, importance float64) (*db.Memory, error) {
-	contentKind := embedding.ClassifyContent(content, "")
+	contentKind := providers.ClassifyContent(content, "")
 	meta := withLongStyleMeta(nil)
 
 	textVec, textModelID, err := s.embedText(ctx, content)

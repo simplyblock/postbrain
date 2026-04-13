@@ -26,7 +26,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/jobs"
 	"github.com/simplyblock/postbrain/internal/modelruntime"
 	"github.com/simplyblock/postbrain/internal/oauth"
@@ -122,7 +122,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	svc, err := embedding.NewService(&cfg.Embedding)
+	svc, err := providers.NewService(&cfg.Embedding)
 	if err != nil {
 		return fmt.Errorf("embedding service: %w", err)
 	}

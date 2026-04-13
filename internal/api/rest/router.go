@@ -11,7 +11,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/codegraph"
 	"github.com/simplyblock/postbrain/internal/config"
-	"github.com/simplyblock/postbrain/internal/embedding"
+	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/graph"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 	"github.com/simplyblock/postbrain/internal/memory"
@@ -23,7 +23,7 @@ import (
 // Router holds all dependencies and builds the chi HTTP handler.
 type Router struct {
 	pool         *pgxpool.Pool
-	svc          *embedding.EmbeddingService
+	svc          *providers.EmbeddingService
 	cfg          *config.Config
 	memStore     *memory.Store
 	knwStore     *knowledge.Store
@@ -41,7 +41,7 @@ type Router struct {
 }
 
 // NewRouter creates a Router with all stores initialised.
-func NewRouter(pool *pgxpool.Pool, svc *embedding.EmbeddingService, cfg *config.Config) *Router {
+func NewRouter(pool *pgxpool.Pool, svc *providers.EmbeddingService, cfg *config.Config) *Router {
 	r := &Router{
 		pool:   pool,
 		svc:    svc,
