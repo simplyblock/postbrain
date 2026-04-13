@@ -56,6 +56,18 @@
     - outside-root absolute path preservation,
     - `tool_input` file path normalization coverage.
 
+- [x] 2026-04-13: Refactored runtime CWD resolution to explicit path plumbing in `postbrain-cli`:
+  - Removed mutable global `getwdFn` from `cmd/postbrain-cli/main.go`.
+  - Updated runtime helpers to accept explicit CWD strings:
+    - `resolveScopeForRuntime(cwd string)`
+    - `resolveURLForRuntime(cwd string)`
+    - `normalizeSnapshotToolInputPaths(..., cwd string)`
+    - `normalizePathToProjectRoot(path, cwd string)`
+  - Added `runtimeCWD()` command-entry helper and wired call sites to resolve
+    CWD once per command path and pass it through.
+  - Updated tests in `cmd/postbrain-cli/main_test.go` to use pure helper
+    signatures without global override state.
+
 - [x] 2026-04-13: Implemented `clangd` stdio LSP backend for C/C++ (TDD-first):
   - Added `internal/codegraph/lsp/clangd.go`:
     - `NewClangdClient(...)` using `clangd` in stdio mode,

@@ -413,11 +413,10 @@ func TestBuildSnapshotDescription_LargeInputFallsBackToKeyCount(t *testing.T) {
 }
 
 func TestNormalizePathToProjectRoot_AbsoluteUnderCWD_ReturnsRelative(t *testing.T) {
-	origGetwd := getwdFn
-	getwdFn = func() (string, error) { return "/Volumes/git/postbrain", nil }
-	t.Cleanup(func() { getwdFn = origGetwd })
-
-	got := normalizePathToProjectRoot("/Volumes/git/postbrain/internal/codegraph/lsp/pyright.go")
+	got := normalizePathToProjectRoot(
+		"/Volumes/git/postbrain/internal/codegraph/lsp/pyright.go",
+		"/Volumes/git/postbrain",
+	)
 	want := "internal/codegraph/lsp/pyright.go"
 	if got != want {
 		t.Fatalf("normalizePathToProjectRoot() = %q, want %q", got, want)
@@ -425,11 +424,7 @@ func TestNormalizePathToProjectRoot_AbsoluteUnderCWD_ReturnsRelative(t *testing.
 }
 
 func TestNormalizePathToProjectRoot_PathOutsideCWD_StaysAbsolute(t *testing.T) {
-	origGetwd := getwdFn
-	getwdFn = func() (string, error) { return "/Volumes/git/postbrain", nil }
-	t.Cleanup(func() { getwdFn = origGetwd })
-
-	got := normalizePathToProjectRoot("/tmp/other/file.go")
+	got := normalizePathToProjectRoot("/tmp/other/file.go", "/Volumes/git/postbrain")
 	want := "/tmp/other/file.go"
 	if got != want {
 		t.Fatalf("normalizePathToProjectRoot() = %q, want %q", got, want)
@@ -437,16 +432,12 @@ func TestNormalizePathToProjectRoot_PathOutsideCWD_StaysAbsolute(t *testing.T) {
 }
 
 func TestNormalizeSnapshotToolInputPaths_FilePathAndPath(t *testing.T) {
-	origGetwd := getwdFn
-	getwdFn = func() (string, error) { return "/Volumes/git/postbrain", nil }
-	t.Cleanup(func() { getwdFn = origGetwd })
-
 	in := map[string]any{
 		"file_path": "/Volumes/git/postbrain/cmd/postbrain-cli/main.go",
 		"path":      "/Volumes/git/postbrain/internal/codegraph/lsp/pyright.go",
 		"query":     "snapshot",
 	}
-	out := normalizeSnapshotToolInputPaths(in)
+	out := normalizeSnapshotToolInputPaths(in, "/Volumes/git/postbrain")
 
 	if out["file_path"] != "cmd/postbrain-cli/main.go" {
 		t.Fatalf("file_path = %v, want relative path", out["file_path"])
@@ -619,7 +610,7 @@ func TestResolveScopeForRuntime_PrefersScopeFlag(t *testing.T) {
 	t.Cleanup(func() { scopeFlag = prev })
 	t.Setenv("POSTBRAIN_SCOPE", "project:from-env")
 
-	if got := resolveScopeForRuntime(); got != "project:from-flag" {
+	if got := resolveScopeForRuntime("/tmp/ignored"); got != "project:from-flag" {
 		t.Fatalf("resolveScopeForRuntime() = %q, want project:from-flag", got)
 	}
 }
@@ -631,10 +622,6 @@ func TestResolveScopeForRuntime_FallsBackToCwdPostbrainBase(t *testing.T) {
 	t.Setenv("POSTBRAIN_SCOPE", "")
 
 	targetDir := t.TempDir()
-	prevGetwd := getwdFn
-	getwdFn = func() (string, error) { return targetDir, nil }
-	t.Cleanup(func() { getwdFn = prevGetwd })
-
 	if err := os.MkdirAll(filepath.Join(targetDir, ".codex"), 0o755); err != nil {
 		t.Fatalf("mkdir .codex: %v", err)
 	}
@@ -642,18 +629,15 @@ func TestResolveScopeForRuntime_FallsBackToCwdPostbrainBase(t *testing.T) {
 		t.Fatalf("write postbrain-base.md: %v", err)
 	}
 
-	if got := resolveScopeForRuntime(); got != "project:from-cwd" {
+	if got := resolveScopeForRuntime(targetDir); got != "project:from-cwd" {
 		t.Fatalf("resolveScopeForRuntime() = %q, want project:from-cwd", got)
 	}
 }
 
 func TestResolveURLForRuntime_PrefersEnvVar(t *testing.T) {
-	prevGetwd := getwdFn
-	getwdFn = func() (string, error) { return "", nil }
-	t.Cleanup(func() { getwdFn = prevGetwd })
 	t.Setenv("POSTBRAIN_URL", "http://env-url:7433/")
 
-	if got := resolveURLForRuntime(); got != "http://env-url:7433" {
+	if got := resolveURLForRuntime(""); got != "http://env-url:7433" {
 		t.Fatalf("resolveURLForRuntime() = %q, want env URL", got)
 	}
 }
@@ -662,10 +646,6 @@ func TestResolveURLForRuntime_FallsBackToCwdPostbrainBase(t *testing.T) {
 	t.Setenv("POSTBRAIN_URL", "")
 	targetDir := t.TempDir()
 
-	prevGetwd := getwdFn
-	getwdFn = func() (string, error) { return targetDir, nil }
-	t.Cleanup(func() { getwdFn = prevGetwd })
-
 	if err := os.MkdirAll(filepath.Join(targetDir, ".agents"), 0o755); err != nil {
 		t.Fatalf("mkdir .agents: %v", err)
 	}
@@ -673,18 +653,15 @@ func TestResolveURLForRuntime_FallsBackToCwdPostbrainBase(t *testing.T) {
 		t.Fatalf("write postbrain-base.md: %v", err)
 	}
 
-	if got := resolveURLForRuntime(); got != "http://from-cwd:7433" {
+	if got := resolveURLForRuntime(targetDir); got != "http://from-cwd:7433" {
 		t.Fatalf("resolveURLForRuntime() = %q, want http://from-cwd:7433", got)
 	}
 }
 
 func TestResolveURLForRuntime_DefaultWhenUnset(t *testing.T) {
-	prevGetwd := getwdFn
-	getwdFn = func() (string, error) { return "", os.ErrNotExist }
-	t.Cleanup(func() { getwdFn = prevGetwd })
 	t.Setenv("POSTBRAIN_URL", "")
 
-	if got := resolveURLForRuntime(); got != "http://localhost:7433" {
+	if got := resolveURLForRuntime(""); got != "http://localhost:7433" {
 		t.Fatalf("resolveURLForRuntime() = %q, want default URL", got)
 	}
 }

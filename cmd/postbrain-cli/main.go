@@ -45,7 +45,6 @@ const latestReleaseAPIURL = "https://api.github.com/repos/simplyblock/postbrain/
 
 var detectCodexVersionFn = detectCodexVersion
 var fetchLatestPostbrainVersionFn = fetchLatestPostbrainVersion
-var getwdFn = os.Getwd
 
 // hookClient is a minimal HTTP client for the Postbrain REST API.
 type hookClient struct {
@@ -54,8 +53,8 @@ type hookClient struct {
 	http    *http.Client
 }
 
-func newHookClient() *hookClient {
-	url := resolveURLForRuntime()
+func newHookClient(cwd string) *hookClient {
+	url := resolveURLForRuntime(cwd)
 	token := os.Getenv("POSTBRAIN_TOKEN")
 	return &hookClient{
 		baseURL: strings.TrimRight(url, "/"),
@@ -176,8 +175,9 @@ func snapshotCmd() *cobra.Command {
 
 func runSnapshot(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
-	client := newHookClient()
-	scope := resolveScopeForRuntime()
+	cwd := runtimeCWD()
+	client := newHookClient(cwd)
+	scope := resolveScopeForRuntime(cwd)
 	if scope == "" {
 		slog.Info("snapshot: no scope configured, skipping")
 		return nil
@@ -202,7 +202,7 @@ func runSnapshot(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	normalizedInput := normalizeSnapshotToolInputPaths(hookData.ToolInput)
+	normalizedInput := normalizeSnapshotToolInputPaths(hookData.ToolInput, cwd)
 
 	// Extract file path from tool input.
 	var sourceRef string
@@ -379,7 +379,7 @@ func snapshotQuote(s string) string {
 	return strconv.Quote(s)
 }
 
-func normalizeSnapshotToolInputPaths(toolInput map[string]any) map[string]any {
+func normalizeSnapshotToolInputPaths(toolInput map[string]any, cwd string) map[string]any {
 	if len(toolInput) == 0 {
 		return toolInput
 	}
@@ -391,13 +391,13 @@ func normalizeSnapshotToolInputPaths(toolInput map[string]any) map[string]any {
 
 	for _, key := range []string{"file_path", "path"} {
 		if raw, ok := out[key].(string); ok {
-			out[key] = normalizePathToProjectRoot(raw)
+			out[key] = normalizePathToProjectRoot(raw, cwd)
 		}
 	}
 	return out
 }
 
-func normalizePathToProjectRoot(path string) string {
+func normalizePathToProjectRoot(path string, cwd string) string {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return ""
@@ -408,8 +408,8 @@ func normalizePathToProjectRoot(path string) string {
 		return filepath.ToSlash(clean)
 	}
 
-	cwd, err := getwdFn()
-	if err != nil || strings.TrimSpace(cwd) == "" {
+	cwd = strings.TrimSpace(cwd)
+	if cwd == "" {
 		return filepath.ToSlash(clean)
 	}
 
@@ -440,8 +440,9 @@ func runSummarizeSession(ctx context.Context, sessionID string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	client := newHookClient()
-	scope := resolveScopeForRuntime()
+	cwd := runtimeCWD()
+	client := newHookClient(cwd)
+	scope := resolveScopeForRuntime(cwd)
 	if scope == "" {
 		slog.Info("summarize-session: no scope configured, skipping")
 		return nil
@@ -511,7 +512,7 @@ func runSkillSync(ctx context.Context, agentType, workdir string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	client := newHookClient()
+	client := newHookClient(runtimeCWD())
 
 	resp, err := client.get(ctx, fmt.Sprintf("/v1/skills/search?scope=%s&status=published&limit=100", scopeFlag))
 	if err != nil {
@@ -598,7 +599,7 @@ func skillInstallCmd() *cobra.Command {
 		Short: "Install a single skill by slug",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
-			client := newHookClient()
+			client := newHookClient(runtimeCWD())
 			resp, err := client.get(ctx, fmt.Sprintf("/v1/skills/search?q=%s&scope=%s&limit=1", slug, scopeFlag))
 			if err != nil {
 				return err
@@ -985,29 +986,30 @@ func resolveURLForInstall(cmd *cobra.Command, targetDir string) (string, error) 
 	return strings.TrimRight(trimmed, "/"), nil
 }
 
-func resolveScopeForRuntime() string {
+func resolveScopeForRuntime(cwd string) string {
 	if strings.TrimSpace(scopeFlag) != "" {
 		return strings.TrimSpace(scopeFlag)
 	}
 	if scope := strings.TrimSpace(os.Getenv("POSTBRAIN_SCOPE")); scope != "" {
 		return scope
 	}
-	cwd, err := getwdFn()
-	if err != nil {
-		return ""
-	}
-	return postbraincli.ResolveScopeFromBaseFiles(cwd)
+	return postbraincli.ResolveScopeFromBaseFiles(strings.TrimSpace(cwd))
 }
 
-func resolveURLForRuntime() string {
+func resolveURLForRuntime(cwd string) string {
 	if url := strings.TrimSpace(os.Getenv("POSTBRAIN_URL")); url != "" {
 		return strings.TrimRight(url, "/")
 	}
-	cwd, err := getwdFn()
-	if err == nil {
-		if url := strings.TrimSpace(postbraincli.ResolveURLFromBaseFiles(cwd)); url != "" {
-			return strings.TrimRight(url, "/")
-		}
+	if url := strings.TrimSpace(postbraincli.ResolveURLFromBaseFiles(strings.TrimSpace(cwd))); url != "" {
+		return strings.TrimRight(url, "/")
 	}
 	return "http://localhost:7433"
+}
+
+func runtimeCWD() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return cwd
 }
