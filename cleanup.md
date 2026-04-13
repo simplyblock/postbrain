@@ -811,7 +811,7 @@ Additionally, consider replacing the string-switch router with `net/http.ServeMu
 
 ---
 
-### 6.2 `internal/db/compat.go` — 2735-line compatibility layer with no tests
+### 6.2 `internal/db/compat.go` — 2735-line compatibility layer with no tests ✓ Done
 
 **File:** `internal/db/compat.go`
 
