@@ -59,8 +59,12 @@ func UpdateStalenessFlag(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID, 
 // ListStalenessFlags returns staleness flags optionally filtered by status.
 func ListStalenessFlags(ctx context.Context, pool *pgxpool.Pool, status string, limit, offset int) ([]*db.StalenessFlag, error) {
 	q := db.New(pool)
+	var statusPtr *string
+	if status != "" {
+		statusPtr = &status
+	}
 	fs, err := q.ListStalenessFlags(ctx, db.ListStalenessFlagsParams{
-		Column1: &status,
+		Column1: statusPtr,
 		Limit:   int32(limit),
 		Offset:  int32(offset),
 	})
