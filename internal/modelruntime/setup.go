@@ -7,8 +7,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/config"
-	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/modelstore"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
 // EnableModelDrivenFactory configures model-aware embedder and summarizer

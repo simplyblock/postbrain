@@ -72,4 +72,3 @@ func deduplicateScopeIDs(ids []uuid.UUID) []uuid.UUID {
 	}
 	return out
 }
-

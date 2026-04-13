@@ -12,7 +12,6 @@ import (
 	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
-
 func (s *Server) registerSessionBegin() {
 	s.mcpServer.AddTool(mcpgo.NewTool("session_begin",
 		mcpgo.WithReadOnlyHintAnnotation(false),

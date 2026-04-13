@@ -18,8 +18,8 @@ import (
 	"github.com/simplyblock/postbrain/internal/codegraph"
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/db/compat"
-	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/graph"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
 // embeddingService is the subset of providers.EmbeddingService used by this package.

@@ -37,7 +37,6 @@ func TestNewAGEBackfillJob_CustomBatchSize(t *testing.T) {
 	}
 }
 
-
 type fakeAGEBackfillLockConn struct {
 	queryRowSQL string
 	queryRowCtx context.Context

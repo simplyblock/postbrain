@@ -21,7 +21,6 @@ var (
 	ErrInvalidTransition = errors.New("skills: invalid state transition")
 )
 
-
 // lifecycleDB abstracts all database calls made by Lifecycle, enabling unit tests.
 type lifecycleDB interface {
 	getSkill(ctx context.Context, id uuid.UUID) (*db.Skill, error)

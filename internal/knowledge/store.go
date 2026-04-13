@@ -19,8 +19,8 @@ import (
 	"github.com/simplyblock/postbrain/internal/chunking"
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/db/compat"
-	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/graph"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
 // Sentinel errors for the knowledge store.

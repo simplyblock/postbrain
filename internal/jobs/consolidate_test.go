@@ -33,4 +33,3 @@ func TestDefaultSummarizer_Empty(t *testing.T) {
 		t.Errorf("expected empty result for nil contents, got %q", result)
 	}
 }
-

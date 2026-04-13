@@ -12,8 +12,8 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"github.com/simplyblock/postbrain/internal/config"
-	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/metrics"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
 // Scheduler manages the lifecycle of all background jobs.

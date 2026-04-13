@@ -8,9 +8,9 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/config"
-	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/modelruntime"
 	"github.com/simplyblock/postbrain/internal/modelstore"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
 type fakeModelStore struct {

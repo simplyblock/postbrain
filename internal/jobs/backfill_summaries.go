@@ -9,8 +9,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/providers"
 	"github.com/simplyblock/postbrain/internal/knowledge"
+	"github.com/simplyblock/postbrain/internal/providers"
 )
 
 // backfillRow holds the minimal fields needed to generate a summary.

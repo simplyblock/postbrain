@@ -25,7 +25,6 @@ var (
 // the real DB path checks for pgx error code 23505 and converts it.
 var errDuplicateEndorsement = errors.New("knowledge: endorsement already exists (idempotent)")
 
-
 // lifecycleDB abstracts all database calls made by Lifecycle, enabling unit tests.
 type lifecycleDB interface {
 	getArtifact(ctx context.Context, id uuid.UUID) (*db.KnowledgeArtifact, error)
