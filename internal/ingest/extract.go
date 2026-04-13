@@ -64,7 +64,9 @@ func extractDocx(data []byte) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("ingest: docx: open document.xml: %w", err)
 		}
-		defer rc.Close()
+		defer func() {
+			_ = rc.Close()
+		}()
 		return extractDocxText(rc)
 	}
 	return "", fmt.Errorf("ingest: docx: word/document.xml not found")

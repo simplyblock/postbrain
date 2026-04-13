@@ -142,11 +142,11 @@ func TestDBModelStore_ActiveGenerationModelIDByContentType_Success(t *testing.T)
 func TestNewEmbeddingModelStore_ReturnsInterface(t *testing.T) {
 	t.Parallel()
 
-	var _ EmbeddingModelStore = NewEmbeddingModelStore(&fakeQueryer{})
+	var _ = EmbeddingModelStore(NewEmbeddingModelStore(&fakeQueryer{}))
 }
 
 func TestNewGenerationModelStore_ReturnsInterface(t *testing.T) {
 	t.Parallel()
 
-	var _ GenerationModelStore = NewGenerationModelStore(&fakeQueryer{})
+	var _ = GenerationModelStore(NewGenerationModelStore(&fakeQueryer{}))
 }

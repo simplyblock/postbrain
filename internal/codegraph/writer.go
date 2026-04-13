@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -43,10 +44,7 @@ func persistFileMemory(ctx context.Context, pool *pgxpool.Pool, opts IndexOption
 func persistSymbolEntities(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, syms []Symbol, fileMemoryID *uuid.UUID, res *IndexResult) map[string]uuid.UUID {
 	symToID := make(map[string]uuid.UUID, len(syms))
 	for _, sym := range syms {
-		canonical := sym.Name
-		if sym.Package != "" {
-			canonical = sym.Package + "." + sym.Name
-		}
+		canonical := canonicalForSymbol(sym)
 		ent, uErr := compat.UpsertEntity(ctx, pool, &db.Entity{
 			ScopeID:    opts.ScopeID,
 			EntityType: string(sym.Kind),
@@ -69,6 +67,16 @@ func persistSymbolEntities(ctx context.Context, pool *pgxpool.Pool, opts IndexOp
 		res.SymbolsUpserted++
 	}
 	return symToID
+}
+
+func canonicalForSymbol(sym Symbol) string {
+	if sym.Package == "" {
+		return sym.Name
+	}
+	if strings.HasPrefix(sym.Name, sym.Package+".") {
+		return sym.Name
+	}
+	return sym.Package + "." + sym.Name
 }
 
 // persistChunkMemories creates child semantic memories for substantive code symbols.

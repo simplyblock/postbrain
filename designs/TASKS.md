@@ -25,6 +25,25 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-13: Fixed codegraph Go LSP call-target regression that broke integration tests (TDD-first):
+  - Added LSP decoder regression coverage for `DocumentSymbol` payloads using
+    `selectionRange` in `internal/codegraph/lsp/client_test.go`.
+  - Updated `internal/codegraph/lsp/client.go` to decode both
+    `SymbolInformation` and `DocumentSymbol` responses for document symbols.
+  - Added resolver regression coverage in
+    `internal/codegraph/resolve_lsp_test.go` for same-package canonical
+    fallback (`<pkg>.<symbol>`) when workspace/call-hierarchy signals are weak.
+  - Updated `internal/codegraph/resolve.go` to prefer package-qualified
+    same-file/same-package targets before generic suffix fallback.
+  - Added canonicalization regression coverage in
+    `internal/codegraph/writer_test.go` and fixed
+    `internal/codegraph/writer.go` to avoid double-prefix canonical names
+    (e.g. `longpkg.longpkg.Target`).
+  - Verified with:
+    - targeted integration test
+      `TestIndexRepo_LSPEnabled_ResolvesCallsDifferentlyThanFallback`
+    - full suite `make test-integration` passing.
+
 - [x] 2026-04-12: Removed `--dimensions` from `summary-model register` CLI surface:
   - Updated `cmd/postbrain/embedding_model_cmd.go` to:
     - remove the `--dimensions` flag from `summary-model register`,

@@ -121,9 +121,11 @@ func (r *Resolver) resolveViaLSP(ctx context.Context, filePath, targetName strin
 		return uuid.UUID{}, false
 	}
 	absFile := r.absPath(filePath)
+	var docSyms []lsp.Symbol
 
 	// Strategy A: declaration lives in the same file.
-	if docSyms, err := r.lsp.DocumentSymbols(ctx, absFile); err == nil {
+	if syms, err := r.lsp.DocumentSymbols(ctx, absFile); err == nil {
+		docSyms = syms
 		for _, s := range docSyms {
 			if !strings.EqualFold(s.Name, targetName) {
 				continue
@@ -160,6 +162,59 @@ func (r *Resolver) resolveViaLSP(ctx context.Context, filePath, targetName strin
 		}
 	}
 
+	// Strategy C: same-package unqualified symbol.
+	// When LSP call hierarchy/workspace symbol lookup is unavailable but the
+	// current file clearly belongs to package "X", prefer "X.<target>".
+	if !strings.Contains(targetName, ".") {
+		for _, s := range docSyms {
+			container := containerFromCanonical(s.Canonical)
+			if container == "" || container == s.Canonical {
+				continue
+			}
+			if id, ok := r.lookupCanonical(ctx, container+"."+targetName, localSymTable); ok {
+				return id, true
+			}
+			break
+		}
+		// If DocumentSymbols do not expose package-qualified canonical names,
+		// derive the package container from file->defines relations in the DB.
+		if id, ok := r.lookupViaFileDefinedContainer(ctx, filePath, targetName, localSymTable); ok {
+			return id, true
+		}
+	}
+
+	return uuid.UUID{}, false
+}
+
+func (r *Resolver) lookupViaFileDefinedContainer(ctx context.Context, filePath, targetName string, localSymTable map[string]uuid.UUID) (uuid.UUID, bool) {
+	if r.pool == nil {
+		return uuid.UUID{}, false
+	}
+
+	fileCanon := strings.ToLower(filepath.ToSlash(filePath))
+	fileEntity, err := compat.GetEntityByCanonical(ctx, r.pool, r.scopeID, "file", fileCanon)
+	if err != nil || fileEntity == nil {
+		return uuid.UUID{}, false
+	}
+
+	relations, err := compat.ListOutgoingRelations(ctx, r.pool, r.scopeID, fileEntity.ID, "defines")
+	if err != nil || len(relations) == 0 {
+		return uuid.UUID{}, false
+	}
+
+	for _, rel := range relations {
+		defEntity, err := compat.GetEntityByID(ctx, r.pool, rel.ObjectID)
+		if err != nil || defEntity == nil {
+			continue
+		}
+		container := containerFromCanonical(defEntity.Canonical)
+		if container == "" || container == defEntity.Canonical {
+			continue
+		}
+		if id, ok := r.lookupCanonical(ctx, container+"."+targetName, localSymTable); ok {
+			return id, true
+		}
+	}
 	return uuid.UUID{}, false
 }
 

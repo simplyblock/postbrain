@@ -166,3 +166,33 @@ func TestResolver_Resolve_LSP_UsesDocumentSymbols(t *testing.T) {
 		t.Fatal("expected CanonicalName to be called for in-file declaration")
 	}
 }
+
+// TestResolver_Resolve_LSP_PrefersCurrentPackageCanonical verifies that when
+// the target is unqualified and no workspace symbol match is available, the
+// resolver derives the current package from document symbols and tries
+// "<pkg>.<target>" before falling back to suffix matching.
+func TestResolver_Resolve_LSP_PrefersCurrentPackageCanonical(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubLSPClient{
+		lang: ".go",
+		docSymsResult: []lsp.Symbol{
+			{Name: "Caller", Canonical: "longpkg.Caller", Kind: lsp.KindFunction},
+		},
+		wsSymsResult: map[string][]lsp.Symbol{
+			"Target": nil,
+		},
+	}
+	r := NewResolver(nil, uuid.New(), stub, "")
+
+	want := uuid.New()
+	got, ok := r.Resolve(context.Background(), "some/file.go", "Target", map[string]uuid.UUID{
+		"longpkg.Target": want,
+	})
+	if !ok {
+		t.Fatal("expected canonical resolution via current package")
+	}
+	if got != want {
+		t.Fatalf("resolved id = %s, want %s", got, want)
+	}
+}

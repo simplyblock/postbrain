@@ -37,7 +37,9 @@ func (c *PyrightClient) Imports(_ context.Context, file string) ([]Import, error
 	if err != nil {
 		return nil, fmt.Errorf("pyright: open %q: %w", file, err)
 	}
-	defer f.Close()
+	defer func() {
+		_ = f.Close()
+	}()
 
 	var out []Import
 	scanner := bufio.NewScanner(f)

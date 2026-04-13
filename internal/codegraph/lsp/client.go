@@ -631,32 +631,141 @@ func decodeSymbolInformation(raw json.RawMessage, defaultURI string) ([]Symbol, 
 	if raw == nil || string(raw) == "null" {
 		return nil, nil
 	}
-	var items []struct {
+	var infoItems []struct {
 		Name          string `json:"name"`
 		Kind          int    `json:"kind"`
 		ContainerName string `json:"containerName"`
 		Location      lspLoc `json:"location"`
 	}
-	if err := json.Unmarshal(raw, &items); err != nil {
+	if err := json.Unmarshal(raw, &infoItems); err == nil {
+		hasSymbolInfoLocation := false
+		for _, it := range infoItems {
+			if it.Location.URI != "" || it.Location.Range != (lspRng{}) {
+				hasSymbolInfoLocation = true
+				break
+			}
+		}
+		if hasSymbolInfoLocation {
+			out := make([]Symbol, 0, len(infoItems))
+			for _, it := range infoItems {
+				uri := it.Location.URI
+				if uri == "" {
+					uri = defaultURI
+				}
+				canonical := it.Name
+				if it.ContainerName != "" {
+					canonical = it.ContainerName + "." + it.Name
+				}
+				out = append(out, Symbol{
+					Name:      it.Name,
+					Canonical: canonical,
+					Kind:      lspKindToSymbolKind(it.Kind),
+					Location:  wireLoc(lspLoc{URI: uri, Range: it.Location.Range}),
+				})
+			}
+			return out, nil
+		}
+	}
+
+	// Some servers (including gopls) return []DocumentSymbol where the
+	// identifier position is in selectionRange, not range/location.
+	var docItems []struct {
+		Name           string `json:"name"`
+		Kind           int    `json:"kind"`
+		Range          lspRng `json:"range"`
+		SelectionRange lspRng `json:"selectionRange"`
+		Children       []struct {
+			Name           string `json:"name"`
+			Kind           int    `json:"kind"`
+			Range          lspRng `json:"range"`
+			SelectionRange lspRng `json:"selectionRange"`
+			Children       []struct {
+				Name           string `json:"name"`
+				Kind           int    `json:"kind"`
+				Range          lspRng `json:"range"`
+				SelectionRange lspRng `json:"selectionRange"`
+			} `json:"children"`
+		} `json:"children"`
+	}
+	if err := json.Unmarshal(raw, &docItems); err != nil {
 		return nil, fmt.Errorf("lsp: decode symbols: %w", err)
 	}
-	out := make([]Symbol, 0, len(items))
-	for _, it := range items {
-		uri := it.Location.URI
-		if uri == "" {
-			uri = defaultURI
-		}
-		canonical := it.Name
-		if it.ContainerName != "" {
-			canonical = it.ContainerName + "." + it.Name
-		}
-		out = append(out, Symbol{
-			Name:      it.Name,
-			Canonical: canonical,
-			Kind:      lspKindToSymbolKind(it.Kind),
-			Location:  wireLoc(lspLoc{URI: uri, Range: it.Location.Range}),
-		})
+	if len(docItems) == 0 {
+		return nil, nil
 	}
+
+	out := make([]Symbol, 0, len(docItems))
+	appendDocSymbols := func(prefix string, items []struct {
+		Name           string `json:"name"`
+		Kind           int    `json:"kind"`
+		Range          lspRng `json:"range"`
+		SelectionRange lspRng `json:"selectionRange"`
+		Children       []struct {
+			Name           string `json:"name"`
+			Kind           int    `json:"kind"`
+			Range          lspRng `json:"range"`
+			SelectionRange lspRng `json:"selectionRange"`
+			Children       []struct {
+				Name           string `json:"name"`
+				Kind           int    `json:"kind"`
+				Range          lspRng `json:"range"`
+				SelectionRange lspRng `json:"selectionRange"`
+			} `json:"children"`
+		} `json:"children"`
+	}) {
+		for _, it := range items {
+			canonical := it.Name
+			if prefix != "" {
+				canonical = prefix + "." + it.Name
+			}
+			rng := it.SelectionRange
+			if rng == (lspRng{}) {
+				rng = it.Range
+			}
+			out = append(out, Symbol{
+				Name:      it.Name,
+				Canonical: canonical,
+				Kind:      lspKindToSymbolKind(it.Kind),
+				Location:  wireLoc(lspLoc{URI: defaultURI, Range: rng}),
+			})
+			if len(it.Children) > 0 {
+				// Flatten immediate children using parent canonical as container.
+				for _, child := range it.Children {
+					childCanonical := child.Name
+					if canonical != "" {
+						childCanonical = canonical + "." + child.Name
+					}
+					childRange := child.SelectionRange
+					if childRange == (lspRng{}) {
+						childRange = child.Range
+					}
+					out = append(out, Symbol{
+						Name:      child.Name,
+						Canonical: childCanonical,
+						Kind:      lspKindToSymbolKind(child.Kind),
+						Location:  wireLoc(lspLoc{URI: defaultURI, Range: childRange}),
+					})
+					for _, grand := range child.Children {
+						grandCanonical := grand.Name
+						if childCanonical != "" {
+							grandCanonical = childCanonical + "." + grand.Name
+						}
+						grandRange := grand.SelectionRange
+						if grandRange == (lspRng{}) {
+							grandRange = grand.Range
+						}
+						out = append(out, Symbol{
+							Name:      grand.Name,
+							Canonical: grandCanonical,
+							Kind:      lspKindToSymbolKind(grand.Kind),
+							Location:  wireLoc(lspLoc{URI: defaultURI, Range: grandRange}),
+						})
+					}
+				}
+			}
+		}
+	}
+	appendDocSymbols("", docItems)
 	return out, nil
 }
 
@@ -745,7 +854,7 @@ func lspKindToSymbolKind(k int) SymbolKind {
 
 // ── Coordinate / URI helpers ──────────────────────────────────────────────────
 
-func posToWire(p Position) lspPos { return lspPos{Line: p.Line, Character: p.Character} }
+func posToWire(p Position) lspPos { return lspPos(p) }
 
 func wireRangeToRange(r lspRng) Range {
 	return Range{
