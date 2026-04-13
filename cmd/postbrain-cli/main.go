@@ -202,16 +202,18 @@ func runSnapshot(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	normalizedInput := normalizeSnapshotToolInputPaths(hookData.ToolInput)
+
 	// Extract file path from tool input.
 	var sourceRef string
-	if fp, ok := hookData.ToolInput["file_path"].(string); ok {
+	if fp, ok := normalizedInput["file_path"].(string); ok {
 		sourceRef = "file:" + fp
-	} else if fp, ok := hookData.ToolInput["path"].(string); ok {
+	} else if fp, ok := normalizedInput["path"].(string); ok {
 		sourceRef = "file:" + fp
 	}
 
 	// Build a compact, useful summary for memory content.
-	desc := buildSnapshotDescription(hookData.ToolName, hookData.ToolInput, sourceRef)
+	desc := buildSnapshotDescription(hookData.ToolName, normalizedInput, sourceRef)
 
 	// 60s dedup check: query recent memories with same source_ref.
 	if sourceRef != "" {
@@ -375,6 +377,50 @@ func snapshotQuote(s string) string {
 		return ""
 	}
 	return strconv.Quote(s)
+}
+
+func normalizeSnapshotToolInputPaths(toolInput map[string]any) map[string]any {
+	if len(toolInput) == 0 {
+		return toolInput
+	}
+
+	out := make(map[string]any, len(toolInput))
+	for k, v := range toolInput {
+		out[k] = v
+	}
+
+	for _, key := range []string{"file_path", "path"} {
+		if raw, ok := out[key].(string); ok {
+			out[key] = normalizePathToProjectRoot(raw)
+		}
+	}
+	return out
+}
+
+func normalizePathToProjectRoot(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+
+	clean := filepath.Clean(path)
+	if !filepath.IsAbs(clean) {
+		return filepath.ToSlash(clean)
+	}
+
+	cwd, err := getwdFn()
+	if err != nil || strings.TrimSpace(cwd) == "" {
+		return filepath.ToSlash(clean)
+	}
+
+	rel, err := filepath.Rel(cwd, clean)
+	if err != nil {
+		return filepath.ToSlash(clean)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return filepath.ToSlash(clean)
+	}
+	return filepath.ToSlash(rel)
 }
 
 func summarizeSessionCmd() *cobra.Command {

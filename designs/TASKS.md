@@ -42,6 +42,20 @@
     - known-field extraction,
     - key-count fallback behavior.
 
+- [x] 2026-04-13: Normalized snapshot file paths to project-root-relative form (TDD-first):
+  - Updated `cmd/postbrain-cli/main.go` snapshot flow to normalize
+    `tool_input.file_path`/`tool_input.path` against current working directory
+    before building memory content and `source_ref`.
+  - `source_ref` now uses project-relative file paths when the file is inside
+    the current repo root (e.g.
+    `/Volumes/git/postbrain/internal/codegraph/lsp/pyright.go` ->
+    `file:internal/codegraph/lsp/pyright.go`).
+  - Paths outside the project root remain absolute.
+  - Added regression tests in `cmd/postbrain-cli/main_test.go`:
+    - relative conversion for in-repo absolute paths,
+    - outside-root absolute path preservation,
+    - `tool_input` file path normalization coverage.
+
 - [x] 2026-04-13: Implemented `clangd` stdio LSP backend for C/C++ (TDD-first):
   - Added `internal/codegraph/lsp/clangd.go`:
     - `NewClangdClient(...)` using `clangd` in stdio mode,

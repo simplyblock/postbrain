@@ -412,6 +412,53 @@ func TestBuildSnapshotDescription_LargeInputFallsBackToKeyCount(t *testing.T) {
 	}
 }
 
+func TestNormalizePathToProjectRoot_AbsoluteUnderCWD_ReturnsRelative(t *testing.T) {
+	origGetwd := getwdFn
+	getwdFn = func() (string, error) { return "/Volumes/git/postbrain", nil }
+	t.Cleanup(func() { getwdFn = origGetwd })
+
+	got := normalizePathToProjectRoot("/Volumes/git/postbrain/internal/codegraph/lsp/pyright.go")
+	want := "internal/codegraph/lsp/pyright.go"
+	if got != want {
+		t.Fatalf("normalizePathToProjectRoot() = %q, want %q", got, want)
+	}
+}
+
+func TestNormalizePathToProjectRoot_PathOutsideCWD_StaysAbsolute(t *testing.T) {
+	origGetwd := getwdFn
+	getwdFn = func() (string, error) { return "/Volumes/git/postbrain", nil }
+	t.Cleanup(func() { getwdFn = origGetwd })
+
+	got := normalizePathToProjectRoot("/tmp/other/file.go")
+	want := "/tmp/other/file.go"
+	if got != want {
+		t.Fatalf("normalizePathToProjectRoot() = %q, want %q", got, want)
+	}
+}
+
+func TestNormalizeSnapshotToolInputPaths_FilePathAndPath(t *testing.T) {
+	origGetwd := getwdFn
+	getwdFn = func() (string, error) { return "/Volumes/git/postbrain", nil }
+	t.Cleanup(func() { getwdFn = origGetwd })
+
+	in := map[string]any{
+		"file_path": "/Volumes/git/postbrain/cmd/postbrain-cli/main.go",
+		"path":      "/Volumes/git/postbrain/internal/codegraph/lsp/pyright.go",
+		"query":     "snapshot",
+	}
+	out := normalizeSnapshotToolInputPaths(in)
+
+	if out["file_path"] != "cmd/postbrain-cli/main.go" {
+		t.Fatalf("file_path = %v, want relative path", out["file_path"])
+	}
+	if out["path"] != "internal/codegraph/lsp/pyright.go" {
+		t.Fatalf("path = %v, want relative path", out["path"])
+	}
+	if out["query"] != "snapshot" {
+		t.Fatalf("query = %v, want unchanged", out["query"])
+	}
+}
+
 func TestResolveScopeForInstall_PrefersEnvVar(t *testing.T) {
 	t.Setenv("POSTBRAIN_SCOPE", "project:env/scope")
 
