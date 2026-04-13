@@ -8,10 +8,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/closeutil"
+	"github.com/simplyblock/postbrain/internal/codegraph/lsp"
 )
 
 // indexFile extracts symbols and relations from a single git blob and upserts them.
-func indexFile(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, f *object.File, res *IndexResult, lspResolver LSPResolver) error {
+func indexFile(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, f *object.File, res *IndexResult, lspClient lsp.Client) error {
 	if f.Size > opts.MaxBytesPerFile {
 		res.FilesSkipped++
 		return nil
@@ -45,7 +46,7 @@ func indexFile(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, f *ob
 	symToID := persistSymbolEntities(ctx, pool, opts, syms, fileMemoryID, res)
 	persistChunkMemories(ctx, pool, opts, f.Name, src, syms, fileMemoryID, res)
 
-	resolver := NewResolver(pool, opts.ScopeID, lspResolver)
+	resolver := NewResolver(pool, opts.ScopeID, lspClient, opts.GoLSPRootDir)
 	persistRelations(ctx, pool, opts, f.Name, edges, resolver, symToID, res)
 
 	return nil

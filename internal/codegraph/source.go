@@ -21,6 +21,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/codegraph/lsp"
 )
 
+
 // newLSPClientForExt is the factory used to create an lsp.Client for a given
 // file extension.  It is a package-level variable so tests can inject fakes.
 var newLSPClientForExt = lsp.NewClientForExt
@@ -36,7 +37,7 @@ func buildCloneAuth(opts IndexOptions) (transport.AuthMethod, error) {
 	return nil, nil
 }
 
-func lspResolverForIndex(ctx context.Context, opts IndexOptions) LSPResolver {
+func lspClientForIndex(ctx context.Context, opts IndexOptions) lsp.Client {
 	if opts.GoLSPRootDir == "" {
 		return nil
 	}
@@ -46,10 +47,7 @@ func lspResolverForIndex(ctx context.Context, opts IndexOptions) LSPResolver {
 			"root", opts.GoLSPRootDir, "err", err)
 		return nil
 	}
-	if client == nil {
-		return nil
-	}
-	return &lspClientAdapter{client: client, rootDir: opts.GoLSPRootDir}
+	return client
 }
 
 // isSSHURL reports whether u is an SSH clone URL (git@ SCP syntax or ssh:// scheme).

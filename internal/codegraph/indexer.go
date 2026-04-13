@@ -71,11 +71,11 @@ func IndexRepo(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions) (*Ind
 		opts.DefaultBranch = "main"
 	}
 
-	lspResolver := lspResolverForIndex(ctx, opts)
-	if lspResolver != nil {
+	lspClient := lspClientForIndex(ctx, opts)
+	if lspClient != nil {
 		defer func() {
-			if err := lspResolver.Close(); err != nil {
-				slog.WarnContext(ctx, "codegraph: close lsp resolver", "err", err)
+			if err := lspClient.Close(); err != nil {
+				slog.WarnContext(ctx, "codegraph: close lsp client", "err", err)
 			}
 		}()
 	}
@@ -120,7 +120,7 @@ func IndexRepo(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions) (*Ind
 			// prev commit unreachable in shallow clone — full re-index
 			slog.WarnContext(ctx, "codegraph: prev commit not reachable, falling back to full index",
 				"prev_sha", opts.PrevCommit)
-			if err2 := indexFullTree(ctx, pool, opts, headTree, res, lspResolver); err2 != nil {
+			if err2 := indexFullTree(ctx, pool, opts, headTree, res, lspClient); err2 != nil {
 				return nil, err2
 			}
 		} else {
@@ -128,12 +128,12 @@ func IndexRepo(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions) (*Ind
 			if treeErr != nil {
 				return nil, fmt.Errorf("codegraph: prev tree: %w", treeErr)
 			}
-			if err2 := indexDiff(ctx, pool, opts, prevTree, headTree, res, lspResolver); err2 != nil {
+			if err2 := indexDiff(ctx, pool, opts, prevTree, headTree, res, lspClient); err2 != nil {
 				return nil, err2
 			}
 		}
 	} else {
-		if err2 := indexFullTree(ctx, pool, opts, headTree, res, lspResolver); err2 != nil {
+		if err2 := indexFullTree(ctx, pool, opts, headTree, res, lspClient); err2 != nil {
 			return nil, err2
 		}
 	}
