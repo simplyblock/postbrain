@@ -11,7 +11,20 @@ import (
 	"github.com/simplyblock/postbrain/internal/db"
 )
 
+// EmbeddingModelStore resolves embedding model metadata.
+type EmbeddingModelStore interface {
+	GetModelConfig(ctx context.Context, modelID uuid.UUID) (*ModelConfig, error)
+	ActiveModelIDByContentType(ctx context.Context, contentType string) (*uuid.UUID, error)
+}
+
+// GenerationModelStore resolves generation/summary model metadata.
+type GenerationModelStore interface {
+	GetModelConfig(ctx context.Context, modelID uuid.UUID) (*ModelConfig, error)
+	ActiveGenerationModelIDByContentType(ctx context.Context, contentType string) (*uuid.UUID, error)
+}
+
 // DBModelStore resolves model metadata from ai_models.
+// It implements both EmbeddingModelStore and GenerationModelStore.
 type DBModelStore struct {
 	q db.DBTX
 }
@@ -19,6 +32,16 @@ type DBModelStore struct {
 // NewDBModelStore constructs a DB-backed model config store.
 func NewDBModelStore(q db.DBTX) *DBModelStore {
 	return &DBModelStore{q: q}
+}
+
+// NewEmbeddingModelStore constructs a DB-backed EmbeddingModelStore.
+func NewEmbeddingModelStore(q db.DBTX) EmbeddingModelStore {
+	return NewDBModelStore(q)
+}
+
+// NewGenerationModelStore constructs a DB-backed GenerationModelStore.
+func NewGenerationModelStore(q db.DBTX) GenerationModelStore {
+	return NewDBModelStore(q)
 }
 
 // GetModelConfig loads one model's runtime configuration by ID.
@@ -76,4 +99,10 @@ func (s *DBModelStore) ActiveModelIDByTypeAndContent(ctx context.Context, modelT
 // Returns (nil, nil) when no active model is registered.
 func (s *DBModelStore) ActiveModelIDByContentType(ctx context.Context, contentType string) (*uuid.UUID, error) {
 	return s.ActiveModelIDByTypeAndContent(ctx, "embedding", contentType)
+}
+
+// ActiveGenerationModelIDByContentType returns the active generation model ID for one content type.
+// Returns (nil, nil) when no active model is registered.
+func (s *DBModelStore) ActiveGenerationModelIDByContentType(ctx context.Context, contentType string) (*uuid.UUID, error) {
+	return s.ActiveModelIDByTypeAndContent(ctx, "generation", contentType)
 }

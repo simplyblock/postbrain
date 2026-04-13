@@ -18,16 +18,17 @@ func (s *EmbeddingService) EnableModelDrivenFactory(ctx context.Context, pool *p
 		return fmt.Errorf("embedding model factory: nil pool")
 	}
 
-	store := NewDBModelStore(pool)
-	textModelID, err := store.ActiveModelIDByContentType(ctx, "text")
+	embStore := NewEmbeddingModelStore(pool)
+	genStore := NewGenerationModelStore(pool)
+	textModelID, err := embStore.ActiveModelIDByContentType(ctx, "text")
 	if err != nil {
 		return err
 	}
-	codeModelID, err := store.ActiveModelIDByContentType(ctx, "code")
+	codeModelID, err := embStore.ActiveModelIDByContentType(ctx, "code")
 	if err != nil {
 		return err
 	}
-	summaryModelID, err := store.ActiveModelIDByTypeAndContent(ctx, "generation", "text")
+	summaryModelID, err := genStore.ActiveGenerationModelIDByContentType(ctx, "text")
 	if err != nil {
 		return err
 	}
@@ -35,7 +36,7 @@ func (s *EmbeddingService) EnableModelDrivenFactory(ctx context.Context, pool *p
 		// Fallback: use the active embedding text model's provider profile.
 		summaryModelID = textModelID
 	}
-	factory := NewModelEmbedderFactory(cfg, store)
+	factory := NewModelEmbedderFactory(cfg, embStore)
 	s.SetModelFactory(factory, textModelID, codeModelID, summaryModelID)
 	return nil
 }

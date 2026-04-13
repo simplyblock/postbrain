@@ -114,3 +114,42 @@ func TestDBModelStore_ActiveModelIDByContentType_Success(t *testing.T) {
 		t.Fatalf("id = %v, want %s", id, modelID)
 	}
 }
+
+func TestDBModelStore_ActiveGenerationModelIDByContentType_NoRows(t *testing.T) {
+	t.Parallel()
+
+	store := NewDBModelStore(&fakeQueryer{rows: []fakeRow{{err: pgx.ErrNoRows}}})
+	id, err := store.ActiveGenerationModelIDByContentType(context.Background(), "text")
+	if err != nil {
+		t.Fatalf("ActiveGenerationModelIDByContentType: %v", err)
+	}
+	if id != nil {
+		t.Fatalf("id = %v, want nil", id)
+	}
+}
+
+func TestDBModelStore_ActiveGenerationModelIDByContentType_Success(t *testing.T) {
+	t.Parallel()
+
+	modelID := uuid.New()
+	store := NewDBModelStore(&fakeQueryer{rows: []fakeRow{{vals: []any{modelID}}}})
+	id, err := store.ActiveGenerationModelIDByContentType(context.Background(), "text")
+	if err != nil {
+		t.Fatalf("ActiveGenerationModelIDByContentType: %v", err)
+	}
+	if id == nil || *id != modelID {
+		t.Fatalf("id = %v, want %s", id, modelID)
+	}
+}
+
+func TestNewEmbeddingModelStore_ReturnsInterface(t *testing.T) {
+	t.Parallel()
+
+	var _ EmbeddingModelStore = NewEmbeddingModelStore(&fakeQueryer{})
+}
+
+func TestNewGenerationModelStore_ReturnsInterface(t *testing.T) {
+	t.Parallel()
+
+	var _ GenerationModelStore = NewGenerationModelStore(&fakeQueryer{})
+}
