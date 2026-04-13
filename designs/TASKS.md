@@ -25,6 +25,21 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-13: Extended Docker images with TypeScript/Python LSP toolchain:
+  - Updated `Dockerfile` and `Dockerfile.release` to include:
+    - `pyright` (npm global install),
+    - `typescript-language-server` (npm global install),
+    - `tsgo` binary (`go install github.com/microsoft/typescript-go/cmd/tsgo` in dedicated build stage).
+  - Added image build args for these tools:
+    - `TSGO_VERSION`
+    - `TYPESCRIPT_VERSION`
+    - `TYPESCRIPT_LANGUAGE_SERVER_VERSION`
+    - `PYRIGHT_VERSION`
+  - Updated local and release build wiring:
+    - `docker-compose.yml` postbrain build args
+    - `Makefile` `docker-build` args
+    - `.github/workflows/build-package.yml` Docker release build args.
+
 - [x] 2026-04-13: Added TypeScript stdio LSP backend selection with `tsgo` flag (TDD-first):
   - Extended `internal/codegraph/lsp/factory.go` with `ClientOptions` and
     TypeScript backend selection:

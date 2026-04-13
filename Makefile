@@ -12,6 +12,10 @@ GOPLS_VERSION ?= v0.21.1
 MARKITDOWN_VENV ?= $(shell pwd)/.venv-markitdown
 MARKITDOWN_STAMP ?= $(MARKITDOWN_VENV)/.markitdown-all-ready
 MARKITDOWN_VERSION ?= 0.1.5
+TSGO_VERSION ?= latest
+TYPESCRIPT_VERSION ?= latest
+TYPESCRIPT_LANGUAGE_SERVER_VERSION ?= latest
+PYRIGHT_VERSION ?= latest
 DIST_DIR ?= $(shell pwd)/dist
 TARGET_OSES ?= linux darwin windows
 TARGET_ARCHES ?= amd64 arm64
@@ -119,6 +123,10 @@ docker-build:
 	docker build \
 		--build-arg GOPLS_VERSION=$(GOPLS_VERSION) \
 		--build-arg MARKITDOWN_VERSION=$(MARKITDOWN_VERSION) \
+		--build-arg TSGO_VERSION=$(TSGO_VERSION) \
+		--build-arg TYPESCRIPT_VERSION=$(TYPESCRIPT_VERSION) \
+		--build-arg TYPESCRIPT_LANGUAGE_SERVER_VERSION=$(TYPESCRIPT_LANGUAGE_SERVER_VERSION) \
+		--build-arg PYRIGHT_VERSION=$(PYRIGHT_VERSION) \
 		-t postbrain:latest .
 
 generate:

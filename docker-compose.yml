@@ -44,6 +44,10 @@ services:
       args:
         GOPLS_VERSION: v0.21.1
         MARKITDOWN_VERSION: "0.1.5"
+        TSGO_VERSION: "latest"
+        TYPESCRIPT_VERSION: "latest"
+        TYPESCRIPT_LANGUAGE_SERVER_VERSION: "latest"
+        PYRIGHT_VERSION: "latest"
     depends_on:
       postgres:
         condition: service_healthy

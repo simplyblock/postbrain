@@ -3,6 +3,10 @@
 ARG GO_VERSION=1.25
 ARG GOPLS_VERSION=v0.21.1
 ARG MARKITDOWN_VERSION=0.1.5
+ARG TSGO_VERSION=latest
+ARG TYPESCRIPT_VERSION=latest
+ARG TYPESCRIPT_LANGUAGE_SERVER_VERSION=latest
+ARG PYRIGHT_VERSION=latest
 
 FROM golang:${GO_VERSION}-bookworm AS builder
 WORKDIR /src
@@ -17,18 +21,30 @@ FROM golang:${GO_VERSION}-bookworm AS gopls
 ARG GOPLS_VERSION
 RUN GOBIN=/out go install golang.org/x/tools/gopls@${GOPLS_VERSION}
 
+FROM golang:${GO_VERSION}-bookworm AS tsgo
+ARG TSGO_VERSION
+RUN GOBIN=/out go install github.com/microsoft/typescript-go/cmd/tsgo@${TSGO_VERSION}
+
 FROM python:3.12-slim AS runtime
 ARG MARKITDOWN_VERSION
+ARG TYPESCRIPT_VERSION
+ARG TYPESCRIPT_LANGUAGE_SERVER_VERSION
+ARG PYRIGHT_VERSION
 ARG APP_USER=postbrain
 ARG APP_UID=10001
 ARG APP_GID=10001
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates tini \
+    && apt-get install -y --no-install-recommends ca-certificates tini nodejs npm \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir "markitdown[all]==${MARKITDOWN_VERSION}"
+
+RUN npm install -g \
+    "typescript@${TYPESCRIPT_VERSION}" \
+    "typescript-language-server@${TYPESCRIPT_LANGUAGE_SERVER_VERSION}" \
+    "pyright@${PYRIGHT_VERSION}"
 
 RUN groupadd --system --gid "${APP_GID}" "${APP_USER}" \
     && useradd --system --uid "${APP_UID}" --gid "${APP_GID}" \
@@ -39,6 +55,7 @@ RUN groupadd --system --gid "${APP_GID}" "${APP_USER}" \
 
 COPY --from=builder --chown=${APP_UID}:${APP_GID} /out/postbrain /usr/local/bin/postbrain
 COPY --from=gopls --chown=${APP_UID}:${APP_GID} /out/gopls /usr/local/bin/gopls
+COPY --from=tsgo --chown=${APP_UID}:${APP_GID} /out/tsgo /usr/local/bin/tsgo
 
 COPY --chown=${APP_UID}:${APP_GID} config.example.yaml /etc/postbrain/config.yaml
 
