@@ -12,6 +12,8 @@ func NewClientForExt(ext, rootDir string, timeout time.Duration) (Client, error)
 	switch strings.ToLower(ext) {
 	case ".go":
 		return NewGoplsClient(rootDir, timeout)
+	case ".py":
+		return NewPyrightClient(rootDir, timeout)
 	}
 	return nil, nil
 }
