@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
+	"github.com/simplyblock/postbrain/internal/lifecyclecore"
 )
 
 // Sentinel errors for the skill lifecycle state machine.
@@ -19,11 +20,6 @@ var (
 	ErrInvalidTransition = errors.New("skills: invalid state transition")
 )
 
-// membershipChecker can determine admin status for a principal.
-type membershipChecker interface {
-	IsScopeAdmin(ctx context.Context, principalID, scopeID uuid.UUID) (bool, error)
-	IsSystemAdmin(ctx context.Context, principalID uuid.UUID) (bool, error)
-}
 
 // lifecycleDB abstracts all database calls made by Lifecycle, enabling unit tests.
 type lifecycleDB interface {
@@ -65,12 +61,12 @@ func (p *poolLifecycleDB) countSkillEndorsements(ctx context.Context, skillID uu
 // Lifecycle manages state transitions for skills.
 type Lifecycle struct {
 	pool       *pgxpool.Pool
-	membership membershipChecker
+	membership lifecyclecore.MembershipChecker
 	dbOps      lifecycleDB
 }
 
 // NewLifecycle creates a Lifecycle backed by pool and the given membership checker.
-func NewLifecycle(pool *pgxpool.Pool, membership membershipChecker) *Lifecycle {
+func NewLifecycle(pool *pgxpool.Pool, membership lifecyclecore.MembershipChecker) *Lifecycle {
 	return &Lifecycle{
 		pool:       pool,
 		membership: membership,
@@ -78,25 +74,13 @@ func NewLifecycle(pool *pgxpool.Pool, membership membershipChecker) *Lifecycle {
 	}
 }
 
-// isEffectiveAdmin returns true if the principal is either a system admin or a
-// scope admin on the given scope. System admin is checked first.
+// isEffectiveAdmin delegates to lifecyclecore.IsEffectiveAdmin.
 func (l *Lifecycle) isEffectiveAdmin(ctx context.Context, principalID, scopeID uuid.UUID) (bool, error) {
-	if l.membership == nil {
-		return false, nil
-	}
-	sysAdmin, err := l.membership.IsSystemAdmin(ctx, principalID)
-	if err != nil || sysAdmin {
-		return sysAdmin, err
-	}
-	return l.membership.IsScopeAdmin(ctx, principalID, scopeID)
+	return lifecyclecore.IsEffectiveAdmin(ctx, l.membership, principalID, scopeID)
 }
 
 // EndorseResult carries the outcome of an Endorse call.
-type EndorseResult struct {
-	EndorsementCount int
-	Status           string
-	AutoPublished    bool
-}
+type EndorseResult = lifecyclecore.EndorseResult
 
 // SubmitForReview transitions a skill from draft → in_review.
 func (l *Lifecycle) SubmitForReview(ctx context.Context, skillID, callerID uuid.UUID) error {
