@@ -94,6 +94,11 @@ func (l *registrationLimiter) Allow(ip string) bool {
 		l.hits[ip] = pruned
 		return false
 	}
+	if len(pruned) == 0 {
+		// All previous timestamps expired; remove the stale map entry so
+		// IPs that go quiet don't accumulate memory indefinitely.
+		delete(l.hits, ip)
+	}
 	l.hits[ip] = append(pruned, now)
 	return true
 }
