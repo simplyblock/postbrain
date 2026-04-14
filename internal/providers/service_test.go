@@ -395,6 +395,77 @@ func TestEmbeddingService_EmbedCodeResult_UsesActiveModelFactory(t *testing.T) {
 	}
 }
 
+func TestEmbedTextBatch_DelegatesToTextEmbedder(t *testing.T) {
+	want := []float32{1.0, 2.0}
+	svc := newServiceWithMocks(&mockEmbedder{slug: "text-model", vec: want}, nil)
+	texts := []string{"hello", "world"}
+	got, err := svc.EmbedTextBatch(context.Background(), texts)
+	if err != nil {
+		t.Fatalf("EmbedTextBatch: %v", err)
+	}
+	if len(got) != len(texts) {
+		t.Fatalf("len(got) = %d, want %d", len(got), len(texts))
+	}
+	for i, row := range got {
+		if row[0] != want[0] {
+			t.Errorf("got[%d][0] = %v; want %v", i, row[0], want[0])
+		}
+	}
+}
+
+func TestEmbedCodeBatch_DelegatesToCodeEmbedder(t *testing.T) {
+	textVec := []float32{9.0}
+	codeVec := []float32{2.0, 3.0}
+	svc := newServiceWithMocks(
+		&mockEmbedder{slug: "text-model", vec: textVec},
+		&mockEmbedder{slug: "code-model", vec: codeVec},
+	)
+	texts := []string{"func foo() {}", "func bar() {}"}
+	got, err := svc.EmbedCodeBatch(context.Background(), texts)
+	if err != nil {
+		t.Fatalf("EmbedCodeBatch: %v", err)
+	}
+	if len(got) != len(texts) {
+		t.Fatalf("len(got) = %d, want %d", len(got), len(texts))
+	}
+	if got[0][0] != codeVec[0] {
+		t.Errorf("got[0][0] = %v; want %v (code embedder)", got[0][0], codeVec[0])
+	}
+}
+
+func TestEmbedCodeBatch_FallsBackToTextWhenNoCodeModel(t *testing.T) {
+	textVec := []float32{5.0}
+	svc := newServiceWithMocks(&mockEmbedder{slug: "text-model", vec: textVec}, nil)
+	got, err := svc.EmbedCodeBatch(context.Background(), []string{"code"})
+	if err != nil {
+		t.Fatalf("EmbedCodeBatch fallback: %v", err)
+	}
+	if got[0][0] != textVec[0] {
+		t.Errorf("got[0][0] = %v; want %v (fallback to text)", got[0][0], textVec[0])
+	}
+}
+
+func TestEmbedTextBatch_UsesModelFactory(t *testing.T) {
+	t.Parallel()
+	modelID := uuid.New()
+	factoryVec := []float32{7.0, 8.0}
+	svc := NewServiceFromEmbedders(&mockEmbedder{vec: []float32{9.0}}, nil)
+	svc.SetModelFactory(
+		&fakeEmbedderResolver{embedder: &mockEmbedder{vec: factoryVec}},
+		nil, &modelID, nil, nil,
+	)
+	got, err := svc.EmbedTextBatch(context.Background(), []string{"a", "b"})
+	if err != nil {
+		t.Fatalf("EmbedTextBatch with factory: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len(got) = %d, want 2", len(got))
+	}
+	if got[0][0] != factoryVec[0] {
+		t.Errorf("got[0][0] = %v; want %v (factory embedder)", got[0][0], factoryVec[0])
+	}
+}
+
 // containsString reports whether s contains substr.
 func containsString(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
