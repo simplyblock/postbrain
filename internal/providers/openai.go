@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/simplyblock/postbrain/internal/closeutil"
@@ -114,8 +115,21 @@ func (e *OpenAIEmbedder) EmbedBatch(ctx context.Context, texts []string) ([][]fl
 // before they hit the API and return an opaque 400.
 const openAIMaxBytes = 32_000
 
+// sanitizeEmbedInput strips null bytes and ensures valid UTF-8.
+// Null bytes are encoded as \u0000 by json.Marshal which is technically valid
+// JSON, but OpenAI's HTTP parser rejects payloads containing them with a 400.
+func sanitizeEmbedInput(s string) string {
+	s = strings.ReplaceAll(s, "\x00", "")
+	return strings.ToValidUTF8(s, "")
+}
+
 // embedBatchOnce makes a single POST request to the OpenAI embeddings endpoint.
 func (e *OpenAIEmbedder) embedBatchOnce(ctx context.Context, texts []string) ([][]float32, error) {
+	sanitized := make([]string, len(texts))
+	for i, t := range texts {
+		sanitized[i] = sanitizeEmbedInput(t)
+	}
+	texts = sanitized
 	for i, t := range texts {
 		if t == "" {
 			return nil, fmt.Errorf("openai: input[%d] is empty", i)
