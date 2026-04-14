@@ -25,6 +25,17 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-14: Wired pyright to be reachable from `IndexRepo` options (TDD-first):
+  - Added Python LSP index options in `internal/codegraph/indexer.go`:
+    - `PythonLSPRootDir`
+    - `PythonLSPTimeout`
+  - Extended lazy LSP registry wiring in `internal/codegraph/source.go` to
+    register `.py` -> pyright selection when Python LSP options are set.
+  - Added/updated regression coverage in
+    `internal/codegraph/indexer_lsp_test.go` to assert:
+    - registry sizing with Python enabled,
+    - lazy `.py` client creation and root/timeout propagation.
+
 - [x] 2026-04-14: Fixed LSP range end-boundary semantics for symbol matching (TDD-first):
   - Updated `internal/codegraph/lsp/client.go` `rangeContains(...)` to treat
     `Range.End` as exclusive (`[Start, End)`), aligning with LSP range

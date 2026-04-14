@@ -45,11 +45,13 @@ func TestLSPRegistry_DoesNotCreateClientsUntilExtensionMatch(t *testing.T) {
 		TypeScriptLSPTimeout: 2 * time.Second,
 		ClangdLSPRootDir:     "/tmp/c",
 		ClangdLSPTimeout:     3 * time.Second,
+		PythonLSPRootDir:     "/tmp/py",
+		PythonLSPTimeout:     3500 * time.Millisecond,
 		MarkdownLSPRootDir:   "/tmp/md",
 		MarkdownLSPTimeout:   4 * time.Second,
 	})
-	if len(registry) != 4 {
-		t.Fatalf("len(registry) = %d, want 4", len(registry))
+	if len(registry) != 5 {
+		t.Fatalf("len(registry) = %d, want 5", len(registry))
 	}
 	if len(exts) != 0 {
 		t.Fatalf("len(created) = %d, want 0 before first file match", len(exts))
@@ -92,6 +94,38 @@ func TestLSPRegistry_FactoryError_DoesNotBlockOtherClients(t *testing.T) {
 	tsClient, _ := lspClientForFile(context.Background(), "web/app.ts", registry)
 	if tsClient == nil {
 		t.Fatal("expected surviving TypeScript client")
+	}
+}
+
+func TestLSPRegistry_Python_Enabled_UsesPyright(t *testing.T) {
+	prev := newLSPClientForExt
+	newLSPClientForExt = func(ext, rootDir string, timeout time.Duration, opts lsp.ClientOptions) (lsp.Client, error) {
+		if ext != ".py" {
+			t.Fatalf("ext = %q, want %q", ext, ".py")
+		}
+		if rootDir != "/tmp/pyrepo" {
+			t.Fatalf("rootDir = %q, want %q", rootDir, "/tmp/pyrepo")
+		}
+		if timeout != 2*time.Second {
+			t.Fatalf("timeout = %v, want %v", timeout, 2*time.Second)
+		}
+		if opts.UseTSGo {
+			t.Fatal("UseTSGo must be false for pyright")
+		}
+		return &stubLSPClient{languages: map[string]int{".py": 100}}, nil
+	}
+	t.Cleanup(func() { newLSPClientForExt = prev })
+
+	registry := newLSPRegistry(IndexOptions{
+		PythonLSPRootDir: "/tmp/pyrepo",
+		PythonLSPTimeout: 2 * time.Second,
+	})
+	client, root := lspClientForFile(context.Background(), "src/app.py", registry)
+	if client == nil {
+		t.Fatal("expected Python client")
+	}
+	if root != "/tmp/pyrepo" {
+		t.Fatalf("root = %q, want %q", root, "/tmp/pyrepo")
 	}
 }
 

@@ -64,6 +64,12 @@ type IndexOptions struct {
 	ClangdLSPRootDir string
 	// ClangdLSPTimeout controls per-request timeouts for the clangd subprocess.
 	ClangdLSPTimeout time.Duration
+	// PythonLSPRootDir enables optional Python LSP resolution via pyright.
+	// It must be the absolute path to the checked-out source tree.
+	// Empty disables Python LSP for this run.
+	PythonLSPRootDir string
+	// PythonLSPTimeout controls per-request timeouts for the pyright subprocess.
+	PythonLSPTimeout time.Duration
 	// MarkdownLSPRootDir enables optional Markdown LSP resolution via marksman.
 	// It must be the absolute path to the checked-out source tree.
 	// Empty disables marksman for this run.

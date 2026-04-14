@@ -96,6 +96,17 @@ func newLSPRegistry(opts IndexOptions) []lspSelection {
 		})
 	}
 
+	if opts.PythonLSPRootDir != "" {
+		out = append(out, lspSelection{
+			canonicalExt: ".py",
+			rootDir:      opts.PythonLSPRootDir,
+			timeout:      opts.PythonLSPTimeout,
+			hintExts: map[string]int{
+				".py": 100,
+			},
+		})
+	}
+
 	if opts.MarkdownLSPRootDir != "" {
 		out = append(out, lspSelection{
 			canonicalExt: ".md",
