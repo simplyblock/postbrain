@@ -78,6 +78,11 @@ func (s *Server) handleSummarize(ctx context.Context, req mcpgo.CallToolRequest)
 	}
 
 	// Run actual consolidation using the configured summarization model.
+	// Cap clusters per call so a single summarize invocation cannot trigger
+	// an unbounded number of LLM API calls.
+	const maxClustersPerCall = 25
+	consolidator.MaxClusters = maxClustersPerCall
+
 	summarizer := func(ctx context.Context, contents []string) (string, error) {
 		joined := strings.Join(contents, "\n\n")
 		if s.svc == nil {
@@ -85,7 +90,7 @@ func (s *Server) handleSummarize(ctx context.Context, req mcpgo.CallToolRequest)
 		}
 		summary, err := s.svc.Summarize(ctx, joined)
 		if err != nil {
-			return joined, nil // fall back to joined text rather than failing the cluster
+			return joined, nil
 		}
 		return summary, nil
 	}
