@@ -22,6 +22,9 @@ var (
 	newClangdClient = func(rootDir string, timeout time.Duration) (Client, error) {
 		return NewClangdClient(rootDir, timeout)
 	}
+	newMarksmanClient = func(rootDir string, timeout time.Duration) (Client, error) {
+		return NewMarksmanClient(rootDir, timeout)
+	}
 	newTypeScriptLanguageServerClient = func(rootDir string, timeout time.Duration) (Client, error) {
 		return NewTypeScriptLanguageServerClient(rootDir, timeout)
 	}
@@ -41,6 +44,8 @@ func NewClientForExt(ext, rootDir string, timeout time.Duration, opts ClientOpti
 		return newPyrightClient(rootDir, timeout)
 	case ".c", ".h", ".hpp", ".hh", ".cpp", ".cc", ".cxx":
 		return newClangdClient(rootDir, timeout)
+	case ".md", ".markdown":
+		return newMarksmanClient(rootDir, timeout)
 	case ".ts", ".tsx", ".js", ".jsx":
 		if opts.UseTSGo {
 			return newTSGoClient(rootDir, timeout)

@@ -25,6 +25,23 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-14: Added Markdown LSP backend support via `marksman` (TDD-first):
+  - Added `internal/codegraph/lsp/marksman.go`:
+    - `NewMarksmanClient(...)` using `marksman server` in stdio mode,
+    - `MarksmanClient.Imports(...)` returning an empty import set for Markdown.
+  - Extended LSP factory routing in
+    `internal/codegraph/lsp/factory.go` for Markdown extensions:
+    - `.md`, `.markdown`.
+  - Added factory regression coverage in
+    `internal/codegraph/lsp/factory_test.go`.
+  - Wired indexer-level Markdown LSP options:
+    - `MarkdownLSPRootDir`
+    - `MarkdownLSPTimeout`
+    - plus runtime selection and root mapping in
+      `internal/codegraph/source.go`.
+  - Added indexer wiring coverage in
+    `internal/codegraph/indexer_lsp_test.go`.
+
 - [x] 2026-04-13: Improved `postbrain-cli snapshot` memory content quality for hook events (TDD-first):
   - Added structured snapshot description builder in
     `cmd/postbrain-cli/main.go` (`buildSnapshotDescription` + helpers).

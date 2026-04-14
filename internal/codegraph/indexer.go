@@ -64,6 +64,12 @@ type IndexOptions struct {
 	ClangdLSPRootDir string
 	// ClangdLSPTimeout controls per-request timeouts for the clangd subprocess.
 	ClangdLSPTimeout time.Duration
+	// MarkdownLSPRootDir enables optional Markdown LSP resolution via marksman.
+	// It must be the absolute path to the checked-out source tree.
+	// Empty disables marksman for this run.
+	MarkdownLSPRootDir string
+	// MarkdownLSPTimeout controls per-request timeouts for the marksman subprocess.
+	MarkdownLSPTimeout time.Duration
 }
 
 const defaultMaxBytes int64 = 512 * 1024

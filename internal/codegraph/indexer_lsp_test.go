@@ -162,3 +162,32 @@ func TestLSPClientForIndex_Clangd_Enabled(t *testing.T) {
 		t.Fatal("expected returned clangd client from factory")
 	}
 }
+
+func TestLSPClientForIndex_Markdown_Enabled(t *testing.T) {
+	want := &stubLSPClient{lang: ".md"}
+	prev := newLSPClientForExt
+	newLSPClientForExt = func(ext, rootDir string, timeout time.Duration, opts lsp.ClientOptions) (lsp.Client, error) {
+		if ext != ".md" {
+			t.Fatalf("ext = %q, want %q", ext, ".md")
+		}
+		if rootDir != "/tmp/mdrepo" {
+			t.Fatalf("rootDir = %q, want %q", rootDir, "/tmp/mdrepo")
+		}
+		if timeout != 1500*time.Millisecond {
+			t.Fatalf("timeout = %v, want %v", timeout, 1500*time.Millisecond)
+		}
+		if opts.UseTSGo {
+			t.Fatal("UseTSGo must be false for marksman")
+		}
+		return want, nil
+	}
+	t.Cleanup(func() { newLSPClientForExt = prev })
+
+	got := lspClientForIndex(context.Background(), IndexOptions{
+		MarkdownLSPRootDir: "/tmp/mdrepo",
+		MarkdownLSPTimeout: 1500 * time.Millisecond,
+	})
+	if got != want {
+		t.Fatal("expected returned markdown client from factory")
+	}
+}

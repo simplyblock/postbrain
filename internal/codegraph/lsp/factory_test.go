@@ -78,3 +78,23 @@ func TestNewClientForExt_CCpp_UsesClangd(t *testing.T) {
 		t.Fatal("expected client")
 	}
 }
+
+func TestNewClientForExt_Markdown_UsesMarksman(t *testing.T) {
+	t.Parallel()
+
+	origMarksman := newMarksmanClient
+	newMarksmanClient = func(rootDir string, timeout time.Duration) (Client, error) {
+		return &PyrightClient{}, nil
+	}
+	t.Cleanup(func() {
+		newMarksmanClient = origMarksman
+	})
+
+	got, err := NewClientForExt(".md", "/tmp/repo", 3*time.Second, ClientOptions{})
+	if err != nil {
+		t.Fatalf("NewClientForExt: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected client")
+	}
+}

@@ -69,6 +69,16 @@ func lspClientForIndex(ctx context.Context, opts IndexOptions) lsp.Client {
 		return client
 	}
 
+	if opts.MarkdownLSPRootDir != "" {
+		client, err := newLSPClientForExt(".md", opts.MarkdownLSPRootDir, opts.MarkdownLSPTimeout, lsp.ClientOptions{})
+		if err != nil {
+			slog.WarnContext(ctx, "codegraph: markdown lsp client unavailable; continuing without lsp",
+				"root", opts.MarkdownLSPRootDir, "err", err)
+			return nil
+		}
+		return client
+	}
+
 	return nil
 }
 
@@ -83,6 +93,8 @@ func lspRootDirForClient(opts IndexOptions, client lsp.Client) string {
 		return opts.TypeScriptLSPRootDir
 	case ".c":
 		return opts.ClangdLSPRootDir
+	case ".md":
+		return opts.MarkdownLSPRootDir
 	default:
 		return ""
 	}
