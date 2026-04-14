@@ -17,7 +17,15 @@ type ClangdClient struct {
 
 // NewClangdClient starts clangd rooted at rootDir.
 func NewClangdClient(rootDir string, timeout time.Duration) (*ClangdClient, error) {
-	c, err := newStdioClient("clangd", nil, ".c", "cpp", rootDir, timeout)
+	c, err := newStdioClient("clangd", nil, map[string]int{
+		".c":   100,
+		".h":   95,
+		".hpp": 95,
+		".hh":  95,
+		".cpp": 90,
+		".cc":  90,
+		".cxx": 90,
+	}, "cpp", rootDir, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("clangd: %w", err)
 	}

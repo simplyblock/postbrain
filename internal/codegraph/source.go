@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	gogit "github.com/go-git/go-git/v5"
@@ -86,18 +87,45 @@ func lspRootDirForClient(opts IndexOptions, client lsp.Client) string {
 	if client == nil {
 		return ""
 	}
-	switch strings.ToLower(client.Language()) {
-	case ".go":
-		return opts.GoLSPRootDir
-	case ".ts":
-		return opts.TypeScriptLSPRootDir
-	case ".c":
-		return opts.ClangdLSPRootDir
-	case ".md":
-		return opts.MarkdownLSPRootDir
-	default:
-		return ""
+
+	type extPriority struct {
+		ext      string
+		priority int
 	}
+	var exts []extPriority
+	for ext, prio := range client.SupportedLanguages() {
+		exts = append(exts, extPriority{
+			ext:      strings.ToLower(strings.TrimSpace(ext)),
+			priority: prio,
+		})
+	}
+	sort.SliceStable(exts, func(i, j int) bool {
+		if exts[i].priority != exts[j].priority {
+			return exts[i].priority > exts[j].priority
+		}
+		return exts[i].ext < exts[j].ext
+	})
+	for _, candidate := range exts {
+		switch candidate.ext {
+		case ".go":
+			if opts.GoLSPRootDir != "" {
+				return opts.GoLSPRootDir
+			}
+		case ".ts", ".tsx", ".js", ".jsx":
+			if opts.TypeScriptLSPRootDir != "" {
+				return opts.TypeScriptLSPRootDir
+			}
+		case ".c", ".h", ".hpp", ".hh", ".cpp", ".cc", ".cxx":
+			if opts.ClangdLSPRootDir != "" {
+				return opts.ClangdLSPRootDir
+			}
+		case ".md", ".markdown":
+			if opts.MarkdownLSPRootDir != "" {
+				return opts.MarkdownLSPRootDir
+			}
+		}
+	}
+	return ""
 }
 
 // isSSHURL reports whether u is an SSH clone URL (git@ SCP syntax or ssh:// scheme).

@@ -19,7 +19,12 @@ type TypeScriptLanguageServerClient struct {
 // NewTypeScriptLanguageServerClient starts typescript-language-server in stdio
 // mode rooted at rootDir.
 func NewTypeScriptLanguageServerClient(rootDir string, timeout time.Duration) (*TypeScriptLanguageServerClient, error) {
-	c, err := newStdioClient("typescript-language-server", []string{"--stdio"}, ".ts", "typescript", rootDir, timeout)
+	c, err := newStdioClient("typescript-language-server", []string{"--stdio"}, map[string]int{
+		".ts":  100,
+		".tsx": 95,
+		".js":  90,
+		".jsx": 85,
+	}, "typescript", rootDir, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("typescript-language-server: %w", err)
 	}

@@ -14,7 +14,7 @@ import (
 // stubLSPClient is a configurable lsp.Client stub for unit tests.
 // Each method records whether it was called and returns the pre-configured result.
 type stubLSPClient struct {
-	lang string
+	languages map[string]int
 
 	docSymsResult []lsp.Symbol
 	docSymsCalled bool
@@ -29,7 +29,13 @@ type stubLSPClient struct {
 	canonicalCalled bool
 }
 
-func (s *stubLSPClient) Language() string { return s.lang }
+func (s *stubLSPClient) SupportedLanguages() map[string]int {
+	out := make(map[string]int, len(s.languages))
+	for ext, prio := range s.languages {
+		out[ext] = prio
+	}
+	return out
+}
 
 func (s *stubLSPClient) DocumentSymbols(_ context.Context, _ string) ([]lsp.Symbol, error) {
 	s.docSymsCalled = true
@@ -76,7 +82,7 @@ func (s *stubLSPClient) Close() error { return nil }
 func TestResolver_Resolve_LSP_SkipsDifferentLanguage(t *testing.T) {
 	t.Parallel()
 
-	stub := &stubLSPClient{lang: ".go"}
+	stub := &stubLSPClient{languages: map[string]int{".go": 100}}
 	r := NewResolver(nil, uuid.New(), stub, "")
 
 	_, ok := r.Resolve(context.Background(), "some/file.py", "Target", nil)
@@ -93,7 +99,7 @@ func TestResolver_Resolve_LSP_SkipsDifferentLanguage(t *testing.T) {
 func TestResolver_Resolve_LSP_LocalHitSkipsLSP(t *testing.T) {
 	t.Parallel()
 
-	stub := &stubLSPClient{lang: ".go"}
+	stub := &stubLSPClient{languages: map[string]int{".go": 100}}
 	r := NewResolver(nil, uuid.New(), stub, "")
 
 	want := uuid.New()
@@ -114,7 +120,7 @@ func TestResolver_Resolve_LSP_UsesWorkspaceSymbols(t *testing.T) {
 	t.Parallel()
 
 	stub := &stubLSPClient{
-		lang: ".go",
+		languages: map[string]int{".go": 100},
 		wsSymsResult: map[string][]lsp.Symbol{
 			"Target": {{Name: "Target", Canonical: "pkg.Target", Kind: lsp.KindFunction}},
 		},
@@ -144,7 +150,7 @@ func TestResolver_Resolve_LSP_UsesDocumentSymbols(t *testing.T) {
 	t.Parallel()
 
 	stub := &stubLSPClient{
-		lang: ".go",
+		languages: map[string]int{".go": 100},
 		docSymsResult: []lsp.Symbol{
 			{Name: "Target", Canonical: "mypkg.Target", Kind: lsp.KindFunction,
 				Location: lsp.Location{URI: "file:///some/file.go"}},
@@ -175,7 +181,7 @@ func TestResolver_Resolve_LSP_PrefersCurrentPackageCanonical(t *testing.T) {
 	t.Parallel()
 
 	stub := &stubLSPClient{
-		lang: ".go",
+		languages: map[string]int{".go": 100},
 		docSymsResult: []lsp.Symbol{
 			{Name: "Caller", Canonical: "longpkg.Caller", Kind: lsp.KindFunction},
 		},
@@ -194,5 +200,30 @@ func TestResolver_Resolve_LSP_PrefersCurrentPackageCanonical(t *testing.T) {
 	}
 	if got != want {
 		t.Fatalf("resolved id = %s, want %s", got, want)
+	}
+}
+
+// TestResolver_Resolve_LSP_SupportsAliasExtension verifies that LSP resolution
+// is attempted for alias extensions when the client advertises support.
+func TestResolver_Resolve_LSP_SupportsAliasExtension(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubLSPClient{
+		languages: map[string]int{
+			".c":   100,
+			".cpp": 90,
+		},
+		docSymsResult: []lsp.Symbol{
+			{Name: "Target", Canonical: "cppkg.Target", Kind: lsp.KindFunction},
+		},
+		canonicalResult: map[string]string{
+			"repo/file.cpp": "cppkg.Target",
+		},
+	}
+	r := NewResolver(nil, uuid.New(), stub, "")
+
+	_, _ = r.Resolve(context.Background(), "repo/file.cpp", "Target", nil)
+	if !stub.docSymsCalled {
+		t.Fatal("expected DocumentSymbols to be called for .cpp alias extension")
 	}
 }

@@ -16,7 +16,9 @@ type GoplsClient struct {
 
 // NewGoplsClient starts gopls in stdio mode rooted at rootDir.
 func NewGoplsClient(rootDir string, timeout time.Duration) (*GoplsClient, error) {
-	c, err := newStdioClient("gopls", []string{"-mode=stdio"}, ".go", "go", rootDir, timeout)
+	c, err := newStdioClient("gopls", []string{"-mode=stdio"}, map[string]int{
+		".go": 100,
+	}, "go", rootDir, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("gopls: %w", err)
 	}

@@ -28,7 +28,7 @@ func TestLSPClientForIndex_EmptyRootDir_Disabled(t *testing.T) {
 }
 
 func TestLSPClientForIndex_Enabled_ReturnsClient(t *testing.T) {
-	want := &stubLSPClient{lang: ".go"}
+	want := &stubLSPClient{languages: map[string]int{".go": 100}}
 	prev := newLSPClientForExt
 	newLSPClientForExt = func(ext, rootDir string, timeout time.Duration, opts lsp.ClientOptions) (lsp.Client, error) {
 		if ext != ".go" {
@@ -83,7 +83,7 @@ func TestLSPClientForIndex_NilClient_ReturnsNil(t *testing.T) {
 }
 
 func TestLSPClientForIndex_TypeScript_Enabled_DefaultBackend(t *testing.T) {
-	want := &stubLSPClient{lang: ".ts"}
+	want := &stubLSPClient{languages: map[string]int{".ts": 100}}
 	prev := newLSPClientForExt
 	newLSPClientForExt = func(ext, rootDir string, timeout time.Duration, opts lsp.ClientOptions) (lsp.Client, error) {
 		if ext != ".ts" {
@@ -112,7 +112,7 @@ func TestLSPClientForIndex_TypeScript_Enabled_DefaultBackend(t *testing.T) {
 }
 
 func TestLSPClientForIndex_TypeScript_Enabled_TSGoFlag(t *testing.T) {
-	want := &stubLSPClient{lang: ".ts"}
+	want := &stubLSPClient{languages: map[string]int{".ts": 100}}
 	prev := newLSPClientForExt
 	newLSPClientForExt = func(ext, rootDir string, timeout time.Duration, opts lsp.ClientOptions) (lsp.Client, error) {
 		if ext != ".ts" {
@@ -135,7 +135,7 @@ func TestLSPClientForIndex_TypeScript_Enabled_TSGoFlag(t *testing.T) {
 }
 
 func TestLSPClientForIndex_Clangd_Enabled(t *testing.T) {
-	want := &stubLSPClient{lang: ".c"}
+	want := &stubLSPClient{languages: map[string]int{".c": 100}}
 	prev := newLSPClientForExt
 	newLSPClientForExt = func(ext, rootDir string, timeout time.Duration, opts lsp.ClientOptions) (lsp.Client, error) {
 		if ext != ".c" {
@@ -164,7 +164,7 @@ func TestLSPClientForIndex_Clangd_Enabled(t *testing.T) {
 }
 
 func TestLSPClientForIndex_Markdown_Enabled(t *testing.T) {
-	want := &stubLSPClient{lang: ".md"}
+	want := &stubLSPClient{languages: map[string]int{".md": 100}}
 	prev := newLSPClientForExt
 	newLSPClientForExt = func(ext, rootDir string, timeout time.Duration, opts lsp.ClientOptions) (lsp.Client, error) {
 		if ext != ".md" {

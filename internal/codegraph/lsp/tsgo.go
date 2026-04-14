@@ -14,7 +14,12 @@ type TSGoClient struct {
 
 // NewTSGoClient starts tsgo in LSP stdio mode rooted at rootDir.
 func NewTSGoClient(rootDir string, timeout time.Duration) (*TSGoClient, error) {
-	c, err := newStdioClient("tsgo", []string{"--lsp"}, ".ts", "typescript", rootDir, timeout)
+	c, err := newStdioClient("tsgo", []string{"--lsp"}, map[string]int{
+		".ts":  100,
+		".tsx": 95,
+		".js":  90,
+		".jsx": 85,
+	}, "typescript", rootDir, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("tsgo: %w", err)
 	}

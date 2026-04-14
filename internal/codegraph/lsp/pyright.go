@@ -18,7 +18,9 @@ type PyrightClient struct {
 
 // NewPyrightClient starts pyright-langserver in stdio mode rooted at rootDir.
 func NewPyrightClient(rootDir string, timeout time.Duration) (*PyrightClient, error) {
-	c, err := newStdioClient("pyright-langserver", []string{"--stdio"}, ".py", "python", rootDir, timeout)
+	c, err := newStdioClient("pyright-langserver", []string{"--stdio"}, map[string]int{
+		".py": 100,
+	}, "python", rootDir, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("pyright: %w", err)
 	}

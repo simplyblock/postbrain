@@ -14,7 +14,10 @@ type MarksmanClient struct {
 
 // NewMarksmanClient starts marksman rooted at rootDir.
 func NewMarksmanClient(rootDir string, timeout time.Duration) (*MarksmanClient, error) {
-	c, err := newStdioClient("marksman", []string{"server"}, ".md", "markdown", rootDir, timeout)
+	c, err := newStdioClient("marksman", []string{"server"}, map[string]int{
+		".md":       100,
+		".markdown": 95,
+	}, "markdown", rootDir, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("marksman: %w", err)
 	}

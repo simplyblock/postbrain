@@ -25,6 +25,33 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-14: Refactored codegraph LSP language capability model to
+  extension sets with priorities (TDD-first):
+  - Replaced `Client.Language()` with
+    `Client.SupportedLanguages() map[string]int` in
+    `internal/codegraph/lsp/lsp.go`.
+  - Updated stdio client internals (`internal/codegraph/lsp/client.go`) to
+    normalize and expose supported extension maps.
+  - Updated concrete LSP clients to declare primary + alias extensions with
+    priority ordering:
+    - Go: `.go`
+    - TypeScript/TSGo: `.ts`, `.tsx`, `.js`, `.jsx`
+    - clangd: `.c`, `.h`, `.hpp`, `.hh`, `.cpp`, `.cc`, `.cxx`
+    - marksman: `.md`, `.markdown`
+    - pyright: `.py`
+  - Fixed alias-extension gating in:
+    - `internal/codegraph/resolve.go` (`resolveViaLSP`),
+    - `internal/codegraph/executor.go` (LSP call-edge enrichment gate),
+    by checking client-supported extension sets instead of a single canonical
+    extension.
+  - Added `internal/codegraph/lsp_support.go` helper for extension support
+    checks and added coverage in
+    `internal/codegraph/lsp_support_test.go`.
+  - Updated `lspRootDirForClient` in `internal/codegraph/source.go` to
+    select root directories via highest-priority supported extension mapping.
+  - Updated/extended resolver and indexer LSP tests for the new interface and
+    alias-extension behavior.
+
 - [x] 2026-04-14: Added Markdown LSP backend support via `marksman` (TDD-first):
   - Added `internal/codegraph/lsp/marksman.go`:
     - `NewMarksmanClient(...)` using `marksman server` in stdio mode,

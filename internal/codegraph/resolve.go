@@ -117,7 +117,7 @@ func (r *Resolver) resolveViaImports(ctx context.Context, filePath, targetName s
 //	declarations named targetName; the result whose container matches an
 //	imported package is preferred.
 func (r *Resolver) resolveViaLSP(ctx context.Context, filePath, targetName string, localSymTable map[string]uuid.UUID) (uuid.UUID, bool) {
-	if r.lsp == nil || !strings.EqualFold(filepath.Ext(filePath), r.lsp.Language()) {
+	if r.lsp == nil || !lspSupportsFile(r.lsp, filePath) {
 		return uuid.UUID{}, false
 	}
 	absFile := r.absPath(filePath)

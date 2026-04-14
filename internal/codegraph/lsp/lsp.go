@@ -152,12 +152,14 @@ type Diagnostic struct {
 type Client interface {
 	// ── Identity ─────────────────────────────────────────────────────────────
 
-	// Language returns the primary file extension this client handles,
-	// including the leading dot (e.g. ".go", ".py", ".ts").
-	// When a client handles multiple extensions (e.g. ".js" and ".mjs") it
-	// returns the canonical one; the adapter must be registered for all
-	// aliases separately.
-	Language() string
+	// SupportedLanguages returns the file extensions this client supports and
+	// their relative priority, where higher numbers win (1-100).
+	//
+	// Example:
+	//   {".ts": 100, ".tsx": 95, ".js": 90, ".jsx": 85}
+	//
+	// Callers should treat extension keys case-insensitively.
+	SupportedLanguages() map[string]int
 
 	// ── Definition / declaration ──────────────────────────────────────────────
 

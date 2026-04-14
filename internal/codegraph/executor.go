@@ -5,7 +5,6 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
-	"strings"
 
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -47,7 +46,7 @@ func indexFile(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, f *ob
 	// heuristic call edges produced by Extract with LSP-accurate ones.
 	// OutgoingCalls gives fully-qualified caller/callee names, so the
 	// resulting edges resolve directly without the multi-stage fallback chain.
-	if lspClient != nil && strings.EqualFold(filepath.Ext(f.Name), lspClient.Language()) {
+	if lspSupportsFile(lspClient, f.Name) {
 		absFile := filepath.Join(lspRootDirForClient(opts, lspClient), filepath.FromSlash(f.Name))
 		edges = enrichCallEdges(ctx, lspClient, absFile, edges)
 	}

@@ -14,7 +14,7 @@ func TestEnrichCallEdges_ReplacesCallEdgesWithLSP(t *testing.T) {
 	t.Parallel()
 
 	stub := &stubLSPClient{
-		lang: ".go",
+		languages: map[string]int{".go": 100},
 		docSymsResult: []lsp.Symbol{
 			{Name: "Caller", Canonical: "mypkg.Caller", Kind: lsp.KindFunction},
 		},
@@ -83,7 +83,7 @@ func TestEnrichCallEdges_FallsBackWhenLSPReturnsNoCalls(t *testing.T) {
 	t.Parallel()
 
 	stub := &stubLSPClient{
-		lang: ".go",
+		languages: map[string]int{".go": 100},
 		docSymsResult: []lsp.Symbol{
 			{Name: "Caller", Canonical: "mypkg.Caller", Kind: lsp.KindFunction},
 		},
@@ -105,7 +105,7 @@ func TestEnrichCallEdges_FallsBackWhenDocSymsFails(t *testing.T) {
 	t.Parallel()
 
 	// stubLSPClient with no docSymsResult returns nil, nil — same as empty.
-	stub := &stubLSPClient{lang: ".go"} // empty docSymsResult → 0 symbols
+	stub := &stubLSPClient{languages: map[string]int{".go": 100}} // empty docSymsResult → 0 symbols
 	original := []Edge{
 		{SubjectName: "mypkg.Caller", Predicate: "calls", ObjectName: "Helper"},
 	}

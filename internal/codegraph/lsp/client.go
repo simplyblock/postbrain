@@ -63,7 +63,7 @@ type stdioClient struct {
 
 	rootURI    string
 	timeout    time.Duration
-	language   string
+	languages  map[string]int
 	languageID string
 
 	initOnce sync.Once
@@ -80,7 +80,7 @@ type stdioClient struct {
 	diagCache map[string][]Diagnostic
 }
 
-func newStdioClient(command string, args []string, language, languageID, rootDir string, timeout time.Duration) (*stdioClient, error) {
+func newStdioClient(command string, args []string, languages map[string]int, languageID, rootDir string, timeout time.Duration) (*stdioClient, error) {
 	if timeout <= 0 {
 		timeout = defaultStdioTimeout
 	}
@@ -109,7 +109,7 @@ func newStdioClient(command string, args []string, language, languageID, rootDir
 		stdin:       stdinPipe,
 		rootURI:     pathToFileURI(abs),
 		timeout:     timeout,
-		language:    language,
+		languages:   normalizeSupportedLanguages(languages),
 		languageID:  languageID,
 		openedFiles: make(map[string]struct{}),
 		pending:     make(map[int64]chan lspMessage),
@@ -121,7 +121,13 @@ func newStdioClient(command string, args []string, language, languageID, rootDir
 
 // ── Client interface methods ──────────────────────────────────────────────────
 
-func (c *stdioClient) Language() string { return c.language }
+func (c *stdioClient) SupportedLanguages() map[string]int {
+	out := make(map[string]int, len(c.languages))
+	for ext, prio := range c.languages {
+		out[ext] = prio
+	}
+	return out
+}
 
 func (c *stdioClient) Definition(ctx context.Context, file string, pos Position) ([]Location, error) {
 	if err := c.prepareFile(ctx, file); err != nil {
@@ -518,6 +524,30 @@ func (c *stdioClient) writeFrame(method string, id any, params any) error {
 		return fmt.Errorf("lsp: write body: %w", err)
 	}
 	return nil
+}
+
+func normalizeSupportedLanguages(in map[string]int) map[string]int {
+	if len(in) == 0 {
+		return map[string]int{}
+	}
+	out := make(map[string]int, len(in))
+	for ext, prio := range in {
+		normalizedExt := strings.ToLower(strings.TrimSpace(ext))
+		if normalizedExt == "" {
+			continue
+		}
+		if !strings.HasPrefix(normalizedExt, ".") {
+			normalizedExt = "." + normalizedExt
+		}
+		if prio < 1 {
+			prio = 1
+		}
+		if prio > 100 {
+			prio = 100
+		}
+		out[normalizedExt] = prio
+	}
+	return out
 }
 
 func (c *stdioClient) readLoop(r io.Reader) {
