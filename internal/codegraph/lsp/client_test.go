@@ -29,3 +29,16 @@ func TestDecodeSymbolInformation_DocumentSymbolUsesSelectionRange(t *testing.T) 
 		)
 	}
 }
+
+func TestRangeContains_EndBoundaryIsExclusive(t *testing.T) {
+	r := Range{
+		Start: Position{Line: 10, Character: 3},
+		End:   Position{Line: 10, Character: 7},
+	}
+	if !rangeContains(r, Position{Line: 10, Character: 6}) {
+		t.Fatal("expected position before end to be contained")
+	}
+	if rangeContains(r, Position{Line: 10, Character: 7}) {
+		t.Fatal("expected end boundary to be excluded")
+	}
+}

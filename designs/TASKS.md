@@ -25,6 +25,14 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-14: Fixed LSP range end-boundary semantics for symbol matching (TDD-first):
+  - Updated `internal/codegraph/lsp/client.go` `rangeContains(...)` to treat
+    `Range.End` as exclusive (`[Start, End)`), aligning with LSP range
+    semantics.
+  - Added regression coverage in
+    `internal/codegraph/lsp/client_test.go`:
+    - `TestRangeContains_EndBoundaryIsExclusive`.
+
 - [x] 2026-04-14: Refactored codegraph LSP language capability model to
   extension sets with priorities (TDD-first):
   - Replaced `Client.Language()` with

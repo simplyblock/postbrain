@@ -904,7 +904,7 @@ func rangeContains(r Range, p Position) bool {
 	if p.Line == r.Start.Line && p.Character < r.Start.Character {
 		return false
 	}
-	if p.Line == r.End.Line && p.Character > r.End.Character {
+	if p.Line == r.End.Line && p.Character >= r.End.Character {
 		return false
 	}
 	return true
