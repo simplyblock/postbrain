@@ -75,12 +75,13 @@ func (j *ConsolidateJob) Run(ctx context.Context) error {
 }
 
 // llmSummarizer returns a summarizer that calls svc.Summarize on the joined
-// content, falling back to the plain join if the LLM call fails.
+// content, falling back to the plain join if the LLM call fails or produces
+// an empty summary.
 func llmSummarizer(svc *providers.EmbeddingService) func(context.Context, []string) (string, error) {
 	return func(ctx context.Context, contents []string) (string, error) {
 		joined := strings.Join(contents, "\n\n")
 		summary, err := svc.Summarize(ctx, joined)
-		if err != nil {
+		if err != nil || strings.TrimSpace(summary) == "" {
 			return joined, nil
 		}
 		return summary, nil
