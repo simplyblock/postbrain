@@ -89,7 +89,7 @@ func (s *Server) handleSummarize(ctx context.Context, req mcpgo.CallToolRequest)
 			return joined, nil
 		}
 		summary, err := s.svc.Summarize(ctx, joined)
-		if err != nil {
+		if err != nil || summary == "" {
 			return joined, nil
 		}
 		return summary, nil
