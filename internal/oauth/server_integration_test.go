@@ -82,7 +82,7 @@ func TestOAuthServer_AuthorizationCodePKCERoundTrip(t *testing.T) {
 	mux.Handle("/mcp", mcpSrv.Handler())
 	mux.Handle("/mcp/", mcpSrv.Handler())
 
-	uiHandler, err := uiapi.NewHandlerWithOAuth(pool, svc, cfg.OAuth, providers, stateStore, clientStore, codeStore, issuer, identityStore)
+	uiHandler, err := uiapi.NewHandlerWithOAuth(pool, svc, cfg, providers, stateStore, clientStore, codeStore, issuer, identityStore)
 	if err != nil {
 		t.Fatalf("new ui handler: %v", err)
 	}

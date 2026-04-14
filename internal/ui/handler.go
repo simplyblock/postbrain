@@ -48,7 +48,7 @@ type Handler struct {
 }
 
 // NewHandler creates a UI Handler with parsed templates.
-func NewHandler(pool *pgxpool.Pool, svc *providers.EmbeddingService) (*Handler, error) {
+func NewHandler(pool *pgxpool.Pool, svc *providers.EmbeddingService, cfg *config.Config) (*Handler, error) {
 	funcMap := template.FuncMap{
 		"truncate":    truncate,
 		"timeAgo":     timeAgo,
@@ -83,7 +83,7 @@ func NewHandler(pool *pgxpool.Pool, svc *providers.EmbeddingService) (*Handler, 
 	if err != nil {
 		return nil, err
 	}
-	h := &Handler{pool: pool, templates: tmpl, staticFS: sub, syncer: codegraph.NewSyncer(), providers: map[string]social.Provider{}}
+	h := &Handler{pool: pool, templates: tmpl, staticFS: sub, syncer: codegraph.NewSyncer(cfg.CodeGraph), providers: map[string]social.Provider{}}
 	if pool != nil {
 		membership := principals.NewMembershipStore(pool)
 		h.knwLife = knowledge.NewLifecycle(pool, membership)
@@ -101,7 +101,7 @@ func NewHandler(pool *pgxpool.Pool, svc *providers.EmbeddingService) (*Handler, 
 func NewHandlerWithOAuth(
 	pool *pgxpool.Pool,
 	svc *providers.EmbeddingService,
-	oauthCfg config.OAuthConfig,
+	cfg *config.Config,
 	providers map[string]social.Provider,
 	stateStore *oauth.StateStore,
 	clientStore *oauth.ClientStore,
@@ -109,11 +109,11 @@ func NewHandlerWithOAuth(
 	issuer *oauth.Issuer,
 	identities *social.IdentityStore,
 ) (*Handler, error) {
-	h, err := NewHandler(pool, svc)
+	h, err := NewHandler(pool, svc, cfg)
 	if err != nil {
 		return nil, err
 	}
-	h.oauthCfg = oauthCfg
+	h.oauthCfg = cfg.OAuth
 	h.providers = providers
 	h.stateStore = stateStore
 	h.clients = clientStore

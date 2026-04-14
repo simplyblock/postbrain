@@ -20,7 +20,7 @@ func NewRouter(pool *pgxpool.Pool, svc *providers.EmbeddingService, cfg *config.
 		pool:   pool,
 		svc:    svc,
 		cfg:    cfg,
-		syncer: codegraph.NewSyncer(),
+		syncer: codegraph.NewSyncer(cfg.CodeGraph),
 	}
 	if pool != nil {
 		r.memStore = memory.NewStore(pool, svc)

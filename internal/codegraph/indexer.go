@@ -22,6 +22,8 @@ type IndexOptions struct {
 	RepoURL string
 	// DefaultBranch is the branch to check out (defaults to "main").
 	DefaultBranch string
+	// CodeMemory controls whether to create code memory entities.
+	CodeMemory *bool
 	// AuthorID is the principal UUID recorded as the author of created memories.
 	// If zero, memories are not created (code graph entities/relations are still indexed).
 	AuthorID uuid.UUID

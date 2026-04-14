@@ -19,6 +19,9 @@ func persistFileMemory(ctx context.Context, pool *pgxpool.Pool, opts IndexOption
 	if opts.AuthorID == uuid.Nil {
 		return nil
 	}
+	if opts.CodeMemory == nil || !*opts.CodeMemory {
+		return nil
+	}
 	fileSourceRef := "file:" + fileName
 	fileMem, err := compat.CreateMemory(ctx, pool, &db.Memory{
 		MemoryType:      "semantic",

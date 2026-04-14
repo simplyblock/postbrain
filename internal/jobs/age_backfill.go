@@ -27,9 +27,9 @@ var ageBackfillAdvisoryUnlockSQL = fmt.Sprintf("SELECT pg_advisory_unlock(%d)", 
 // AGEBackfillJob mirrors relational entities/relations into the AGE overlay.
 // It is intended for periodic reconciliation and uses MERGE-based AGE upserts.
 type AGEBackfillJob struct {
-	pool        *pgxpool.Pool
-	batchSize   int
-	syncEntity  func(ctx context.Context, pool *pgxpool.Pool, e *db.Entity) error
+	pool         *pgxpool.Pool
+	batchSize    int
+	syncEntity   func(ctx context.Context, pool *pgxpool.Pool, e *db.Entity) error
 	syncRelation func(ctx context.Context, pool *pgxpool.Pool, rel *db.Relation) error
 }
 

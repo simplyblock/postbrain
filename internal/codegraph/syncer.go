@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/simplyblock/postbrain/internal/config"
 
 	"github.com/simplyblock/postbrain/internal/db/compat"
 )
@@ -37,11 +38,12 @@ type SyncStatus struct {
 type Syncer struct {
 	mu     sync.Mutex
 	status map[uuid.UUID]*SyncStatus
+	cfg    config.CodeGraphConfig
 }
 
 // NewSyncer creates a ready-to-use Syncer.
-func NewSyncer() *Syncer {
-	return &Syncer{status: make(map[uuid.UUID]*SyncStatus)}
+func NewSyncer(cfg config.CodeGraphConfig) *Syncer {
+	return &Syncer{cfg: cfg, status: make(map[uuid.UUID]*SyncStatus)}
 }
 
 // Status returns a copy of the current sync status for the given scope.
@@ -60,6 +62,11 @@ func (s *Syncer) Status(scopeID uuid.UUID) SyncStatus {
 func (s *Syncer) Start(pool *pgxpool.Pool, opts IndexOptions) (started bool, current SyncStatus) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// Apply code memory config if not set explicitly.
+	if opts.CodeMemory == nil {
+		opts.CodeMemory = &s.cfg.CodeMemory
+	}
 
 	if st, ok := s.status[opts.ScopeID]; ok && st.State == SyncRunning {
 		return false, *st

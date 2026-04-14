@@ -180,7 +180,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	uiHandler, err := uiapi.NewHandlerWithOAuth(
 		pool,
 		svc,
-		cfg.OAuth,
+		cfg,
 		providers,
 		stateStore,
 		clientStore,

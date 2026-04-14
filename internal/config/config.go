@@ -18,6 +18,7 @@ type Config struct {
 	Migrations MigrationsConfig `mapstructure:"migrations"`
 	Jobs       JobsConfig       `mapstructure:"jobs"`
 	OAuth      OAuthConfig      `mapstructure:"oauth"`
+	CodeGraph  CodeGraphConfig  `mapstructure:"code_graph"`
 }
 
 // DatabaseConfig holds PostgreSQL connection parameters.
@@ -100,6 +101,11 @@ type OAuthSocialConfig struct {
 	AllowedEmailDomains  []string `mapstructure:"allowed_email_domains"`
 }
 
+// CodeGraphConfig controls code graph indexing behavior.
+type CodeGraphConfig struct {
+	CodeMemory bool `mapstructure:"code_memory"`
+}
+
 // LoadDatabaseURL reads only the database URL from the config file at path
 // (or the POSTBRAIN_DATABASE_URL env var) without validating any other fields.
 // It is intended for bootstrap commands like `onboard` that run before the
@@ -167,6 +173,8 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("oauth.social.auto_create_users", true)
 	v.SetDefault("oauth.social.require_verified_email", false)
 	v.SetDefault("oauth.social.allowed_email_domains", []string{})
+
+	v.SetDefault("code_graph.code_memory", false)
 
 	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("config: read %q: %w", path, err)
