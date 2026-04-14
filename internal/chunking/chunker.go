@@ -137,13 +137,14 @@ func isMarkdownHRule(s string) bool {
 }
 
 // stripMarkdownHeader removes leading ATX header markers ("# ", "## ", etc.)
-// and returns the plain heading text. Returns s unchanged if it is not a header.
+// and returns the plain heading text. Returns s unchanged unless it starts
+// with 1-6 '#' characters followed by at least one space.
 func stripMarkdownHeader(s string) string {
 	i := 0
 	for i < len(s) && s[i] == '#' {
 		i++
 	}
-	if i == 0 || i >= len(s) {
+	if i == 0 || i > 6 || i >= len(s) || s[i] != ' ' {
 		return s
 	}
 	return strings.TrimLeft(s[i:], " ")
