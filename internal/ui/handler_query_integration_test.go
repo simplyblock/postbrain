@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
+	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/memory"
@@ -60,7 +61,7 @@ func TestQueryPlayground_SelectedScopeIncludesAncestorMemories(t *testing.T) {
 		t.Fatalf("create token: %v", err)
 	}
 
-	handler, err := uiapi.NewHandler(pool, svc)
+	handler, err := uiapi.NewHandler(pool, svc, &config.Config{})
 	if err != nil {
 		t.Fatalf("new ui handler: %v", err)
 	}
@@ -157,7 +158,7 @@ func TestQueryPlayground_SelectedScopeExcludesSiblingMemories(t *testing.T) {
 		t.Fatalf("create token: %v", err)
 	}
 
-	handler, err := uiapi.NewHandler(pool, svc)
+	handler, err := uiapi.NewHandler(pool, svc, &config.Config{})
 	if err != nil {
 		t.Fatalf("new ui handler: %v", err)
 	}
@@ -288,7 +289,7 @@ func TestQueryPlayground_MemoryOnly_DoesNotLeakSiblingGraphContext(t *testing.T)
 		t.Fatalf("create token: %v", err)
 	}
 
-	handler, err := uiapi.NewHandler(pool, svc)
+	handler, err := uiapi.NewHandler(pool, svc, &config.Config{})
 	if err != nil {
 		t.Fatalf("new ui handler: %v", err)
 	}

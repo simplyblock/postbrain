@@ -6,10 +6,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/simplyblock/postbrain/internal/config"
 )
 
 func TestUploadKnowledge_Unauthorized(t *testing.T) {
-	ro := NewRouter(nil, nil, nil)
+	ro := NewRouter(nil, nil, &config.Config{})
 	req := httptest.NewRequest(http.MethodPost, "/v1/knowledge/upload", nil)
 	rec := httptest.NewRecorder()
 	ro.Handler().ServeHTTP(rec, req)

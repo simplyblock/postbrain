@@ -25,6 +25,27 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-14: Fixed failing unit/integration tests after constructor signature changes (TDD green pass):
+  - Updated `internal/codegraph/syncer_test.go` and
+    `internal/api/rest/scopes_test.go` to use the current
+    `codegraph.NewSyncer(config.CodeGraphConfig)` signature.
+  - Updated UI tests to pass explicit config objects for
+    `ui.NewHandler(pool, svc, cfg)`:
+    - `internal/ui/handler_test.go`
+    - `internal/ui/handler_knowledge_test.go`
+    - `internal/ui/auth_integration_test.go`
+    - `internal/ui/handler_principals_integration_test.go`
+    - `internal/ui/handler_promotions_integration_test.go`
+    - `internal/ui/handler_query_integration_test.go`
+    - `internal/ui/tokens_integration_test.go`
+  - Updated `internal/api/rest/upload_test.go` to construct router with
+    non-nil config (`NewRouter(nil, nil, &config.Config{})`) and avoid
+    nil-config panic.
+  - Verified with:
+    - `go test ./...`
+    - `gofmt -w .`
+    - `make lint`
+
 - [x] 2026-04-14: Wired pyright to be reachable from `IndexRepo` options (TDD-first):
   - Added Python LSP index options in `internal/codegraph/indexer.go`:
     - `PythonLSPRootDir`

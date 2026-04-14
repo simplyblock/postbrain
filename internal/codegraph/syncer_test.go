@@ -6,13 +6,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/simplyblock/postbrain/internal/config"
 )
 
 // ── NewSyncer ─────────────────────────────────────────────────────────────────
 
 func TestNewSyncer_NotNil(t *testing.T) {
 	t.Parallel()
-	if NewSyncer() == nil {
+	if NewSyncer(config.CodeGraphConfig{}) == nil {
 		t.Fatal("NewSyncer returned nil")
 	}
 }
@@ -21,7 +22,7 @@ func TestNewSyncer_NotNil(t *testing.T) {
 
 func TestSyncer_Status_IdleForUnknownScope(t *testing.T) {
 	t.Parallel()
-	s := NewSyncer()
+	s := NewSyncer(config.CodeGraphConfig{})
 	st := s.Status(uuid.New())
 	if st.State != SyncIdle {
 		t.Errorf("State = %v, want SyncIdle", st.State)
@@ -36,7 +37,7 @@ func TestSyncer_Status_IdleForUnknownScope(t *testing.T) {
 
 func TestSyncer_Status_ReturnsCopy(t *testing.T) {
 	t.Parallel()
-	s := NewSyncer()
+	s := NewSyncer(config.CodeGraphConfig{})
 	scopeID := uuid.New()
 	now := time.Now()
 
@@ -97,7 +98,7 @@ func TestSyncer_Start_ReturnsTrueForNewScope(t *testing.T) {
 		_ = ln.Close()
 	}()
 
-	s := NewSyncer()
+	s := NewSyncer(config.CodeGraphConfig{})
 	opts := IndexOptions{
 		ScopeID: uuid.New(),
 		RepoURL: "http://" + ln.Addr().String() + "/repo.git",
@@ -118,7 +119,7 @@ func TestSyncer_Start_ReturnsTrueForNewScope(t *testing.T) {
 
 func TestSyncer_Start_ReturnsFalseWhenAlreadyRunning(t *testing.T) {
 	t.Parallel()
-	s := NewSyncer()
+	s := NewSyncer(config.CodeGraphConfig{})
 	scopeID := uuid.New()
 	now := time.Now()
 
@@ -137,7 +138,7 @@ func TestSyncer_Start_ReturnsFalseWhenAlreadyRunning(t *testing.T) {
 
 func TestSyncer_Start_SecondScopeStartsIndependently(t *testing.T) {
 	t.Parallel()
-	s := NewSyncer()
+	s := NewSyncer(config.CodeGraphConfig{})
 	scopeA := uuid.New()
 	scopeB := uuid.New()
 	now := time.Now()

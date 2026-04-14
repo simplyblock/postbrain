@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/auth"
+	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 	uiapi "github.com/simplyblock/postbrain/internal/ui"
@@ -386,7 +387,7 @@ func TestTokensPage_EditScopes_ShowsPrincipalEffectiveScopes(t *testing.T) {
 func loginUITestClient(t *testing.T, pool *pgxpool.Pool, rawSessionToken string) (*http.Client, string) {
 	t.Helper()
 
-	handler, err := uiapi.NewHandler(pool, nil)
+	handler, err := uiapi.NewHandler(pool, nil, &config.Config{})
 	if err != nil {
 		t.Fatalf("new ui handler: %v", err)
 	}

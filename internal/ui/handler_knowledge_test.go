@@ -7,13 +7,14 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/simplyblock/postbrain/internal/config"
 )
 
 // newTestHandler creates a Handler with nil pool (no DB) for unit testing.
 // Templates are still parsed and rendered; DB-dependent data is simply absent.
 func newTestHandler(t *testing.T) *Handler {
 	t.Helper()
-	h, err := NewHandler(nil, nil)
+	h, err := NewHandler(nil, nil, &config.Config{})
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}
