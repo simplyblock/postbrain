@@ -6,3 +6,21 @@ url = "http://localhost:7433/mcp"
 bearer_token_env_var = "POSTBRAIN_TOKEN"
 default_tools_enabled = true
 default_tools_approval_mode = "approve"
+
+[mcp_servers.postbrain.tools.list_scopes]
+approval_mode = "approve"
+
+[mcp_servers.postbrain.tools.session_begin]
+approval_mode = "approve"
+
+[mcp_servers.postbrain.tools.context]
+approval_mode = "approve"
+
+[mcp_servers.postbrain.tools.recall]
+approval_mode = "approve"
+
+[mcp_servers.postbrain.tools.remember]
+approval_mode = "approve"
+
+[mcp_servers.postbrain.tools.session_end]
+approval_mode = "approve"

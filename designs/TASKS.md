@@ -25,6 +25,189 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-14: Wired pyright to be reachable from `IndexRepo` options (TDD-first):
+  - Added Python LSP index options in `internal/codegraph/indexer.go`:
+    - `PythonLSPRootDir`
+    - `PythonLSPTimeout`
+  - Extended lazy LSP registry wiring in `internal/codegraph/source.go` to
+    register `.py` -> pyright selection when Python LSP options are set.
+  - Added/updated regression coverage in
+    `internal/codegraph/indexer_lsp_test.go` to assert:
+    - registry sizing with Python enabled,
+    - lazy `.py` client creation and root/timeout propagation.
+
+- [x] 2026-04-14: Fixed LSP range end-boundary semantics for symbol matching (TDD-first):
+  - Updated `internal/codegraph/lsp/client.go` `rangeContains(...)` to treat
+    `Range.End` as exclusive (`[Start, End)`), aligning with LSP range
+    semantics.
+  - Added regression coverage in
+    `internal/codegraph/lsp/client_test.go`:
+    - `TestRangeContains_EndBoundaryIsExclusive`.
+
+- [x] 2026-04-14: Refactored codegraph LSP language capability model to
+  extension sets with priorities (TDD-first):
+  - Replaced `Client.Language()` with
+    `Client.SupportedLanguages() map[string]int` in
+    `internal/codegraph/lsp/lsp.go`.
+  - Updated stdio client internals (`internal/codegraph/lsp/client.go`) to
+    normalize and expose supported extension maps.
+  - Updated concrete LSP clients to declare primary + alias extensions with
+    priority ordering:
+    - Go: `.go`
+    - TypeScript/TSGo: `.ts`, `.tsx`, `.js`, `.jsx`
+    - clangd: `.c`, `.h`, `.hpp`, `.hh`, `.cpp`, `.cc`, `.cxx`
+    - marksman: `.md`, `.markdown`
+    - pyright: `.py`
+  - Fixed alias-extension gating in:
+    - `internal/codegraph/resolve.go` (`resolveViaLSP`),
+    - `internal/codegraph/executor.go` (LSP call-edge enrichment gate),
+    by checking client-supported extension sets instead of a single canonical
+    extension.
+  - Added `internal/codegraph/lsp_support.go` helper for extension support
+    checks and added coverage in
+    `internal/codegraph/lsp_support_test.go`.
+  - Reworked index-time LSP orchestration in `internal/codegraph/source.go`
+    to a lazy registry model:
+    - registry entries are configured up front from index options,
+    - concrete LSP subprocesses are created on-demand when a matching file
+      extension is first encountered,
+    - per-file client selection uses supported-extension priority values.
+  - Updated executor/planner/indexer flow to pass registry selections through
+    indexing and resolve/enrich each file with the selected per-file client.
+  - Updated/extended resolver and indexer LSP tests for the new interface,
+    alias-extension behavior, and lazy client initialization.
+
+- [x] 2026-04-14: Added Markdown LSP backend support via `marksman` (TDD-first):
+  - Added `internal/codegraph/lsp/marksman.go`:
+    - `NewMarksmanClient(...)` using `marksman server` in stdio mode,
+    - `MarksmanClient.Imports(...)` returning an empty import set for Markdown.
+  - Extended LSP factory routing in
+    `internal/codegraph/lsp/factory.go` for Markdown extensions:
+    - `.md`, `.markdown`.
+  - Added factory regression coverage in
+    `internal/codegraph/lsp/factory_test.go`.
+  - Wired indexer-level Markdown LSP options:
+    - `MarkdownLSPRootDir`
+    - `MarkdownLSPTimeout`
+    - plus runtime selection and root mapping in
+      `internal/codegraph/source.go`.
+  - Added indexer wiring coverage in
+    `internal/codegraph/indexer_lsp_test.go`.
+
+- [x] 2026-04-13: Improved `postbrain-cli snapshot` memory content quality for hook events (TDD-first):
+  - Added structured snapshot description builder in
+    `cmd/postbrain-cli/main.go` (`buildSnapshotDescription` + helpers).
+  - Snapshot content now includes compact, high-signal tool input context
+    instead of only generic "Tool X called" text, including:
+    - `command` summary (truncated),
+    - path/query/pattern/limit style scalar fields,
+    - write/edit size hints (`content_bytes`, `old_string_bytes`,
+      `new_string_bytes`),
+    - fallback `input_keys=<n>` when no scalar details are available.
+  - Updated `runSnapshot` to use the new description builder.
+  - Added regression tests in `cmd/postbrain-cli/main_test.go` covering:
+    - Write snapshots include content-size hints,
+    - command summarization + truncation,
+    - known-field extraction,
+    - key-count fallback behavior.
+
+- [x] 2026-04-13: Normalized snapshot file paths to project-root-relative form (TDD-first):
+  - Updated `cmd/postbrain-cli/main.go` snapshot flow to normalize
+    `tool_input.file_path`/`tool_input.path` against current working directory
+    before building memory content and `source_ref`.
+  - `source_ref` now uses project-relative file paths when the file is inside
+    the current repo root (e.g.
+    `/Volumes/git/postbrain/internal/codegraph/lsp/pyright.go` ->
+    `file:internal/codegraph/lsp/pyright.go`).
+  - Paths outside the project root remain absolute.
+  - Added regression tests in `cmd/postbrain-cli/main_test.go`:
+    - relative conversion for in-repo absolute paths,
+    - outside-root absolute path preservation,
+    - `tool_input` file path normalization coverage.
+
+- [x] 2026-04-13: Refactored runtime CWD resolution to explicit path plumbing in `postbrain-cli`:
+  - Removed mutable global `getwdFn` from `cmd/postbrain-cli/main.go`.
+  - Updated runtime helpers to accept explicit CWD strings:
+    - `resolveScopeForRuntime(cwd string)`
+    - `resolveURLForRuntime(cwd string)`
+    - `normalizeSnapshotToolInputPaths(..., cwd string)`
+    - `normalizePathToProjectRoot(path, cwd string)`
+  - Added `runtimeCWD()` command-entry helper and wired call sites to resolve
+    CWD once per command path and pass it through.
+  - Updated tests in `cmd/postbrain-cli/main_test.go` to use pure helper
+    signatures without global override state.
+
+- [x] 2026-04-13: Implemented `clangd` stdio LSP backend for C/C++ (TDD-first):
+  - Added `internal/codegraph/lsp/clangd.go`:
+    - `NewClangdClient(...)` using `clangd` in stdio mode,
+    - `ClangdClient.Imports(...)` include-parser for `#include <...>` and
+      `#include "..."` directives.
+  - Extended LSP factory routing in
+    `internal/codegraph/lsp/factory.go` for C/C++ extensions:
+    - `.c`, `.h`, `.hpp`, `.hh`, `.cpp`, `.cc`, `.cxx`.
+  - Wired indexer-level clangd options:
+    - `ClangdLSPRootDir`
+    - `ClangdLSPTimeout`
+    - plus runtime selection in `internal/codegraph/source.go`.
+  - Added regression coverage:
+    - `internal/codegraph/lsp/clangd_test.go`
+    - `internal/codegraph/lsp/factory_test.go` (C/C++ factory selection)
+    - `internal/codegraph/indexer_lsp_test.go` (indexer clangd option wiring).
+
+- [x] 2026-04-13: Extended Docker images with TypeScript/Python LSP toolchain:
+  - Updated `Dockerfile` and `Dockerfile.release` to include:
+    - `pyright` (npm global install),
+    - `typescript-language-server` (npm global install),
+    - `tsgo` binary (`go install github.com/microsoft/typescript-go/cmd/tsgo` in dedicated build stage).
+  - Added image build args for these tools:
+    - `TSGO_VERSION`
+    - `TYPESCRIPT_VERSION`
+    - `TYPESCRIPT_LANGUAGE_SERVER_VERSION`
+    - `PYRIGHT_VERSION`
+  - Updated local and release build wiring:
+    - `docker-compose.yml` postbrain build args
+    - `Makefile` `docker-build` args
+    - `.github/workflows/build-package.yml` Docker release build args.
+
+- [x] 2026-04-13: Added TypeScript stdio LSP backend selection with `tsgo` flag (TDD-first):
+  - Extended `internal/codegraph/lsp/factory.go` with `ClientOptions` and
+    TypeScript backend selection:
+    - default: `typescript-language-server --stdio`
+    - opt-in: `tsgo --lsp` when `UseTSGo=true`.
+  - Added stdio TypeScript clients:
+    - `internal/codegraph/lsp/typescript.go`
+    - `internal/codegraph/lsp/tsgo.go`
+    - both reuse TS/JS import parsing for `Imports(...)`.
+  - Added factory selection tests in
+    `internal/codegraph/lsp/factory_test.go`.
+  - Extended codegraph index options and wiring for TypeScript LSP:
+    - `TypeScriptLSPRootDir`
+    - `TypeScriptLSPTimeout`
+    - `TypeScriptLSPUseTSGo`
+  - Updated indexer/source/executor LSP routing to use language-specific root
+    directories (`.go` vs `.ts`), and added coverage in
+    `internal/codegraph/indexer_lsp_test.go` for default TS backend and
+    `tsgo`-flag behavior.
+
+- [x] 2026-04-13: Fixed codegraph Go LSP call-target regression that broke integration tests (TDD-first):
+  - Added LSP decoder regression coverage for `DocumentSymbol` payloads using
+    `selectionRange` in `internal/codegraph/lsp/client_test.go`.
+  - Updated `internal/codegraph/lsp/client.go` to decode both
+    `SymbolInformation` and `DocumentSymbol` responses for document symbols.
+  - Added resolver regression coverage in
+    `internal/codegraph/resolve_lsp_test.go` for same-package canonical
+    fallback (`<pkg>.<symbol>`) when workspace/call-hierarchy signals are weak.
+  - Updated `internal/codegraph/resolve.go` to prefer package-qualified
+    same-file/same-package targets before generic suffix fallback.
+  - Added canonicalization regression coverage in
+    `internal/codegraph/writer_test.go` and fixed
+    `internal/codegraph/writer.go` to avoid double-prefix canonical names
+    (e.g. `longpkg.longpkg.Target`).
+  - Verified with:
+    - targeted integration test
+      `TestIndexRepo_LSPEnabled_ResolvesCallsDifferentlyThanFallback`
+    - full suite `make test-integration` passing.
+
 - [x] 2026-04-12: Removed `--dimensions` from `summary-model register` CLI surface:
   - Updated `cmd/postbrain/embedding_model_cmd.go` to:
     - remove the `--dimensions` flag from `summary-model register`,

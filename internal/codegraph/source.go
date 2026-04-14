@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,10 +19,22 @@ import (
 	"golang.org/x/crypto/ssh/agent"
 
 	"github.com/simplyblock/postbrain/internal/closeutil"
+	"github.com/simplyblock/postbrain/internal/codegraph/lsp"
 )
 
-var newGoplsTCPResolverFn = func(addr string, timeout time.Duration, rootURI string) (LSPResolver, error) {
-	return NewGoplsTCPResolver(addr, timeout, rootURI)
+// newLSPClientForExt is the factory used to create an lsp.Client for a given
+// file extension.  It is a package-level variable so tests can inject fakes.
+var newLSPClientForExt = lsp.NewClientForExt
+
+type lspSelection struct {
+	canonicalExt string
+	rootDir      string
+	timeout      time.Duration
+	clientOpts   lsp.ClientOptions
+	hintExts     map[string]int
+
+	initialized bool
+	client      lsp.Client
 }
 
 // buildCloneAuth returns the go-git auth method for opts, or nil if no auth is configured.
@@ -37,21 +48,153 @@ func buildCloneAuth(opts IndexOptions) (transport.AuthMethod, error) {
 	return nil, nil
 }
 
-func lspResolverForIndex(ctx context.Context, opts IndexOptions) LSPResolver {
-	if opts.GoLSPAddr == "" {
+func newLSPRegistry(opts IndexOptions) []lspSelection {
+	var out []lspSelection
+
+	if opts.GoLSPRootDir != "" {
+		out = append(out, lspSelection{
+			canonicalExt: ".go",
+			rootDir:      opts.GoLSPRootDir,
+			timeout:      opts.GoLSPTimeout,
+			hintExts: map[string]int{
+				".go": 100,
+			},
+		})
+	}
+
+	if opts.TypeScriptLSPRootDir != "" {
+		out = append(out, lspSelection{
+			canonicalExt: ".ts",
+			rootDir:      opts.TypeScriptLSPRootDir,
+			timeout:      opts.TypeScriptLSPTimeout,
+			clientOpts: lsp.ClientOptions{
+				UseTSGo: opts.TypeScriptLSPUseTSGo,
+			},
+			hintExts: map[string]int{
+				".ts":  100,
+				".tsx": 95,
+				".js":  90,
+				".jsx": 85,
+			},
+		})
+	}
+
+	if opts.ClangdLSPRootDir != "" {
+		out = append(out, lspSelection{
+			canonicalExt: ".c",
+			rootDir:      opts.ClangdLSPRootDir,
+			timeout:      opts.ClangdLSPTimeout,
+			hintExts: map[string]int{
+				".c":   100,
+				".h":   95,
+				".hpp": 95,
+				".hh":  95,
+				".cpp": 90,
+				".cc":  90,
+				".cxx": 90,
+			},
+		})
+	}
+
+	if opts.PythonLSPRootDir != "" {
+		out = append(out, lspSelection{
+			canonicalExt: ".py",
+			rootDir:      opts.PythonLSPRootDir,
+			timeout:      opts.PythonLSPTimeout,
+			hintExts: map[string]int{
+				".py": 100,
+			},
+		})
+	}
+
+	if opts.MarkdownLSPRootDir != "" {
+		out = append(out, lspSelection{
+			canonicalExt: ".md",
+			rootDir:      opts.MarkdownLSPRootDir,
+			timeout:      opts.MarkdownLSPTimeout,
+			hintExts: map[string]int{
+				".md":       100,
+				".markdown": 95,
+			},
+		})
+	}
+
+	return out
+}
+
+func lspClientForFile(ctx context.Context, filePath string, selections []lspSelection) (lsp.Client, string) {
+	ext := strings.ToLower(filepath.Ext(filePath))
+	if ext == "" || len(selections) == 0 {
+		return nil, ""
+	}
+	var (
+		chosenClient lsp.Client
+		chosenRoot   string
+		bestPriority int
+		haveBest     bool
+	)
+	for i := range selections {
+		sel := &selections[i]
+		_, hinted := sel.hintExts[ext]
+		if !hinted && sel.client == nil {
+			continue
+		}
+		client := ensureLSPSelectionClient(ctx, sel)
+		if client == nil {
+			continue
+		}
+		priority, ok := client.SupportedLanguages()[ext]
+		if !ok {
+			if hinted {
+				priority = sel.hintExts[ext]
+			} else {
+				continue
+			}
+		}
+		if !haveBest || priority > bestPriority {
+			haveBest = true
+			bestPriority = priority
+			chosenClient = client
+			chosenRoot = sel.rootDir
+		}
+	}
+	if !haveBest {
+		return nil, ""
+	}
+	return chosenClient, chosenRoot
+}
+
+func ensureLSPSelectionClient(ctx context.Context, sel *lspSelection) lsp.Client {
+	if sel == nil {
 		return nil
 	}
-	rootURI := opts.GoLSPRootURI
-	if rootURI == "" && filepath.IsAbs(opts.RepoURL) {
-		rootURI = (&url.URL{Scheme: "file", Path: filepath.ToSlash(opts.RepoURL)}).String()
+	if sel.client != nil {
+		sel.initialized = true
+		return sel.client
 	}
-	resolver, err := newGoplsTCPResolverFn(opts.GoLSPAddr, opts.GoLSPTimeout, rootURI)
+	if sel.initialized {
+		return sel.client
+	}
+	sel.initialized = true
+	client, err := newLSPClientForExt(sel.canonicalExt, sel.rootDir, sel.timeout, sel.clientOpts)
 	if err != nil {
-		slog.WarnContext(ctx, "codegraph: gopls resolver unavailable; continuing without lsp",
-			"addr", opts.GoLSPAddr, "err", err)
+		slog.WarnContext(ctx, "codegraph: lsp client unavailable; continuing without lsp",
+			"ext", sel.canonicalExt, "root", sel.rootDir, "err", err)
 		return nil
 	}
-	return resolver
+	sel.client = client
+	return sel.client
+}
+
+func closeLSPSelections(ctx context.Context, selections []lspSelection) {
+	for _, sel := range selections {
+		if sel.client == nil {
+			continue
+		}
+		if err := sel.client.Close(); err != nil {
+			slog.WarnContext(ctx, "codegraph: close lsp client", "err", err)
+		}
+	}
 }
 
 // isSSHURL reports whether u is an SSH clone URL (git@ SCP syntax or ssh:// scheme).

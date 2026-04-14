@@ -41,14 +41,41 @@ type IndexOptions struct {
 	// Depth controls the git clone depth. 0 defaults to 1 (shallow, production default).
 	// Set higher in tests to make previous commits reachable for incremental diffs.
 	Depth int
-	// GoLSPAddr enables optional Go LSP resolution via a TCP gopls endpoint.
-	// Example: "127.0.0.1:37373". Empty disables LSP for this run.
-	GoLSPAddr string
-	// GoLSPRootURI is the LSP workspace root URI used during initialize.
-	// If empty and RepoURL points at a local path, a file:// URI is derived.
-	GoLSPRootURI string
-	// GoLSPTimeout controls request/dial timeouts for GoLSPAddr.
+	// GoLSPRootDir enables optional Go LSP resolution via a local gopls process.
+	// It must be the absolute path to the checked-out source tree that gopls
+	// should index.  Empty disables LSP for this run.
+	GoLSPRootDir string
+	// GoLSPTimeout controls per-request timeouts for the gopls subprocess.
 	GoLSPTimeout time.Duration
+	// TypeScriptLSPRootDir enables optional TypeScript/JavaScript LSP
+	// resolution via a local stdio language server process.
+	// It must be the absolute path to the checked-out source tree.
+	// Empty disables TypeScript LSP for this run.
+	TypeScriptLSPRootDir string
+	// TypeScriptLSPTimeout controls per-request timeouts for the TypeScript
+	// language server subprocess.
+	TypeScriptLSPTimeout time.Duration
+	// TypeScriptLSPUseTSGo selects tsgo (`tsgo --lsp`) instead of
+	// typescript-language-server for TypeScript/JavaScript extensions.
+	TypeScriptLSPUseTSGo bool
+	// ClangdLSPRootDir enables optional C/C++ LSP resolution via clangd.
+	// It must be the absolute path to the checked-out source tree.
+	// Empty disables clangd for this run.
+	ClangdLSPRootDir string
+	// ClangdLSPTimeout controls per-request timeouts for the clangd subprocess.
+	ClangdLSPTimeout time.Duration
+	// PythonLSPRootDir enables optional Python LSP resolution via pyright.
+	// It must be the absolute path to the checked-out source tree.
+	// Empty disables Python LSP for this run.
+	PythonLSPRootDir string
+	// PythonLSPTimeout controls per-request timeouts for the pyright subprocess.
+	PythonLSPTimeout time.Duration
+	// MarkdownLSPRootDir enables optional Markdown LSP resolution via marksman.
+	// It must be the absolute path to the checked-out source tree.
+	// Empty disables marksman for this run.
+	MarkdownLSPRootDir string
+	// MarkdownLSPTimeout controls per-request timeouts for the marksman subprocess.
+	MarkdownLSPTimeout time.Duration
 }
 
 const defaultMaxBytes int64 = 512 * 1024
@@ -73,13 +100,9 @@ func IndexRepo(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions) (*Ind
 		opts.DefaultBranch = "main"
 	}
 
-	lspResolver := lspResolverForIndex(ctx, opts)
-	if lspResolver != nil {
-		defer func() {
-			if err := lspResolver.Close(); err != nil {
-				slog.WarnContext(ctx, "codegraph: close lsp resolver", "err", err)
-			}
-		}()
+	lspSelections := newLSPRegistry(opts)
+	if len(lspSelections) > 0 {
+		defer closeLSPSelections(ctx, lspSelections)
 	}
 
 	cloneOpts, err := newInMemoryCloneOptions(opts)
@@ -122,7 +145,7 @@ func IndexRepo(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions) (*Ind
 			// prev commit unreachable in shallow clone — full re-index
 			slog.WarnContext(ctx, "codegraph: prev commit not reachable, falling back to full index",
 				"prev_sha", opts.PrevCommit)
-			if err2 := indexFullTree(ctx, pool, opts, headTree, res, lspResolver); err2 != nil {
+			if err2 := indexFullTree(ctx, pool, opts, headTree, res, lspSelections); err2 != nil {
 				return nil, err2
 			}
 		} else {
@@ -130,12 +153,12 @@ func IndexRepo(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions) (*Ind
 			if treeErr != nil {
 				return nil, fmt.Errorf("codegraph: prev tree: %w", treeErr)
 			}
-			if err2 := indexDiff(ctx, pool, opts, prevTree, headTree, res, lspResolver); err2 != nil {
+			if err2 := indexDiff(ctx, pool, opts, prevTree, headTree, res, lspSelections); err2 != nil {
 				return nil, err2
 			}
 		}
 	} else {
-		if err2 := indexFullTree(ctx, pool, opts, headTree, res, lspResolver); err2 != nil {
+		if err2 := indexFullTree(ctx, pool, opts, headTree, res, lspSelections); err2 != nil {
 			return nil, err2
 		}
 	}

@@ -22,7 +22,7 @@ import (
 func TestNewResolver_StoresFields(t *testing.T) {
 	t.Parallel()
 	scopeID := uuid.New()
-	r := NewResolver(nil, scopeID, nil)
+	r := NewResolver(nil, scopeID, nil, "")
 	if r == nil {
 		t.Fatal("NewResolver returned nil")
 	}
@@ -35,7 +35,7 @@ func TestNewResolver_StoresFields(t *testing.T) {
 
 func TestResolver_Resolve_LocalHit(t *testing.T) {
 	t.Parallel()
-	r := NewResolver(nil, uuid.New(), nil)
+	r := NewResolver(nil, uuid.New(), nil, "")
 
 	want := uuid.New()
 	local := map[string]uuid.UUID{"MyFunc": want}
@@ -52,7 +52,7 @@ func TestResolver_Resolve_LocalHit(t *testing.T) {
 func TestResolver_Resolve_LocalHit_CaseSensitive(t *testing.T) {
 	t.Parallel()
 	// The local table is a plain Go map: "MyFunc" and "myfunc" are distinct keys.
-	r := NewResolver(nil, uuid.New(), nil)
+	r := NewResolver(nil, uuid.New(), nil, "")
 
 	upper := uuid.New()
 	lower := uuid.New()
@@ -74,7 +74,7 @@ func TestResolver_Resolve_LocalHit_CaseSensitive(t *testing.T) {
 
 func TestResolver_Resolve_LocalHit_ReturnsCorrectAmongMany(t *testing.T) {
 	t.Parallel()
-	r := NewResolver(nil, uuid.New(), nil)
+	r := NewResolver(nil, uuid.New(), nil, "")
 
 	local := map[string]uuid.UUID{
 		"Alpha": uuid.New(),
@@ -96,7 +96,7 @@ func TestResolver_Resolve_LocalHit_ReturnsCorrectAmongMany(t *testing.T) {
 func TestResolver_Resolve_LocalHit_DifferentFilePaths(t *testing.T) {
 	t.Parallel()
 	// The filePath parameter is only used in stages 2/3; stage 1 ignores it.
-	r := NewResolver(nil, uuid.New(), nil)
+	r := NewResolver(nil, uuid.New(), nil, "")
 
 	want := uuid.New()
 	local := map[string]uuid.UUID{"Foo": want}

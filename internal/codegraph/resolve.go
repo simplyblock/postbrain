@@ -2,60 +2,58 @@ package codegraph
 
 import (
 	"context"
+	"path"
 	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/simplyblock/postbrain/internal/codegraph/lsp"
 	"github.com/simplyblock/postbrain/internal/db/compat"
 )
-
-// LSPResolver is the interface for optional language-server-based resolution.
-// Implementations are registered per file extension.
-type LSPResolver interface {
-	// Language returns the file extension this resolver handles (e.g. ".go").
-	Language() string
-	// Resolve maps an unresolved symbol in a given file to a canonical entity name.
-	// Returns "" if unresolvable.
-	Resolve(ctx context.Context, file, symbol string) (string, error)
-	// Close releases any resources (LSP process, temp dir).
-	Close() error
-}
 
 // Resolver holds the resolution context for a single file extraction pass.
 type Resolver struct {
 	pool    *pgxpool.Pool
 	scopeID uuid.UUID
-	// lsp is an optional language-specific resolver; nil = not configured.
-	lsp LSPResolver
+	// lsp is an optional LSP client for the language being indexed.
+	// nil means LSP resolution is disabled for this pass.
+	lsp     lsp.Client
+	lspRoot string // absolute path of the LSP workspace root
 }
 
 // NewResolver creates a Resolver for the given scope.
-// lsp may be nil for heuristic-only resolution.
-func NewResolver(pool *pgxpool.Pool, scopeID uuid.UUID, lsp LSPResolver) *Resolver {
-	return &Resolver{pool: pool, scopeID: scopeID, lsp: lsp}
+// lspClient may be nil to disable LSP-assisted resolution.
+// lspRoot is the absolute path that was passed to the LSP client as rootDir;
+// it is used to convert repo-relative file paths to absolute paths.
+func NewResolver(pool *pgxpool.Pool, scopeID uuid.UUID, lspClient lsp.Client, lspRoot string) *Resolver {
+	return &Resolver{pool: pool, scopeID: scopeID, lsp: lspClient, lspRoot: lspRoot}
 }
 
-// Resolve attempts to resolve a target symbol name to an entity ID using a
-// three-stage pipeline: local → import-aware → suffix fallback.
+// Resolve attempts to map targetName to an entity ID using a four-stage pipeline:
+//
+//  1. Local symbol table (exact match, no I/O).
+//  2. Import-aware DB lookup (walk stored import edges, try pkg.symbol).
+//  3. LSP-assisted resolution (DocumentSymbols + Imports + WorkspaceSymbols).
+//  4. Suffix fallback (DB LIKE query).
 func (r *Resolver) Resolve(ctx context.Context, filePath, targetName string, localSymTable map[string]uuid.UUID) (uuid.UUID, bool) {
 	// Stage 1: local symbol table.
 	if id, ok := localSymTable[targetName]; ok {
 		return id, true
 	}
 
-	// Stage 2: import-aware lookup.
+	// Stage 2: import-aware DB lookup.
 	if id, ok := r.resolveViaImports(ctx, filePath, targetName); ok {
 		return id, true
 	}
 
-	// Stage 2.5: optional language-server resolution.
+	// Stage 3: LSP-assisted resolution.
 	if id, ok := r.resolveViaLSP(ctx, filePath, targetName, localSymTable); ok {
 		return id, true
 	}
 
-	// Stage 3: suffix fallback.
+	// Stage 4: suffix fallback.
 	if r.pool != nil {
 		candidates, err := compat.FindEntitiesBySuffix(ctx, r.pool, r.scopeID, targetName)
 		if err == nil && len(candidates) > 0 {
@@ -73,38 +71,27 @@ func (r *Resolver) resolveViaImports(ctx context.Context, filePath, targetName s
 		return uuid.UUID{}, false
 	}
 
-	// File canonicals are lowercased (see extract_go.go etc).
 	fileCanon := strings.ToLower(filepath.ToSlash(filePath))
-
-	// Try to find the file entity in the database.
 	fileEntity, err := compat.GetEntityByCanonical(ctx, r.pool, r.scopeID, "file", fileCanon)
 	if err != nil || fileEntity == nil {
 		return uuid.UUID{}, false
 	}
 
-	// Get outgoing imports edges for this file entity.
 	relations, err := compat.ListOutgoingRelations(ctx, r.pool, r.scopeID, fileEntity.ID, "imports")
 	if err != nil || len(relations) == 0 {
 		return uuid.UUID{}, false
 	}
 
-	// Code entity types to try.
 	codeTypes := []string{"function", "method", "type", "struct", "interface", "class", "variable"}
-
 	for _, rel := range relations {
-		// Get the imported package entity.
 		pkgEntity, err := compat.GetEntityByID(ctx, r.pool, rel.ObjectID)
 		if err != nil || pkgEntity == nil {
 			continue
 		}
-
-		// Try <pkgCanonical>.<targetName> and <pkgName>.<targetName>.
-		candidates := []string{
+		for _, cand := range []string{
 			pkgEntity.Canonical + "." + targetName,
 			pkgEntity.Name + "." + targetName,
-		}
-
-		for _, cand := range candidates {
+		} {
 			for _, codeType := range codeTypes {
 				ent, err := compat.GetEntityByCanonical(ctx, r.pool, r.scopeID, codeType, cand)
 				if err == nil && ent != nil {
@@ -113,37 +100,177 @@ func (r *Resolver) resolveViaImports(ctx context.Context, filePath, targetName s
 			}
 		}
 	}
+	return uuid.UUID{}, false
+}
+
+// resolveViaLSP uses the language server to resolve targetName to a canonical
+// entity name and then looks it up in the database.  Two strategies are tried:
+//
+// Strategy A — document-local declaration:
+//
+//	DocumentSymbols finds targetName declared in filePath; CanonicalName at
+//	that position yields the fully-qualified identifier.
+//
+// Strategy B — cross-package reference:
+//
+//	Imports lists the packages in scope; WorkspaceSymbols finds all workspace
+//	declarations named targetName; the result whose container matches an
+//	imported package is preferred.
+func (r *Resolver) resolveViaLSP(ctx context.Context, filePath, targetName string, localSymTable map[string]uuid.UUID) (uuid.UUID, bool) {
+	if r.lsp == nil || !lspSupportsFile(r.lsp, filePath) {
+		return uuid.UUID{}, false
+	}
+	absFile := r.absPath(filePath)
+	var docSyms []lsp.Symbol
+
+	// Strategy A: declaration lives in the same file.
+	if syms, err := r.lsp.DocumentSymbols(ctx, absFile); err == nil {
+		docSyms = syms
+		for _, s := range docSyms {
+			if !strings.EqualFold(s.Name, targetName) {
+				continue
+			}
+			if canonical, err := r.lsp.CanonicalName(ctx, absFile, s.Location.Range.Start); err == nil && canonical != "" {
+				if id, ok := r.lookupCanonical(ctx, canonical, localSymTable); ok {
+					return id, true
+				}
+			}
+		}
+	}
+
+	// Strategy B: declaration is in another package imported by this file.
+	importedPkgs := r.importedPackageNames(ctx, absFile)
+	wsSyms, err := r.lsp.WorkspaceSymbols(ctx, targetName)
+	if err != nil {
+		return uuid.UUID{}, false
+	}
+	for _, s := range wsSyms {
+		if !strings.EqualFold(s.Name, targetName) {
+			continue
+		}
+		// When we know the imported packages, only accept symbols whose
+		// container matches one of them.  When Imports() is unavailable we
+		// fall back to trusting the first workspace hit.
+		if len(importedPkgs) > 0 {
+			container := containerFromCanonical(s.Canonical)
+			if _, ok := importedPkgs[container]; !ok {
+				continue
+			}
+		}
+		if id, ok := r.lookupCanonical(ctx, s.Canonical, localSymTable); ok {
+			return id, true
+		}
+	}
+
+	// Strategy C: same-package unqualified symbol.
+	// When LSP call hierarchy/workspace symbol lookup is unavailable but the
+	// current file clearly belongs to package "X", prefer "X.<target>".
+	if !strings.Contains(targetName, ".") {
+		for _, s := range docSyms {
+			container := containerFromCanonical(s.Canonical)
+			if container == "" || container == s.Canonical {
+				continue
+			}
+			if id, ok := r.lookupCanonical(ctx, container+"."+targetName, localSymTable); ok {
+				return id, true
+			}
+			break
+		}
+		// If DocumentSymbols do not expose package-qualified canonical names,
+		// derive the package container from file->defines relations in the DB.
+		if id, ok := r.lookupViaFileDefinedContainer(ctx, filePath, targetName, localSymTable); ok {
+			return id, true
+		}
+	}
 
 	return uuid.UUID{}, false
 }
 
-func (r *Resolver) resolveViaLSP(ctx context.Context, filePath, targetName string, localSymTable map[string]uuid.UUID) (uuid.UUID, bool) {
-	if r.lsp == nil || r.lsp.Language() == "" {
-		return uuid.UUID{}, false
-	}
-	if !strings.EqualFold(filepath.Ext(filePath), r.lsp.Language()) {
+func (r *Resolver) lookupViaFileDefinedContainer(ctx context.Context, filePath, targetName string, localSymTable map[string]uuid.UUID) (uuid.UUID, bool) {
+	if r.pool == nil {
 		return uuid.UUID{}, false
 	}
 
-	canonical, err := r.lsp.Resolve(ctx, filePath, targetName)
-	if err != nil || canonical == "" {
+	fileCanon := strings.ToLower(filepath.ToSlash(filePath))
+	fileEntity, err := compat.GetEntityByCanonical(ctx, r.pool, r.scopeID, "file", fileCanon)
+	if err != nil || fileEntity == nil {
 		return uuid.UUID{}, false
 	}
 
+	relations, err := compat.ListOutgoingRelations(ctx, r.pool, r.scopeID, fileEntity.ID, "defines")
+	if err != nil || len(relations) == 0 {
+		return uuid.UUID{}, false
+	}
+
+	for _, rel := range relations {
+		defEntity, err := compat.GetEntityByID(ctx, r.pool, rel.ObjectID)
+		if err != nil || defEntity == nil {
+			continue
+		}
+		container := containerFromCanonical(defEntity.Canonical)
+		if container == "" || container == defEntity.Canonical {
+			continue
+		}
+		if id, ok := r.lookupCanonical(ctx, container+"."+targetName, localSymTable); ok {
+			return id, true
+		}
+	}
+	return uuid.UUID{}, false
+}
+
+// importedPackageNames returns the set of package names (alias or base of path)
+// that filePath imports, using the LSP client.  Returns nil on error.
+func (r *Resolver) importedPackageNames(ctx context.Context, absFile string) map[string]struct{} {
+	if r.lsp == nil {
+		return nil
+	}
+	imports, err := r.lsp.Imports(ctx, absFile)
+	if err != nil || len(imports) == 0 {
+		return nil
+	}
+	pkgs := make(map[string]struct{}, len(imports))
+	for _, imp := range imports {
+		name := imp.Alias
+		if name == "" {
+			name = path.Base(imp.Path) // "github.com/foo/bar" → "bar"
+		}
+		pkgs[name] = struct{}{}
+	}
+	return pkgs
+}
+
+// lookupCanonical finds a canonical entity name in the local symbol table and
+// then, if that fails, in the database across all code entity types.
+func (r *Resolver) lookupCanonical(ctx context.Context, canonical string, localSymTable map[string]uuid.UUID) (uuid.UUID, bool) {
 	if id, ok := localSymTable[canonical]; ok {
 		return id, true
 	}
 	if r.pool == nil {
 		return uuid.UUID{}, false
 	}
-
-	codeTypes := []string{"function", "method", "type", "struct", "interface", "class", "variable"}
-	for _, codeType := range codeTypes {
-		ent, qErr := compat.GetEntityByCanonical(ctx, r.pool, r.scopeID, codeType, canonical)
-		if qErr == nil && ent != nil {
+	for _, codeType := range []string{"function", "method", "type", "struct", "interface", "class", "variable"} {
+		ent, err := compat.GetEntityByCanonical(ctx, r.pool, r.scopeID, codeType, canonical)
+		if err == nil && ent != nil {
 			return ent.ID, true
 		}
 	}
-
 	return uuid.UUID{}, false
+}
+
+// absPath converts a (possibly repo-relative) file path to absolute using the
+// LSP workspace root.
+func (r *Resolver) absPath(filePath string) string {
+	if filepath.IsAbs(filePath) || r.lspRoot == "" {
+		return filePath
+	}
+	return filepath.Join(r.lspRoot, filepath.FromSlash(filePath))
+}
+
+// containerFromCanonical returns everything before the final dot in a
+// canonical name, e.g. "pkg.Sub" → "pkg", "pkg" → "pkg".
+func containerFromCanonical(canonical string) string {
+	if i := strings.LastIndex(canonical, "."); i >= 0 {
+		return canonical[:i]
+	}
+	return canonical
 }

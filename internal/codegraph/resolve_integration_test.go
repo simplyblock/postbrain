@@ -54,7 +54,7 @@ func TestResolverStage2_ImportAware(t *testing.T) {
 		t.Fatalf("upsert relation: %v", err)
 	}
 
-	r := codegraph.NewResolver(pool, scope.ID, nil)
+	r := codegraph.NewResolver(pool, scope.ID, nil, "")
 
 	// "Println" is absent from the local table → stage 1 misses → stage 2 finds it.
 	id, ok := r.Resolve(ctx, "auth/token.go", "Println", nil)
@@ -87,7 +87,7 @@ func TestResolverStage3_SuffixFallback(t *testing.T) {
 		t.Fatalf("upsert entity: %v", err)
 	}
 
-	r := codegraph.NewResolver(pool, scope.ID, nil)
+	r := codegraph.NewResolver(pool, scope.ID, nil, "")
 
 	// No file entity in DB → stage 2 is skipped. Stage 3 matches by suffix.
 	id, ok := r.Resolve(ctx, "some/other/file.go", "VerifyToken", nil)
@@ -107,7 +107,7 @@ func TestResolverStage3_NotFound(t *testing.T) {
 	principal := testhelper.CreateTestPrincipal(t, pool, "user", "resolver-notfound-"+uuid.New().String())
 	scope := testhelper.CreateTestScope(t, pool, "project", "resolver-notfound-"+uuid.New().String(), nil, principal.ID)
 
-	r := codegraph.NewResolver(pool, scope.ID, nil)
+	r := codegraph.NewResolver(pool, scope.ID, nil, "")
 
 	id, ok := r.Resolve(ctx, "file.go", "NonExistentSymbolXYZ", nil)
 	if ok {

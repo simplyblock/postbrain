@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -340,6 +341,115 @@ func TestCheckUpdateCommand_DevBuild(t *testing.T) {
 	}
 }
 
+func TestBuildSnapshotDescription_WriteIncludesContentSize(t *testing.T) {
+	t.Parallel()
+
+	desc := buildSnapshotDescription("Write", map[string]any{
+		"file_path": "/tmp/main.go",
+		"content":   "package main\n\nfunc main() {}\n",
+	}, "file:/tmp/main.go")
+
+	if !strings.Contains(desc, "Tool Write called on file:/tmp/main.go") {
+		t.Fatalf("description missing source ref: %q", desc)
+	}
+	if !strings.Contains(desc, "content_bytes=") {
+		t.Fatalf("description missing content size hint: %q", desc)
+	}
+}
+
+func TestBuildSnapshotDescription_BashIncludesCommandAndTruncates(t *testing.T) {
+	t.Parallel()
+
+	cmdText := strings.Repeat("echo very-long-command ", 20)
+	desc := buildSnapshotDescription("Bash", map[string]any{
+		"command": cmdText,
+	}, "")
+
+	if !strings.Contains(desc, "Tool Bash called") {
+		t.Fatalf("description missing tool call prefix: %q", desc)
+	}
+	if !strings.Contains(desc, "command=") {
+		t.Fatalf("description missing command summary: %q", desc)
+	}
+	if strings.Contains(desc, cmdText) {
+		t.Fatalf("description should truncate very long command: %q", desc)
+	}
+}
+
+func TestBuildSnapshotDescription_UsesKnownInputFields(t *testing.T) {
+	t.Parallel()
+
+	desc := buildSnapshotDescription("Read", map[string]any{
+		"path":    "/tmp/readme.md",
+		"pattern": "TODO",
+		"limit":   25,
+	}, "")
+
+	wantParts := []string{
+		"Tool Read called",
+		"path=/tmp/readme.md",
+		"pattern=TODO",
+		"limit=25",
+	}
+	for _, part := range wantParts {
+		if !strings.Contains(desc, part) {
+			t.Fatalf("description missing %q: %q", part, desc)
+		}
+	}
+}
+
+func TestBuildSnapshotDescription_LargeInputFallsBackToKeyCount(t *testing.T) {
+	t.Parallel()
+
+	input := map[string]any{}
+	for i := 0; i < 40; i++ {
+		input[fmt.Sprintf("k%d", i)] = i
+	}
+
+	desc := buildSnapshotDescription("Edit", input, "")
+	if !strings.Contains(desc, "input_keys=40") {
+		t.Fatalf("description missing key-count fallback: %q", desc)
+	}
+}
+
+func TestNormalizePathToProjectRoot_AbsoluteUnderCWD_ReturnsRelative(t *testing.T) {
+	got := normalizePathToProjectRoot(
+		"/Volumes/git/postbrain/internal/codegraph/lsp/pyright.go",
+		"/Volumes/git/postbrain",
+	)
+	want := "internal/codegraph/lsp/pyright.go"
+	if got != want {
+		t.Fatalf("normalizePathToProjectRoot() = %q, want %q", got, want)
+	}
+}
+
+func TestNormalizePathToProjectRoot_PathOutsideCWD_StaysAbsolute(t *testing.T) {
+	got := normalizePathToProjectRoot("/tmp/other/file.go", "/Volumes/git/postbrain")
+	want := "/tmp/other/file.go"
+	if got != want {
+		t.Fatalf("normalizePathToProjectRoot() = %q, want %q", got, want)
+	}
+}
+
+func TestNormalizeSnapshotToolInputPaths_FilePathAndPath(t *testing.T) {
+	in := map[string]any{
+		"file_path": "/Volumes/git/postbrain/cmd/postbrain-cli/main.go",
+		"path":      "/Volumes/git/postbrain/internal/codegraph/lsp/pyright.go",
+		"query":     "snapshot",
+	}
+	out := normalizeSnapshotToolInputPaths(in, "/Volumes/git/postbrain")
+
+	if out["file_path"] != "cmd/postbrain-cli/main.go" {
+		t.Fatalf("file_path = %v, want relative path", out["file_path"])
+	}
+	if out["path"] != "internal/codegraph/lsp/pyright.go" {
+		t.Fatalf("path = %v, want relative path", out["path"])
+	}
+	if out["query"] != "snapshot" {
+		t.Fatalf("query = %v, want unchanged", out["query"])
+	}
+}
+
 func TestResolveScopeForInstall_PrefersEnvVar(t *testing.T) {
 	t.Setenv("POSTBRAIN_SCOPE", "project:env/scope")
 
@@ -500,7 +610,7 @@ func TestResolveScopeForRuntime_PrefersScopeFlag(t *testing.T) {
 	t.Cleanup(func() { scopeFlag = prev })
 	t.Setenv("POSTBRAIN_SCOPE", "project:from-env")
 
-	if got := resolveScopeForRuntime(); got != "project:from-flag" {
+	if got := resolveScopeForRuntime("/tmp/ignored"); got != "project:from-flag" {
 		t.Fatalf("resolveScopeForRuntime() = %q, want project:from-flag", got)
 	}
 }
@@ -512,10 +622,6 @@ func TestResolveScopeForRuntime_FallsBackToCwdPostbrainBase(t *testing.T) {
 	t.Setenv("POSTBRAIN_SCOPE", "")
 
 	targetDir := t.TempDir()
-	prevGetwd := getwdFn
-	getwdFn = func() (string, error) { return targetDir, nil }
-	t.Cleanup(func() { getwdFn = prevGetwd })
-
 	if err := os.MkdirAll(filepath.Join(targetDir, ".codex"), 0o755); err != nil {
 		t.Fatalf("mkdir .codex: %v", err)
 	}
@@ -523,18 +629,15 @@ func TestResolveScopeForRuntime_FallsBackToCwdPostbrainBase(t *testing.T) {
 		t.Fatalf("write postbrain-base.md: %v", err)
 	}
 
-	if got := resolveScopeForRuntime(); got != "project:from-cwd" {
+	if got := resolveScopeForRuntime(targetDir); got != "project:from-cwd" {
 		t.Fatalf("resolveScopeForRuntime() = %q, want project:from-cwd", got)
 	}
 }
 
 func TestResolveURLForRuntime_PrefersEnvVar(t *testing.T) {
-	prevGetwd := getwdFn
-	getwdFn = func() (string, error) { return "", nil }
-	t.Cleanup(func() { getwdFn = prevGetwd })
 	t.Setenv("POSTBRAIN_URL", "http://env-url:7433/")
 
-	if got := resolveURLForRuntime(); got != "http://env-url:7433" {
+	if got := resolveURLForRuntime(""); got != "http://env-url:7433" {
 		t.Fatalf("resolveURLForRuntime() = %q, want env URL", got)
 	}
 }
@@ -543,10 +646,6 @@ func TestResolveURLForRuntime_FallsBackToCwdPostbrainBase(t *testing.T) {
 	t.Setenv("POSTBRAIN_URL", "")
 	targetDir := t.TempDir()
 
-	prevGetwd := getwdFn
-	getwdFn = func() (string, error) { return targetDir, nil }
-	t.Cleanup(func() { getwdFn = prevGetwd })
-
 	if err := os.MkdirAll(filepath.Join(targetDir, ".agents"), 0o755); err != nil {
 		t.Fatalf("mkdir .agents: %v", err)
 	}
@@ -554,18 +653,15 @@ func TestResolveURLForRuntime_FallsBackToCwdPostbrainBase(t *testing.T) {
 		t.Fatalf("write postbrain-base.md: %v", err)
 	}
 
-	if got := resolveURLForRuntime(); got != "http://from-cwd:7433" {
+	if got := resolveURLForRuntime(targetDir); got != "http://from-cwd:7433" {
 		t.Fatalf("resolveURLForRuntime() = %q, want http://from-cwd:7433", got)
 	}
 }
 
 func TestResolveURLForRuntime_DefaultWhenUnset(t *testing.T) {
-	prevGetwd := getwdFn
-	getwdFn = func() (string, error) { return "", os.ErrNotExist }
-	t.Cleanup(func() { getwdFn = prevGetwd })
 	t.Setenv("POSTBRAIN_URL", "")
 
-	if got := resolveURLForRuntime(); got != "http://localhost:7433" {
+	if got := resolveURLForRuntime(""); got != "http://localhost:7433" {
 		t.Fatalf("resolveURLForRuntime() = %q, want default URL", got)
 	}
 }

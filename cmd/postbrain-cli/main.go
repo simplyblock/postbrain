@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -44,7 +45,6 @@ const latestReleaseAPIURL = "https://api.github.com/repos/simplyblock/postbrain/
 
 var detectCodexVersionFn = detectCodexVersion
 var fetchLatestPostbrainVersionFn = fetchLatestPostbrainVersion
-var getwdFn = os.Getwd
 
 // hookClient is a minimal HTTP client for the Postbrain REST API.
 type hookClient struct {
@@ -53,8 +53,8 @@ type hookClient struct {
 	http    *http.Client
 }
 
-func newHookClient() *hookClient {
-	url := resolveURLForRuntime()
+func newHookClient(cwd string) *hookClient {
+	url := resolveURLForRuntime(cwd)
 	token := os.Getenv("POSTBRAIN_TOKEN")
 	return &hookClient{
 		baseURL: strings.TrimRight(url, "/"),
@@ -175,8 +175,9 @@ func snapshotCmd() *cobra.Command {
 
 func runSnapshot(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
-	client := newHookClient()
-	scope := resolveScopeForRuntime()
+	cwd := runtimeCWD()
+	client := newHookClient(cwd)
+	scope := resolveScopeForRuntime(cwd)
 	if scope == "" {
 		slog.Info("snapshot: no scope configured, skipping")
 		return nil
@@ -201,19 +202,18 @@ func runSnapshot(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	normalizedInput := normalizeSnapshotToolInputPaths(hookData.ToolInput, cwd)
+
 	// Extract file path from tool input.
 	var sourceRef string
-	if fp, ok := hookData.ToolInput["file_path"].(string); ok {
+	if fp, ok := normalizedInput["file_path"].(string); ok {
 		sourceRef = "file:" + fp
-	} else if fp, ok := hookData.ToolInput["path"].(string); ok {
+	} else if fp, ok := normalizedInput["path"].(string); ok {
 		sourceRef = "file:" + fp
 	}
 
-	// Build description.
-	desc := fmt.Sprintf("Tool %s called", hookData.ToolName)
-	if sourceRef != "" {
-		desc = fmt.Sprintf("Tool %s called on %s", hookData.ToolName, sourceRef)
-	}
+	// Build a compact, useful summary for memory content.
+	desc := buildSnapshotDescription(hookData.ToolName, normalizedInput, sourceRef)
 
 	// 60s dedup check: query recent memories with same source_ref.
 	if sourceRef != "" {
@@ -252,6 +252,177 @@ func runSnapshot(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+func buildSnapshotDescription(toolName string, toolInput map[string]any, sourceRef string) string {
+	desc := fmt.Sprintf("Tool %s called", toolName)
+	if sourceRef != "" {
+		desc += " on " + sourceRef
+	}
+
+	details := snapshotInputDetails(toolInput)
+	if len(details) == 0 {
+		return desc
+	}
+	return fmt.Sprintf("%s (%s)", desc, strings.Join(details, ", "))
+}
+
+func snapshotInputDetails(toolInput map[string]any) []string {
+	if len(toolInput) == 0 {
+		return nil
+	}
+
+	details := make([]string, 0, 6)
+	added := map[string]struct{}{}
+	add := func(key, value string) {
+		if strings.TrimSpace(value) == "" {
+			return
+		}
+		if _, ok := added[key]; ok {
+			return
+		}
+		details = append(details, fmt.Sprintf("%s=%s", key, value))
+		added[key] = struct{}{}
+	}
+
+	if cmd := snapshotStringValue(toolInput["command"]); cmd != "" {
+		add("command", snapshotQuote(snapshotTruncateWhitespace(cmd, 120)))
+	}
+	if cmd := snapshotStringValue(toolInput["cmd"]); cmd != "" {
+		add("command", snapshotQuote(snapshotTruncateWhitespace(cmd, 120)))
+	}
+	if content := snapshotStringValue(toolInput["content"]); content != "" {
+		add("content_bytes", strconv.Itoa(len(content)))
+	}
+	if oldString := snapshotStringValue(toolInput["old_string"]); oldString != "" {
+		add("old_string_bytes", strconv.Itoa(len(oldString)))
+	}
+	if newString := snapshotStringValue(toolInput["new_string"]); newString != "" {
+		add("new_string_bytes", strconv.Itoa(len(newString)))
+	}
+
+	orderedKeys := []string{
+		"file_path", "path", "url", "query", "pattern", "target",
+		"line", "lineno", "limit", "id", "name",
+	}
+	for _, key := range orderedKeys {
+		if value, ok := snapshotScalarString(toolInput[key]); ok {
+			add(key, snapshotTruncateWhitespace(value, 80))
+		}
+	}
+
+	if len(details) == 0 {
+		add("input_keys", strconv.Itoa(len(toolInput)))
+		return details
+	}
+
+	// Include a small deterministic tail of scalar keys for extra context.
+	var extraKeys []string
+	for key := range toolInput {
+		if _, ok := added[key]; ok {
+			continue
+		}
+		if _, ok := snapshotScalarString(toolInput[key]); !ok {
+			continue
+		}
+		extraKeys = append(extraKeys, key)
+	}
+	sort.Strings(extraKeys)
+	for _, key := range extraKeys {
+		if len(details) >= 6 {
+			break
+		}
+		if value, ok := snapshotScalarString(toolInput[key]); ok {
+			add(key, snapshotTruncateWhitespace(value, 80))
+		}
+	}
+	return details
+}
+
+func snapshotStringValue(v any) string {
+	s, _ := v.(string)
+	return s
+}
+
+func snapshotScalarString(v any) (string, bool) {
+	switch val := v.(type) {
+	case string:
+		return val, true
+	case bool:
+		return strconv.FormatBool(val), true
+	case float64:
+		return strconv.FormatFloat(val, 'f', -1, 64), true
+	case int:
+		return strconv.Itoa(val), true
+	case int64:
+		return strconv.FormatInt(val, 10), true
+	case json.Number:
+		return val.String(), true
+	default:
+		return "", false
+	}
+}
+
+func snapshotTruncateWhitespace(s string, max int) string {
+	clean := strings.Join(strings.Fields(strings.TrimSpace(s)), " ")
+	if max <= 0 || len(clean) <= max {
+		return clean
+	}
+	if max <= 3 {
+		return clean[:max]
+	}
+	return clean[:max-3] + "..."
+}
+
+func snapshotQuote(s string) string {
+	if s == "" {
+		return ""
+	}
+	return strconv.Quote(s)
+}
+
+func normalizeSnapshotToolInputPaths(toolInput map[string]any, cwd string) map[string]any {
+	if len(toolInput) == 0 {
+		return toolInput
+	}
+
+	out := make(map[string]any, len(toolInput))
+	for k, v := range toolInput {
+		out[k] = v
+	}
+
+	for _, key := range []string{"file_path", "path"} {
+		if raw, ok := out[key].(string); ok {
+			out[key] = normalizePathToProjectRoot(raw, cwd)
+		}
+	}
+	return out
+}
+
+func normalizePathToProjectRoot(path string, cwd string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+
+	clean := filepath.Clean(path)
+	if !filepath.IsAbs(clean) {
+		return filepath.ToSlash(clean)
+	}
+
+	cwd = strings.TrimSpace(cwd)
+	if cwd == "" {
+		return filepath.ToSlash(clean)
+	}
+
+	rel, err := filepath.Rel(cwd, clean)
+	if err != nil {
+		return filepath.ToSlash(clean)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return filepath.ToSlash(clean)
+	}
+	return filepath.ToSlash(rel)
+}
+
 func summarizeSessionCmd() *cobra.Command {
 	var sessionID string
 	cmd := &cobra.Command{
@@ -269,8 +440,9 @@ func runSummarizeSession(ctx context.Context, sessionID string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	client := newHookClient()
-	scope := resolveScopeForRuntime()
+	cwd := runtimeCWD()
+	client := newHookClient(cwd)
+	scope := resolveScopeForRuntime(cwd)
 	if scope == "" {
 		slog.Info("summarize-session: no scope configured, skipping")
 		return nil
@@ -340,7 +512,7 @@ func runSkillSync(ctx context.Context, agentType, workdir string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	client := newHookClient()
+	client := newHookClient(runtimeCWD())
 
 	resp, err := client.get(ctx, fmt.Sprintf("/v1/skills/search?scope=%s&status=published&limit=100", scopeFlag))
 	if err != nil {
@@ -427,7 +599,7 @@ func skillInstallCmd() *cobra.Command {
 		Short: "Install a single skill by slug",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
-			client := newHookClient()
+			client := newHookClient(runtimeCWD())
 			resp, err := client.get(ctx, fmt.Sprintf("/v1/skills/search?q=%s&scope=%s&limit=1", slug, scopeFlag))
 			if err != nil {
 				return err
@@ -814,29 +986,30 @@ func resolveURLForInstall(cmd *cobra.Command, targetDir string) (string, error) 
 	return strings.TrimRight(trimmed, "/"), nil
 }
 
-func resolveScopeForRuntime() string {
+func resolveScopeForRuntime(cwd string) string {
 	if strings.TrimSpace(scopeFlag) != "" {
 		return strings.TrimSpace(scopeFlag)
 	}
 	if scope := strings.TrimSpace(os.Getenv("POSTBRAIN_SCOPE")); scope != "" {
 		return scope
 	}
-	cwd, err := getwdFn()
-	if err != nil {
-		return ""
-	}
-	return postbraincli.ResolveScopeFromBaseFiles(cwd)
+	return postbraincli.ResolveScopeFromBaseFiles(strings.TrimSpace(cwd))
 }
 
-func resolveURLForRuntime() string {
+func resolveURLForRuntime(cwd string) string {
 	if url := strings.TrimSpace(os.Getenv("POSTBRAIN_URL")); url != "" {
 		return strings.TrimRight(url, "/")
 	}
-	cwd, err := getwdFn()
-	if err == nil {
-		if url := strings.TrimSpace(postbraincli.ResolveURLFromBaseFiles(cwd)); url != "" {
-			return strings.TrimRight(url, "/")
-		}
+	if url := strings.TrimSpace(postbraincli.ResolveURLFromBaseFiles(strings.TrimSpace(cwd))); url != "" {
+		return strings.TrimRight(url, "/")
 	}
 	return "http://localhost:7433"
+}
+
+func runtimeCWD() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return cwd
 }
