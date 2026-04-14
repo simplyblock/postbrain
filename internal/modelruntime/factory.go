@@ -197,10 +197,15 @@ func resolveProviderConfig(baseCfg *config.EmbeddingConfig, model *modelstore.Mo
 	resolvedAPIKey := ""
 	resolvedSummaryModel := ""
 	if profile, ok := baseCfg.Providers[profileName]; ok {
-		if strings.TrimSpace(profile.Backend) != "" {
+		// provider (backend type) is authoritative from the DB — the profile must
+		// not override it, because the model was registered for a specific backend
+		// and changing the profile would silently reroute it to a different API.
+		// The profile supplies credentials (api_key) and optional service_url
+		// overrides that are not persisted in the DB.
+		if resolvedProvider == "" && strings.TrimSpace(profile.Backend) != "" {
 			resolvedProvider = strings.TrimSpace(profile.Backend)
 		}
-		if strings.TrimSpace(profile.ServiceURL) != "" {
+		if resolvedServiceURL == "" && strings.TrimSpace(profile.ServiceURL) != "" {
 			resolvedServiceURL = strings.TrimSpace(profile.ServiceURL)
 		}
 		if strings.TrimSpace(profile.APIKey) != "" {

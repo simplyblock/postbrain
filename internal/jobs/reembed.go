@@ -80,15 +80,34 @@ func (j *ReembedJob) RunText(ctx context.Context) error {
 			break
 		}
 
-		for _, r := range active {
-			content, _ := r.Content.(string)
-			vec, err := j.svc.EmbedText(ctx, content)
-			if err != nil {
-				if markErr := j.markEmbeddingFailedAttempt(ctx, r.ObjectType, r.ObjectID, modelID, int(r.RetryCount), err); markErr != nil {
-					slog.Error("reembed text: mark failed attempt error", "object_id", r.ObjectID, "error", markErr)
+		texts := make([]string, len(active))
+		for i, r := range active {
+			texts[i], _ = r.Content.(string)
+		}
+
+		vecs, batchErr := j.svc.EmbedTextBatch(ctx, texts)
+		if batchErr != nil {
+			// Batch call failed entirely; fall back to per-item so partial
+			// progress is still saved and each item gets its own retry count.
+			slog.Warn("reembed text: batch embed failed, falling back to per-item", "error", batchErr)
+			vecs = nil
+		}
+
+		for i, r := range active {
+			var vec []float32
+			if vecs != nil {
+				vec = vecs[i]
+			} else {
+				var err error
+				content, _ := r.Content.(string)
+				vec, err = j.svc.EmbedText(ctx, content)
+				if err != nil {
+					if markErr := j.markEmbeddingFailedAttempt(ctx, r.ObjectType, r.ObjectID, modelID, int(r.RetryCount), err); markErr != nil {
+						slog.Error("reembed text: mark failed attempt error", "object_id", r.ObjectID, "error", markErr)
+					}
+					slog.Error("reembed text: embed failed", "object_type", r.ObjectType, "object_id", r.ObjectID, "error", err)
+					continue
 				}
-				slog.Error("reembed text: embed failed", "object_type", r.ObjectType, "object_id", r.ObjectID, "error", err)
-				continue
 			}
 			if err := j.updateTextEmbeddingByObjectType(ctx, r.ObjectType, r.ObjectID, vec, modelID); err != nil {
 				if markErr := j.markEmbeddingFailedAttempt(ctx, r.ObjectType, r.ObjectID, modelID, int(r.RetryCount), err); markErr != nil {
@@ -160,14 +179,31 @@ func (j *ReembedJob) RunCode(ctx context.Context) error {
 			break
 		}
 
-		for _, r := range batch {
-			vec, err := j.svc.EmbedCode(ctx, r.Content)
-			if err != nil {
-				if markErr := j.markEmbeddingFailedAttempt(ctx, "memory", r.ObjectID, modelID, int(r.RetryCount), err); markErr != nil {
-					slog.Error("reembed code: mark failed attempt error", "memory_id", r.ObjectID, "error", markErr)
+		codeTexts := make([]string, len(batch))
+		for i, r := range batch {
+			codeTexts[i] = r.Content
+		}
+
+		codeVecs, batchErr := j.svc.EmbedCodeBatch(ctx, codeTexts)
+		if batchErr != nil {
+			slog.Warn("reembed code: batch embed failed, falling back to per-item", "error", batchErr)
+			codeVecs = nil
+		}
+
+		for i, r := range batch {
+			var vec []float32
+			if codeVecs != nil {
+				vec = codeVecs[i]
+			} else {
+				var err error
+				vec, err = j.svc.EmbedCode(ctx, r.Content)
+				if err != nil {
+					if markErr := j.markEmbeddingFailedAttempt(ctx, "memory", r.ObjectID, modelID, int(r.RetryCount), err); markErr != nil {
+						slog.Error("reembed code: mark failed attempt error", "memory_id", r.ObjectID, "error", markErr)
+					}
+					slog.Error("reembed code: embed failed", "memory_id", r.ObjectID, "error", err)
+					continue
 				}
-				slog.Error("reembed code: embed failed", "memory_id", r.ObjectID, "error", err)
-				continue
 			}
 			v := pgvector.NewVector(vec)
 			if err := db.New(j.pool).UpdateMemoryCodeEmbedding(ctx, db.UpdateMemoryCodeEmbeddingParams{

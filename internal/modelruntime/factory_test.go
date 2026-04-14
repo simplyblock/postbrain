@@ -66,7 +66,51 @@ func TestEmbeddingFactory_EmbedderForModel_OpenAI(t *testing.T) {
 	}
 }
 
-func TestEmbeddingFactory_EmbedderForModel_UsesProfileOverride(t *testing.T) {
+// TestEmbeddingFactory_EmbedderForModel_DBProviderTakesPrecedence verifies that
+// the model's stored provider (from the DB) wins over the profile's backend.
+// This prevents rerouting all models to a different backend when the config
+// profile is updated (e.g. switching the "default" profile from ollama to openai
+// must not redirect pre-existing ollama models to openai).
+func TestEmbeddingFactory_EmbedderForModel_DBProviderTakesPrecedence(t *testing.T) {
+	t.Parallel()
+
+	modelID := uuid.New()
+	// Model was registered as ollama but the "default" profile now says openai.
+	factory := modelruntime.NewEmbeddingFactory(&config.EmbeddingConfig{
+		Providers: map[string]config.EmbeddingProviderConfig{
+			"default": {
+				Backend:    "openai",
+				ServiceURL: "https://api.openai.com/v1",
+				APIKey:     "sk-test",
+			},
+		},
+	}, &fakeModelStore{models: map[uuid.UUID]modelstore.ModelConfig{
+		modelID: {
+			ID:             modelID,
+			Provider:       "ollama",
+			ProviderConfig: "default",
+			ProviderModel:  "nomic-embed-text",
+			ServiceURL:     "http://localhost:11434",
+			Dimensions:     768,
+		},
+	}})
+
+	emb, err := factory.EmbedderForModel(context.Background(), modelID)
+	if err != nil {
+		t.Fatalf("EmbedderForModel: %v", err)
+	}
+	ool, ok := emb.(*providers.OllamaEmbedder)
+	if !ok {
+		t.Fatalf("embedder type = %T, want *providers.OllamaEmbedder (DB provider must win over profile backend)", emb)
+	}
+	if ool.ServiceURL() != "http://localhost:11434" {
+		t.Fatalf("ServiceURL = %q, want model's stored service URL", ool.ServiceURL())
+	}
+}
+
+// TestEmbeddingFactory_EmbedderForModel_ProfileBackendFallback verifies that
+// when the DB model has no stored provider, the profile's backend is used.
+func TestEmbeddingFactory_EmbedderForModel_ProfileBackendFallback(t *testing.T) {
 	t.Parallel()
 
 	modelID := uuid.New()
@@ -80,7 +124,7 @@ func TestEmbeddingFactory_EmbedderForModel_UsesProfileOverride(t *testing.T) {
 	}, &fakeModelStore{models: map[uuid.UUID]modelstore.ModelConfig{
 		modelID: {
 			ID:             modelID,
-			Provider:       "openai",
+			Provider:       "", // no provider stored — fall back to profile
 			ProviderConfig: "local-ollama",
 			ProviderModel:  "nomic-embed-text",
 			Dimensions:     768,

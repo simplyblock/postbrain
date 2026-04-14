@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/simplyblock/postbrain/internal/config"
 
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/db/compat"
@@ -19,7 +20,7 @@ import (
 func TestHandleUpdatePrincipal_Success(t *testing.T) {
 	t.Parallel()
 	pool := testhelper.NewTestPool(t)
-	h, err := NewHandler(pool, nil)
+	h, err := NewHandler(pool, nil, &config.Config{})
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}

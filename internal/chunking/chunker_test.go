@@ -135,6 +135,61 @@ func TestChunk_AllContentPreserved(t *testing.T) {
 	}
 }
 
+// ── markdown normalisation ────────────────────────────────────────────────────
+
+func TestSplitSentences_MarkdownHRuleNotASentence(t *testing.T) {
+	t.Parallel()
+	text := "Before rule.\n\n---\n\nAfter rule."
+	got := splitSentences(text)
+	for _, s := range got {
+		if strings.TrimSpace(s) == "---" {
+			t.Errorf("horizontal rule appeared as a sentence: %v", got)
+		}
+	}
+}
+
+func TestSplitSentences_MarkdownHRuleActsAsSeparator(t *testing.T) {
+	t.Parallel()
+	// The two content sentences must both be present even though --- sits between them.
+	text := "First sentence.\n\n---\n\nSecond sentence."
+	got := splitSentences(text)
+	found := map[string]bool{}
+	for _, s := range got {
+		found[s] = true
+	}
+	if !found["First sentence."] {
+		t.Errorf("missing 'First sentence.' in %v", got)
+	}
+	if !found["Second sentence."] {
+		t.Errorf("missing 'Second sentence.' in %v", got)
+	}
+}
+
+func TestSplitSentences_MarkdownHeaderPrefixStripped(t *testing.T) {
+	t.Parallel()
+	text := "## Hardware\n\nSome content."
+	got := splitSentences(text)
+	for _, s := range got {
+		if strings.Contains(s, "#") {
+			t.Errorf("markdown header prefix not stripped in sentence %q", s)
+		}
+	}
+}
+
+func TestChunk_MarkdownSeparatorNotRepeatedInOverlap(t *testing.T) {
+	t.Parallel()
+	// Build a document whose chunk boundary falls at a markdown section separator.
+	// With overlap=2 the separator must not appear more than once in any chunk.
+	body := sentences(5, 100)
+	text := body + "\n\n---\n\n## Hardware\n\n" + sentences(5, 100)
+	chunks := Chunk(text, 200, 2)
+	for i, chunk := range chunks {
+		if c := strings.Count(chunk, "---"); c > 0 {
+			t.Errorf("chunk[%d] contains '---' %d time(s); separator should be stripped:\n%s", i, c, chunk)
+		}
+	}
+}
+
 // ── splitSentences ────────────────────────────────────────────────────────────
 
 func TestSplitSentences_ParagraphBreakIsHardBoundary(t *testing.T) {

@@ -27,8 +27,10 @@ var ageBackfillAdvisoryUnlockSQL = fmt.Sprintf("SELECT pg_advisory_unlock(%d)", 
 // AGEBackfillJob mirrors relational entities/relations into the AGE overlay.
 // It is intended for periodic reconciliation and uses MERGE-based AGE upserts.
 type AGEBackfillJob struct {
-	pool      *pgxpool.Pool
-	batchSize int
+	pool         *pgxpool.Pool
+	batchSize    int
+	syncEntity   func(ctx context.Context, pool *pgxpool.Pool, e *db.Entity) error
+	syncRelation func(ctx context.Context, pool *pgxpool.Pool, rel *db.Relation) error
 }
 
 type ageBackfillLockConn interface {
@@ -43,8 +45,10 @@ func NewAGEBackfillJob(pool *pgxpool.Pool, batchSize int) *AGEBackfillJob {
 		batchSize = defaultAGEBackfillBatchSize
 	}
 	return &AGEBackfillJob{
-		pool:      pool,
-		batchSize: batchSize,
+		pool:         pool,
+		batchSize:    batchSize,
+		syncEntity:   graph.SyncEntityToAGE,
+		syncRelation: graph.SyncRelationToAGE,
 	}
 }
 
@@ -146,7 +150,11 @@ func (j *AGEBackfillJob) backfillEntities(ctx context.Context) (int, error) {
 				Name:       r.Name,
 				Canonical:  r.Canonical,
 			}
-			if err := graph.SyncEntityToAGE(ctx, j.pool, e); err != nil {
+			if err := j.syncEntity(ctx, j.pool, e); err != nil {
+				if errors.Is(err, graph.ErrAGEUnavailable) {
+					slog.Info("age backfill entities: AGE became unavailable mid-run; aborting")
+					return total, nil
+				}
 				return total, fmt.Errorf("age backfill entities: sync %s: %w", e.ID, err)
 			}
 			lastCreatedAt = r.CreatedAt
@@ -211,7 +219,11 @@ func (j *AGEBackfillJob) backfillRelations(ctx context.Context) (int, error) {
 				ObjectID:   r.ObjectID,
 				Confidence: r.Confidence,
 			}
-			if err := graph.SyncRelationToAGE(ctx, j.pool, rel); err != nil {
+			if err := j.syncRelation(ctx, j.pool, rel); err != nil {
+				if errors.Is(err, graph.ErrAGEUnavailable) {
+					slog.Info("age backfill relations: AGE became unavailable mid-run; aborting")
+					return total, nil
+				}
 				if shouldSkipAGEBackfillRelationSyncError(err) {
 					slog.Warn("age backfill relations: skipping relation after AGE internal update failure",
 						"subject_id", r.SubjectID,

@@ -292,6 +292,48 @@ func TestOpenAIEmbedder_ObjectArrayResponse_ColumnVector_SingleInput(t *testing.
 	}
 }
 
+func TestOpenAIEmbedder_NullBytesInInputAreStripped(t *testing.T) {
+	var received string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Input []string `json:"input"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if len(req.Input) > 0 {
+			received = req.Input[0]
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{
+				{"embedding": []float32{1, 2}, "index": 0},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	e := NewOpenAIEmbedder(newOpenAICfg(), "text-embedding-3-small", srv.URL, "sk-test")
+	_, err := e.Embed(context.Background(), "hel\x00lo")
+	if err != nil {
+		t.Fatalf("Embed: %v", err)
+	}
+	if received != "hello" {
+		t.Fatalf("server received %q, want %q", received, "hello")
+	}
+}
+
+func TestOpenAIEmbedder_AllNullBytesReturnsError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	e := NewOpenAIEmbedder(newOpenAICfg(), "text-embedding-3-small", srv.URL, "sk-test")
+	_, err := e.Embed(context.Background(), "\x00\x00\x00")
+	if err == nil {
+		t.Fatal("expected error for all-null-byte input, got nil")
+	}
+}
+
 func TestOpenAIEmbedder_ObjectArrayResponse_MatrixEmbedding_SingleInput(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

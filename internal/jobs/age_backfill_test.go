@@ -7,7 +7,15 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/simplyblock/postbrain/internal/graph"
 )
+
+func TestShouldSkipAGEBackfillRelationSyncError_AGEUnavailable(t *testing.T) {
+	if shouldSkipAGEBackfillRelationSyncError(graph.ErrAGEUnavailable) {
+		t.Fatal("ErrAGEUnavailable must not be skipped; it triggers a clean mid-run abort instead")
+	}
+}
 
 func TestShouldSkipAGEBackfillRelationSyncError_EntityUpdateFailureInternalError(t *testing.T) {
 	err := fmt.Errorf("graph: sync relation to age: %w", &pgconn.PgError{Code: "XX000", Message: "Entity failed to be updated: 3"})

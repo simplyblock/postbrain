@@ -72,8 +72,13 @@ func Chunk(text string, maxRunes, overlap int) []string {
 
 // splitSentences breaks text into individual sentences, preserving punctuation.
 // Paragraph breaks (blank lines) are treated as hard sentence boundaries.
+// Markdown horizontal rules (---, ***, ___) are treated as paragraph separators
+// and stripped from output. Markdown header prefixes (# ## etc.) are removed
+// so headers flow as prose rather than becoming punctuation-free "sentences"
+// that inflate the overlap region.
 func splitSentences(text string) []string {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = normalizeMarkdown(text)
 	var out []string
 	for _, para := range strings.Split(text, "\n\n") {
 		para = strings.TrimSpace(para)
@@ -83,6 +88,66 @@ func splitSentences(text string) []string {
 		out = append(out, splitParagraph(para)...)
 	}
 	return out
+}
+
+// normalizeMarkdown rewrites markdown structural elements so they don't
+// produce empty punctuation-free "sentences" that pollute chunk overlap:
+//   - Horizontal rules (lines of only -, *, or _ with 3+ chars) become blank
+//     lines, acting as paragraph separators.
+//   - ATX header prefixes (leading # characters) are stripped so the heading
+//     text flows as a regular prose sentence.
+func normalizeMarkdown(text string) string {
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if isMarkdownHRule(trimmed) {
+			lines[i] = ""
+			continue
+		}
+		if stripped := stripMarkdownHeader(trimmed); stripped != trimmed {
+			lines[i] = stripped
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// isMarkdownHRule reports whether s is a markdown horizontal rule: three or
+// more of the same character from the set {-, *, _} with optional spaces.
+func isMarkdownHRule(s string) bool {
+	if len(s) < 3 {
+		return false
+	}
+	var marker rune
+	count := 0
+	for _, r := range s {
+		if r == ' ' {
+			continue
+		}
+		if r != '-' && r != '*' && r != '_' {
+			return false
+		}
+		if marker == 0 {
+			marker = r
+		} else if r != marker {
+			return false
+		}
+		count++
+	}
+	return count >= 3
+}
+
+// stripMarkdownHeader removes leading ATX header markers ("# ", "## ", etc.)
+// and returns the plain heading text. Returns s unchanged unless it starts
+// with 1-6 '#' characters followed by at least one space.
+func stripMarkdownHeader(s string) string {
+	i := 0
+	for i < len(s) && s[i] == '#' {
+		i++
+	}
+	if i == 0 || i > 6 || i >= len(s) || s[i] != ' ' {
+		return s
+	}
+	return strings.TrimLeft(s[i:], " ")
 }
 
 func splitParagraph(text string) []string {

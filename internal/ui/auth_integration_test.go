@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/simplyblock/postbrain/internal/auth"
+	"github.com/simplyblock/postbrain/internal/config"
 	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/testhelper"
 	uiapi "github.com/simplyblock/postbrain/internal/ui"
@@ -30,7 +31,7 @@ func TestLoginPOST_WithNext_RedirectsToNext(t *testing.T) {
 		t.Fatalf("create token: %v", err)
 	}
 
-	h, err := uiapi.NewHandler(pool, nil)
+	h, err := uiapi.NewHandler(pool, nil, &config.Config{})
 	if err != nil {
 		t.Fatalf("new handler: %v", err)
 	}
@@ -83,7 +84,7 @@ func TestLogoutPOST_ClearsSessionAndRequiresLoginAgain(t *testing.T) {
 		t.Fatalf("create token: %v", err)
 	}
 
-	h, err := uiapi.NewHandler(pool, nil)
+	h, err := uiapi.NewHandler(pool, nil, &config.Config{})
 	if err != nil {
 		t.Fatalf("new handler: %v", err)
 	}

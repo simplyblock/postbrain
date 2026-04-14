@@ -208,6 +208,35 @@ func (s *EmbeddingService) Analyze(ctx context.Context, text string) (*DocumentA
 	return s.summarizer.Analyze(ctx, text)
 }
 
+// EmbedTextBatch embeds multiple texts using the text model in a single batch call.
+// This reduces API round-trips compared to calling EmbedText per item.
+func (s *EmbeddingService) EmbedTextBatch(ctx context.Context, texts []string) ([][]float32, error) {
+	if s.embedFactory != nil && s.activeTextModelID != nil {
+		emb, err := s.embedFactory.EmbedderForModel(ctx, *s.activeTextModelID)
+		if err != nil {
+			return nil, err
+		}
+		return emb.EmbedBatch(ctx, texts)
+	}
+	return s.text.EmbedBatch(ctx, texts)
+}
+
+// EmbedCodeBatch embeds multiple texts using the code model in a single batch call.
+// Falls back to the text model if no code model is configured.
+func (s *EmbeddingService) EmbedCodeBatch(ctx context.Context, texts []string) ([][]float32, error) {
+	if s.embedFactory != nil && s.activeCodeModelID != nil {
+		emb, err := s.embedFactory.EmbedderForModel(ctx, *s.activeCodeModelID)
+		if err != nil {
+			return nil, err
+		}
+		return emb.EmbedBatch(ctx, texts)
+	}
+	if s.code != nil {
+		return s.code.EmbedBatch(ctx, texts)
+	}
+	return s.text.EmbedBatch(ctx, texts)
+}
+
 // TextEmbedder returns the underlying text Embedder.
 func (s *EmbeddingService) TextEmbedder() Embedder { return s.text }
 

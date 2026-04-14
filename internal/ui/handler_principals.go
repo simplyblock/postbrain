@@ -13,7 +13,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/authz"
 	"github.com/simplyblock/postbrain/internal/codegraph"
 	"github.com/simplyblock/postbrain/internal/db"
@@ -487,7 +486,7 @@ func (h *Handler) handleSyncScopeRepo(w http.ResponseWriter, r *http.Request) {
 	if scope.LastIndexedCommit != nil {
 		prevCommit = *scope.LastIndexedCommit
 	}
-	principalID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
+	principalID := h.principalFromCookie(r)
 	opts := codegraph.IndexOptions{
 		ScopeID:          scope.ID,
 		AuthorID:         principalID,

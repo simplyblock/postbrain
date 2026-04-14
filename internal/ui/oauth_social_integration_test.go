@@ -61,18 +61,20 @@ func TestUISocialLoginE2E_GitHubMockProvider(t *testing.T) {
 		},
 	}
 
-	uiCfg := config.OAuthConfig{
-		BaseURL: "http://placeholder.local",
-		Server: config.OAuthServerConfig{
-			StateTTL: 15 * time.Minute,
-			TokenTTL: 0,
-		},
-		Social: config.OAuthSocialConfig{
-			AutoCreateUsers: true,
+	cfg := &config.Config{
+		OAuth: config.OAuthConfig{
+			BaseURL: "http://placeholder.local",
+			Server: config.OAuthServerConfig{
+				StateTTL: 15 * time.Minute,
+				TokenTTL: 0,
+			},
+			Social: config.OAuthSocialConfig{
+				AutoCreateUsers: true,
+			},
 		},
 	}
 
-	handler, err := uiapi.NewHandlerWithOAuth(pool, nil, uiCfg, providers, stateStore, clientStore, codeStore, issuer, identityStore)
+	handler, err := uiapi.NewHandlerWithOAuth(pool, nil, cfg, providers, stateStore, clientStore, codeStore, issuer, identityStore)
 	if err != nil {
 		t.Fatalf("new ui handler: %v", err)
 	}
@@ -142,18 +144,20 @@ func TestUISocialLoginE2E_AutoCreateDisabled_RequiresProvisionedPrincipal(t *tes
 		},
 	}
 
-	uiCfg := config.OAuthConfig{
-		BaseURL: "http://placeholder.local",
-		Server: config.OAuthServerConfig{
-			StateTTL: 15 * time.Minute,
-			TokenTTL: 0,
-		},
-		Social: config.OAuthSocialConfig{
-			AutoCreateUsers: false,
+	cfg := &config.Config{
+		OAuth: config.OAuthConfig{
+			BaseURL: "http://placeholder.local",
+			Server: config.OAuthServerConfig{
+				StateTTL: 15 * time.Minute,
+				TokenTTL: 0,
+			},
+			Social: config.OAuthSocialConfig{
+				AutoCreateUsers: false,
+			},
 		},
 	}
 
-	handler, err := uiapi.NewHandlerWithOAuth(pool, nil, uiCfg, providers, stateStore, clientStore, codeStore, issuer, identityStore)
+	handler, err := uiapi.NewHandlerWithOAuth(pool, nil, cfg, providers, stateStore, clientStore, codeStore, issuer, identityStore)
 	if err != nil {
 		t.Fatalf("new ui handler: %v", err)
 	}

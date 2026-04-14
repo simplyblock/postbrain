@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/codegraph"
+	"github.com/simplyblock/postbrain/internal/config"
 )
 
 // TestListScopes_NoAuth_Returns401 verifies unauthenticated requests to GET /v1/scopes return 401.
@@ -139,7 +140,7 @@ func TestSetScopeRepo_MissingRepoURL_Returns400(t *testing.T) {
 // TestGetSyncStatus_UnknownScope_ReturnsJSON verifies that getSyncStatus
 // always responds with valid JSON even for a scope that was never synced.
 func TestGetSyncStatus_UnknownScope_ReturnsJSON(t *testing.T) {
-	ro := &Router{syncer: codegraph.NewSyncer()}
+	ro := &Router{syncer: codegraph.NewSyncer(config.CodeGraphConfig{})}
 
 	req := requestWithChiParam(t, "id", uuid.New().String())
 	w := httptest.NewRecorder()

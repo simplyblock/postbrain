@@ -249,6 +249,7 @@ const getMemoriesWithoutChunks = `-- name: GetMemoriesWithoutChunks :many
 SELECT m.id, m.scope_id, m.author_id, m.content FROM memories m
 WHERE char_length(m.content) > $1::int
   AND m.parent_memory_id IS NULL
+  AND m.promotion_status != 'promoted'
   AND NOT EXISTS (
       SELECT 1 FROM memories c WHERE c.parent_memory_id = m.id
   )
