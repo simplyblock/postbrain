@@ -14,7 +14,7 @@ import (
 )
 
 // indexFile extracts symbols and relations from a single git blob and upserts them.
-func indexFile(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, f *object.File, res *IndexResult, lspClient lsp.Client) error {
+func indexFile(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, f *object.File, res *IndexResult, lspSelections []lspSelection) error {
 	if f.Size > opts.MaxBytesPerFile {
 		res.FilesSkipped++
 		return nil
@@ -46,8 +46,9 @@ func indexFile(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, f *ob
 	// heuristic call edges produced by Extract with LSP-accurate ones.
 	// OutgoingCalls gives fully-qualified caller/callee names, so the
 	// resulting edges resolve directly without the multi-stage fallback chain.
-	if lspSupportsFile(lspClient, f.Name) {
-		absFile := filepath.Join(lspRootDirForClient(opts, lspClient), filepath.FromSlash(f.Name))
+	lspClient, lspRootDir := lspClientForFile(ctx, f.Name, lspSelections)
+	if lspClient != nil && lspRootDir != "" {
+		absFile := filepath.Join(lspRootDir, filepath.FromSlash(f.Name))
 		edges = enrichCallEdges(ctx, lspClient, absFile, edges)
 	}
 
@@ -57,7 +58,7 @@ func indexFile(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions, f *ob
 	symToID := persistSymbolEntities(ctx, pool, opts, syms, fileMemoryID, res)
 	persistChunkMemories(ctx, pool, opts, f.Name, src, syms, fileMemoryID, res)
 
-	resolver := NewResolver(pool, opts.ScopeID, lspClient, lspRootDirForClient(opts, lspClient))
+	resolver := NewResolver(pool, opts.ScopeID, lspClient, lspRootDir)
 	persistRelations(ctx, pool, opts, f.Name, edges, resolver, symToID, res)
 
 	return nil

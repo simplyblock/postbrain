@@ -9,7 +9,7 @@ import (
 	"github.com/simplyblock/postbrain/internal/codegraph/lsp"
 )
 
-func TestLSPClientForIndex_EmptyRootDir_Disabled(t *testing.T) {
+func TestLSPRegistry_EmptyRootDirs_Disabled(t *testing.T) {
 	called := false
 	prev := newLSPClientForExt
 	newLSPClientForExt = func(string, string, time.Duration, lsp.ClientOptions) (lsp.Client, error) {
@@ -18,176 +18,116 @@ func TestLSPClientForIndex_EmptyRootDir_Disabled(t *testing.T) {
 	}
 	t.Cleanup(func() { newLSPClientForExt = prev })
 
-	got := lspClientForIndex(context.Background(), IndexOptions{})
-	if got != nil {
-		t.Fatal("expected nil client when GoLSPRootDir is empty")
+	got := newLSPRegistry(IndexOptions{})
+	if len(got) != 0 {
+		t.Fatalf("len(clients) = %d, want 0", len(got))
 	}
 	if called {
-		t.Fatal("did not expect factory call when GoLSPRootDir is empty")
+		t.Fatal("did not expect factory call when all root dirs are empty")
 	}
 }
 
-func TestLSPClientForIndex_Enabled_ReturnsClient(t *testing.T) {
-	want := &stubLSPClient{languages: map[string]int{".go": 100}}
+func TestLSPRegistry_DoesNotCreateClientsUntilExtensionMatch(t *testing.T) {
+	prev := newLSPClientForExt
+	var exts []string
+	newLSPClientForExt = func(ext, rootDir string, timeout time.Duration, opts lsp.ClientOptions) (lsp.Client, error) {
+		exts = append(exts, ext)
+		return &stubLSPClient{
+			languages: map[string]int{ext: 100},
+		}, nil
+	}
+	t.Cleanup(func() { newLSPClientForExt = prev })
+
+	registry := newLSPRegistry(IndexOptions{
+		GoLSPRootDir:         "/tmp/go",
+		GoLSPTimeout:         1 * time.Second,
+		TypeScriptLSPRootDir: "/tmp/ts",
+		TypeScriptLSPTimeout: 2 * time.Second,
+		ClangdLSPRootDir:     "/tmp/c",
+		ClangdLSPTimeout:     3 * time.Second,
+		MarkdownLSPRootDir:   "/tmp/md",
+		MarkdownLSPTimeout:   4 * time.Second,
+	})
+	if len(registry) != 4 {
+		t.Fatalf("len(registry) = %d, want 4", len(registry))
+	}
+	if len(exts) != 0 {
+		t.Fatalf("len(created) = %d, want 0 before first file match", len(exts))
+	}
+
+	client, root := lspClientForFile(context.Background(), "web/app.tsx", registry)
+	if client == nil {
+		t.Fatal("expected TypeScript client to be created lazily")
+	}
+	if root != "/tmp/ts" {
+		t.Fatalf("root = %q, want %q", root, "/tmp/ts")
+	}
+	if len(exts) != 1 || exts[0] != ".ts" {
+		t.Fatalf("created exts = %v, want [.ts]", exts)
+	}
+}
+
+func TestLSPRegistry_FactoryError_DoesNotBlockOtherClients(t *testing.T) {
 	prev := newLSPClientForExt
 	newLSPClientForExt = func(ext, rootDir string, timeout time.Duration, opts lsp.ClientOptions) (lsp.Client, error) {
-		if ext != ".go" {
-			t.Fatalf("ext = %q, want %q", ext, ".go")
+		if ext == ".go" {
+			return nil, errors.New("gopls not found")
 		}
-		if rootDir != "/tmp/repo" {
-			t.Fatalf("rootDir = %q, want %q", rootDir, "/tmp/repo")
-		}
-		if timeout != 3*time.Second {
-			t.Fatalf("timeout = %v, want %v", timeout, 3*time.Second)
-		}
-		if opts.UseTSGo {
-			t.Fatal("UseTSGo must be false for Go LSP")
-		}
-		return want, nil
+		return &stubLSPClient{languages: map[string]int{ext: 100}}, nil
 	}
 	t.Cleanup(func() { newLSPClientForExt = prev })
 
-	got := lspClientForIndex(context.Background(), IndexOptions{
-		GoLSPRootDir: "/tmp/repo",
-		GoLSPTimeout: 3 * time.Second,
+	registry := newLSPRegistry(IndexOptions{
+		GoLSPRootDir:         "/tmp/go",
+		TypeScriptLSPRootDir: "/tmp/ts",
 	})
-	if got != want {
-		t.Fatal("expected returned client from factory")
+	if len(registry) != 2 {
+		t.Fatalf("len(registry) = %d, want 2", len(registry))
+	}
+
+	goClient, _ := lspClientForFile(context.Background(), "svc/main.go", registry)
+	if goClient != nil {
+		t.Fatal("expected nil Go client when factory creation fails")
+	}
+	tsClient, _ := lspClientForFile(context.Background(), "web/app.ts", registry)
+	if tsClient == nil {
+		t.Fatal("expected surviving TypeScript client")
 	}
 }
 
-func TestLSPClientForIndex_FactoryError_FallsBackToNil(t *testing.T) {
-	prev := newLSPClientForExt
-	newLSPClientForExt = func(string, string, time.Duration, lsp.ClientOptions) (lsp.Client, error) {
-		return nil, errors.New("gopls not found")
-	}
-	t.Cleanup(func() { newLSPClientForExt = prev })
+func TestLSPClientForFile_SelectsHighestPriorityClient(t *testing.T) {
+	t.Parallel()
 
-	got := lspClientForIndex(context.Background(), IndexOptions{GoLSPRootDir: "/tmp/repo"})
-	if got != nil {
-		t.Fatal("expected nil client on factory error")
-	}
-}
-
-func TestLSPClientForIndex_NilClient_ReturnsNil(t *testing.T) {
-	prev := newLSPClientForExt
-	newLSPClientForExt = func(string, string, time.Duration, lsp.ClientOptions) (lsp.Client, error) {
-		return nil, nil // unsupported extension
-	}
-	t.Cleanup(func() { newLSPClientForExt = prev })
-
-	got := lspClientForIndex(context.Background(), IndexOptions{GoLSPRootDir: "/tmp/repo"})
-	if got != nil {
-		t.Fatal("expected nil client when factory returns nil")
-	}
-}
-
-func TestLSPClientForIndex_TypeScript_Enabled_DefaultBackend(t *testing.T) {
-	want := &stubLSPClient{languages: map[string]int{".ts": 100}}
-	prev := newLSPClientForExt
-	newLSPClientForExt = func(ext, rootDir string, timeout time.Duration, opts lsp.ClientOptions) (lsp.Client, error) {
-		if ext != ".ts" {
-			t.Fatalf("ext = %q, want %q", ext, ".ts")
-		}
-		if rootDir != "/tmp/tsrepo" {
-			t.Fatalf("rootDir = %q, want %q", rootDir, "/tmp/tsrepo")
-		}
-		if timeout != 4*time.Second {
-			t.Fatalf("timeout = %v, want %v", timeout, 4*time.Second)
-		}
-		if opts.UseTSGo {
-			t.Fatal("UseTSGo must be false by default")
-		}
-		return want, nil
-	}
-	t.Cleanup(func() { newLSPClientForExt = prev })
-
-	got := lspClientForIndex(context.Background(), IndexOptions{
-		TypeScriptLSPRootDir: "/tmp/tsrepo",
-		TypeScriptLSPTimeout: 4 * time.Second,
+	low := &stubLSPClient{languages: map[string]int{".ts": 80}}
+	high := &stubLSPClient{languages: map[string]int{".ts": 100}}
+	client, root := lspClientForFile(context.Background(), "web/app.ts", []lspSelection{
+		{client: low, rootDir: "/tmp/low"},
+		{client: high, rootDir: "/tmp/high"},
 	})
-	if got != want {
-		t.Fatal("expected returned TypeScript client from factory")
+	if client != high {
+		t.Fatal("expected highest-priority client")
+	}
+	if root != "/tmp/high" {
+		t.Fatalf("root = %q, want %q", root, "/tmp/high")
 	}
 }
 
-func TestLSPClientForIndex_TypeScript_Enabled_TSGoFlag(t *testing.T) {
-	want := &stubLSPClient{languages: map[string]int{".ts": 100}}
-	prev := newLSPClientForExt
-	newLSPClientForExt = func(ext, rootDir string, timeout time.Duration, opts lsp.ClientOptions) (lsp.Client, error) {
-		if ext != ".ts" {
-			t.Fatalf("ext = %q, want %q", ext, ".ts")
-		}
-		if !opts.UseTSGo {
-			t.Fatal("UseTSGo must be true when TypeScriptLSPUseTSGo is set")
-		}
-		return want, nil
-	}
-	t.Cleanup(func() { newLSPClientForExt = prev })
+func TestLSPClientForFile_SupportsAliasExtension(t *testing.T) {
+	t.Parallel()
 
-	got := lspClientForIndex(context.Background(), IndexOptions{
-		TypeScriptLSPRootDir: "/tmp/tsrepo",
-		TypeScriptLSPUseTSGo: true,
+	clang := &stubLSPClient{
+		languages: map[string]int{
+			".c":   100,
+			".cpp": 90,
+		},
+	}
+	client, root := lspClientForFile(context.Background(), "src/main.cpp", []lspSelection{
+		{client: clang, rootDir: "/tmp/cpp"},
 	})
-	if got != want {
-		t.Fatal("expected returned TypeScript client from factory")
+	if client == nil {
+		t.Fatal("expected client for .cpp alias extension")
 	}
-}
-
-func TestLSPClientForIndex_Clangd_Enabled(t *testing.T) {
-	want := &stubLSPClient{languages: map[string]int{".c": 100}}
-	prev := newLSPClientForExt
-	newLSPClientForExt = func(ext, rootDir string, timeout time.Duration, opts lsp.ClientOptions) (lsp.Client, error) {
-		if ext != ".c" {
-			t.Fatalf("ext = %q, want %q", ext, ".c")
-		}
-		if rootDir != "/tmp/crepo" {
-			t.Fatalf("rootDir = %q, want %q", rootDir, "/tmp/crepo")
-		}
-		if timeout != 2*time.Second {
-			t.Fatalf("timeout = %v, want %v", timeout, 2*time.Second)
-		}
-		if opts.UseTSGo {
-			t.Fatal("UseTSGo must be false for clangd")
-		}
-		return want, nil
-	}
-	t.Cleanup(func() { newLSPClientForExt = prev })
-
-	got := lspClientForIndex(context.Background(), IndexOptions{
-		ClangdLSPRootDir: "/tmp/crepo",
-		ClangdLSPTimeout: 2 * time.Second,
-	})
-	if got != want {
-		t.Fatal("expected returned clangd client from factory")
-	}
-}
-
-func TestLSPClientForIndex_Markdown_Enabled(t *testing.T) {
-	want := &stubLSPClient{languages: map[string]int{".md": 100}}
-	prev := newLSPClientForExt
-	newLSPClientForExt = func(ext, rootDir string, timeout time.Duration, opts lsp.ClientOptions) (lsp.Client, error) {
-		if ext != ".md" {
-			t.Fatalf("ext = %q, want %q", ext, ".md")
-		}
-		if rootDir != "/tmp/mdrepo" {
-			t.Fatalf("rootDir = %q, want %q", rootDir, "/tmp/mdrepo")
-		}
-		if timeout != 1500*time.Millisecond {
-			t.Fatalf("timeout = %v, want %v", timeout, 1500*time.Millisecond)
-		}
-		if opts.UseTSGo {
-			t.Fatal("UseTSGo must be false for marksman")
-		}
-		return want, nil
-	}
-	t.Cleanup(func() { newLSPClientForExt = prev })
-
-	got := lspClientForIndex(context.Background(), IndexOptions{
-		MarkdownLSPRootDir: "/tmp/mdrepo",
-		MarkdownLSPTimeout: 1500 * time.Millisecond,
-	})
-	if got != want {
-		t.Fatal("expected returned markdown client from factory")
+	if root != "/tmp/cpp" {
+		t.Fatalf("root = %q, want %q", root, "/tmp/cpp")
 	}
 }

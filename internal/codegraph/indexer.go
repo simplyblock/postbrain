@@ -94,13 +94,9 @@ func IndexRepo(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions) (*Ind
 		opts.DefaultBranch = "main"
 	}
 
-	lspClient := lspClientForIndex(ctx, opts)
-	if lspClient != nil {
-		defer func() {
-			if err := lspClient.Close(); err != nil {
-				slog.WarnContext(ctx, "codegraph: close lsp client", "err", err)
-			}
-		}()
+	lspSelections := newLSPRegistry(opts)
+	if len(lspSelections) > 0 {
+		defer closeLSPSelections(ctx, lspSelections)
 	}
 
 	cloneOpts, err := newInMemoryCloneOptions(opts)
@@ -143,7 +139,7 @@ func IndexRepo(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions) (*Ind
 			// prev commit unreachable in shallow clone — full re-index
 			slog.WarnContext(ctx, "codegraph: prev commit not reachable, falling back to full index",
 				"prev_sha", opts.PrevCommit)
-			if err2 := indexFullTree(ctx, pool, opts, headTree, res, lspClient); err2 != nil {
+			if err2 := indexFullTree(ctx, pool, opts, headTree, res, lspSelections); err2 != nil {
 				return nil, err2
 			}
 		} else {
@@ -151,12 +147,12 @@ func IndexRepo(ctx context.Context, pool *pgxpool.Pool, opts IndexOptions) (*Ind
 			if treeErr != nil {
 				return nil, fmt.Errorf("codegraph: prev tree: %w", treeErr)
 			}
-			if err2 := indexDiff(ctx, pool, opts, prevTree, headTree, res, lspClient); err2 != nil {
+			if err2 := indexDiff(ctx, pool, opts, prevTree, headTree, res, lspSelections); err2 != nil {
 				return nil, err2
 			}
 		}
 	} else {
-		if err2 := indexFullTree(ctx, pool, opts, headTree, res, lspClient); err2 != nil {
+		if err2 := indexFullTree(ctx, pool, opts, headTree, res, lspSelections); err2 != nil {
 			return nil, err2
 		}
 	}

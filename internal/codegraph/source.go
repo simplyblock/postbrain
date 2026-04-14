@@ -7,8 +7,8 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
+	"time"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -26,6 +26,17 @@ import (
 // file extension.  It is a package-level variable so tests can inject fakes.
 var newLSPClientForExt = lsp.NewClientForExt
 
+type lspSelection struct {
+	canonicalExt string
+	rootDir      string
+	timeout      time.Duration
+	clientOpts   lsp.ClientOptions
+	hintExts     map[string]int
+
+	initialized bool
+	client      lsp.Client
+}
+
 // buildCloneAuth returns the go-git auth method for opts, or nil if no auth is configured.
 func buildCloneAuth(opts IndexOptions) (transport.AuthMethod, error) {
 	if isSSHURL(opts.RepoURL) {
@@ -37,95 +48,142 @@ func buildCloneAuth(opts IndexOptions) (transport.AuthMethod, error) {
 	return nil, nil
 }
 
-func lspClientForIndex(ctx context.Context, opts IndexOptions) lsp.Client {
+func newLSPRegistry(opts IndexOptions) []lspSelection {
+	var out []lspSelection
+
 	if opts.GoLSPRootDir != "" {
-		client, err := newLSPClientForExt(".go", opts.GoLSPRootDir, opts.GoLSPTimeout, lsp.ClientOptions{})
-		if err != nil {
-			slog.WarnContext(ctx, "codegraph: gopls client unavailable; continuing without lsp",
-				"root", opts.GoLSPRootDir, "err", err)
-			return nil
-		}
-		return client
+		out = append(out, lspSelection{
+			canonicalExt: ".go",
+			rootDir:      opts.GoLSPRootDir,
+			timeout:      opts.GoLSPTimeout,
+			hintExts: map[string]int{
+				".go": 100,
+			},
+		})
 	}
 
 	if opts.TypeScriptLSPRootDir != "" {
-		client, err := newLSPClientForExt(".ts", opts.TypeScriptLSPRootDir, opts.TypeScriptLSPTimeout, lsp.ClientOptions{
-			UseTSGo: opts.TypeScriptLSPUseTSGo,
+		out = append(out, lspSelection{
+			canonicalExt: ".ts",
+			rootDir:      opts.TypeScriptLSPRootDir,
+			timeout:      opts.TypeScriptLSPTimeout,
+			clientOpts: lsp.ClientOptions{
+				UseTSGo: opts.TypeScriptLSPUseTSGo,
+			},
+			hintExts: map[string]int{
+				".ts":  100,
+				".tsx": 95,
+				".js":  90,
+				".jsx": 85,
+			},
 		})
-		if err != nil {
-			slog.WarnContext(ctx, "codegraph: typescript lsp client unavailable; continuing without lsp",
-				"root", opts.TypeScriptLSPRootDir, "use_tsgo", opts.TypeScriptLSPUseTSGo, "err", err)
-			return nil
-		}
-		return client
 	}
 
 	if opts.ClangdLSPRootDir != "" {
-		client, err := newLSPClientForExt(".c", opts.ClangdLSPRootDir, opts.ClangdLSPTimeout, lsp.ClientOptions{})
-		if err != nil {
-			slog.WarnContext(ctx, "codegraph: clangd client unavailable; continuing without lsp",
-				"root", opts.ClangdLSPRootDir, "err", err)
-			return nil
-		}
-		return client
+		out = append(out, lspSelection{
+			canonicalExt: ".c",
+			rootDir:      opts.ClangdLSPRootDir,
+			timeout:      opts.ClangdLSPTimeout,
+			hintExts: map[string]int{
+				".c":   100,
+				".h":   95,
+				".hpp": 95,
+				".hh":  95,
+				".cpp": 90,
+				".cc":  90,
+				".cxx": 90,
+			},
+		})
 	}
 
 	if opts.MarkdownLSPRootDir != "" {
-		client, err := newLSPClientForExt(".md", opts.MarkdownLSPRootDir, opts.MarkdownLSPTimeout, lsp.ClientOptions{})
-		if err != nil {
-			slog.WarnContext(ctx, "codegraph: markdown lsp client unavailable; continuing without lsp",
-				"root", opts.MarkdownLSPRootDir, "err", err)
-			return nil
-		}
-		return client
-	}
-
-	return nil
-}
-
-func lspRootDirForClient(opts IndexOptions, client lsp.Client) string {
-	if client == nil {
-		return ""
-	}
-
-	type extPriority struct {
-		ext      string
-		priority int
-	}
-	var exts []extPriority
-	for ext, prio := range client.SupportedLanguages() {
-		exts = append(exts, extPriority{
-			ext:      strings.ToLower(strings.TrimSpace(ext)),
-			priority: prio,
+		out = append(out, lspSelection{
+			canonicalExt: ".md",
+			rootDir:      opts.MarkdownLSPRootDir,
+			timeout:      opts.MarkdownLSPTimeout,
+			hintExts: map[string]int{
+				".md":       100,
+				".markdown": 95,
+			},
 		})
 	}
-	sort.SliceStable(exts, func(i, j int) bool {
-		if exts[i].priority != exts[j].priority {
-			return exts[i].priority > exts[j].priority
+
+	return out
+}
+
+func lspClientForFile(ctx context.Context, filePath string, selections []lspSelection) (lsp.Client, string) {
+	ext := strings.ToLower(filepath.Ext(filePath))
+	if ext == "" || len(selections) == 0 {
+		return nil, ""
+	}
+	var (
+		chosenClient lsp.Client
+		chosenRoot   string
+		bestPriority int
+		haveBest     bool
+	)
+	for i := range selections {
+		sel := &selections[i]
+		_, hinted := sel.hintExts[ext]
+		if !hinted && sel.client == nil {
+			continue
 		}
-		return exts[i].ext < exts[j].ext
-	})
-	for _, candidate := range exts {
-		switch candidate.ext {
-		case ".go":
-			if opts.GoLSPRootDir != "" {
-				return opts.GoLSPRootDir
+		client := ensureLSPSelectionClient(ctx, sel)
+		if client == nil {
+			continue
+		}
+		priority, ok := client.SupportedLanguages()[ext]
+		if !ok {
+			if hinted {
+				priority = sel.hintExts[ext]
+			} else {
+				continue
 			}
-		case ".ts", ".tsx", ".js", ".jsx":
-			if opts.TypeScriptLSPRootDir != "" {
-				return opts.TypeScriptLSPRootDir
-			}
-		case ".c", ".h", ".hpp", ".hh", ".cpp", ".cc", ".cxx":
-			if opts.ClangdLSPRootDir != "" {
-				return opts.ClangdLSPRootDir
-			}
-		case ".md", ".markdown":
-			if opts.MarkdownLSPRootDir != "" {
-				return opts.MarkdownLSPRootDir
-			}
+		}
+		if !haveBest || priority > bestPriority {
+			haveBest = true
+			bestPriority = priority
+			chosenClient = client
+			chosenRoot = sel.rootDir
 		}
 	}
-	return ""
+	if !haveBest {
+		return nil, ""
+	}
+	return chosenClient, chosenRoot
+}
+
+func ensureLSPSelectionClient(ctx context.Context, sel *lspSelection) lsp.Client {
+	if sel == nil {
+		return nil
+	}
+	if sel.client != nil {
+		sel.initialized = true
+		return sel.client
+	}
+	if sel.initialized {
+		return sel.client
+	}
+	sel.initialized = true
+	client, err := newLSPClientForExt(sel.canonicalExt, sel.rootDir, sel.timeout, sel.clientOpts)
+	if err != nil {
+		slog.WarnContext(ctx, "codegraph: lsp client unavailable; continuing without lsp",
+			"ext", sel.canonicalExt, "root", sel.rootDir, "err", err)
+		return nil
+	}
+	sel.client = client
+	return sel.client
+}
+
+func closeLSPSelections(ctx context.Context, selections []lspSelection) {
+	for _, sel := range selections {
+		if sel.client == nil {
+			continue
+		}
+		if err := sel.client.Close(); err != nil {
+			slog.WarnContext(ctx, "codegraph: close lsp client", "err", err)
+		}
+	}
 }
 
 // isSSHURL reports whether u is an SSH clone URL (git@ SCP syntax or ssh:// scheme).

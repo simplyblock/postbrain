@@ -47,10 +47,16 @@
   - Added `internal/codegraph/lsp_support.go` helper for extension support
     checks and added coverage in
     `internal/codegraph/lsp_support_test.go`.
-  - Updated `lspRootDirForClient` in `internal/codegraph/source.go` to
-    select root directories via highest-priority supported extension mapping.
-  - Updated/extended resolver and indexer LSP tests for the new interface and
-    alias-extension behavior.
+  - Reworked index-time LSP orchestration in `internal/codegraph/source.go`
+    to a lazy registry model:
+    - registry entries are configured up front from index options,
+    - concrete LSP subprocesses are created on-demand when a matching file
+      extension is first encountered,
+    - per-file client selection uses supported-extension priority values.
+  - Updated executor/planner/indexer flow to pass registry selections through
+    indexing and resolve/enrich each file with the selected per-file client.
+  - Updated/extended resolver and indexer LSP tests for the new interface,
+    alias-extension behavior, and lazy client initialization.
 
 - [x] 2026-04-14: Added Markdown LSP backend support via `marksman` (TDD-first):
   - Added `internal/codegraph/lsp/marksman.go`:

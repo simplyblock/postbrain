@@ -16,20 +16,15 @@ func TestLSPSupportsFile_AliasExtension(t *testing.T) {
 	}
 }
 
-func TestLSPRootDirForClient_PrefersHighestPrioritySupportedExtension(t *testing.T) {
+func TestLSPSupportsExt_NormalizesCaseAndDot(t *testing.T) {
 	t.Parallel()
 
 	client := &stubLSPClient{
 		languages: map[string]int{
-			".js":  90,
-			".ts":  100,
-			".tsx": 95,
+			".ts": 100,
 		},
 	}
-	got := lspRootDirForClient(IndexOptions{
-		TypeScriptLSPRootDir: "/tmp/tsrepo",
-	}, client)
-	if got != "/tmp/tsrepo" {
-		t.Fatalf("root dir = %q, want %q", got, "/tmp/tsrepo")
+	if !lspSupportsExt(client, "TS") {
+		t.Fatal("expected extension normalization to support TS")
 	}
 }
