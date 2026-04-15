@@ -38,17 +38,17 @@ func TestValidateSlug_ValidSlugs(t *testing.T) {
 func TestValidateSlug_InvalidSlugs(t *testing.T) {
 	t.Parallel()
 	invalid := []string{
-		"",                       // empty
-		"../../../etc/passwd",    // path traversal
-		"../../tmp/pwned",        // path traversal
-		"/absolute/path",         // absolute path
-		"has space",              // space
-		"has.dot",                // dot separator
-		"UPPERCASE",              // uppercase
-		"has/slash",              // forward slash
-		"has\\backslash",         // backslash
-		strings.Repeat("a", 65), // too long
-		"-starts-with-dash",      // leading dash
+		"",                        // empty
+		"../../../etc/passwd",     // path traversal
+		"../../tmp/pwned",         // path traversal
+		"/absolute/path",          // absolute path
+		"has space",               // space
+		"has.dot",                 // dot separator
+		"UPPERCASE",               // uppercase
+		"has/slash",               // forward slash
+		"has\\backslash",          // backslash
+		strings.Repeat("a", 65),   // too long
+		"-starts-with-dash",       // leading dash
 		"_starts-with-underscore", // leading underscore
 	}
 	for _, s := range invalid {
