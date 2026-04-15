@@ -2,13 +2,31 @@ package skills
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/simplyblock/postbrain/internal/db"
 )
+
+// slugRe matches valid skill slugs: lowercase alphanumeric, hyphens and
+// underscores, starting with an alphanumeric character, max 64 chars.
+// This pattern intentionally excludes dots, slashes, backslashes, spaces and
+// uppercase so that slugs can never be used as path-traversal payloads.
+var slugRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+
+// ValidateSlug returns an error if slug would be unsafe to use as a filename
+// component. The regex rejects traversal sequences (../, /, \), dots, spaces,
+// uppercase letters, leading dashes/underscores, and empty strings.
+func ValidateSlug(slug string) error {
+	if !slugRe.MatchString(slug) {
+		return errors.New("skills: slug must match ^[a-z0-9][a-z0-9_-]{0,63}$ (no dots, slashes, spaces, uppercase)")
+	}
+	return nil
+}
 
 // TargetPath returns the absolute path where a skill would be installed.
 // "codex" agent type installs to {workdir}/.codex/skills/{slug}.md.
@@ -29,7 +47,25 @@ func IsInstalled(slug, agentType, workdir string) bool {
 // Install materialises a skill to the agent's command directory and returns
 // the absolute path of the written file.
 func Install(skill *db.Skill, agentType, workdir string) (string, error) {
+	if err := ValidateSlug(skill.Slug); err != nil {
+		return "", err
+	}
+
+	// Defense-in-depth: ensure the resolved target stays inside workdir even
+	// if ValidateSlug is somehow bypassed by a future code path.
 	target := TargetPath(skill.Slug, agentType, workdir)
+	cleanBase, err := filepath.Abs(workdir)
+	if err != nil {
+		return "", fmt.Errorf("skills: install resolve base: %w", err)
+	}
+	cleanTarget, err := filepath.Abs(target)
+	if err != nil {
+		return "", fmt.Errorf("skills: install resolve target: %w", err)
+	}
+	if !strings.HasPrefix(cleanTarget, cleanBase+string(filepath.Separator)) {
+		return "", fmt.Errorf("skills: install path %q escapes base directory %q", cleanTarget, cleanBase)
+	}
+
 	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 		return "", fmt.Errorf("skills: install mkdir: %w", err)
 	}

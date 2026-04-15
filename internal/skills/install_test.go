@@ -9,6 +9,95 @@ import (
 	"github.com/simplyblock/postbrain/internal/db"
 )
 
+// ── ValidateSlug ──────────────────────────────────────────────────────────────
+
+func TestValidateSlug_ValidSlugs(t *testing.T) {
+	t.Parallel()
+	valid := []string{
+		"my-skill",
+		"deploy",
+		"a",
+		"a1",
+		"hello-world",
+		"skill123",
+		"abc_def",
+		"0starts-with-digit",
+		strings.Repeat("a", 64), // max length
+	}
+	for _, s := range valid {
+		s := s
+		t.Run(s, func(t *testing.T) {
+			t.Parallel()
+			if err := ValidateSlug(s); err != nil {
+				t.Errorf("ValidateSlug(%q) = %v, want nil", s, err)
+			}
+		})
+	}
+}
+
+func TestValidateSlug_InvalidSlugs(t *testing.T) {
+	t.Parallel()
+	invalid := []string{
+		"",                       // empty
+		"../../../etc/passwd",    // path traversal
+		"../../tmp/pwned",        // path traversal
+		"/absolute/path",         // absolute path
+		"has space",              // space
+		"has.dot",                // dot separator
+		"UPPERCASE",              // uppercase
+		"has/slash",              // forward slash
+		"has\\backslash",         // backslash
+		strings.Repeat("a", 65), // too long
+		"-starts-with-dash",      // leading dash
+		"_starts-with-underscore", // leading underscore
+	}
+	for _, s := range invalid {
+		s := s
+		t.Run(s, func(t *testing.T) {
+			t.Parallel()
+			if err := ValidateSlug(s); err == nil {
+				t.Errorf("ValidateSlug(%q) = nil, want error", s)
+			}
+		})
+	}
+}
+
+// ── Install path-traversal regression tests ───────────────────────────────────
+
+// TestInstall_TraversalSlug_ReturnsError is the regression test for
+// path-traversal via a malicious slug.  Before the fix, a slug like
+// "../../etc/passwd" would cause Install to write outside the expected
+// base directory.
+func TestInstall_TraversalSlug_ReturnsError(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	skill := makeTestSkill("../../etc/passwd")
+	_, err := Install(skill, "claude-code", dir)
+	if err == nil {
+		t.Fatal("Install with traversal slug must return an error, got nil")
+	}
+}
+
+func TestInstall_AbsoluteSlug_ReturnsError(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	skill := makeTestSkill("/etc/cron.d/evil")
+	_, err := Install(skill, "claude-code", dir)
+	if err == nil {
+		t.Fatal("Install with absolute-path slug must return an error, got nil")
+	}
+}
+
+func TestInstall_SlugWithDot_ReturnsError(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	skill := makeTestSkill("bad.slug")
+	_, err := Install(skill, "claude-code", dir)
+	if err == nil {
+		t.Fatal("Install with dot-containing slug must return an error, got nil")
+	}
+}
+
 func makeTestSkill(slug string) *db.Skill {
 	return &db.Skill{
 		Slug:        slug,

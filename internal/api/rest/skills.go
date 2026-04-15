@@ -48,6 +48,10 @@ func (ro *Router) createSkill(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if err := skillspkg.ValidateSlug(body.Slug); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	body.applyDefaults()
 	kind, externalID, err := parseScopeString(body.Scope)
 	if err != nil {
@@ -226,7 +230,6 @@ func (ro *Router) deprecateSkill(w http.ResponseWriter, r *http.Request) {
 
 type installSkillRequest struct {
 	AgentType string `json:"agent_type"`
-	Workdir   string `json:"workdir"`
 }
 
 func (ro *Router) installSkill(w http.ResponseWriter, r *http.Request) {
@@ -240,16 +243,13 @@ func (ro *Router) installSkill(w http.ResponseWriter, r *http.Request) {
 	if body.AgentType == "" {
 		body.AgentType = "claude-code"
 	}
-	if body.Workdir == "" {
-		body.Workdir = "."
-	}
 
 	skill, err := ro.sklStore.GetByID(r.Context(), id)
 	if err != nil || skill == nil {
 		writeError(w, http.StatusNotFound, "skill not found")
 		return
 	}
-	path, err := skillspkg.Install(skill, body.AgentType, body.Workdir)
+	path, err := skillspkg.Install(skill, body.AgentType, ".")
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
