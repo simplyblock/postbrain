@@ -96,6 +96,10 @@ func (ro *Router) getScope(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "scope not found")
 		return
 	}
+	if err := ro.authorizeObjectScope(r.Context(), s.ID); err != nil {
+		writeScopeAuthzError(w, r, s.ID, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, s)
 }
 

@@ -51,6 +51,21 @@ func TestCreateScope_NoAuth_Returns401(t *testing.T) {
 	}
 }
 
+// TestGetScope_InvalidUUID_Returns400 verifies that a non-UUID {id} is rejected before DB access.
+func TestGetScope_InvalidUUID_Returns400(t *testing.T) {
+	t.Parallel()
+	ro := &Router{}
+	req := requestWithChiParam(t, "id", "not-a-uuid")
+	w := httptest.NewRecorder()
+
+	ro.getScope(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	assertJSONError(t, w)
+}
+
 // TestGetScope_NoAuth_Returns401 verifies unauthenticated GET /v1/scopes/{id} returns 401.
 func TestGetScope_NoAuth_Returns401(t *testing.T) {
 	r := newTestRouter()
