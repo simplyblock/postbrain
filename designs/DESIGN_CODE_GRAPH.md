@@ -580,15 +580,16 @@ Phase 7 of this design covers the scheduler; it has not been implemented yet.
 ### 3. Codegraph memories bypass the embedding pipeline
 
 `persistFileMemory` and `persistChunkMemories` use `compat.CreateMemory` which
-is a raw DB insert. It does **not** call `memory.Store`, so:
+is a raw DB insert. It does **not** go through the memory store layer (for
+example, `(*memory.Store).Create`), so:
 
 - No row is written to `embedding_index` → the reembed job never picks up these memories
 - No initial embedding is computed at index time
 - The memories exist in the `memories` table but will never appear in semantic search results
 
-**Fix needed:** route codegraph memory creation through `memory.Store` (or at
-minimum seed an `embedding_index` row in `pending` status so the reembed job
-enrolls them).
+**Fix needed:** route codegraph memory creation through the memory store layer
+(for example, `(*memory.Store).Create`), or at minimum seed an
+`embedding_index` row in `pending` status so the reembed job enrolls them.
 
 ### 4. File-level memory creation disabled by default
 
