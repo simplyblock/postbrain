@@ -90,6 +90,22 @@ func (ro *Router) updateSession(w http.ResponseWriter, r *http.Request) {
 		endedAt = &t
 	}
 
+	// Load session to enforce ownership before mutating.
+	existing, err := compat.GetSession(r.Context(), ro.pool, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if existing == nil {
+		writeError(w, http.StatusNotFound, "session not found")
+		return
+	}
+	callerID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
+	if existing.PrincipalID == nil || *existing.PrincipalID != callerID {
+		writeError(w, http.StatusForbidden, "forbidden: session belongs to a different principal")
+		return
+	}
+
 	var meta []byte
 	if body.Meta != nil {
 		meta, _ = json.Marshal(body.Meta)
