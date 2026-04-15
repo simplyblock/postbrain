@@ -2,12 +2,14 @@ package social
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
+
+	"github.com/coreos/go-oidc/v3/oidc"
 
 	"github.com/simplyblock/postbrain/internal/closeutil"
 	"github.com/simplyblock/postbrain/internal/config"
@@ -19,8 +21,11 @@ type GoogleProvider struct {
 	scopes       []string
 	redirectURI  string
 	httpClient   *http.Client
-	authorizeURL string
-	discoveryURL string
+	issuerURL    string // defaults to https://accounts.google.com; overridable for tests
+
+	oidcOnce sync.Once
+	oidcProv *oidc.Provider
+	oidcErr  error
 }
 
 func NewGoogleProvider(baseURL string, cfg config.ProviderConfig) *GoogleProvider {
@@ -30,8 +35,7 @@ func NewGoogleProvider(baseURL string, cfg config.ProviderConfig) *GoogleProvide
 		scopes:       cfg.Scopes,
 		redirectURI:  strings.TrimSuffix(baseURL, "/") + "/ui/auth/google/callback",
 		httpClient:   http.DefaultClient,
-		authorizeURL: "https://accounts.google.com/o/oauth2/v2/auth",
-		discoveryURL: "https://accounts.google.com/.well-known/openid-configuration",
+		issuerURL:    "https://accounts.google.com",
 	}
 }
 
@@ -42,21 +46,51 @@ func (p *GoogleProvider) AuthURL(state string) string {
 	q.Set("response_type", "code")
 	q.Set("scope", strings.Join(p.scopes, " "))
 	q.Set("state", state)
-	return p.authorizeURL + "?" + q.Encode()
+	// Always use the canonical Google authorization endpoint.
+	return "https://accounts.google.com/o/oauth2/v2/auth?" + q.Encode()
 }
 
+// provider returns the cached OIDC provider, initializing it on first call.
+// The OIDC provider fetches Google's discovery document and caches the JWKS URI.
+func (p *GoogleProvider) provider(ctx context.Context) (*oidc.Provider, error) {
+	p.oidcOnce.Do(func() {
+		// Inject our HTTP client so tests can intercept the discovery request.
+		ctx = oidc.ClientContext(ctx, p.httpClient)
+		p.oidcProv, p.oidcErr = oidc.NewProvider(ctx, p.issuerURL)
+	})
+	return p.oidcProv, p.oidcErr
+}
+
+// Exchange redeems the authorization code for an id_token, verifies its
+// signature against Google's JWKS, and returns the verified user claims.
 func (p *GoogleProvider) Exchange(ctx context.Context, code string) (*UserInfo, error) {
-	tokenEndpoint, err := p.fetchTokenEndpoint(ctx)
+	prov, err := p.provider(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("google oidc provider: %w", err)
+	}
+
+	// Exchange authorization code → id_token using the OIDC-discovered token endpoint.
+	tokenURL := prov.Endpoint().TokenURL
+	rawIDToken, err := p.exchangeIDToken(ctx, tokenURL, code)
 	if err != nil {
 		return nil, err
 	}
-	idToken, err := p.exchangeIDToken(ctx, tokenEndpoint, code)
+
+	// Verify signature, issuer (accounts.google.com), audience (our client_id),
+	// and expiry. Rejects alg:none and any token with an invalid or missing signature.
+	verifier := prov.Verifier(&oidc.Config{ClientID: p.clientID})
+	verified, err := verifier.Verify(ctx, rawIDToken)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("google id_token verification: %w", err)
 	}
-	claims, rawClaims, err := parseJWTClaims(idToken)
+
+	var claims map[string]any
+	if err := verified.Claims(&claims); err != nil {
+		return nil, fmt.Errorf("google id_token claims: %w", err)
+	}
+	rawClaims, err := json.Marshal(claims)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("google id_token marshal: %w", err)
 	}
 
 	return &UserInfo{
@@ -68,31 +102,6 @@ func (p *GoogleProvider) Exchange(ctx context.Context, code string) (*UserInfo, 
 		AvatarURL:     stringFromAny(claims["picture"]),
 		RawProfile:    rawClaims,
 	}, nil
-}
-
-func (p *GoogleProvider) fetchTokenEndpoint(ctx context.Context) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.discoveryURL, nil)
-	if err != nil {
-		return "", err
-	}
-	res, err := p.httpClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer closeutil.Log(res.Body, "social: google discovery: close response body")
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return "", fmt.Errorf("google discovery status=%d", res.StatusCode)
-	}
-	var body struct {
-		TokenEndpoint string `json:"token_endpoint"`
-	}
-	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
-		return "", err
-	}
-	if body.TokenEndpoint == "" {
-		return "", fmt.Errorf("google discovery missing token_endpoint")
-	}
-	return body.TokenEndpoint, nil
 }
 
 func (p *GoogleProvider) exchangeIDToken(ctx context.Context, tokenEndpoint, code string) (string, error) {
@@ -125,22 +134,6 @@ func (p *GoogleProvider) exchangeIDToken(ctx context.Context, tokenEndpoint, cod
 		return "", fmt.Errorf("google token exchange missing id_token")
 	}
 	return body.IDToken, nil
-}
-
-func parseJWTClaims(raw string) (map[string]any, []byte, error) {
-	parts := strings.Split(raw, ".")
-	if len(parts) < 2 {
-		return nil, nil, fmt.Errorf("invalid jwt format")
-	}
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return nil, nil, fmt.Errorf("decode jwt payload: %w", err)
-	}
-	var claims map[string]any
-	if err := json.Unmarshal(payload, &claims); err != nil {
-		return nil, nil, fmt.Errorf("parse jwt payload: %w", err)
-	}
-	return claims, payload, nil
 }
 
 func stringFromAny(v any) string {
