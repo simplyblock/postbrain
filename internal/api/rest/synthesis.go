@@ -6,7 +6,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/simplyblock/postbrain/internal/auth"
-	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/knowledge"
 )
 
@@ -105,14 +104,20 @@ func (ro *Router) getArtifactDigests(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate artifact exists.
-	a, err := compat.GetArtifact(r.Context(), ro.pool, id)
+	// Resolve artifact and enforce scope authorization before listing digests.
+	// Existence was previously checked but scope authorization was omitted,
+	// allowing cross-scope disclosure of digest linkage (IDOR).
+	a, err := ro.knwStore.GetByID(r.Context(), id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if a == nil {
 		writeError(w, http.StatusNotFound, "artifact not found")
+		return
+	}
+	if err := ro.authorizeObjectScope(r.Context(), a.OwnerScopeID); err != nil {
+		writeScopeAuthzError(w, r, a.OwnerScopeID, err)
 		return
 	}
 
