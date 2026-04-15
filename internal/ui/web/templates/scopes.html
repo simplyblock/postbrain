@@ -159,23 +159,58 @@
       roots.push(s);
     }
   });
+  // Build each tree node using DOM API so user-supplied values (externalId,
+  // name, kind) are always set via textContent and never parsed as HTML.
   function renderNode(s, prefix, isLast) {
     var connector = isLast ? "└─ " : "├─ ";
     var childPrefix = prefix + (isLast ? "   " : "│  ");
-    var label = "<span style='color:var(--pico-muted-color)'>" + s.kind + "</span> " +
-                "<strong>" + s.externalId + "</strong>" +
-                (s.name ? " <span style='color:var(--pico-muted-color)'>(" + s.name + ")</span>" : "");
-    var html = "<div>" + prefix + connector + label + "</div>";
-    for (var i = 0; i < s.children.length; i++) {
-      html += renderNode(s.children[i], childPrefix, i === s.children.length - 1);
+
+    var div = document.createElement("div");
+
+    // prefix + connector are static strings — safe as text node.
+    div.appendChild(document.createTextNode(prefix + connector));
+
+    // kind: stored field, always rendered as text.
+    var kindSpan = document.createElement("span");
+    kindSpan.style.color = "var(--pico-muted-color)";
+    kindSpan.textContent = s.kind;
+    div.appendChild(kindSpan);
+
+    div.appendChild(document.createTextNode(" "));
+
+    // externalId: user-controlled — must use textContent, never innerHTML.
+    var idEl = document.createElement("strong");
+    idEl.textContent = s.externalId;
+    div.appendChild(idEl);
+
+    // name: user-controlled — must use textContent, never innerHTML.
+    if (s.name) {
+      div.appendChild(document.createTextNode(" "));
+      var nameSpan = document.createElement("span");
+      nameSpan.style.color = "var(--pico-muted-color)";
+      nameSpan.textContent = "(" + s.name + ")";
+      div.appendChild(nameSpan);
     }
-    return html;
+
+    var frag = document.createDocumentFragment();
+    frag.appendChild(div);
+    for (var i = 0; i < s.children.length; i++) {
+      frag.appendChild(renderNode(s.children[i], childPrefix, i === s.children.length - 1));
+    }
+    return frag;
   }
-  var html = "";
-  for (var i = 0; i < roots.length; i++) {
-    html += renderNode(roots[i], "", i === roots.length - 1);
+
+  var tree = document.getElementById("scope-tree");
+  if (roots.length === 0) {
+    var empty = document.createElement("span");
+    empty.style.color = "var(--pico-muted-color)";
+    empty.textContent = "No scopes.";
+    tree.appendChild(empty);
+  } else {
+    for (var i = 0; i < roots.length; i++) {
+      tree.appendChild(renderNode(roots[i], "", i === roots.length - 1));
+    }
   }
-  document.getElementById("scope-tree").innerHTML = html || "<span style='color:var(--pico-muted-color)'>No scopes.</span>";
 })();
 </script>
 {{end}}
