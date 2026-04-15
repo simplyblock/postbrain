@@ -45,6 +45,22 @@ func (ro *Router) approvePromotion(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid promotion request id")
 		return
 	}
+
+	// Load request first so we can authorize against its TargetScopeID.
+	req, err := compat.GetPromotionRequest(r.Context(), ro.pool, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if req == nil {
+		writeError(w, http.StatusNotFound, "promotion request not found")
+		return
+	}
+	if err := ro.authorizeScopeAdmin(r.Context(), req.TargetScopeID); err != nil {
+		writeScopeAuthzError(w, r, req.TargetScopeID, err)
+		return
+	}
+
 	reviewerID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
 	artifact, err := ro.knwProm.Approve(r.Context(), id, reviewerID, reviewerID)
 	if err != nil {
@@ -64,6 +80,22 @@ func (ro *Router) rejectPromotion(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid promotion request id")
 		return
 	}
+
+	// Load request first so we can authorize against its TargetScopeID.
+	req, err := compat.GetPromotionRequest(r.Context(), ro.pool, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if req == nil {
+		writeError(w, http.StatusNotFound, "promotion request not found")
+		return
+	}
+	if err := ro.authorizeScopeAdmin(r.Context(), req.TargetScopeID); err != nil {
+		writeScopeAuthzError(w, r, req.TargetScopeID, err)
+		return
+	}
+
 	var body rejectPromotionRequest
 	_ = readJSON(r, &body)
 
