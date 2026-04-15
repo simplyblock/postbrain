@@ -101,7 +101,26 @@ func ReadInstalledVersion(slug, agentType, workdir string) int {
 }
 
 func readInstalledVersion(slug, agentType, workdir string) int {
+	// Reject any slug that would fail slug validation — defense-in-depth against
+	// traversal slugs stored in the DB before the ValidateSlug check was added.
+	if ValidateSlug(slug) != nil {
+		return 0
+	}
+
+	// Containment check: ensure the resolved path stays inside workdir.
 	path := TargetPath(slug, agentType, workdir)
+	cleanBase, err := filepath.Abs(workdir)
+	if err != nil {
+		return 0
+	}
+	cleanPath, err := filepath.Abs(path)
+	if err != nil {
+		return 0
+	}
+	if !strings.HasPrefix(cleanPath, cleanBase+string(filepath.Separator)) {
+		return 0
+	}
+
 	f, err := os.Open(path)
 	if err != nil {
 		return 0
