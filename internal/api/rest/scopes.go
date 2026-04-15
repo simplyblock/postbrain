@@ -295,6 +295,10 @@ func (ro *Router) getSyncStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid scope id")
 		return
 	}
+	if err := ro.authorizeObjectScope(r.Context(), id); err != nil {
+		writeScopeAuthzError(w, r, id, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, ro.syncer.Status(id))
 }
 

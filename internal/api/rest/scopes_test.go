@@ -137,25 +137,33 @@ func TestSetScopeRepo_MissingRepoURL_Returns400(t *testing.T) {
 	}
 }
 
-// TestGetSyncStatus_UnknownScope_ReturnsJSON verifies that getSyncStatus
-// always responds with valid JSON even for a scope that was never synced.
-func TestGetSyncStatus_UnknownScope_ReturnsJSON(t *testing.T) {
+// TestGetSyncStatus_InvalidUUID_Returns400 verifies that a non-UUID {id} returns 400.
+func TestGetSyncStatus_InvalidUUID_Returns400(t *testing.T) {
+	t.Parallel()
 	ro := &Router{syncer: codegraph.NewSyncer(config.CodeGraphConfig{})}
-
-	req := requestWithChiParam(t, "id", uuid.New().String())
+	req := requestWithChiParam(t, "id", "not-a-uuid")
 	w := httptest.NewRecorder()
 
 	ro.getSyncStatus(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
 	}
-	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
-		t.Errorf("Content-Type = %q, want %q", ct, "application/json")
-	}
-	var body map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
-		t.Fatalf("response body is not valid JSON: %v\nbody: %s", err, w.Body.String())
+	assertJSONError(t, w)
+}
+
+// TestGetSyncStatus_NoAuth_Returns401 verifies that unauthenticated requests
+// to GET /v1/scopes/{id}/repo/sync return 401.
+func TestGetSyncStatus_NoAuth_Returns401(t *testing.T) {
+	t.Parallel()
+	r := newTestRouter()
+	req := httptest.NewRequest(http.MethodGet, "/v1/scopes/"+uuid.New().String()+"/repo/sync", nil)
+	w := httptest.NewRecorder()
+
+	r.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusUnauthorized)
 	}
 }
 
