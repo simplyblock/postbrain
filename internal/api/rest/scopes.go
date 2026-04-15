@@ -206,6 +206,10 @@ func (ro *Router) setScopeRepo(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "repo_url is required")
 		return
 	}
+	if err := codegraph.ValidateRepoURL(body.RepoURL); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err := ro.authorizeScopeAdmin(r.Context(), id); err != nil {
 		writeScopeAuthzError(w, r, id, err)
 		return
