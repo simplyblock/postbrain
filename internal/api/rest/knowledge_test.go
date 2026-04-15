@@ -6,6 +6,21 @@ import (
 	"testing"
 )
 
+// TestGetArtifactHistory_InvalidID_Returns400 verifies that a non-UUID path
+// parameter causes getArtifactHistory to return 400 before any DB access.
+func TestGetArtifactHistory_InvalidID_Returns400(t *testing.T) {
+	ro := &Router{}
+	req := requestWithChiParam(t, "id", "not-a-uuid")
+	w := httptest.NewRecorder()
+
+	ro.getArtifactHistory(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	assertJSONError(t, w)
+}
+
 // TestSearchArtifacts_MissingQ_Not400 verifies that GET /v1/knowledge/search
 // does NOT require the q parameter — empty / absent query is valid for
 // browse/recall. The handler is called directly with a nil store, so it will
