@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/simplyblock/postbrain/internal/db"
@@ -58,6 +59,18 @@ func (s *Store) Create(ctx context.Context, g *Grant) (*Grant, error) {
 		return nil, fmt.Errorf("sharing: create grant: %w", err)
 	}
 	return grantFromDB(row), nil
+}
+
+// GetByID retrieves a sharing grant by its ID. Returns nil, nil if not found.
+func (s *Store) GetByID(ctx context.Context, id uuid.UUID) (*Grant, error) {
+	g, err := db.New(s.pool).GetSharingGrant(ctx, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("sharing: get grant: %w", err)
+	}
+	return grantFromDB(g), nil
 }
 
 // Revoke deletes a sharing grant by ID.
