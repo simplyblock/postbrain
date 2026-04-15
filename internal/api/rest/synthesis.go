@@ -72,6 +72,23 @@ func (ro *Router) getArtifactSources(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve the digest artifact and enforce scope authorization before
+	// returning source documents.  Without this check any authenticated caller
+	// can read provenance for artifacts outside their authorized scopes (IDOR).
+	a, err := ro.knwStore.GetByID(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if a == nil {
+		writeError(w, http.StatusNotFound, "artifact not found")
+		return
+	}
+	if err := ro.authorizeObjectScope(r.Context(), a.OwnerScopeID); err != nil {
+		writeScopeAuthzError(w, r, a.OwnerScopeID, err)
+		return
+	}
+
 	synth := knowledge.NewSynthesiser(ro.pool, ro.svc)
 	sources, err := synth.ListSources(r.Context(), id)
 	if err != nil {
