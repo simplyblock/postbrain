@@ -189,3 +189,146 @@ func TestGoogleProvider_Exchange_MalformedIDToken_ReturnsError(t *testing.T) {
 		t.Fatal("Exchange: expected error for malformed token, got nil")
 	}
 }
+
+// ── OIDC claim validation regression tests ────────────────────────────────────
+// These tests verify that exp, iss, aud, and nbf are enforced by the verifier.
+// Before 2d38474, parseJWTClaims decoded claims without any claim checks,
+// making all four of these attacks viable.
+
+// TestGoogleProvider_Exchange_ExpiredToken_Rejected verifies that a token whose
+// exp is in the past is rejected with an error.
+func TestGoogleProvider_Exchange_ExpiredToken_Rejected(t *testing.T) {
+	ts := newOIDCTestServer(t, "google-client-id")
+
+	sig, err := jose.NewSigner(
+		jose.SigningKey{Algorithm: jose.RS256, Key: ts.key},
+		(&jose.SignerOptions{}).WithType("JWT").WithHeader("kid", "test-key-1"),
+	)
+	if err != nil {
+		t.Fatalf("new signer: %v", err)
+	}
+	expiredClaims := josejwt.Claims{
+		Issuer:   ts.srv.URL,
+		Subject:  "sub-1",
+		Audience: josejwt.Audience{"google-client-id"},
+		Expiry:   josejwt.NewNumericDate(time.Now().Add(-2 * time.Hour)), // expired
+		IssuedAt: josejwt.NewNumericDate(time.Now().Add(-3 * time.Hour)),
+	}
+	expiredToken, err := josejwt.Signed(sig).Claims(expiredClaims).Serialize()
+	if err != nil {
+		t.Fatalf("sign expired jwt: %v", err)
+	}
+
+	ts.srv.Config.Handler.(*http.ServeMux).HandleFunc("/token", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"id_token": expiredToken})
+	})
+
+	_, err = newTestProvider(ts).Exchange(context.Background(), "expired-code")
+	if err == nil {
+		t.Fatal("Exchange: expected error for expired token (exp in past), got nil — replay attack possible")
+	}
+}
+
+// TestGoogleProvider_Exchange_WrongIssuer_Rejected verifies that a validly
+// signed token from a different issuer is rejected.
+func TestGoogleProvider_Exchange_WrongIssuer_Rejected(t *testing.T) {
+	ts := newOIDCTestServer(t, "google-client-id")
+
+	sig, err := jose.NewSigner(
+		jose.SigningKey{Algorithm: jose.RS256, Key: ts.key},
+		(&jose.SignerOptions{}).WithType("JWT").WithHeader("kid", "test-key-1"),
+	)
+	if err != nil {
+		t.Fatalf("new signer: %v", err)
+	}
+	wrongIssClaims := josejwt.Claims{
+		Issuer:   "https://evil.example.com", // wrong issuer
+		Subject:  "sub-1",
+		Audience: josejwt.Audience{"google-client-id"},
+		Expiry:   josejwt.NewNumericDate(time.Now().Add(time.Hour)),
+		IssuedAt: josejwt.NewNumericDate(time.Now()),
+	}
+	wrongIssToken, err := josejwt.Signed(sig).Claims(wrongIssClaims).Serialize()
+	if err != nil {
+		t.Fatalf("sign wrong-iss jwt: %v", err)
+	}
+
+	ts.srv.Config.Handler.(*http.ServeMux).HandleFunc("/token", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"id_token": wrongIssToken})
+	})
+
+	_, err = newTestProvider(ts).Exchange(context.Background(), "wrong-iss-code")
+	if err == nil {
+		t.Fatal("Exchange: expected error for wrong issuer, got nil — cross-issuer token accepted")
+	}
+}
+
+// TestGoogleProvider_Exchange_WrongAudience_Rejected verifies that a token
+// issued for a different client ID is rejected.
+func TestGoogleProvider_Exchange_WrongAudience_Rejected(t *testing.T) {
+	ts := newOIDCTestServer(t, "google-client-id")
+
+	sig, err := jose.NewSigner(
+		jose.SigningKey{Algorithm: jose.RS256, Key: ts.key},
+		(&jose.SignerOptions{}).WithType("JWT").WithHeader("kid", "test-key-1"),
+	)
+	if err != nil {
+		t.Fatalf("new signer: %v", err)
+	}
+	wrongAudClaims := josejwt.Claims{
+		Issuer:   ts.srv.URL,
+		Subject:  "sub-1",
+		Audience: josejwt.Audience{"other-app-client-id"}, // wrong audience
+		Expiry:   josejwt.NewNumericDate(time.Now().Add(time.Hour)),
+		IssuedAt: josejwt.NewNumericDate(time.Now()),
+	}
+	wrongAudToken, err := josejwt.Signed(sig).Claims(wrongAudClaims).Serialize()
+	if err != nil {
+		t.Fatalf("sign wrong-aud jwt: %v", err)
+	}
+
+	ts.srv.Config.Handler.(*http.ServeMux).HandleFunc("/token", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"id_token": wrongAudToken})
+	})
+
+	_, err = newTestProvider(ts).Exchange(context.Background(), "wrong-aud-code")
+	if err == nil {
+		t.Fatal("Exchange: expected error for wrong audience, got nil — token intended for another app accepted")
+	}
+}
+
+// TestGoogleProvider_Exchange_NotYetValid_Rejected verifies that a token whose
+// nbf (not-before) is in the future is rejected.
+func TestGoogleProvider_Exchange_NotYetValid_Rejected(t *testing.T) {
+	ts := newOIDCTestServer(t, "google-client-id")
+
+	sig, err := jose.NewSigner(
+		jose.SigningKey{Algorithm: jose.RS256, Key: ts.key},
+		(&jose.SignerOptions{}).WithType("JWT").WithHeader("kid", "test-key-1"),
+	)
+	if err != nil {
+		t.Fatalf("new signer: %v", err)
+	}
+	future := time.Now().Add(2 * time.Hour)
+	nbfClaims := josejwt.Claims{
+		Issuer:    ts.srv.URL,
+		Subject:   "sub-1",
+		Audience:  josejwt.Audience{"google-client-id"},
+		Expiry:    josejwt.NewNumericDate(future.Add(time.Hour)),
+		IssuedAt:  josejwt.NewNumericDate(time.Now()),
+		NotBefore: josejwt.NewNumericDate(future), // nbf in the future
+	}
+	nbfToken, err := josejwt.Signed(sig).Claims(nbfClaims).Serialize()
+	if err != nil {
+		t.Fatalf("sign nbf jwt: %v", err)
+	}
+
+	ts.srv.Config.Handler.(*http.ServeMux).HandleFunc("/token", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"id_token": nbfToken})
+	})
+
+	_, err = newTestProvider(ts).Exchange(context.Background(), "nbf-code")
+	if err == nil {
+		t.Fatal("Exchange: expected error for token not yet valid (nbf in future), got nil")
+	}
+}
