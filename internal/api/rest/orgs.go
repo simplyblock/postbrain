@@ -139,6 +139,16 @@ func (ro *Router) listMembers(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid principal id")
 		return
 	}
+	callerID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
+	allowed, err := ro.membership.IsPrincipalAdmin(r.Context(), callerID, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !allowed {
+		writeError(w, http.StatusForbidden, "forbidden: principal admin required")
+		return
+	}
 	members, err := compat.GetMemberships(r.Context(), ro.pool, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
