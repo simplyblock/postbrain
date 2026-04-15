@@ -547,3 +547,66 @@ Each implementation:
 
 The implementation is opt-in: if the LSP binary is not on `PATH`, the indexer
 falls back to the import-aware pipeline silently.
+
+---
+
+## Known Issues
+
+### 1. Stale memories on modify / delete / rename
+
+`indexDiff` (incremental reindex via `PrevCommit`) handles file changes as follows:
+
+| Git change | What happens today |
+|------------|--------------------|
+| **Insert** | New entities, relations, and memories created — correct |
+| **Modify** | Old relations deleted, file re-indexed — but **old memories persist forever** |
+| **Delete** | Relations deleted — but **entities and memories persist forever** |
+| **Rename** | Treated as Delete + Insert — old path's entities and memories persist |
+
+There is no cleanup of `memories` or `entities` rows when a file is modified,
+deleted, or renamed. Over time this causes unbounded accumulation of stale memory
+rows, duplicated content, and orphaned entity nodes.
+
+**Fix needed:** `indexDiff` must delete (or soft-delete) existing memories whose
+`source_ref` starts with `file:<old_path>` before re-indexing a modified file,
+and must delete them outright for deleted/renamed files.
+
+### 2. No automatic reindexing
+
+Repos are only reindexed on an explicit `POST /v1/scopes/:id/repo/sync` or the
+equivalent UI button click. There is no background polling or webhook trigger.
+Phase 7 of this design covers the scheduler; it has not been implemented yet.
+
+### 3. Codegraph memories bypass the embedding pipeline
+
+`persistFileMemory` and `persistChunkMemories` use `compat.CreateMemory` which
+is a raw DB insert. It does **not** call `memory.Store`, so:
+
+- No row is written to `embedding_index` → the reembed job never picks up these memories
+- No initial embedding is computed at index time
+- The memories exist in the `memories` table but will never appear in semantic search results
+
+**Fix needed:** route codegraph memory creation through `memory.Store` (or at
+minimum seed an `embedding_index` row in `pending` status so the reembed job
+enrolls them).
+
+### 4. File-level memory creation disabled by default
+
+Because of issues 1–3 above, `persistFileMemory` (and the chunk memories derived
+from it) is gated behind `IndexOptions.CodeMemory` (default `nil` → `false`) and
+the config field `code_graph.code_memory` (default `false`).
+
+Codegraph entity and relation indexing continues to work regardless of this flag.
+Enable it only in environments where the stale-memory accumulation and missing
+embedding enrollment are acceptable or have been fixed.
+
+### 5. UI sync handler was using wrong principal ID (fixed)
+
+The UI route `POST /ui/scopes/:id/repo/sync` previously read the author ID from
+`auth.ContextKeyPrincipalID` in the request context. The UI middleware does not
+set that key (only the REST API middleware does), so `AuthorID` was always
+`uuid.Nil`. Because `persistFileMemory` returns early when `AuthorID == uuid.Nil`,
+zero file memories were ever created during UI-triggered syncs.
+
+**Fixed** in `internal/ui/handler_principals.go` by using `h.principalFromCookie(r)`
+(the same helper used by every other UI handler) instead of the context key.
