@@ -96,6 +96,10 @@ func (ro *Router) getScope(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "scope not found")
 		return
 	}
+	if err := ro.authorizeObjectScope(r.Context(), s.ID); err != nil {
+		writeScopeAuthzError(w, r, s.ID, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, s)
 }
 
@@ -206,6 +210,10 @@ func (ro *Router) setScopeRepo(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "repo_url is required")
 		return
 	}
+	if err := codegraph.ValidateRepoURL(body.RepoURL); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err := ro.authorizeScopeAdmin(r.Context(), id); err != nil {
 		writeScopeAuthzError(w, r, id, err)
 		return
@@ -289,6 +297,10 @@ func (ro *Router) getSyncStatus(w http.ResponseWriter, r *http.Request) {
 	id, err := uuidParam(r, "id")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid scope id")
+		return
+	}
+	if err := ro.authorizeObjectScope(r.Context(), id); err != nil {
+		writeScopeAuthzError(w, r, id, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, ro.syncer.Status(id))

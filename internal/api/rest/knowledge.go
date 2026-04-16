@@ -258,6 +258,22 @@ func (ro *Router) getArtifactHistory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid artifact id")
 		return
 	}
+	// Resolve the artifact and enforce scope authorization before returning
+	// history rows.  Without this check any authenticated caller can enumerate
+	// revision history for artifacts outside their authorized scopes (IDOR).
+	a, err := ro.knwStore.GetByID(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if a == nil {
+		writeError(w, http.StatusNotFound, "artifact not found")
+		return
+	}
+	if err := ro.authorizeObjectScope(r.Context(), a.OwnerScopeID); err != nil {
+		writeScopeAuthzError(w, r, a.OwnerScopeID, err)
+		return
+	}
 	history, err := compat.GetArtifactHistory(r.Context(), ro.pool, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())

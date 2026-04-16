@@ -41,6 +41,39 @@ func TestCreateSkill_MissingFields_Returns400(t *testing.T) {
 	}
 }
 
+// TestCreateSkill_TraversalSlug_Returns400 is a regression test: a slug
+// containing path-traversal characters must be rejected at creation so it
+// can never be persisted and later used in Install to escape the base dir.
+func TestCreateSkill_TraversalSlug_Returns400(t *testing.T) {
+	t.Parallel()
+	dangerous := []string{
+		"../../etc/passwd",
+		"../evil",
+		"/absolute/path",
+		"has space",
+		"has.dot",
+		"UPPERCASE",
+	}
+	for _, slug := range dangerous {
+		slug := slug
+		t.Run(slug, func(t *testing.T) {
+			t.Parallel()
+			ro := &Router{}
+			body := `{"scope":"team:eng","slug":"` + slug + `","name":"n"}`
+			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			ro.createSkill(w, req)
+
+			if w.Code != http.StatusBadRequest {
+				t.Errorf("createSkill with slug %q: status = %d, want 400", slug, w.Code)
+			}
+			assertJSONError(t, w)
+		})
+	}
+}
+
 func TestCreateSkill_InvalidScopeFormat_Returns400(t *testing.T) {
 	t.Parallel()
 	ro := &Router{}

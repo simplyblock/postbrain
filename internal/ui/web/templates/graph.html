@@ -191,7 +191,17 @@
       tooltip.style.display = "block";
       tooltip.style.left = (event.clientX + 14) + "px";
       tooltip.style.top  = (event.clientY - 28) + "px";
-      tooltip.innerHTML = `<strong>${n.name}</strong><br><span style="opacity:.7">${n.type}</span>`;
+      // Build tooltip with DOM API so n.name and n.type (user-controlled entity
+      // metadata) are set via textContent and never parsed as HTML markup.
+      tooltip.replaceChildren();
+      var nameEl = document.createElement("strong");
+      nameEl.textContent = n.name;
+      tooltip.appendChild(nameEl);
+      tooltip.appendChild(document.createElement("br"));
+      var typeEl = document.createElement("span");
+      typeEl.style.opacity = "0.7";
+      typeEl.textContent = n.type;
+      tooltip.appendChild(typeEl);
     } else {
       tooltip.style.display = "none";
     }

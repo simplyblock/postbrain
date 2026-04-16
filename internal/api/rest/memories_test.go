@@ -32,6 +32,54 @@ func TestCreateMemory_MalformedJSON_Returns400(t *testing.T) {
 	}
 }
 
+// TestPromoteMemory_InvalidMemoryID_Returns400 verifies that a non-UUID path
+// parameter causes promoteMemory to return 400 before any DB access.
+func TestPromoteMemory_InvalidMemoryID_Returns400(t *testing.T) {
+	ro := &Router{}
+	req := requestWithChiParam(t, "id", "not-a-uuid")
+	req = withBody(req, `{"target_scope":"project:x","target_visibility":"team"}`)
+	w := httptest.NewRecorder()
+
+	ro.promoteMemory(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	assertJSONError(t, w)
+}
+
+// TestPromoteMemory_MalformedJSON_Returns400 verifies that a syntactically
+// invalid JSON body causes promoteMemory to return 400.
+func TestPromoteMemory_MalformedJSON_Returns400(t *testing.T) {
+	ro := &Router{}
+	req := requestWithChiParam(t, "id", "11111111-1111-1111-1111-111111111111")
+	req = withBody(req, `{not valid json`)
+	w := httptest.NewRecorder()
+
+	ro.promoteMemory(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	assertJSONError(t, w)
+}
+
+// TestPromoteMemory_MissingTargetFields_Returns400 verifies that a request
+// without target_scope and target_visibility returns 400.
+func TestPromoteMemory_MissingTargetFields_Returns400(t *testing.T) {
+	ro := &Router{}
+	req := requestWithChiParam(t, "id", "11111111-1111-1111-1111-111111111111")
+	req = withBody(req, `{}`)
+	w := httptest.NewRecorder()
+
+	ro.promoteMemory(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	assertJSONError(t, w)
+}
+
 // TestRecallMemories_MissingQ_Returns400 verifies that a recall request
 // without the required q parameter returns 400.
 func TestRecallMemories_MissingQ_Returns400(t *testing.T) {

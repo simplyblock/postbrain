@@ -436,6 +436,10 @@ func (h *Handler) handleSetScopeRepo(w http.ResponseWriter, r *http.Request) {
 		h.renderScopes(w, r, "repo_url is required")
 		return
 	}
+	if err := codegraph.ValidateRepoURL(repoURL); err != nil {
+		h.renderScopes(w, r, err.Error())
+		return
+	}
 	if defaultBranch == "" {
 		defaultBranch = "main"
 	}

@@ -574,6 +574,76 @@ func TestHandleRegister_DynamicRegistrationDisabled_Returns404(t *testing.T) {
 	}
 }
 
+// TestHandleRevoke_NoAuth_Returns401 is a regression test for the missing-auth
+// vulnerability: an unauthenticated request must be rejected, not processed.
+func TestHandleRevoke_NoAuth_Returns401(t *testing.T) {
+	srv := newTestServer()
+	rawToken := "pb_victim_token"
+	hash := hashSHA256Hex(rawToken)
+	srv.tokens.(*fakeServerTokenStore).tokenByHash[hash] = &db.Token{ID: uuid.New()}
+
+	// No Authorization header — simulates the unauthenticated SSRF/DoS attack.
+	form := url.Values{"token": {rawToken}}
+	req := httptest.NewRequest(http.MethodPost, "/oauth/revoke", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.HandleRevoke(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 (unauthenticated revoke must be rejected)", rec.Code)
+	}
+	if len(srv.tokens.(*fakeServerTokenStore).revoked) != 0 {
+		t.Fatalf("revoke calls = %d, want 0 (token must NOT be revoked without auth)", len(srv.tokens.(*fakeServerTokenStore).revoked))
+	}
+}
+
+// TestHandleRevoke_InvalidBearerToken_Returns401 verifies that a request
+// carrying an expired or already-revoked bearer token is rejected.
+func TestHandleRevoke_InvalidBearerToken_Returns401(t *testing.T) {
+	srv := newTestServer()
+	// Bearer token is not in the store (simulates revoked/expired token).
+	req := httptest.NewRequest(http.MethodPost, "/oauth/revoke", strings.NewReader("token=pb_any"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer pb_invalid_bearer")
+	rec := httptest.NewRecorder()
+	srv.HandleRevoke(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 (invalid bearer must be rejected)", rec.Code)
+	}
+}
+
+// TestHandleRevoke_CrossTokenRevocation_NotRevoked verifies that a valid
+// bearer holder cannot revoke a different token (cross-token DoS prevention).
+func TestHandleRevoke_CrossTokenRevocation_NotRevoked(t *testing.T) {
+	srv := newTestServer()
+	bearerRaw := "pb_attacker_token"
+	victimRaw := "pb_victim_token"
+	for _, pair := range []struct{ raw, id string }{{bearerRaw, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}, {victimRaw, "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}} {
+		id := uuid.MustParse(pair.id)
+		srv.tokens.(*fakeServerTokenStore).tokenByHash[hashSHA256Hex(pair.raw)] = &db.Token{ID: id}
+	}
+
+	// Authenticate as attacker, but try to revoke the victim's token.
+	form := url.Values{"token": {victimRaw}}
+	req := httptest.NewRequest(http.MethodPost, "/oauth/revoke", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer "+bearerRaw)
+	rec := httptest.NewRecorder()
+	srv.HandleRevoke(rec, req)
+
+	// Must return 200 (RFC 7009 §2.2 — server responds 200 for tokens it won't revoke)
+	// but must NOT actually revoke the victim's token.
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if len(srv.tokens.(*fakeServerTokenStore).revoked) != 0 {
+		t.Fatalf("revoke calls = %d, want 0 (victim token must NOT be revoked)", len(srv.tokens.(*fakeServerTokenStore).revoked))
+	}
+}
+
+// TestHandleRevoke_ValidToken_Returns200 verifies that a token holder can
+// revoke their own active token (self-revocation).
 func TestHandleRevoke_ValidToken_Returns200(t *testing.T) {
 	srv := newTestServer()
 	rawToken := "pb_revoke_me"
@@ -584,6 +654,7 @@ func TestHandleRevoke_ValidToken_Returns200(t *testing.T) {
 	form := url.Values{"token": {rawToken}}
 	req := httptest.NewRequest(http.MethodPost, "/oauth/revoke", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer "+rawToken) // authenticate with the same token
 	rec := httptest.NewRecorder()
 	srv.HandleRevoke(rec, req)
 
@@ -595,13 +666,20 @@ func TestHandleRevoke_ValidToken_Returns200(t *testing.T) {
 	}
 }
 
-func TestHandleRevoke_UnknownToken_Returns200(t *testing.T) {
+// TestHandleRevoke_BodyTokenMissing_Returns200 verifies that omitting the
+// body token parameter while providing valid auth returns 200 with no action.
+func TestHandleRevoke_BodyTokenMissing_Returns200(t *testing.T) {
 	srv := newTestServer()
-	form := url.Values{"token": {"pb_unknown"}}
-	req := httptest.NewRequest(http.MethodPost, "/oauth/revoke", strings.NewReader(form.Encode()))
+	rawToken := "pb_auth_no_body_token"
+	hash := hashSHA256Hex(rawToken)
+	srv.tokens.(*fakeServerTokenStore).tokenByHash[hash] = &db.Token{ID: uuid.New()}
+
+	req := httptest.NewRequest(http.MethodPost, "/oauth/revoke", strings.NewReader(""))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer "+rawToken)
 	rec := httptest.NewRecorder()
 	srv.HandleRevoke(rec, req)
+
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
@@ -611,3 +689,55 @@ func TestHandleRevoke_UnknownToken_Returns200(t *testing.T) {
 }
 
 func strPtr(s string) *string { return &s }
+
+// TestHandleRevoke_BearerScheme_CaseInsensitive verifies that RFC 9110 §11.1
+// case-insensitive scheme matching accepts "bearer" and "BEARER" in addition to
+// the canonical "Bearer" form.
+func TestHandleRevoke_BearerScheme_CaseInsensitive(t *testing.T) {
+	for _, scheme := range []string{"Bearer", "bearer", "BEARER", "bEaReR"} {
+		scheme := scheme
+		t.Run(scheme, func(t *testing.T) {
+			srv := newTestServer()
+			rawToken := "pb_case_token"
+			hash := hashSHA256Hex(rawToken)
+			srv.tokens.(*fakeServerTokenStore).tokenByHash[hash] = &db.Token{ID: uuid.New()}
+
+			form := url.Values{"token": {rawToken}}
+			req := httptest.NewRequest(http.MethodPost, "/oauth/revoke", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.Header.Set("Authorization", scheme+" "+rawToken)
+			rec := httptest.NewRecorder()
+			srv.HandleRevoke(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Errorf("scheme %q: status = %d, want 200", scheme, rec.Code)
+			}
+			if len(srv.tokens.(*fakeServerTokenStore).revoked) != 1 {
+				t.Errorf("scheme %q: revoke calls = %d, want 1", scheme, len(srv.tokens.(*fakeServerTokenStore).revoked))
+			}
+		})
+	}
+}
+
+// TestHandleRevoke_WhitespaceAroundToken_Accepted verifies that extra whitespace
+// around the bearer token value is trimmed (RFC 9110 §5.6.2).
+func TestHandleRevoke_WhitespaceAroundToken_Accepted(t *testing.T) {
+	srv := newTestServer()
+	rawToken := "pb_ws_token"
+	hash := hashSHA256Hex(rawToken)
+	srv.tokens.(*fakeServerTokenStore).tokenByHash[hash] = &db.Token{ID: uuid.New()}
+
+	form := url.Values{"token": {rawToken}}
+	req := httptest.NewRequest(http.MethodPost, "/oauth/revoke", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer  "+rawToken+"  ") // extra spaces
+	rec := httptest.NewRecorder()
+	srv.HandleRevoke(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (whitespace must be trimmed)", rec.Code)
+	}
+	if len(srv.tokens.(*fakeServerTokenStore).revoked) != 1 {
+		t.Fatalf("revoke calls = %d, want 1", len(srv.tokens.(*fakeServerTokenStore).revoked))
+	}
+}

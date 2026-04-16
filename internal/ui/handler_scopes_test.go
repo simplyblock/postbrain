@@ -7,7 +7,80 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+
+	"github.com/simplyblock/postbrain/internal/codegraph"
+	"github.com/simplyblock/postbrain/internal/db"
 )
+
+// TestScopesHierarchy_XSSPayload_NotInjectedViaInnerHTML is a regression test
+// for stored XSS in the scope hierarchy tree.  Before the fix, scope name and
+// externalId values were concatenated into an HTML string and assigned to
+// innerHTML, allowing stored script injection.
+//
+// After the fix the renderNode function must use the DOM API
+// (createElement / textContent) so user-supplied values are never treated as
+// HTML markup.  We verify this by:
+//  1. Rendering the scopes template with XSS payloads in name and externalId.
+//  2. Asserting the rendered output does not contain an innerHTML assignment
+//     that could carry user-controlled HTML (the old s.externalId / s.name
+//     string-concatenation pattern).
+//  3. Asserting the rendered output contains textContent usage (the safe pattern).
+func TestScopesHierarchy_XSSPayload_NotInjectedViaInnerHTML(t *testing.T) {
+	h := newTestHandler(t)
+
+	xssName := `<img src=x onerror=alert('xss-name')>`
+	xssExtID := `<script>alert('xss-extid')</script>`
+
+	scopeID := uuid.New()
+	data := struct {
+		Principals     []*db.Principal
+		Scopes         []*db.Scope
+		ScopeFormError string
+		SyncStatus     map[string]codegraph.SyncStatus
+		ChildCount     map[string]int64
+		CanManage      map[string]bool
+		CanDelete      map[string]bool
+		OwnerNames     map[string]string
+	}{
+		Scopes: []*db.Scope{
+			{
+				ID:         scopeID,
+				Kind:       "project",
+				ExternalID: xssExtID,
+				Name:       xssName,
+			},
+		},
+		SyncStatus: make(map[string]codegraph.SyncStatus),
+		ChildCount: make(map[string]int64),
+		CanManage:  map[string]bool{scopeID.String(): false},
+		CanDelete:  map[string]bool{scopeID.String(): false},
+		OwnerNames: make(map[string]string),
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/ui/scopes", nil)
+	w := httptest.NewRecorder()
+	h.render(w, req, "scopes", "Scopes", data)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("render status = %d, want 200", w.Code)
+	}
+
+	body := w.Body.String()
+
+	// The rendered JS must NOT concatenate user values into innerHTML.
+	// The old vulnerable pattern was: ... + s.externalId + ... assigned to innerHTML.
+	// After the fix, renderNode builds DOM nodes and uses textContent.
+	if strings.Contains(body, `s.externalId + "</strong>"`) ||
+		strings.Contains(body, `"<strong>" + s.externalId`) ||
+		strings.Contains(body, `s.name + ")</span>"`) {
+		t.Errorf("rendered page contains vulnerable innerHTML string-concatenation pattern with user fields")
+	}
+
+	// The hierarchy script must use textContent for user-controlled values.
+	if !strings.Contains(body, "textContent") {
+		t.Errorf("rendered page must use textContent for safe DOM insertion; innerHTML string-concat must be gone")
+	}
+}
 
 // TestHandleSetScopeRepo_MissingRepoURL_RendersError verifies that
 // POST /ui/scopes/{id}/repo without repo_url renders the scopes page with

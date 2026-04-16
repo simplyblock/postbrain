@@ -281,6 +281,23 @@ func (ro *Router) promoteMemory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve and authorize the source memory before processing the promotion.
+	// Without this check any principal with promotion permission in an allowed
+	// target scope could nominate an arbitrary memory (IDOR).
+	sourceMem, err := compat.GetMemory(r.Context(), ro.pool, memID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if sourceMem == nil {
+		writeError(w, http.StatusNotFound, "memory not found")
+		return
+	}
+	if err := ro.authorizeObjectScope(r.Context(), sourceMem.ScopeID); err != nil {
+		writeScopeAuthzError(w, r, sourceMem.ScopeID, err)
+		return
+	}
+
 	kind, externalID, err := parseScopeString(body.TargetScope)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())

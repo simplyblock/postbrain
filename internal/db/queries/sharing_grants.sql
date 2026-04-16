@@ -3,6 +3,10 @@ INSERT INTO sharing_grants (memory_id, artifact_id, grantee_scope_id, granted_by
 VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id, memory_id, artifact_id, grantee_scope_id, granted_by, can_reshare, expires_at, created_at;
 
+-- name: GetSharingGrant :one
+SELECT id, memory_id, artifact_id, grantee_scope_id, granted_by, can_reshare, expires_at, created_at
+FROM sharing_grants WHERE id = $1;
+
 -- name: RevokeSharingGrant :exec
 DELETE FROM sharing_grants WHERE id = $1;
 

@@ -50,6 +50,27 @@ func (q *Queries) CreateSharingGrant(ctx context.Context, arg CreateSharingGrant
 	return &i, err
 }
 
+const getSharingGrant = `-- name: GetSharingGrant :one
+SELECT id, memory_id, artifact_id, grantee_scope_id, granted_by, can_reshare, expires_at, created_at
+FROM sharing_grants WHERE id = $1
+`
+
+func (q *Queries) GetSharingGrant(ctx context.Context, id uuid.UUID) (*SharingGrant, error) {
+	row := q.db.QueryRow(ctx, getSharingGrant, id)
+	var i SharingGrant
+	err := row.Scan(
+		&i.ID,
+		&i.MemoryID,
+		&i.ArtifactID,
+		&i.GranteeScopeID,
+		&i.GrantedBy,
+		&i.CanReshare,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return &i, err
+}
+
 const isArtifactGranted = `-- name: IsArtifactGranted :one
 SELECT EXISTS (
     SELECT 1 FROM sharing_grants

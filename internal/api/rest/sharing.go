@@ -82,6 +82,25 @@ func (ro *Router) revokeGrant(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid grant id")
 		return
 	}
+
+	// Load the grant to authorize the caller before deleting.
+	grant, err := ro.sharing.GetByID(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if grant == nil {
+		writeError(w, http.StatusNotFound, "grant not found")
+		return
+	}
+
+	// Only the principal who created the grant may revoke it.
+	callerID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
+	if grant.GrantedBy != callerID {
+		writeError(w, http.StatusForbidden, "forbidden: only the grant creator may revoke it")
+		return
+	}
+
 	if err := ro.sharing.Revoke(r.Context(), id); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

@@ -2,16 +2,109 @@ package social
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strings"
 	"testing"
+	"time"
+
+	"github.com/go-jose/go-jose/v4"
+	josejwt "github.com/go-jose/go-jose/v4/jwt"
 
 	"github.com/simplyblock/postbrain/internal/config"
 )
+
+// oidcTestServer is a minimal OIDC provider that signs tokens with an RSA key.
+// It satisfies the go-oidc library's discovery + JWKS requirements.
+type oidcTestServer struct {
+	srv      *httptest.Server
+	key      *rsa.PrivateKey
+	clientID string
+}
+
+func newOIDCTestServer(t *testing.T, clientID string) *oidcTestServer {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate rsa key: %v", err)
+	}
+	ts := &oidcTestServer{key: key, clientID: clientID}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/.well-known/openid-configuration", ts.handleDiscovery)
+	mux.HandleFunc("/jwks", ts.handleJWKS)
+	ts.srv = httptest.NewServer(mux)
+	t.Cleanup(ts.srv.Close)
+	return ts
+}
+
+func (ts *oidcTestServer) handleDiscovery(w http.ResponseWriter, _ *http.Request) {
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"issuer":                                ts.srv.URL,
+		"authorization_endpoint":                ts.srv.URL + "/auth",
+		"token_endpoint":                        ts.srv.URL + "/token",
+		"jwks_uri":                              ts.srv.URL + "/jwks",
+		"response_types_supported":              []string{"code"},
+		"subject_types_supported":               []string{"public"},
+		"id_token_signing_alg_values_supported": []string{"RS256"},
+	})
+}
+
+func (ts *oidcTestServer) handleJWKS(w http.ResponseWriter, _ *http.Request) {
+	jwks := jose.JSONWebKeySet{
+		Keys: []jose.JSONWebKey{
+			{Key: &ts.key.PublicKey, KeyID: "test-key-1", Algorithm: string(jose.RS256), Use: "sig"},
+		},
+	}
+	_ = json.NewEncoder(w).Encode(jwks)
+}
+
+// signToken creates a valid RS256-signed JWT with the given extra claims.
+func (ts *oidcTestServer) signToken(t *testing.T, extra map[string]any) string {
+	t.Helper()
+	sig, err := jose.NewSigner(
+		jose.SigningKey{Algorithm: jose.RS256, Key: ts.key},
+		(&jose.SignerOptions{}).WithType("JWT").WithHeader("kid", "test-key-1"),
+	)
+	if err != nil {
+		t.Fatalf("new signer: %v", err)
+	}
+	stdClaims := josejwt.Claims{
+		Issuer:   ts.srv.URL,
+		Subject:  "google-sub-1",
+		Audience: josejwt.Audience{ts.clientID},
+		Expiry:   josejwt.NewNumericDate(time.Now().Add(time.Hour)),
+		IssuedAt: josejwt.NewNumericDate(time.Now()),
+	}
+	raw, err := josejwt.Signed(sig).Claims(stdClaims).Claims(extra).Serialize()
+	if err != nil {
+		t.Fatalf("sign jwt: %v", err)
+	}
+	return raw
+}
+
+// forgeAlgNoneJWT builds a JWT with alg:none — no cryptographic signature.
+// This is the token format from the SAST proof-of-concept.
+func forgeAlgNoneJWT(claims map[string]any) string {
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
+	payload, _ := json.Marshal(claims)
+	return header + "." + base64.RawURLEncoding.EncodeToString(payload) + "."
+}
+
+// newTestProvider wires a GoogleProvider against the test OIDC server.
+func newTestProvider(ts *oidcTestServer) *GoogleProvider {
+	return &GoogleProvider{
+		clientID:     ts.clientID,
+		clientSecret: "secret",
+		redirectURI:  "https://postbrain.example.com/ui/auth/google/callback",
+		httpClient:   ts.srv.Client(),
+		issuerURL:    ts.srv.URL,
+	}
+}
 
 func TestGoogleProvider_AuthURL_ContainsClientIDAndState(t *testing.T) {
 	p := NewGoogleProvider("https://postbrain.example.com", config.ProviderConfig{
@@ -37,74 +130,205 @@ func TestGoogleProvider_AuthURL_ContainsClientIDAndState(t *testing.T) {
 }
 
 func TestGoogleProvider_Exchange_ValidIDToken_ReturnsUserInfo(t *testing.T) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"token_endpoint": "http://example.test/unused"})
+	ts := newOIDCTestServer(t, "google-client-id")
+	signedToken := ts.signToken(t, map[string]any{
+		"email":          "user@example.com",
+		"email_verified": true,
+		"name":           "Google User",
+		"picture":        "https://cdn.example/google.png",
 	})
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
+	ts.srv.Config.Handler.(*http.ServeMux).HandleFunc("/token", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"id_token": signedToken})
+	})
 
-	mux = http.NewServeMux()
-	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"token_endpoint": srv.URL + "/token"})
-	})
-	mux.HandleFunc("/token", func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"id_token": fakeJWT(map[string]any{
-			"sub":     "google-sub-1",
-			"email":   "user@example.com",
-			"name":    "Google User",
-			"picture": "https://cdn.example/google.png",
-		})})
-	})
-	srv.Config.Handler = mux
-
-	p := NewGoogleProvider("https://postbrain.example.com", config.ProviderConfig{
-		ClientID:     "google-client-id",
-		ClientSecret: "google-secret",
-		Scopes:       []string{"openid", "email", "profile"},
-	})
-	p.discoveryURL = srv.URL + "/.well-known/openid-configuration"
-	p.httpClient = srv.Client()
-
-	info, err := p.Exchange(context.Background(), "valid-code")
+	info, err := newTestProvider(ts).Exchange(context.Background(), "valid-code")
 	if err != nil {
 		t.Fatalf("Exchange: %v", err)
 	}
 	if info.ProviderID != "google-sub-1" {
-		t.Fatalf("provider id = %q", info.ProviderID)
+		t.Fatalf("provider id = %q, want google-sub-1", info.ProviderID)
 	}
 	if info.Email != "user@example.com" {
-		t.Fatalf("email = %q", info.Email)
+		t.Fatalf("email = %q, want user@example.com", info.Email)
+	}
+	if info.DisplayName != "Google User" {
+		t.Fatalf("display name = %q, want Google User", info.DisplayName)
 	}
 }
 
-func TestGoogleProvider_Exchange_InvalidIDToken_ReturnsError(t *testing.T) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"token_endpoint": "http://example.test/token"})
+// TestGoogleProvider_Exchange_ForgedAlgNone_Rejected verifies that a JWT with alg:none
+// (no signature) is rejected — this is the exact attack described in the SAST report.
+func TestGoogleProvider_Exchange_ForgedAlgNone_Rejected(t *testing.T) {
+	ts := newOIDCTestServer(t, "google-client-id")
+	forgedToken := forgeAlgNoneJWT(map[string]any{
+		"iss":            ts.srv.URL,
+		"sub":            "victim-sub",
+		"aud":            "google-client-id",
+		"email":          "victim@example.com",
+		"email_verified": true,
+		"exp":            time.Now().Add(time.Hour).Unix(),
+		"iat":            time.Now().Unix(),
 	})
-	mux.HandleFunc("/token", func(w http.ResponseWriter, _ *http.Request) {
+	ts.srv.Config.Handler.(*http.ServeMux).HandleFunc("/token", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"id_token": forgedToken})
+	})
+
+	_, err := newTestProvider(ts).Exchange(context.Background(), "forged-code")
+	if err == nil {
+		t.Fatal("Exchange: expected error for alg:none forged token, got nil — authentication bypass possible")
+	}
+}
+
+func TestGoogleProvider_Exchange_MalformedIDToken_ReturnsError(t *testing.T) {
+	ts := newOIDCTestServer(t, "google-client-id")
+	ts.srv.Config.Handler.(*http.ServeMux).HandleFunc("/token", func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"id_token": "not-a-jwt"})
 	})
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
 
-	p := NewGoogleProvider("https://postbrain.example.com", config.ProviderConfig{
-		ClientID:     "google-client-id",
-		ClientSecret: "google-secret",
-		Scopes:       []string{"openid", "email", "profile"},
-	})
-	p.discoveryURL = srv.URL + "/.well-known/openid-configuration"
-	p.httpClient = srv.Client()
-
-	if _, err := p.Exchange(context.Background(), "bad-code"); err == nil {
-		t.Fatal("Exchange expected error, got nil")
+	if _, err := newTestProvider(ts).Exchange(context.Background(), "bad-code"); err == nil {
+		t.Fatal("Exchange: expected error for malformed token, got nil")
 	}
 }
 
-func fakeJWT(claims map[string]any) string {
-	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
-	payloadBytes, _ := json.Marshal(claims)
-	payload := base64.RawURLEncoding.EncodeToString(payloadBytes)
-	return strings.Join([]string{header, payload, "sig"}, ".")
+// ── OIDC claim validation regression tests ────────────────────────────────────
+// These tests verify that exp, iss, aud, and nbf are enforced by the verifier.
+// Before 2d38474, parseJWTClaims decoded claims without any claim checks,
+// making all four of these attacks viable.
+
+// TestGoogleProvider_Exchange_ExpiredToken_Rejected verifies that a token whose
+// exp is in the past is rejected with an error.
+func TestGoogleProvider_Exchange_ExpiredToken_Rejected(t *testing.T) {
+	ts := newOIDCTestServer(t, "google-client-id")
+
+	sig, err := jose.NewSigner(
+		jose.SigningKey{Algorithm: jose.RS256, Key: ts.key},
+		(&jose.SignerOptions{}).WithType("JWT").WithHeader("kid", "test-key-1"),
+	)
+	if err != nil {
+		t.Fatalf("new signer: %v", err)
+	}
+	expiredClaims := josejwt.Claims{
+		Issuer:   ts.srv.URL,
+		Subject:  "sub-1",
+		Audience: josejwt.Audience{"google-client-id"},
+		Expiry:   josejwt.NewNumericDate(time.Now().Add(-2 * time.Hour)), // expired
+		IssuedAt: josejwt.NewNumericDate(time.Now().Add(-3 * time.Hour)),
+	}
+	expiredToken, err := josejwt.Signed(sig).Claims(expiredClaims).Serialize()
+	if err != nil {
+		t.Fatalf("sign expired jwt: %v", err)
+	}
+
+	ts.srv.Config.Handler.(*http.ServeMux).HandleFunc("/token", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"id_token": expiredToken})
+	})
+
+	_, err = newTestProvider(ts).Exchange(context.Background(), "expired-code")
+	if err == nil {
+		t.Fatal("Exchange: expected error for expired token (exp in past), got nil — replay attack possible")
+	}
+}
+
+// TestGoogleProvider_Exchange_WrongIssuer_Rejected verifies that a validly
+// signed token from a different issuer is rejected.
+func TestGoogleProvider_Exchange_WrongIssuer_Rejected(t *testing.T) {
+	ts := newOIDCTestServer(t, "google-client-id")
+
+	sig, err := jose.NewSigner(
+		jose.SigningKey{Algorithm: jose.RS256, Key: ts.key},
+		(&jose.SignerOptions{}).WithType("JWT").WithHeader("kid", "test-key-1"),
+	)
+	if err != nil {
+		t.Fatalf("new signer: %v", err)
+	}
+	wrongIssClaims := josejwt.Claims{
+		Issuer:   "https://evil.example.com", // wrong issuer
+		Subject:  "sub-1",
+		Audience: josejwt.Audience{"google-client-id"},
+		Expiry:   josejwt.NewNumericDate(time.Now().Add(time.Hour)),
+		IssuedAt: josejwt.NewNumericDate(time.Now()),
+	}
+	wrongIssToken, err := josejwt.Signed(sig).Claims(wrongIssClaims).Serialize()
+	if err != nil {
+		t.Fatalf("sign wrong-iss jwt: %v", err)
+	}
+
+	ts.srv.Config.Handler.(*http.ServeMux).HandleFunc("/token", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"id_token": wrongIssToken})
+	})
+
+	_, err = newTestProvider(ts).Exchange(context.Background(), "wrong-iss-code")
+	if err == nil {
+		t.Fatal("Exchange: expected error for wrong issuer, got nil — cross-issuer token accepted")
+	}
+}
+
+// TestGoogleProvider_Exchange_WrongAudience_Rejected verifies that a token
+// issued for a different client ID is rejected.
+func TestGoogleProvider_Exchange_WrongAudience_Rejected(t *testing.T) {
+	ts := newOIDCTestServer(t, "google-client-id")
+
+	sig, err := jose.NewSigner(
+		jose.SigningKey{Algorithm: jose.RS256, Key: ts.key},
+		(&jose.SignerOptions{}).WithType("JWT").WithHeader("kid", "test-key-1"),
+	)
+	if err != nil {
+		t.Fatalf("new signer: %v", err)
+	}
+	wrongAudClaims := josejwt.Claims{
+		Issuer:   ts.srv.URL,
+		Subject:  "sub-1",
+		Audience: josejwt.Audience{"other-app-client-id"}, // wrong audience
+		Expiry:   josejwt.NewNumericDate(time.Now().Add(time.Hour)),
+		IssuedAt: josejwt.NewNumericDate(time.Now()),
+	}
+	wrongAudToken, err := josejwt.Signed(sig).Claims(wrongAudClaims).Serialize()
+	if err != nil {
+		t.Fatalf("sign wrong-aud jwt: %v", err)
+	}
+
+	ts.srv.Config.Handler.(*http.ServeMux).HandleFunc("/token", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"id_token": wrongAudToken})
+	})
+
+	_, err = newTestProvider(ts).Exchange(context.Background(), "wrong-aud-code")
+	if err == nil {
+		t.Fatal("Exchange: expected error for wrong audience, got nil — token intended for another app accepted")
+	}
+}
+
+// TestGoogleProvider_Exchange_NotYetValid_Rejected verifies that a token whose
+// nbf (not-before) is in the future is rejected.
+func TestGoogleProvider_Exchange_NotYetValid_Rejected(t *testing.T) {
+	ts := newOIDCTestServer(t, "google-client-id")
+
+	sig, err := jose.NewSigner(
+		jose.SigningKey{Algorithm: jose.RS256, Key: ts.key},
+		(&jose.SignerOptions{}).WithType("JWT").WithHeader("kid", "test-key-1"),
+	)
+	if err != nil {
+		t.Fatalf("new signer: %v", err)
+	}
+	future := time.Now().Add(2 * time.Hour)
+	nbfClaims := josejwt.Claims{
+		Issuer:    ts.srv.URL,
+		Subject:   "sub-1",
+		Audience:  josejwt.Audience{"google-client-id"},
+		Expiry:    josejwt.NewNumericDate(future.Add(time.Hour)),
+		IssuedAt:  josejwt.NewNumericDate(time.Now()),
+		NotBefore: josejwt.NewNumericDate(future), // nbf in the future
+	}
+	nbfToken, err := josejwt.Signed(sig).Claims(nbfClaims).Serialize()
+	if err != nil {
+		t.Fatalf("sign nbf jwt: %v", err)
+	}
+
+	ts.srv.Config.Handler.(*http.ServeMux).HandleFunc("/token", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"id_token": nbfToken})
+	})
+
+	_, err = newTestProvider(ts).Exchange(context.Background(), "nbf-code")
+	if err == nil {
+		t.Fatal("Exchange: expected error for token not yet valid (nbf in future), got nil")
+	}
 }
