@@ -766,6 +766,7 @@ func installCodexSkillCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&targetDir, "target", ".", "target directory")
+	cmd.Flags().String("url", "", "Postbrain backend URL (overrides POSTBRAIN_URL env var and base file)")
 	cmd.Flags().BoolVar(&autoapprove, "autoapprove", false, "add approval_mode=approve for all Postbrain tools in .codex/config.toml")
 	return cmd
 }
@@ -946,6 +947,7 @@ func installClaudeSkillCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&targetDir, "target", ".", "target directory")
+	cmd.Flags().String("url", "", "Postbrain backend URL (overrides POSTBRAIN_URL env var and base file)")
 	cmd.Flags().BoolVar(&autoapprove, "autoapprove", false, "add mcp__postbrain__* to permissions.allow in .claude/settings.local.json")
 	return cmd
 }
@@ -958,6 +960,11 @@ func resolveScopeForInstall(targetDir string) string {
 }
 
 func resolveURLForInstall(cmd *cobra.Command, targetDir string) (string, error) {
+	if cmd != nil {
+		if f := cmd.Flags().Lookup("url"); f != nil && f.Changed {
+			return strings.TrimRight(strings.TrimSpace(f.Value.String()), "/"), nil
+		}
+	}
 	if url := strings.TrimSpace(os.Getenv("POSTBRAIN_URL")); url != "" {
 		return strings.TrimRight(url, "/"), nil
 	}
