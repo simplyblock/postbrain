@@ -107,21 +107,26 @@ func readInstalledVersion(slug, agentType, workdir string) int {
 		return 0
 	}
 
-	// Containment check: ensure the resolved path stays inside workdir.
+	// Containment check: resolve symlinks on both base and target so that a
+	// symlink component under workdir cannot redirect the read outside the
+	// intended base directory.  filepath.Abs alone does not follow symlinks.
 	path := TargetPath(slug, agentType, workdir)
-	cleanBase, err := filepath.Abs(workdir)
+	realBase, err := filepath.EvalSymlinks(workdir)
 	if err != nil {
 		return 0
 	}
-	cleanPath, err := filepath.Abs(path)
+	// The target file may not exist; resolve its parent directory, then re-attach
+	// the filename.  If the parent doesn't exist either, os.Open will fail safely.
+	realDir, err := filepath.EvalSymlinks(filepath.Dir(path))
 	if err != nil {
 		return 0
 	}
-	if !strings.HasPrefix(cleanPath, cleanBase+string(filepath.Separator)) {
+	realPath := filepath.Join(realDir, filepath.Base(path))
+	if !strings.HasPrefix(realPath, filepath.Clean(realBase)+string(filepath.Separator)) {
 		return 0
 	}
 
-	f, err := os.Open(path)
+	f, err := os.Open(realPath)
 	if err != nil {
 		return 0
 	}

@@ -208,3 +208,34 @@ func TestInstall_OverwritesExisting(t *testing.T) {
 		t.Error("expected updated body in file after overwrite")
 	}
 }
+
+// TestInstall_SymlinkEscape_ReturnsError verifies that a symlink under workdir
+// pointing outside the base directory is detected and rejected.
+// Before the EvalSymlinks fix, filepath.Abs alone would not follow symlinks,
+// so a symlink like workdir/.claude → /tmp/outside could bypass the check.
+func TestInstall_SymlinkEscape_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	outer := t.TempDir()
+	base := filepath.Join(outer, "workdir")
+	outside := filepath.Join(outer, "outside")
+
+	if err := os.MkdirAll(outside, 0755); err != nil {
+		t.Fatalf("mkdir outside: %v", err)
+	}
+	if err := os.MkdirAll(base, 0755); err != nil {
+		t.Fatalf("mkdir base: %v", err)
+	}
+
+	// Create workdir/.claude as a symlink pointing to outer/outside.
+	dotClaude := filepath.Join(base, ".claude")
+	if err := os.Symlink(outside, dotClaude); err != nil {
+		t.Skipf("symlink not supported on this OS/FS: %v", err)
+	}
+
+	skill := makeTestSkill("my-skill")
+	_, err := Install(skill, "claude-code", base)
+	if err == nil {
+		t.Fatal("Install through symlink-escaped directory must return an error, got nil")
+	}
+}

@@ -51,23 +51,30 @@ func Install(skill *db.Skill, agentType, workdir string) (string, error) {
 		return "", err
 	}
 
-	// Defense-in-depth: ensure the resolved target stays inside workdir even
-	// if ValidateSlug is somehow bypassed by a future code path.
 	target := TargetPath(skill.Slug, agentType, workdir)
-	cleanBase, err := filepath.Abs(workdir)
+
+	// Create the directory first so EvalSymlinks can resolve it below.
+	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		return "", fmt.Errorf("skills: install mkdir: %w", err)
+	}
+
+	// Defense-in-depth: resolve symlinks on both paths before comparing so that
+	// a symlink under workdir (e.g. workdir/.claude → /etc) cannot be used to
+	// escape the intended base directory.  filepath.Abs alone does not protect
+	// against this — filepath.EvalSymlinks follows every symlink component.
+	realBase, err := filepath.EvalSymlinks(workdir)
 	if err != nil {
 		return "", fmt.Errorf("skills: install resolve base: %w", err)
 	}
-	cleanTarget, err := filepath.Abs(target)
+	// The target file itself does not exist yet; resolve its parent (which was
+	// just created by MkdirAll) and re-attach the filename.
+	realDir, err := filepath.EvalSymlinks(filepath.Dir(target))
 	if err != nil {
-		return "", fmt.Errorf("skills: install resolve target: %w", err)
+		return "", fmt.Errorf("skills: install resolve target dir: %w", err)
 	}
-	if !strings.HasPrefix(cleanTarget, cleanBase+string(filepath.Separator)) {
-		return "", fmt.Errorf("skills: install path %q escapes base directory %q", cleanTarget, cleanBase)
-	}
-
-	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-		return "", fmt.Errorf("skills: install mkdir: %w", err)
+	realTarget := filepath.Join(realDir, filepath.Base(target))
+	if !strings.HasPrefix(realTarget, filepath.Clean(realBase)+string(filepath.Separator)) {
+		return "", fmt.Errorf("skills: install path %q escapes base directory %q", realTarget, realBase)
 	}
 
 	agentTypesJSON, err := json.Marshal(skill.AgentTypes)
