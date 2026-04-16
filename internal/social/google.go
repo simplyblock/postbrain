@@ -76,10 +76,15 @@ func (p *GoogleProvider) Exchange(ctx context.Context, code string) (*UserInfo, 
 		return nil, err
 	}
 
+	// Inject the custom HTTP client so that JWKS fetch/refresh during Verify
+	// uses the same transport as provider discovery (required for tests and
+	// custom timeouts/proxies; without this, go-oidc falls back to http.DefaultClient).
+	verifyCtx := oidc.ClientContext(ctx, p.httpClient)
+
 	// Verify signature, issuer (accounts.google.com), audience (our client_id),
 	// and expiry. Rejects alg:none and any token with an invalid or missing signature.
 	verifier := prov.Verifier(&oidc.Config{ClientID: p.clientID})
-	verified, err := verifier.Verify(ctx, rawIDToken)
+	verified, err := verifier.Verify(verifyCtx, rawIDToken)
 	if err != nil {
 		return nil, fmt.Errorf("google id_token verification: %w", err)
 	}
