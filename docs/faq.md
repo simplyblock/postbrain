@@ -23,6 +23,17 @@ Postbrain scope.
 
 No. If omitted, current directory (`.`) is used as project root.
 
+## How do I set the backend URL during skill installation?
+
+Use `--url`:
+
+```bash
+postbrain-cli install-claude-skill --url https://postbrain.example.com
+postbrain-cli install-codex-skill  --url https://postbrain.example.com
+```
+
+If `--url` is not provided the URL is resolved in this order: `POSTBRAIN_URL` env var → `.claude/postbrain-base.md` / `.agents/postbrain-base.md` → interactive prompt (default: `http://localhost:7433`).
+
 ## Does `server.token` exist in the current config schema?
 
 No. Current runtime config uses `server.addr`, `server.tls_cert`, and `server.tls_key` for server settings.

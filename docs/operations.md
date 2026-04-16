@@ -95,6 +95,6 @@ make test-integration
 make lint
 
 postbrain-cli skill sync --scope project:your-org/your-repo --agent claude-code
-postbrain-cli install-codex-skill --target /path/to/project
-postbrain-cli install-claude-skill --target /path/to/project
+postbrain-cli install-codex-skill --target /path/to/project --url https://postbrain.example.com
+postbrain-cli install-claude-skill --target /path/to/project --url https://postbrain.example.com
 ```

@@ -77,6 +77,13 @@ postbrain-cli install-codex-skill --target /path/to/project
 postbrain-cli install-claude-skill --target /path/to/project
 ```
 
+Use `--url` to set the backend URL explicitly (useful in CI or when the server is not on localhost):
+
+```bash
+postbrain-cli install-codex-skill --target /path/to/project --url https://postbrain.example.com
+postbrain-cli install-claude-skill --target /path/to/project --url https://postbrain.example.com
+```
+
 ## Skill sync from registry
 
 When using published team skills:
