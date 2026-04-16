@@ -17,7 +17,7 @@ It exposes three layers backed by PostgreSQL:
 Prerequisites:
 
 - PostgreSQL 18 with required extensions (`pgvector`, `apache_age`, `pg_cron`, `pg_partman`)
-- Go 1.23+
+- Go 1.26+
 - Embedding provider (for example Ollama or OpenAI-compatible endpoint)
 
 Then:

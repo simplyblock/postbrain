@@ -2,7 +2,7 @@
 codex_hooks = true
 
 [mcp_servers.postbrain]
-url = "http://localhost:7433/mcp"
+url = "https://postbrain.simplyblock.ai"
 bearer_token_env_var = "POSTBRAIN_TOKEN"
 default_tools_enabled = true
 default_tools_approval_mode = "approve"

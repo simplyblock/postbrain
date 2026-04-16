@@ -1,7 +1,7 @@
 ---
 postbrain_enabled: true
 postbrain_scope: project:postbrain
-postbrain_url: http://localhost:7433
+postbrain_url: https://postbrain.simplyblock.ai
 updated_at: 2026-04-11
 ---
 
