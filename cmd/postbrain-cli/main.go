@@ -39,6 +39,9 @@ var embeddedCodexSkillLight string
 //go:embed assets/claude-code.md
 var embeddedClaudeSkill string
 
+//go:embed assets/claude-dot-claude.md
+var embeddedClaudeDotClaude string
+
 // Effectively disabled for now since the hooks system is still very minimal
 const minimumCodexHooksVersion = "0.114.0"
 const latestReleaseAPIURL = "https://api.github.com/repos/simplyblock/postbrain/releases/latest"
@@ -910,16 +913,17 @@ func installClaudeSkillCmd() *cobra.Command {
 			installedPath, updatedClaude, err := postbraincli.InstallClaudeSkill(
 				targetDir,
 				embeddedClaudeSkill,
+				embeddedClaudeDotClaude,
 				backendURL,
 				scope,
 			)
 			if err != nil {
 				return err
 			}
-			updatedSettings, err := postbraincli.InstallClaudeHooks(targetDir, scope)
-			if err != nil {
-				return err
-			}
+			//updatedSettings, err := postbraincli.InstallClaudeHooks(targetDir, scope)
+			//if err != nil {
+			//	return err
+			//}
 			updatedMCP, err := postbraincli.InstallClaudeMCPConfig(targetDir, backendURL)
 			if err != nil {
 				return err
@@ -935,7 +939,7 @@ func installClaudeSkillCmd() *cobra.Command {
 				"path", installedPath,
 				"backend_url", backendURL,
 				"claude_updated", updatedClaude,
-				"settings_updated", updatedSettings,
+				//"settings_updated", updatedSettings,
 				"mcp_updated", updatedMCP,
 				"permissions_updated", updatedPerms)
 			return nil
