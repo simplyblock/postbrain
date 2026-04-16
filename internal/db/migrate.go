@@ -38,16 +38,33 @@ const advisoryLockKey = int64(0x706f737462726169) // 8101067571501756777
 // or a previous run crashed without releasing the lock session.
 const advisoryLockTimeout = "30s"
 
-// acquireAdvisoryLock sets a lock_timeout and acquires the migration advisory
-// lock on conn. It logs before and after so a slow wait is visible in logs.
+// acquireAdvisoryLock scopes lock_timeout to just the advisory-lock acquisition
+// by using SET LOCAL inside a short transaction. The session-level advisory
+// lock remains held after commit, but the temporary lock_timeout does not leak
+// into later migration statements or future reuse of the pooled connection.
 func acquireAdvisoryLock(ctx context.Context, conn *pgxpool.Conn) error {
-	if _, err := conn.Exec(ctx, "SET lock_timeout = $1", advisoryLockTimeout); err != nil {
-		return fmt.Errorf("migrate: set lock_timeout: %w", err)
+	tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("migrate: begin advisory lock transaction: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback(ctx)
+		}
+	}()
+
+	if _, err := tx.Exec(ctx, "SET LOCAL lock_timeout = $1", advisoryLockTimeout); err != nil {
+		return fmt.Errorf("migrate: set local lock_timeout: %w", err)
 	}
 	slog.Info("migrate: acquiring advisory lock")
-	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", advisoryLockKey); err != nil {
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_lock($1)", advisoryLockKey); err != nil {
 		return fmt.Errorf("migrate: acquire advisory lock (timeout %s — another instance may be migrating): %w", advisoryLockTimeout, err)
 	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("migrate: commit advisory lock transaction: %w", err)
+	}
+	committed = true
 	slog.Info("migrate: advisory lock acquired")
 	return nil
 }
