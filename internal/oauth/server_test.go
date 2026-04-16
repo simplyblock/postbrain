@@ -689,3 +689,55 @@ func TestHandleRevoke_BodyTokenMissing_Returns200(t *testing.T) {
 }
 
 func strPtr(s string) *string { return &s }
+
+// TestHandleRevoke_BearerScheme_CaseInsensitive verifies that RFC 9110 §11.1
+// case-insensitive scheme matching accepts "bearer" and "BEARER" in addition to
+// the canonical "Bearer" form.
+func TestHandleRevoke_BearerScheme_CaseInsensitive(t *testing.T) {
+	for _, scheme := range []string{"Bearer", "bearer", "BEARER", "bEaReR"} {
+		scheme := scheme
+		t.Run(scheme, func(t *testing.T) {
+			srv := newTestServer()
+			rawToken := "pb_case_token"
+			hash := hashSHA256Hex(rawToken)
+			srv.tokens.(*fakeServerTokenStore).tokenByHash[hash] = &db.Token{ID: uuid.New()}
+
+			form := url.Values{"token": {rawToken}}
+			req := httptest.NewRequest(http.MethodPost, "/oauth/revoke", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.Header.Set("Authorization", scheme+" "+rawToken)
+			rec := httptest.NewRecorder()
+			srv.HandleRevoke(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Errorf("scheme %q: status = %d, want 200", scheme, rec.Code)
+			}
+			if len(srv.tokens.(*fakeServerTokenStore).revoked) != 1 {
+				t.Errorf("scheme %q: revoke calls = %d, want 1", scheme, len(srv.tokens.(*fakeServerTokenStore).revoked))
+			}
+		})
+	}
+}
+
+// TestHandleRevoke_WhitespaceAroundToken_Accepted verifies that extra whitespace
+// around the bearer token value is trimmed (RFC 9110 §5.6.2).
+func TestHandleRevoke_WhitespaceAroundToken_Accepted(t *testing.T) {
+	srv := newTestServer()
+	rawToken := "pb_ws_token"
+	hash := hashSHA256Hex(rawToken)
+	srv.tokens.(*fakeServerTokenStore).tokenByHash[hash] = &db.Token{ID: uuid.New()}
+
+	form := url.Values{"token": {rawToken}}
+	req := httptest.NewRequest(http.MethodPost, "/oauth/revoke", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", "Bearer  "+rawToken+"  ") // extra spaces
+	rec := httptest.NewRecorder()
+	srv.HandleRevoke(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (whitespace must be trimmed)", rec.Code)
+	}
+	if len(srv.tokens.(*fakeServerTokenStore).revoked) != 1 {
+		t.Fatalf("revoke calls = %d, want 1", len(srv.tokens.(*fakeServerTokenStore).revoked))
+	}
+}
