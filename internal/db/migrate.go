@@ -33,6 +33,42 @@ var migrationsFS embed.FS
 // as an int64.
 const advisoryLockKey = int64(0x706f737462726169) // 8101067571501756777
 
+// advisoryLockTimeout is how long to wait for the migration advisory lock
+// before giving up. A long wait usually means another instance is migrating
+// or a previous run crashed without releasing the lock session.
+const advisoryLockTimeout = "30s"
+
+// acquireAdvisoryLock scopes lock_timeout to just the advisory-lock acquisition
+// by using SET LOCAL inside a short transaction. The session-level advisory
+// lock remains held after commit, but the temporary lock_timeout does not leak
+// into later migration statements or future reuse of the pooled connection.
+func acquireAdvisoryLock(ctx context.Context, conn *pgxpool.Conn) error {
+	tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("migrate: begin advisory lock transaction: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback(ctx)
+		}
+	}()
+
+	if _, err := tx.Exec(ctx, "SET LOCAL lock_timeout = $1", advisoryLockTimeout); err != nil {
+		return fmt.Errorf("migrate: set local lock_timeout: %w", err)
+	}
+	slog.Info("migrate: acquiring advisory lock")
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_lock($1)", advisoryLockKey); err != nil {
+		return fmt.Errorf("migrate: acquire advisory lock (timeout %s — another instance may be migrating): %w", advisoryLockTimeout, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("migrate: commit advisory lock transaction: %w", err)
+	}
+	committed = true
+	slog.Info("migrate: advisory lock acquired")
+	return nil
+}
+
 // CheckAndMigrate applies pending schema migrations under a PostgreSQL advisory
 // lock. It:
 //  1. Acquires an advisory lock to prevent concurrent migration runs.
@@ -48,9 +84,8 @@ func CheckAndMigrate(ctx context.Context, pool *pgxpool.Pool, autoMigrate bool) 
 	}
 	defer release()
 
-	// Acquire advisory lock to prevent concurrent migration runs.
-	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", advisoryLockKey); err != nil {
-		return fmt.Errorf("migrate: acquire advisory lock: %w", err)
+	if err := acquireAdvisoryLock(ctx, conn); err != nil {
+		return err
 	}
 	defer func() {
 		if _, unlockErr := conn.Exec(ctx, "SELECT pg_advisory_unlock($1)", advisoryLockKey); unlockErr != nil {
@@ -161,8 +196,8 @@ func MigrateDown(ctx context.Context, pool *pgxpool.Pool, n int) error {
 	}
 	defer release()
 
-	if _, lockErr := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", advisoryLockKey); lockErr != nil {
-		return fmt.Errorf("migrate: acquire advisory lock: %w", lockErr)
+	if err := acquireAdvisoryLock(ctx, conn); err != nil {
+		return err
 	}
 	defer func() {
 		if _, unlockErr := conn.Exec(ctx, "SELECT pg_advisory_unlock($1)", advisoryLockKey); unlockErr != nil {
@@ -195,8 +230,8 @@ func MigrateForce(ctx context.Context, pool *pgxpool.Pool, v int) error {
 	}
 	defer release()
 
-	if _, lockErr := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", advisoryLockKey); lockErr != nil {
-		return fmt.Errorf("migrate: acquire advisory lock: %w", lockErr)
+	if err := acquireAdvisoryLock(ctx, conn); err != nil {
+		return err
 	}
 	defer func() {
 		if _, unlockErr := conn.Exec(ctx, "SELECT pg_advisory_unlock($1)", advisoryLockKey); unlockErr != nil {
