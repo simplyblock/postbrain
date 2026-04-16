@@ -9,10 +9,16 @@ import (
 )
 
 // InstallClaudeSkill installs the postbrain Claude Code instructions file into
-// targetDir and optionally appends a Postbrain hint block to CLAUDE.md.
+// targetDir, optionally installs .claude/CLAUDE.md, and appends a Postbrain
+// hint block to the root CLAUDE.md.
 //
-// Returns the installed skill path, whether CLAUDE.md was updated, and an error.
-func InstallClaudeSkill(targetDir, skillContent, postbrainURL, postbrainScope string) (string, bool, error) {
+// claudeDotClaudeContent is the content to install into .claude/CLAUDE.md.
+// When non-empty it is merged into any existing .claude/CLAUDE.md (or created).
+// The operation is idempotent: if the postbrain marker is already present the
+// file is left unchanged.
+//
+// Returns the installed skill path, whether any CLAUDE.md was updated, and an error.
+func InstallClaudeSkill(targetDir, skillContent, claudeDotClaudeContent, postbrainURL, postbrainScope string) (string, bool, error) {
 	if strings.TrimSpace(targetDir) == "" {
 		targetDir = "."
 	}
@@ -39,6 +45,11 @@ func InstallClaudeSkill(targetDir, skillContent, postbrainURL, postbrainScope st
 		return "", false, err
 	}
 
+	innerUpdated, err := installDotClaudeCLAUDE(targetDir, claudeDotClaudeContent)
+	if err != nil {
+		return "", false, err
+	}
+
 	claudePath := filepath.Join(targetDir, "CLAUDE.md")
 	claudeBytes, err := os.ReadFile(claudePath)
 	if err != nil {
@@ -49,7 +60,7 @@ func InstallClaudeSkill(targetDir, skillContent, postbrainURL, postbrainScope st
 		}
 	}
 	if strings.Contains(string(claudeBytes), postbrainConfigMarker) {
-		return destFile, false, nil
+		return destFile, innerUpdated, nil
 	}
 
 	var block strings.Builder
@@ -87,6 +98,43 @@ func InstallClaudeSkill(targetDir, skillContent, postbrainURL, postbrainScope st
 	}
 
 	return destFile, true, nil
+}
+
+// installDotClaudeCLAUDE merges content into <targetDir>/.claude/CLAUDE.md.
+// It creates the file if absent, appends if the marker is missing, or skips
+// if the marker is already present (idempotent). Returns true when the file
+// was written. When content is empty the call is a no-op.
+func installDotClaudeCLAUDE(targetDir, content string) (bool, error) {
+	if strings.TrimSpace(content) == "" {
+		return false, nil
+	}
+
+	claudeDir := filepath.Join(targetDir, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		return false, fmt.Errorf("create .claude directory: %w", err)
+	}
+
+	innerPath := filepath.Join(claudeDir, "CLAUDE.md")
+	existing, err := os.ReadFile(innerPath)
+	if err != nil && !os.IsNotExist(err) {
+		return false, fmt.Errorf("read .claude/CLAUDE.md: %w", err)
+	}
+	if strings.Contains(string(existing), postbrainConfigMarker) {
+		return false, nil
+	}
+
+	var block strings.Builder
+	block.WriteString("\n")
+	block.WriteString(postbrainConfigMarker)
+	block.WriteString("\n")
+	block.WriteString(strings.TrimSpace(content))
+	block.WriteString("\n")
+
+	newContent := string(existing) + block.String()
+	if err := os.WriteFile(innerPath, []byte(newContent), 0o644); err != nil {
+		return false, fmt.Errorf("write .claude/CLAUDE.md: %w", err)
+	}
+	return true, nil
 }
 
 // InstallClaudeHooks merges Postbrain hooks into .claude/settings.local.json.

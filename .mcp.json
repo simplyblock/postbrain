@@ -5,7 +5,7 @@
         "Authorization": "Bearer ${POSTBRAIN_TOKEN}"
       },
       "type": "http",
-      "url": "http://localhost:7433/mcp"
+      "url": "https://postbrain.simplyblock.ai/mcp"
     }
   }
 }

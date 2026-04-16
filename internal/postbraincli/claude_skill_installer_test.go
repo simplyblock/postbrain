@@ -16,7 +16,7 @@ func TestInstallClaudeSkill_WritesSkillFileAndUpdatesCLAUDE(t *testing.T) {
 		t.Fatalf("write CLAUDE.md: %v", err)
 	}
 
-	installedPath, updatedClaude, err := InstallClaudeSkill(targetDir, "skill-content", "http://localhost:7433", "project:acme/api")
+	installedPath, updatedClaude, err := InstallClaudeSkill(targetDir, "skill-content", "inner-claude-content", "http://localhost:7433", "project:acme/api")
 	if err != nil {
 		t.Fatalf("InstallClaudeSkill: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestInstallClaudeSkill_DoesNotDuplicateBlock(t *testing.T) {
 		t.Fatalf("write CLAUDE.md: %v", err)
 	}
 
-	_, updatedClaude, err := InstallClaudeSkill(targetDir, "skill-content", "http://localhost:7433", "")
+	_, updatedClaude, err := InstallClaudeSkill(targetDir, "skill-content", "", "http://localhost:7433", "")
 	if err != nil {
 		t.Fatalf("InstallClaudeSkill: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestInstallClaudeSkill_NoCLAUDEFileCreatesAndUpdatesCLAUDE(t *testing.T) {
 	t.Parallel()
 	targetDir := t.TempDir()
 
-	installedPath, updatedClaude, err := InstallClaudeSkill(targetDir, "skill-content", "http://localhost:7433", "")
+	installedPath, updatedClaude, err := InstallClaudeSkill(targetDir, "skill-content", "", "http://localhost:7433", "")
 	if err != nil {
 		t.Fatalf("InstallClaudeSkill: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestInstallClaudeSkill_RemovesLegacyRootSkillFile(t *testing.T) {
 		t.Fatalf("write legacy postbrain.md: %v", err)
 	}
 
-	_, _, err := InstallClaudeSkill(targetDir, "skill-content", "http://localhost:7433", "")
+	_, _, err := InstallClaudeSkill(targetDir, "skill-content", "", "http://localhost:7433", "")
 	if err != nil {
 		t.Fatalf("InstallClaudeSkill: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestInstallClaudeSkill_NoScopeOmitsScopeLine(t *testing.T) {
 		t.Fatalf("write CLAUDE.md: %v", err)
 	}
 
-	_, _, err := InstallClaudeSkill(targetDir, "skill-content", "http://localhost:7433", "")
+	_, _, err := InstallClaudeSkill(targetDir, "skill-content", "", "http://localhost:7433", "")
 	if err != nil {
 		t.Fatalf("InstallClaudeSkill: %v", err)
 	}
@@ -186,6 +186,100 @@ func TestInstallClaudeSkill_NoScopeOmitsScopeLine(t *testing.T) {
 	}
 	if !strings.Contains(content, "# POSTBRAIN_SCOPE=project:your-org/your-repo") {
 		t.Fatal("CLAUDE.md should contain the placeholder scope comment")
+	}
+}
+
+// ── .claude/CLAUDE.md installation ───────────────────────────────────────────
+
+func TestInstallClaudeSkill_CreatesDotClaudeCLAUDE_WhenAbsent(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+
+	_, _, err := InstallClaudeSkill(targetDir, "skill-content", "inner-content", "http://localhost:7433", "")
+	if err != nil {
+		t.Fatalf("InstallClaudeSkill: %v", err)
+	}
+
+	innerPath := filepath.Join(targetDir, ".claude", "CLAUDE.md")
+	data, err := os.ReadFile(innerPath)
+	if err != nil {
+		t.Fatalf("read .claude/CLAUDE.md: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "inner-content") {
+		t.Fatal(".claude/CLAUDE.md missing inner content")
+	}
+	if !strings.Contains(content, "<!-- postbrain-config -->") {
+		t.Fatal(".claude/CLAUDE.md missing postbrain marker")
+	}
+}
+
+func TestInstallClaudeSkill_MergesDotClaudeCLAUDE_WhenExists(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+	claudeDir := filepath.Join(targetDir, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		t.Fatalf("mkdir .claude: %v", err)
+	}
+	innerPath := filepath.Join(claudeDir, "CLAUDE.md")
+	if err := os.WriteFile(innerPath, []byte("## Existing Instructions\n"), 0o644); err != nil {
+		t.Fatalf("write .claude/CLAUDE.md: %v", err)
+	}
+
+	_, _, err := InstallClaudeSkill(targetDir, "skill-content", "inner-content", "http://localhost:7433", "")
+	if err != nil {
+		t.Fatalf("InstallClaudeSkill: %v", err)
+	}
+
+	data, err := os.ReadFile(innerPath)
+	if err != nil {
+		t.Fatalf("read .claude/CLAUDE.md: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "## Existing Instructions") {
+		t.Fatal(".claude/CLAUDE.md lost existing content")
+	}
+	if !strings.Contains(content, "inner-content") {
+		t.Fatal(".claude/CLAUDE.md missing inner content")
+	}
+}
+
+func TestInstallClaudeSkill_DotClaudeCLAUDE_Idempotent(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+
+	if _, _, err := InstallClaudeSkill(targetDir, "skill-content", "inner-content", "http://localhost:7433", ""); err != nil {
+		t.Fatalf("first install: %v", err)
+	}
+	if _, _, err := InstallClaudeSkill(targetDir, "skill-content", "inner-content", "http://localhost:7433", ""); err != nil {
+		t.Fatalf("second install: %v", err)
+	}
+
+	innerPath := filepath.Join(targetDir, ".claude", "CLAUDE.md")
+	data, err := os.ReadFile(innerPath)
+	if err != nil {
+		t.Fatalf("read .claude/CLAUDE.md: %v", err)
+	}
+	if strings.Count(string(data), "<!-- postbrain-config -->") != 1 {
+		t.Error(".claude/CLAUDE.md marker duplicated on second install")
+	}
+	if strings.Count(string(data), "inner-content") != 1 {
+		t.Error(".claude/CLAUDE.md inner content duplicated on second install")
+	}
+}
+
+func TestInstallClaudeSkill_DotClaudeCLAUDE_EmptyContentSkipped(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+
+	_, _, err := InstallClaudeSkill(targetDir, "skill-content", "", "http://localhost:7433", "")
+	if err != nil {
+		t.Fatalf("InstallClaudeSkill: %v", err)
+	}
+
+	innerPath := filepath.Join(targetDir, ".claude", "CLAUDE.md")
+	if _, err := os.Stat(innerPath); !os.IsNotExist(err) {
+		t.Fatal(".claude/CLAUDE.md should not be created when inner content is empty")
 	}
 }
 

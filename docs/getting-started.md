@@ -109,6 +109,15 @@ postbrain-cli install-claude-skill --target /path/to/project
 
 If `--target` is omitted, current directory (`.`) is treated as the project root.
 
+Both commands accept a `--url` flag to set the Postbrain backend URL explicitly:
+
+```bash
+postbrain-cli install-claude-skill --target /path/to/project --url https://postbrain.example.com
+postbrain-cli install-codex-skill  --target /path/to/project --url https://postbrain.example.com
+```
+
+The backend URL is resolved in this order: `--url` flag → `POSTBRAIN_URL` env var → `.claude/postbrain-base.md` / `.agents/postbrain-base.md` → interactive prompt (default: `http://localhost:7433`).
+
 ### 4.1 Optional: Codex hooks automation (macOS/Linux)
 
 Codex hook support is experimental and currently unavailable on Windows.
@@ -295,8 +304,8 @@ curl -sS -H "Authorization: Bearer ${POSTBRAIN_TOKEN}" \
 ### 7.6 Install and sync skills in the project
 
 ```bash
-postbrain-cli install-codex-skill --target /path/to/project
-postbrain-cli install-claude-skill --target /path/to/project
+postbrain-cli install-codex-skill --target /path/to/project --url https://postbrain.example.com
+postbrain-cli install-claude-skill --target /path/to/project --url https://postbrain.example.com
 postbrain-cli skill sync --scope "project:acme/platform/postbrain" --agent "claude-code"
 ```
 

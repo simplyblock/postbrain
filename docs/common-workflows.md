@@ -80,8 +80,8 @@ Best for: repositories used by both Codex and Claude Code.
 Example setup:
 
 ```bash
-postbrain-cli install-codex-skill --target /path/to/project
-postbrain-cli install-claude-skill --target /path/to/project
+postbrain-cli install-codex-skill --target /path/to/project --url https://postbrain.example.com
+postbrain-cli install-claude-skill --target /path/to/project --url https://postbrain.example.com
 postbrain-cli skill sync --scope project:acme/api --agent claude-code
 ```
 

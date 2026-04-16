@@ -529,6 +529,26 @@ func TestResolveScopeForInstall_FallsBackToClaudeThenAgents(t *testing.T) {
 	}
 }
 
+func TestResolveURLForInstall_PrefersURLFlag(t *testing.T) {
+	t.Setenv("POSTBRAIN_URL", "http://env-url:7433")
+	targetDir := t.TempDir()
+	cmd := &cobra.Command{}
+	cmd.Flags().String("url", "", "backend url")
+	if err := cmd.Flags().Set("url", "http://flag-url:9000/"); err != nil {
+		t.Fatalf("set --url flag: %v", err)
+	}
+	cmd.SetIn(strings.NewReader(""))
+	cmd.SetErr(&bytes.Buffer{})
+
+	got, err := resolveURLForInstall(cmd, targetDir)
+	if err != nil {
+		t.Fatalf("resolveURLForInstall: %v", err)
+	}
+	if got != "http://flag-url:9000" {
+		t.Fatalf("resolveURLForInstall() = %q, want flag URL (trailing slash trimmed)", got)
+	}
+}
+
 func TestResolveURLForInstall_PrefersEnvVar(t *testing.T) {
 	t.Setenv("POSTBRAIN_URL", "http://env-url:7433")
 	targetDir := t.TempDir()

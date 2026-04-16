@@ -39,6 +39,9 @@ var embeddedCodexSkillLight string
 //go:embed assets/claude-code.md
 var embeddedClaudeSkill string
 
+//go:embed assets/claude-dot-claude.md
+var embeddedClaudeDotClaude string
+
 // Effectively disabled for now since the hooks system is still very minimal
 const minimumCodexHooksVersion = "0.114.0"
 const latestReleaseAPIURL = "https://api.github.com/repos/simplyblock/postbrain/releases/latest"
@@ -763,6 +766,7 @@ func installCodexSkillCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&targetDir, "target", ".", "target directory")
+	cmd.Flags().String("url", "", "Postbrain backend URL (overrides POSTBRAIN_URL env var and base file)")
 	cmd.Flags().BoolVar(&autoapprove, "autoapprove", false, "add approval_mode=approve for all Postbrain tools in .codex/config.toml")
 	return cmd
 }
@@ -910,16 +914,17 @@ func installClaudeSkillCmd() *cobra.Command {
 			installedPath, updatedClaude, err := postbraincli.InstallClaudeSkill(
 				targetDir,
 				embeddedClaudeSkill,
+				embeddedClaudeDotClaude,
 				backendURL,
 				scope,
 			)
 			if err != nil {
 				return err
 			}
-			updatedSettings, err := postbraincli.InstallClaudeHooks(targetDir, scope)
-			if err != nil {
-				return err
-			}
+			//updatedSettings, err := postbraincli.InstallClaudeHooks(targetDir, scope)
+			//if err != nil {
+			//	return err
+			//}
 			updatedMCP, err := postbraincli.InstallClaudeMCPConfig(targetDir, backendURL)
 			if err != nil {
 				return err
@@ -935,13 +940,14 @@ func installClaudeSkillCmd() *cobra.Command {
 				"path", installedPath,
 				"backend_url", backendURL,
 				"claude_updated", updatedClaude,
-				"settings_updated", updatedSettings,
+				//"settings_updated", updatedSettings,
 				"mcp_updated", updatedMCP,
 				"permissions_updated", updatedPerms)
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&targetDir, "target", ".", "target directory")
+	cmd.Flags().String("url", "", "Postbrain backend URL (overrides POSTBRAIN_URL env var and base file)")
 	cmd.Flags().BoolVar(&autoapprove, "autoapprove", false, "add mcp__postbrain__* to permissions.allow in .claude/settings.local.json")
 	return cmd
 }
@@ -954,6 +960,11 @@ func resolveScopeForInstall(targetDir string) string {
 }
 
 func resolveURLForInstall(cmd *cobra.Command, targetDir string) (string, error) {
+	if cmd != nil {
+		if f := cmd.Flags().Lookup("url"); f != nil && f.Changed {
+			return strings.TrimRight(strings.TrimSpace(f.Value.String()), "/"), nil
+		}
+	}
 	if url := strings.TrimSpace(os.Getenv("POSTBRAIN_URL")); url != "" {
 		return strings.TrimRight(url, "/"), nil
 	}
