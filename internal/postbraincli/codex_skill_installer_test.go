@@ -614,12 +614,18 @@ func TestInstallCodexPermissions_WritesApprovalModes(t *testing.T) {
 	if !strings.Contains(content, "default_tools_enabled = true") {
 		t.Fatal("config.toml missing default_tools_enabled = true")
 	}
-	if !strings.Contains(content, `default_tools_approval_mode = "approve"`) {
-		t.Fatal(`config.toml missing default_tools_approval_mode = "approve"`)
+	// Codex ignores default_tools_approval_mode; per-tool sections are required.
+	if strings.Contains(content, "default_tools_approval_mode") {
+		t.Fatal("config.toml must not contain default_tools_approval_mode (Codex ignores it)")
 	}
-	// Must not fall back to per-tool sections.
-	if strings.Contains(content, "[mcp_servers.postbrain.tools.") {
-		t.Fatal("config.toml must not contain per-tool approval sections")
+	for _, tool := range codexAutoApproveTools {
+		section := "[mcp_servers.postbrain.tools." + tool + "]"
+		if !strings.Contains(content, section) {
+			t.Fatalf("config.toml missing per-tool section %s", section)
+		}
+		if !strings.Contains(content, section+"\napproval_mode = \"approve\"") {
+			t.Fatalf("config.toml missing approval_mode = \"approve\" under %s", section)
+		}
 	}
 }
 
@@ -670,7 +676,10 @@ func TestInstallCodexPermissions_MergesIntoExistingConfig(t *testing.T) {
 	if !strings.Contains(content, "default_tools_enabled = true") {
 		t.Error("default_tools_enabled = true not added")
 	}
-	if !strings.Contains(content, `default_tools_approval_mode = "approve"`) {
-		t.Error(`default_tools_approval_mode = "approve" not added`)
+	for _, tool := range codexAutoApproveTools {
+		section := "[mcp_servers.postbrain.tools." + tool + "]"
+		if !strings.Contains(content, section) {
+			t.Errorf("per-tool section %s not added", section)
+		}
 	}
 }
