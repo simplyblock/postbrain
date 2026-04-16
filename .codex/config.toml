@@ -5,7 +5,6 @@ codex_hooks = true
 url = "https://postbrain.simplyblock.ai"
 bearer_token_env_var = "POSTBRAIN_TOKEN"
 default_tools_enabled = true
-default_tools_approval_mode = "approve"
 
 [mcp_servers.postbrain.tools.list_scopes]
 approval_mode = "approve"
@@ -13,7 +12,13 @@ approval_mode = "approve"
 [mcp_servers.postbrain.tools.session_begin]
 approval_mode = "approve"
 
+[mcp_servers.postbrain.tools.session_end]
+approval_mode = "approve"
+
 [mcp_servers.postbrain.tools.context]
+approval_mode = "approve"
+
+[mcp_servers.postbrain.tools.cross_scope_context]
 approval_mode = "approve"
 
 [mcp_servers.postbrain.tools.recall]
@@ -22,5 +27,38 @@ approval_mode = "approve"
 [mcp_servers.postbrain.tools.remember]
 approval_mode = "approve"
 
-[mcp_servers.postbrain.tools.session_end]
+[mcp_servers.postbrain.tools.forget]
+approval_mode = "approve"
+
+[mcp_servers.postbrain.tools.publish]
+approval_mode = "approve"
+
+[mcp_servers.postbrain.tools.promote]
+approval_mode = "approve"
+
+[mcp_servers.postbrain.tools.endorse]
+approval_mode = "approve"
+
+[mcp_servers.postbrain.tools.collect]
+approval_mode = "approve"
+
+[mcp_servers.postbrain.tools.summarize]
+approval_mode = "approve"
+
+[mcp_servers.postbrain.tools.synthesize_topic]
+approval_mode = "approve"
+
+[mcp_servers.postbrain.tools.knowledge_detail]
+approval_mode = "approve"
+
+[mcp_servers.postbrain.tools.skill_search]
+approval_mode = "approve"
+
+[mcp_servers.postbrain.tools.skill_install]
+approval_mode = "approve"
+
+[mcp_servers.postbrain.tools.skill_invoke]
+approval_mode = "approve"
+
+[mcp_servers.postbrain.tools.graph_query]
 approval_mode = "approve"

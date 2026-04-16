@@ -247,10 +247,38 @@ func InstallCodexMCPConfig(targetDir, postbrainURL string) (bool, error) {
 	return true, nil
 }
 
-// InstallCodexPermissions sets default_tools_enabled = true and
-// default_tools_approval_mode = "approve" at the [mcp_servers.postbrain] level
-// so Codex auto-approves all Postbrain MCP tool calls without needing a
-// per-tool list. The call is idempotent.
+// codexAutoApproveTools lists every Postbrain MCP tool that is pre-approved in
+// Codex via per-tool [mcp_servers.postbrain.tools.<name>] sections.
+// Codex ignores the server-level default_tools_approval_mode field, so
+// per-tool sections are the only reliable mechanism.
+var codexAutoApproveTools = []string{
+	"list_scopes",
+	"session_begin",
+	"session_end",
+	"context",
+	"cross_scope_context",
+	"recall",
+	"remember",
+	"forget",
+	"publish",
+	"promote",
+	"endorse",
+	"collect",
+	"summarize",
+	"synthesize_topic",
+	"knowledge_detail",
+	"skill_search",
+	"skill_install",
+	"skill_invoke",
+	"graph_query",
+}
+
+// InstallCodexPermissions sets default_tools_enabled = true at the
+// [mcp_servers.postbrain] level and writes per-tool approval_mode = "approve"
+// sections for each tool in codexAutoApproveTools.
+//
+// Codex ignores the server-level default_tools_approval_mode field, so
+// per-tool sections are required. The call is idempotent.
 func InstallCodexPermissions(targetDir string) (bool, error) {
 	if strings.TrimSpace(targetDir) == "" {
 		targetDir = "."
@@ -272,8 +300,12 @@ func InstallCodexPermissions(targetDir string) (bool, error) {
 	var sectionUpdated bool
 	content, sectionUpdated = ensureTOMLBoolKey(content, "mcp_servers.postbrain", "default_tools_enabled", true)
 	updatedAny = updatedAny || sectionUpdated
-	content, sectionUpdated = ensureTOMLStringKey(content, "mcp_servers.postbrain", "default_tools_approval_mode", "approve")
-	updatedAny = updatedAny || sectionUpdated
+
+	for _, tool := range codexAutoApproveTools {
+		section := "mcp_servers.postbrain.tools." + tool
+		content, sectionUpdated = ensureTOMLStringKey(content, section, "approval_mode", "approve")
+		updatedAny = updatedAny || sectionUpdated
+	}
 
 	if !updatedAny {
 		return false, nil
