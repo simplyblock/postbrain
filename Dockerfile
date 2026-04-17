@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-ARG GO_VERSION=1.26
+ARG GO_VERSION=1.26.2
 ARG GOPLS_VERSION=v0.21.1
 ARG MARKITDOWN_VERSION=0.1.5
 ARG TSGO_VERSION=latest
@@ -25,7 +25,7 @@ FROM golang:${GO_VERSION}-bookworm AS tsgo
 ARG TSGO_VERSION
 RUN GOBIN=/out go install github.com/microsoft/typescript-go/cmd/tsgo@${TSGO_VERSION}
 
-FROM python:3.12-slim AS runtime
+FROM python:3.13-slim AS runtime
 ARG MARKITDOWN_VERSION
 ARG TYPESCRIPT_VERSION
 ARG TYPESCRIPT_LANGUAGE_SERVER_VERSION
