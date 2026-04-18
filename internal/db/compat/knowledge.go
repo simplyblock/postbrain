@@ -178,7 +178,10 @@ func GetEndorsementByEndorser(ctx context.Context, pool *pgxpool.Pool, artifactI
 // SearchArtifacts filters artifacts by a text query (ILIKE on title/content), optional status, and optional scope.
 // A zero scopeID means no scope filter.
 func SearchArtifacts(ctx context.Context, pool *pgxpool.Pool, query, status string, scopeID uuid.UUID, limit, offset int) ([]*db.KnowledgeArtifact, error) {
-	if offset < 0 && offset > math.MaxInt32 {
+	if limit < 0 || limit > math.MaxInt32 {
+		return nil, fmt.Errorf("sharing: invalid limit: %d", limit)
+	}
+	if offset < 0 || offset > math.MaxInt32 {
 		return nil, fmt.Errorf("sharing: invalid offset: %d", offset)
 	}
 	q := db.New(pool)
