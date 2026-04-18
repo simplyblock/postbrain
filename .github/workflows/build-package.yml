@@ -57,9 +57,12 @@ jobs:
       - name: Resolve build version
         id: vars
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.release_tag }}" ]]; then
-            VERSION="${{ inputs.release_tag }}"
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && -n "$INPUT_RELEASE_TAG" ]]; then
+            VERSION="$INPUT_RELEASE_TAG"
             VERSION="${VERSION#v}"
           else
             TAG="$(git tag --points-at HEAD | grep -E '^v' | head -n1 || true)"
@@ -149,9 +152,12 @@ jobs:
       - name: Resolve package version
         id: vars
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.release_tag }}" ]]; then
-            TAG="${{ inputs.release_tag }}"
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && -n "$INPUT_RELEASE_TAG" ]]; then
+            TAG="$INPUT_RELEASE_TAG"
             if [[ "$TAG" != v* ]]; then
               TAG="v${TAG}"
             fi
@@ -263,14 +269,18 @@ jobs:
       - name: Resolve Docker tags
         id: docker_tags
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+          WORKFLOW_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
           set -euo pipefail
           IMAGE="simplyblock/postbrain"
           SHORT_SHA="$(git rev-parse --short HEAD)"
           TAGS=("${IMAGE}:sha-${SHORT_SHA}")
 
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.release_tag }}" ]]; then
-            TAG="${{ inputs.release_tag }}"
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && -n "$INPUT_RELEASE_TAG" ]]; then
+            TAG="$INPUT_RELEASE_TAG"
             if [[ "$TAG" != v* ]]; then
               TAG="v${TAG}"
             fi
@@ -283,7 +293,7 @@ jobs:
             TAGS+=("${IMAGE}:${VERSION}" "${IMAGE}:${TAG}")
           fi
 
-          if [[ "${{ github.event_name }}" == "workflow_run" && "${{ github.event.workflow_run.head_branch }}" == "main" ]]; then
+          if [[ "$EVENT_NAME" == "workflow_run" && "$WORKFLOW_HEAD_BRANCH" == "main" ]]; then
             TAGS+=("${IMAGE}:latest")
           fi
 
