@@ -84,7 +84,10 @@ func (s *Store) Revoke(ctx context.Context, grantID uuid.UUID) error {
 
 // List returns sharing grants visible to a grantee scope, paginated.
 func (s *Store) List(ctx context.Context, granteeScopeID uuid.UUID, limit, offset int) ([]*Grant, error) {
-	if offset < 0 && offset > math.MaxInt32 {
+	if limit < 0 || limit > math.MaxInt32 {
+		return nil, fmt.Errorf("sharing: invalid limit: %d", limit)
+	}
+	if offset < 0 || offset > math.MaxInt32 {
 		return nil, fmt.Errorf("sharing: invalid offset: %d", offset)
 	}
 	rows, err := db.New(s.pool).ListSharingGrants(ctx, db.ListSharingGrantsParams{
