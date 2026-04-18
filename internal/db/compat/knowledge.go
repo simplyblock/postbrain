@@ -3,6 +3,7 @@ package compat
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -177,6 +178,9 @@ func GetEndorsementByEndorser(ctx context.Context, pool *pgxpool.Pool, artifactI
 // SearchArtifacts filters artifacts by a text query (ILIKE on title/content), optional status, and optional scope.
 // A zero scopeID means no scope filter.
 func SearchArtifacts(ctx context.Context, pool *pgxpool.Pool, query, status string, scopeID uuid.UUID, limit, offset int) ([]*db.KnowledgeArtifact, error) {
+	if offset < 0 && offset > math.MaxInt32 {
+		return nil, fmt.Errorf("sharing: invalid offset: %d", offset)
+	}
 	q := db.New(pool)
 	rows, err := q.SearchArtifacts(ctx, db.SearchArtifactsParams{
 		Title:   "%" + query + "%",
@@ -198,6 +202,9 @@ func SearchArtifacts(ctx context.Context, pool *pgxpool.Pool, query, status stri
 // ListArtifactsByStatus returns artifacts filtered by status and optional scope.
 // A zero scopeID means no scope filter.
 func ListArtifactsByStatus(ctx context.Context, pool *pgxpool.Pool, status string, scopeID uuid.UUID, limit, offset int) ([]*db.KnowledgeArtifact, error) {
+	if offset < 0 && offset > math.MaxInt32 {
+		return nil, fmt.Errorf("sharing: invalid offset: %d", offset)
+	}
 	q := db.New(pool)
 	rows, err := q.ListArtifactsByStatus(ctx, db.ListArtifactsByStatusParams{
 		Status:  status,
@@ -217,6 +224,9 @@ func ListArtifactsByStatus(ctx context.Context, pool *pgxpool.Pool, status strin
 
 // ListAllArtifacts returns artifacts for the given scope (zero scopeID = all scopes, admin view).
 func ListAllArtifacts(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, limit, offset int) ([]*db.KnowledgeArtifact, error) {
+	if offset < 0 && offset > math.MaxInt32 {
+		return nil, fmt.Errorf("sharing: invalid offset: %d", offset)
+	}
 	q := db.New(pool)
 	rows, err := q.ListAllArtifacts(ctx, db.ListAllArtifactsParams{
 		Column1: scopeID,

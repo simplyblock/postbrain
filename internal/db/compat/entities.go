@@ -3,6 +3,7 @@ package compat
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -204,6 +205,9 @@ func ListEntitiesByCanonical(ctx context.Context, pool *pgxpool.Pool, scopeID uu
 
 // ListEntitiesByScope returns entities in a scope.
 func ListEntitiesByScope(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, entityType string, limit, offset int) ([]*db.Entity, error) {
+	if offset < 0 && offset > math.MaxInt32 {
+		return nil, fmt.Errorf("sharing: invalid offset: %d", offset)
+	}
 	q := db.New(pool)
 	es, err := q.ListEntitiesByScope(ctx, db.ListEntitiesByScopeParams{
 		ScopeID: scopeID,

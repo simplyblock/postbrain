@@ -3,6 +3,7 @@ package compat
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,6 +27,9 @@ func GetMemory(ctx context.Context, pool *pgxpool.Pool, id uuid.UUID) (*db.Memor
 
 // ListMemoriesByScope returns active memories for a scope.
 func ListMemoriesByScope(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, limit, offset int) ([]*db.Memory, error) {
+	if offset < 0 && offset > math.MaxInt32 {
+		return nil, fmt.Errorf("sharing: invalid offset: %d", offset)
+	}
 	q := db.New(pool)
 	ms, err := q.ListMemoriesByScope(ctx, db.ListMemoriesByScopeParams{
 		ScopeID: scopeID,
