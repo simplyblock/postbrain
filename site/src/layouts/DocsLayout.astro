@@ -4,11 +4,15 @@ import navData from "../generated/docs-nav.json";
 const frontmatter = Astro.props.frontmatter ?? {};
 const baseUrl = import.meta.env.BASE_URL ?? "/";
 
+const getDocsHref = (slug) => (
+  slug === "index" ? `${baseUrl}docs/` : `${baseUrl}docs/${slug}/`
+);
+
 const navSections = navData.sections.map((section) => ({
   title: section.title,
   pages: section.pages.map((p) => ({
     title: p.title,
-    href: `${baseUrl}docs/${p.slug}/`
+    href: getDocsHref(p.slug)
   }))
 }));
 
