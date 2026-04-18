@@ -28,7 +28,7 @@ const docsFileSet = new Set(docsFiles.map((name) => name.toLowerCase()));
 function titleFromMarkdown(file, markdownText) {
   const heading = markdownText.match(/^#\s+(.+)\s*$/m);
   if (heading?.[1]) {
-    return heading[1].replace(/"/g, '\\"');
+    return heading[1].replace(/\\/g, "\\\\").replace(/"/g, '\\"');
   }
   const stem = file.replace(/\.md$/i, "");
   if (stem.toLowerCase() === "readme") {
