@@ -49,5 +49,6 @@ bin/
 .venv-*/
 node_modules/
 site/src/pages/docs/
+site/src/generated/
 site/dist/
 site/.astro/

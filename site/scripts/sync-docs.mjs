@@ -7,6 +7,7 @@ const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..");
 const sourceDocsDir = path.resolve(projectRoot, "..", "docs");
 const targetDocsDir = path.resolve(projectRoot, "src", "pages", "docs");
+const generatedDir = path.resolve(projectRoot, "src", "generated");
 const githubRepoBase = "https://github.com/simplyblock/postbrain/blob/main";
 const repo = process.env.GITHUB_REPOSITORY?.split("/")[1] ?? "";
 const usePagesBase = process.env.GITHUB_ACTIONS === "true" && repo !== "";
@@ -97,3 +98,83 @@ for (const file of docsFiles) {
 }
 
 console.log(`synced ${docsFiles.length} markdown files from docs/`);
+
+// Build nav data so DocsLayout can import it statically at build time
+// rather than scanning the filesystem at prerender time (which breaks
+// because __dirname resolves differently inside the compiled .prerender bundle).
+
+function buildNavSections(files) {
+  const fileContents = new Map(
+    files.map((f) => [f.toLowerCase(), readFileSync(path.join(sourceDocsDir, f), "utf8")])
+  );
+
+  function pageForFile(file) {
+    const text = fileContents.get(file.toLowerCase()) ?? "";
+    const heading = text.match(/^#\s+(.+)\s*$/m)?.[1];
+    const fileLower = file.toLowerCase();
+    const slug = fileLower === "readme.md" ? "" : file.replace(/\.md$/i, "");
+    const title = heading ?? (slug === "" ? "Documentation" : slug.replace(/[-_]/g, " "));
+    return { title, slug };
+  }
+
+  const readmeText = fileContents.get("readme.md") ?? "";
+  const available = new Map(files.map((f) => [f.toLowerCase(), f]));
+  const sections = [];
+  const seen = new Set();
+
+  if (readmeText) {
+    let current = null;
+    for (const line of readmeText.split(/\r?\n/)) {
+      const headingMatch = line.match(/^##\s+(.+?)\s*$/);
+      if (headingMatch) {
+        current = { title: headingMatch[1], files: [] };
+        sections.push(current);
+        continue;
+      }
+      const linkMatch = line.match(/^\s*-\s+\[[^\]]+\]\(\.\/([^)]+?\.md)\)/);
+      if (linkMatch && current) {
+        const file = path.basename(linkMatch[1]);
+        const lower = file.toLowerCase();
+        if (!seen.has(lower) && available.has(lower)) {
+          current.files.push(available.get(lower));
+          seen.add(lower);
+        }
+      }
+    }
+  }
+
+  const navSections = [];
+  for (const section of sections) {
+    const pages = section.files
+      .map((f) => pageForFile(f))
+      .filter((p) => p.slug !== "");
+    if (pages.length > 0) {
+      navSections.push({ title: section.title, pages });
+    }
+  }
+
+  if (navSections.length === 0) {
+    const fallback = files
+      .map((f) => pageForFile(f))
+      .filter((p) => p.slug !== "");
+    navSections.push({ title: "Contents", pages: fallback });
+  } else {
+    const uncategorized = files
+      .filter((f) => !seen.has(f.toLowerCase()) && f.toLowerCase() !== "readme.md")
+      .map((f) => pageForFile(f))
+      .filter((p) => p.slug !== "");
+    if (uncategorized.length > 0) {
+      navSections.push({ title: "More", pages: uncategorized });
+    }
+  }
+
+  return navSections;
+}
+
+mkdirSync(generatedDir, { recursive: true });
+const navSections = buildNavSections(docsFiles);
+writeFileSync(
+  path.join(generatedDir, "docs-nav.json"),
+  JSON.stringify({ sections: navSections }, null, 2),
+  "utf8"
+);
