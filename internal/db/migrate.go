@@ -165,7 +165,7 @@ func MigrateStatus(ctx context.Context, pool *pgxpool.Pool) ([]MigrationInfo, er
 		if len(parts) < 2 {
 			return nil
 		}
-		v, parseErr := strconv.ParseUint(parts[0], 10, 64)
+		v, parseErr := strconv.ParseUint(parts[0], 10, 32)
 		if parseErr != nil {
 			return nil
 		}

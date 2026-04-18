@@ -3,6 +3,7 @@ package compat
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -50,6 +51,12 @@ func GetPrincipalBySlug(ctx context.Context, pool *pgxpool.Pool, slug string) (*
 
 // ListPrincipals returns principals ordered by creation time.
 func ListPrincipals(ctx context.Context, pool *pgxpool.Pool, limit, offset int) ([]*db.Principal, error) {
+	if limit < 0 || limit > math.MaxInt32 {
+		return nil, fmt.Errorf("db: invalid limit: %d", limit)
+	}
+	if offset < 0 || offset > math.MaxInt32 {
+		return nil, fmt.Errorf("db: invalid offset: %d", offset)
+	}
 	q := db.New(pool)
 	ps, err := q.ListPrincipals(ctx, db.ListPrincipalsParams{
 		Limit:  int32(limit),
