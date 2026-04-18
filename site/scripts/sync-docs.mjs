@@ -108,12 +108,21 @@ function buildNavSections(files) {
     files.map((f) => [f.toLowerCase(), readFileSync(path.join(sourceDocsDir, f), "utf8")])
   );
 
+  function titleFromSlug(slug) {
+    return slug
+      .replace(/[-_]/g, " ")
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
+  }
+
   function pageForFile(file) {
     const text = fileContents.get(file.toLowerCase()) ?? "";
     const heading = text.match(/^#\s+(.+)\s*$/m)?.[1];
     const fileLower = file.toLowerCase();
     const slug = fileLower === "readme.md" ? "" : file.replace(/\.md$/i, "");
-    const title = heading ?? (slug === "" ? "Documentation" : slug.replace(/[-_]/g, " "));
+    const title = heading ?? (slug === "" ? "Documentation" : titleFromSlug(slug));
     return { title, slug };
   }
 
