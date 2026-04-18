@@ -205,7 +205,10 @@ func SearchArtifacts(ctx context.Context, pool *pgxpool.Pool, query, status stri
 // ListArtifactsByStatus returns artifacts filtered by status and optional scope.
 // A zero scopeID means no scope filter.
 func ListArtifactsByStatus(ctx context.Context, pool *pgxpool.Pool, status string, scopeID uuid.UUID, limit, offset int) ([]*db.KnowledgeArtifact, error) {
-	if offset < 0 && offset > math.MaxInt32 {
+	if limit < 0 || limit > math.MaxInt32 {
+		return nil, fmt.Errorf("sharing: invalid limit: %d", limit)
+	}
+	if offset < 0 || offset > math.MaxInt32 {
 		return nil, fmt.Errorf("sharing: invalid offset: %d", offset)
 	}
 	q := db.New(pool)
@@ -227,7 +230,10 @@ func ListArtifactsByStatus(ctx context.Context, pool *pgxpool.Pool, status strin
 
 // ListAllArtifacts returns artifacts for the given scope (zero scopeID = all scopes, admin view).
 func ListAllArtifacts(ctx context.Context, pool *pgxpool.Pool, scopeID uuid.UUID, limit, offset int) ([]*db.KnowledgeArtifact, error) {
-	if offset < 0 && offset > math.MaxInt32 {
+	if limit < 0 || limit > math.MaxInt32 {
+		return nil, fmt.Errorf("sharing: invalid limit: %d", limit)
+	}
+	if offset < 0 || offset > math.MaxInt32 {
 		return nil, fmt.Errorf("sharing: invalid offset: %d", offset)
 	}
 	q := db.New(pool)
