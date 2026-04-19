@@ -56,12 +56,12 @@ func TestHandleMemoryForget_CrossScope_Returns404(t *testing.T) {
 		t.Errorf("status = %d, want %d (cross-scope delete must be rejected)", resp.StatusCode, http.StatusNotFound)
 	}
 
-	// Verify the memory was NOT deleted.
+	// Verify the memory was NOT soft-deleted (IsActive must still be true).
 	mem, err := compat.GetMemory(ctx, pool, memB.ID)
 	if err != nil {
 		t.Fatalf("GetMemory after cross-scope forget attempt: %v", err)
 	}
-	if mem == nil || mem.DeletedAt != nil {
-		t.Error("memory was deleted despite cross-scope forget attempt")
+	if mem == nil || !mem.IsActive {
+		t.Error("memory was soft-deleted despite cross-scope forget attempt")
 	}
 }
