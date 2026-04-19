@@ -117,6 +117,12 @@ func (h *Handler) handleKnowledgeDetail(w http.ResponseWriter, r *http.Request) 
 		http.NotFound(w, r)
 		return
 	}
+	// Verify the artifact belongs to the scope in the URL to prevent
+	// cross-scope leakage. Return 404 to avoid revealing existence.
+	if scope := scopeFromContext(r.Context()); scope == nil || art.OwnerScopeID != scope.ID {
+		http.NotFound(w, r)
+		return
+	}
 	data.Artifact = art
 
 	if art.KnowledgeType == "digest" {
@@ -162,6 +168,12 @@ func (h *Handler) handleKnowledgeHistory(w http.ResponseWriter, r *http.Request)
 	if h.pool != nil {
 		art, err := compat.GetArtifact(r.Context(), h.pool, id)
 		if err != nil || art == nil {
+			http.NotFound(w, r)
+			return
+		}
+		// Verify the artifact belongs to the scope in the URL to prevent
+		// cross-scope leakage. Return 404 to avoid revealing existence.
+		if scope := scopeFromContext(r.Context()); scope == nil || art.OwnerScopeID != scope.ID {
 			http.NotFound(w, r)
 			return
 		}
