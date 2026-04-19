@@ -501,7 +501,7 @@ func skillSyncCmd() *cobra.Command {
 	var workdir string
 	cmd := &cobra.Command{
 		Use:   "sync",
-		Short: "Sync published skills to local agent command directory",
+		Short: "Sync published skills to local agent skills directory",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runSkillSync(cmd.Context(), agentType, workdir)
 		},
@@ -574,15 +574,20 @@ func runSkillSync(ctx context.Context, agentType, workdir string) error {
 		}
 	}
 
-	// Find orphaned local files.
-	pattern := filepath.Join(workdir, ".claude", "commands", "*.md")
+	// Find orphaned local skill directories.
+	// New layout: {agentDir}/skills/{slug}/SKILL.md
+	agentBase := ".claude"
+	if agentType == "codex" {
+		agentBase = ".agents"
+	}
+	pattern := filepath.Join(workdir, agentBase, "skills", "*", "SKILL.md")
 	localFiles, _ := filepath.Glob(pattern)
 	slugSet := make(map[string]bool)
 	for _, sk := range result.Data {
 		slugSet[sk.Slug] = true
 	}
 	for _, f := range localFiles {
-		slug := strings.TrimSuffix(filepath.Base(f), ".md")
+		slug := filepath.Base(filepath.Dir(f))
 		if !slugSet[slug] {
 			orphaned = append(orphaned, slug)
 		}
@@ -658,19 +663,26 @@ func skillInstallCmd() *cobra.Command {
 }
 
 func skillListCmd() *cobra.Command {
-	return &cobra.Command{
+	var agentType string
+	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List installed skills",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workdir := "."
-			pattern := filepath.Join(workdir, ".claude", "commands", "*.md")
+			agentBase := ".claude"
+			if agentType == "codex" {
+				agentBase = ".agents"
+			}
+			pattern := filepath.Join(workdir, agentBase, "skills", "*", "SKILL.md")
 			files, _ := filepath.Glob(pattern)
 			for _, f := range files {
-				fmt.Println(strings.TrimSuffix(filepath.Base(f), ".md"))
+				fmt.Println(filepath.Base(filepath.Dir(f)))
 			}
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&agentType, "agent", "claude-code", "agent type")
+	return cmd
 }
 
 // parseSkillID parses a UUID string from the API. An invalid UUID is a data-
