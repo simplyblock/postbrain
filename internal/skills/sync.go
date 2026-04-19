@@ -65,26 +65,23 @@ func syncInternal(ctx context.Context, sdb syncDB, scopeIDs []uuid.UUID, agentTy
 	result := &SyncResult{}
 
 	for _, skill := range published {
+		alreadyInstalled := IsInstalled(skill.Slug, agentType, workdir)
+		if alreadyInstalled && readInstalledVersion(skill.Slug, agentType, workdir) == int(skill.Version) {
+			continue // up-to-date; skip the DB round-trip for files
+		}
+
+		// Only fetch supplementary files when we are about to write to disk.
 		files, err := sdb.listSkillFiles(ctx, skill.ID)
 		if err != nil {
 			return nil, fmt.Errorf("skills: sync list files for %s: %w", skill.Slug, err)
 		}
-
-		if !IsInstalled(skill.Slug, agentType, workdir) {
-			if _, err := Install(skill, files, agentType, workdir); err != nil {
-				return nil, fmt.Errorf("skills: sync install %s: %w", skill.Slug, err)
-			}
-			result.Installed = append(result.Installed, skill.Slug)
-			continue
+		if _, err := Install(skill, files, agentType, workdir); err != nil {
+			return nil, fmt.Errorf("skills: sync install %s: %w", skill.Slug, err)
 		}
-
-		// Check if the installed version differs from the registry version.
-		installedVersion := readInstalledVersion(skill.Slug, agentType, workdir)
-		if installedVersion != int(skill.Version) {
-			if _, err := Install(skill, files, agentType, workdir); err != nil {
-				return nil, fmt.Errorf("skills: sync update %s: %w", skill.Slug, err)
-			}
+		if alreadyInstalled {
 			result.Updated = append(result.Updated, skill.Slug)
+		} else {
+			result.Installed = append(result.Installed, skill.Slug)
 		}
 	}
 
