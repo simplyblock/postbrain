@@ -282,8 +282,10 @@ func TestHandleKnowledgeRetract_InvalidUUID_Returns400(t *testing.T) {
 	}
 }
 
-func TestHandleKnowledgeRetract_NilPool_Returns503(t *testing.T) {
+func TestHandleKnowledgeRetract_NilPool_Returns404(t *testing.T) {
 	t.Parallel()
+	// scopedArtifact checks h.pool before h.knwLife, so a nil pool returns 404
+	// (artifact not found / scope unverifiable) rather than 503.
 	h := newTestHandler(t)
 	req := httptest.NewRequest(http.MethodPost,
 		"/ui/knowledge/00000000-0000-0000-0000-000000000001/retract", nil)
@@ -291,8 +293,8 @@ func TestHandleKnowledgeRetract_NilPool_Returns503(t *testing.T) {
 
 	h.handleKnowledgeRetract(w, req)
 
-	if w.Code != http.StatusServiceUnavailable {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusNotFound)
 	}
 }
 

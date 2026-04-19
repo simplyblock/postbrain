@@ -185,6 +185,27 @@ func (h *Handler) handleKnowledgeHistory(w http.ResponseWriter, r *http.Request)
 	h.render(w, r, "knowledge_history", "Knowledge History", data)
 }
 
+// scopedArtifact fetches the artifact by id and verifies it belongs to the
+// scope in the request context. Writes the error response and returns false
+// when the check fails; the caller must return immediately in that case.
+func (h *Handler) scopedArtifact(w http.ResponseWriter, r *http.Request, id uuid.UUID) (*db.KnowledgeArtifact, bool) {
+	if h.pool == nil {
+		http.NotFound(w, r)
+		return nil, false
+	}
+	art, err := compat.GetArtifact(r.Context(), h.pool, id)
+	if err != nil || art == nil {
+		http.NotFound(w, r)
+		return nil, false
+	}
+	scope := scopeFromContext(r.Context())
+	if scope == nil || art.OwnerScopeID != scope.ID {
+		http.NotFound(w, r)
+		return nil, false
+	}
+	return art, true
+}
+
 // handleEndorseArtifact serves POST /ui/{scope}/knowledge/{id}/endorse.
 func (h *Handler) handleEndorseArtifact(w http.ResponseWriter, r *http.Request) {
 	path := routePathFromContext(r.Context(), r)
@@ -192,6 +213,9 @@ func (h *Handler) handleEndorseArtifact(w http.ResponseWriter, r *http.Request) 
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		http.Error(w, "invalid artifact id", http.StatusBadRequest)
+		return
+	}
+	if _, ok := h.scopedArtifact(w, r, id); !ok {
 		return
 	}
 	endorserID := h.principalFromCookie(r)
@@ -211,6 +235,9 @@ func (h *Handler) handleKnowledgeReview(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "invalid artifact id", http.StatusBadRequest)
 		return
 	}
+	if _, ok := h.scopedArtifact(w, r, id); !ok {
+		return
+	}
 	callerID := h.principalFromCookie(r)
 	if err := h.knwLife.SubmitForReview(r.Context(), id, callerID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -226,6 +253,9 @@ func (h *Handler) handleKnowledgeDeprecate(w http.ResponseWriter, r *http.Reques
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		http.Error(w, "invalid artifact id", http.StatusBadRequest)
+		return
+	}
+	if _, ok := h.scopedArtifact(w, r, id); !ok {
 		return
 	}
 	callerID := h.principalFromCookie(r)
@@ -245,6 +275,9 @@ func (h *Handler) handleKnowledgeRepublish(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "invalid artifact id", http.StatusBadRequest)
 		return
 	}
+	if _, ok := h.scopedArtifact(w, r, id); !ok {
+		return
+	}
 	callerID := h.principalFromCookie(r)
 	if err := h.knwLife.Republish(r.Context(), id, callerID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -262,6 +295,9 @@ func (h *Handler) handleKnowledgeDelete(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "invalid artifact id", http.StatusBadRequest)
 		return
 	}
+	if _, ok := h.scopedArtifact(w, r, id); !ok {
+		return
+	}
 	callerID := h.principalFromCookie(r)
 	if err := h.knwLife.Delete(r.Context(), id, callerID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -277,6 +313,9 @@ func (h *Handler) handleKnowledgeRetract(w http.ResponseWriter, r *http.Request)
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		http.Error(w, "invalid artifact id", http.StatusBadRequest)
+		return
+	}
+	if _, ok := h.scopedArtifact(w, r, id); !ok {
 		return
 	}
 	if h.knwLife == nil {
