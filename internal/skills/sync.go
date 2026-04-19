@@ -21,12 +21,13 @@ import (
 type SyncResult struct {
 	Installed []string // slugs of newly installed skills
 	Updated   []string // slugs of skills that were reinstalled due to version change
-	Orphaned  []string // local files not in the published registry
+	Orphaned  []string // local skills not in the published registry
 }
 
-// syncDB abstracts the database query used during sync.
+// syncDB abstracts the database queries used during sync.
 type syncDB interface {
 	listPublishedSkillsForAgent(ctx context.Context, scopeIDs []uuid.UUID, agentType string) ([]*db.Skill, error)
+	listSkillFiles(ctx context.Context, skillID uuid.UUID) ([]*db.SkillFile, error)
 }
 
 // poolSyncDB wraps pgxpool.Pool to implement syncDB.
@@ -38,7 +39,11 @@ func (p *poolSyncDB) listPublishedSkillsForAgent(ctx context.Context, scopeIDs [
 	return compat.ListPublishedSkillsForAgent(ctx, p.pool, scopeIDs, agentType)
 }
 
-// Sync compares the local agent command directory against the published skill registry
+func (p *poolSyncDB) listSkillFiles(ctx context.Context, skillID uuid.UUID) ([]*db.SkillFile, error) {
+	return compat.ListSkillFiles(ctx, p.pool, skillID)
+}
+
+// Sync compares the local agent skills directory against the published skill registry
 // and installs or updates missing or outdated skills.
 func Sync(ctx context.Context, pool *pgxpool.Pool, scopeIDs []uuid.UUID, agentType, workdir string) (*SyncResult, error) {
 	return syncInternal(ctx, &poolSyncDB{pool: pool}, scopeIDs, agentType, workdir)
@@ -60,31 +65,36 @@ func syncInternal(ctx context.Context, sdb syncDB, scopeIDs []uuid.UUID, agentTy
 	result := &SyncResult{}
 
 	for _, skill := range published {
-		if !IsInstalled(skill.Slug, agentType, workdir) {
-			if _, err := Install(skill, agentType, workdir); err != nil {
-				return nil, fmt.Errorf("skills: sync install %s: %w", skill.Slug, err)
-			}
-			result.Installed = append(result.Installed, skill.Slug)
-			continue
+		alreadyInstalled := IsInstalled(skill.Slug, agentType, workdir)
+		if alreadyInstalled && readInstalledVersion(skill.Slug, agentType, workdir) == int(skill.Version) {
+			continue // up-to-date; skip the DB round-trip for files
 		}
 
-		// Check if the installed version differs from the registry version.
-		installedVersion := readInstalledVersion(skill.Slug, agentType, workdir)
-		if installedVersion != int(skill.Version) {
-			if _, err := Install(skill, agentType, workdir); err != nil {
-				return nil, fmt.Errorf("skills: sync update %s: %w", skill.Slug, err)
-			}
+		// Only fetch supplementary files when we are about to write to disk.
+		files, err := sdb.listSkillFiles(ctx, skill.ID)
+		if err != nil {
+			return nil, fmt.Errorf("skills: sync list files for %s: %w", skill.Slug, err)
+		}
+		if _, err := Install(skill, files, agentType, workdir); err != nil {
+			return nil, fmt.Errorf("skills: sync install %s: %w", skill.Slug, err)
+		}
+		if alreadyInstalled {
 			result.Updated = append(result.Updated, skill.Slug)
+		} else {
+			result.Installed = append(result.Installed, skill.Slug)
 		}
 	}
 
-	// Find orphaned local files.
-	localFiles, err := listLocalSkillFiles(agentType, workdir)
+	// Find orphaned local skills.
+	localSlugs, err := listLocalSkillSlugs(agentType, workdir)
 	if err != nil {
-		// If the directory doesn't exist there are no local files.
-		return result, nil
+		// If the directory doesn't exist there are no local skills.
+		if os.IsNotExist(err) {
+			return result, nil
+		}
+		return nil, fmt.Errorf("skills: sync list local skills: %w", err)
 	}
-	for _, slug := range localFiles {
+	for _, slug := range localSlugs {
 		if _, ok := bySlug[slug]; !ok {
 			result.Orphaned = append(result.Orphaned, slug)
 		}
@@ -94,8 +104,8 @@ func syncInternal(ctx context.Context, sdb syncDB, scopeIDs []uuid.UUID, agentTy
 }
 
 // ReadInstalledVersion reads the version field from the frontmatter of an
-// installed skill file. Returns 0 if the file cannot be read or has no version
-// line (treated as outdated). Exported for use by the hook CLI.
+// installed skill's SKILL.md. Returns 0 if the file cannot be read or has no
+// version line (treated as outdated). Exported for use by the hook CLI.
 func ReadInstalledVersion(slug, agentType, workdir string) int {
 	return readInstalledVersion(slug, agentType, workdir)
 }
@@ -109,14 +119,14 @@ func readInstalledVersion(slug, agentType, workdir string) int {
 
 	// Containment check: resolve symlinks on both base and target so that a
 	// symlink component under workdir cannot redirect the read outside the
-	// intended base directory.  filepath.Abs alone does not follow symlinks.
+	// intended base directory.
 	path := TargetPath(slug, agentType, workdir)
 	realBase, err := filepath.EvalSymlinks(workdir)
 	if err != nil {
 		return 0
 	}
 	// The target file may not exist; resolve its parent directory, then re-attach
-	// the filename.  If the parent doesn't exist either, os.Open will fail safely.
+	// the filename. If the parent doesn't exist either, os.Open will fail safely.
 	realDir, err := filepath.EvalSymlinks(filepath.Dir(path))
 	if err != nil {
 		return 0
@@ -162,14 +172,14 @@ func readInstalledVersion(slug, agentType, workdir string) int {
 	return 0
 }
 
-// listLocalSkillFiles returns the slugs (without .md suffix) of all .md files
-// in the agent's command directory.
-func listLocalSkillFiles(agentType, workdir string) ([]string, error) {
+// listLocalSkillSlugs returns the slugs of all locally installed skills by
+// scanning the agent's skills directory for subdirectories that contain a SKILL.md.
+func listLocalSkillSlugs(agentType, workdir string) ([]string, error) {
 	var dir string
 	if agentType == "codex" {
-		dir = filepath.Join(workdir, ".codex", "skills")
+		dir = filepath.Join(workdir, ".agents", "skills")
 	} else {
-		dir = filepath.Join(workdir, ".claude", "commands")
+		dir = filepath.Join(workdir, ".claude", "skills")
 	}
 
 	entries, err := os.ReadDir(dir)
@@ -179,12 +189,13 @@ func listLocalSkillFiles(agentType, workdir string) ([]string, error) {
 
 	var slugs []string
 	for _, e := range entries {
-		if e.IsDir() {
+		if !e.IsDir() {
 			continue
 		}
-		name := e.Name()
-		if strings.HasSuffix(name, ".md") {
-			slugs = append(slugs, strings.TrimSuffix(name, ".md"))
+		// Only count directories that actually contain SKILL.md.
+		skillMD := filepath.Join(dir, e.Name(), "SKILL.md")
+		if _, err := os.Stat(skillMD); err == nil {
+			slugs = append(slugs, e.Name())
 		}
 	}
 	return slugs, nil

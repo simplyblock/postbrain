@@ -119,6 +119,38 @@ func TestCreateSkill_NoAuth_Returns401(t *testing.T) {
 	}
 }
 
+func TestCreateSkill_WithFiles_InvalidPath_Returns400(t *testing.T) {
+	t.Parallel()
+	ro := &Router{}
+	body := `{"scope":"team:eng","slug":"my-skill","name":"n","files":[{"path":"scripts/../../../etc/passwd","content":"evil","executable":true}]}`
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	ro.createSkill(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	assertJSONError(t, w)
+}
+
+func TestCreateSkill_WithExecutableNotInScriptsDir_Returns400(t *testing.T) {
+	t.Parallel()
+	ro := &Router{}
+	body := `{"scope":"team:eng","slug":"my-skill","name":"n","files":[{"path":"references/run.sh","content":"#!/bin/sh","executable":true}]}`
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	ro.createSkill(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	assertJSONError(t, w)
+}
+
 // ── searchSkills ──────────────────────────────────────────────────────────────
 
 func TestSearchSkills_InvalidScopeFormat_Returns400(t *testing.T) {

@@ -61,7 +61,7 @@ func TestSkillInstall_WritesFile(t *testing.T) {
 	}
 
 	workdir := t.TempDir()
-	path, err := skills.Install(skill, "claude-code", workdir)
+	path, err := skills.Install(skill, nil, "claude-code", workdir)
 	if err != nil {
 		t.Fatalf("Install: %v", err)
 	}
@@ -435,7 +435,7 @@ func TestRecall_InstalledFilter(t *testing.T) {
 	installed := create("installed-skill")
 	_ = create("not-installed-skill")
 
-	if _, err := skills.Install(installed, "any", workdir); err != nil {
+	if _, err := skills.Install(installed, nil, "any", workdir); err != nil {
 		t.Fatalf("Install: %v", err)
 	}
 

@@ -65,9 +65,23 @@ type CreateInput struct {
 	Parameters       []db.SkillParameter
 	Visibility       string
 	ReviewRequired   int // default 1 if 0
+	// Files are optional supplementary files to attach to the skill.
+	// Each path must pass ValidateSkillFile; requires a non-nil pool.
+	Files []db.SkillFileInput
+}
+
+// UpdateInput holds optional fields for UpdateWithFiles.
+// Files semantics: nil = leave existing files untouched;
+// non-nil (even empty slice) = replace all files with the provided set.
+type UpdateInput struct {
+	Body       string
+	Parameters []db.SkillParameter
+	Files      *[]db.SkillFileInput
 }
 
 // Create persists a new skill in draft status, embedding its description+body.
+// When Files are provided, the skill row and all supplementary files are written
+// in a single transaction so a mid-file failure cannot leave an orphaned skill.
 func (s *Store) Create(ctx context.Context, input CreateInput) (*db.Skill, error) {
 	// Apply defaults.
 	if len(input.AgentTypes) == 0 {
@@ -75,6 +89,17 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.Skill, error
 	}
 	if input.ReviewRequired == 0 {
 		input.ReviewRequired = 1
+	}
+
+	// Validate supplementary files before any expensive work or DB writes.
+	for _, f := range input.Files {
+		if err := ValidateSkillFile(f); err != nil {
+			return nil, fmt.Errorf("skills: create: %w", err)
+		}
+	}
+	// Fail fast: file persistence requires a pool.
+	if len(input.Files) > 0 && s.pool == nil {
+		return nil, fmt.Errorf("skills: create: supplementary files require a database pool")
 	}
 
 	// Serialize parameters to JSON.
@@ -108,18 +133,91 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.Skill, error
 		EmbeddingModelID: modelID,
 	}
 
-	created, err := s.creator.createSkill(ctx, skill)
-	if err != nil {
-		return nil, fmt.Errorf("skills: create: %w", err)
+	var created *db.Skill
+	if len(input.Files) > 0 {
+		// Atomically insert the skill row and all supplementary files so that
+		// a failure mid-way (e.g. constraint violation on file N) rolls back the
+		// entire operation and does not leave an orphaned, file-less skill.
+		tx, err := s.pool.Begin(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("skills: create begin tx: %w", err)
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+
+		q := db.New(tx)
+		created, err = q.CreateSkill(ctx, db.CreateSkillParams{
+			ScopeID:          skill.ScopeID,
+			AuthorID:         skill.AuthorID,
+			Column3:          skill.SourceArtifactID,
+			Slug:             skill.Slug,
+			Name:             skill.Name,
+			Description:      skill.Description,
+			AgentTypes:       skill.AgentTypes,
+			Body:             skill.Body,
+			Parameters:       skill.Parameters,
+			Visibility:       skill.Visibility,
+			Status:           skill.Status,
+			PublishedAt:      skill.PublishedAt,
+			DeprecatedAt:     skill.DeprecatedAt,
+			ReviewRequired:   skill.ReviewRequired,
+			Version:          skill.Version,
+			Column16:         skill.PreviousVersion,
+			Embedding:        skill.Embedding,
+			EmbeddingModelID: skill.EmbeddingModelID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("skills: create: %w", err)
+		}
+		for _, f := range input.Files {
+			if _, err := q.UpsertSkillFile(ctx, db.UpsertSkillFileParams{
+				SkillID:      created.ID,
+				RelativePath: f.RelativePath,
+				Content:      f.Content,
+				IsExecutable: f.IsExecutable,
+			}); err != nil {
+				return nil, fmt.Errorf("skills: create upsert file %q: %w", f.RelativePath, err)
+			}
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, fmt.Errorf("skills: create commit: %w", err)
+		}
+	} else {
+		created, err = s.creator.createSkill(ctx, skill)
+		if err != nil {
+			return nil, fmt.Errorf("skills: create: %w", err)
+		}
 	}
+
 	if err := s.dualWriteSkillEmbedding(ctx, created.ID, created.ScopeID, embeddingVec, modelID); err != nil {
 		return nil, fmt.Errorf("skills: dual-write create: %w", err)
 	}
+
 	return created, nil
 }
 
 // Update re-embeds, snapshots the current version to history, then updates the skill.
+// Files are left untouched; use UpdateWithFiles to also replace supplementary files.
 func (s *Store) Update(ctx context.Context, id uuid.UUID, callerID uuid.UUID, body string, params []db.SkillParameter) (*db.Skill, error) {
+	return s.UpdateWithFiles(ctx, id, callerID, UpdateInput{Body: body, Parameters: params, Files: nil})
+}
+
+// UpdateWithFiles snapshots the current version (body, params, files), then updates
+// the skill content. If input.Files is non-nil, all existing supplementary files are
+// replaced with the provided set (empty slice deletes all files).
+// The full sequence — snapshot, content update, and file replacement — executes in
+// a single transaction so a partial failure cannot leave the skill in an inconsistent
+// state or diverge the file-history snapshot from the final content.
+func (s *Store) UpdateWithFiles(ctx context.Context, id uuid.UUID, callerID uuid.UUID, input UpdateInput) (*db.Skill, error) {
+	// Validate supplementary files before any DB writes.
+	if input.Files != nil {
+		for _, f := range *input.Files {
+			if err := ValidateSkillFile(f); err != nil {
+				return nil, fmt.Errorf("skills: update: %w", err)
+			}
+		}
+	}
+
+	// Read the current skill outside the transaction; GetSkill is a plain SELECT.
 	existing, err := compat.GetSkill(ctx, s.pool, id)
 	if err != nil {
 		return nil, fmt.Errorf("skills: update get: %w", err)
@@ -128,8 +226,29 @@ func (s *Store) Update(ctx context.Context, id uuid.UUID, callerID uuid.UUID, bo
 		return nil, fmt.Errorf("skills: update: skill %s not found", id)
 	}
 
-	// Snapshot the current version.
-	if err := compat.SnapshotSkillVersion(ctx, s.pool, &db.SkillHistory{
+	// Serialize and embed outside the transaction — both are pure CPU / network
+	// work that must not hold a DB connection open.
+	paramsJSON, err := json.Marshal(input.Parameters)
+	if err != nil {
+		return nil, fmt.Errorf("skills: marshal parameters: %w", err)
+	}
+	embeddingVec, modelID, err := s.embedText(ctx, existing.Description+" "+input.Body)
+	if err != nil {
+		return nil, fmt.Errorf("skills: embed: %w", err)
+	}
+	embVec := pgvector.NewVector(embeddingVec)
+
+	// Atomically: snapshot history, update content, replace files.
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("skills: update begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	q := db.New(tx)
+
+	// Snapshot current body/params version.
+	if err := q.SnapshotSkillVersion(ctx, db.SnapshotSkillVersionParams{
 		SkillID:    id,
 		Version:    existing.Version,
 		Body:       existing.Body,
@@ -139,23 +258,50 @@ func (s *Store) Update(ctx context.Context, id uuid.UUID, callerID uuid.UUID, bo
 		return nil, fmt.Errorf("skills: snapshot: %w", err)
 	}
 
-	paramsJSON, err := json.Marshal(params)
-	if err != nil {
-		return nil, fmt.Errorf("skills: marshal parameters: %w", err)
+	// Snapshot supplementary files for this version.
+	if err := q.SnapshotSkillFiles(ctx, db.SnapshotSkillFilesParams{
+		SkillID: id,
+		Version: existing.Version,
+	}); err != nil {
+		return nil, fmt.Errorf("skills: snapshot files: %w", err)
 	}
 
-	embeddingVec, modelID, err := s.embedText(ctx, existing.Description+" "+body)
-	if err != nil {
-		return nil, fmt.Errorf("skills: embed: %w", err)
-	}
-
-	updated, err := compat.UpdateSkillContent(ctx, s.pool, id, body, paramsJSON, embeddingVec, modelID)
+	updated, err := q.UpdateSkillContent(ctx, db.UpdateSkillContentParams{
+		ID:               id,
+		Body:             input.Body,
+		Parameters:       paramsJSON,
+		Embedding:        &embVec,
+		EmbeddingModelID: modelID,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("skills: update content: %w", err)
 	}
+
+	// Replace supplementary files if explicitly provided.
+	if input.Files != nil {
+		if err := q.DeleteAllSkillFiles(ctx, id); err != nil {
+			return nil, fmt.Errorf("skills: update delete files: %w", err)
+		}
+		for _, f := range *input.Files {
+			if _, err := q.UpsertSkillFile(ctx, db.UpsertSkillFileParams{
+				SkillID:      id,
+				RelativePath: f.RelativePath,
+				Content:      f.Content,
+				IsExecutable: f.IsExecutable,
+			}); err != nil {
+				return nil, fmt.Errorf("skills: update upsert file %q: %w", f.RelativePath, err)
+			}
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("skills: update commit: %w", err)
+	}
+
 	if err := s.dualWriteSkillEmbedding(ctx, updated.ID, updated.ScopeID, embeddingVec, modelID); err != nil {
 		return nil, fmt.Errorf("skills: dual-write update: %w", err)
 	}
+
 	return updated, nil
 }
 

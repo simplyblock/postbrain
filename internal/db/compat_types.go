@@ -6,6 +6,16 @@ import (
 	"github.com/google/uuid"
 )
 
+// SkillFileInput describes one supplementary file to attach to a skill.
+// RelativePath must include the typed subdirectory prefix:
+//   - "scripts/foo.sh"    for executable scripts (is_executable=true)
+//   - "references/bar.md" for additional markdown reference files
+type SkillFileInput struct {
+	RelativePath string
+	Content      string
+	IsExecutable bool
+}
+
 // SkillParameter is the in-memory representation of one parameter descriptor.
 // Not stored in a DB column directly; serialised to/from JSONB.
 type SkillParameter struct {

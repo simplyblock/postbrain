@@ -82,14 +82,23 @@ func (s *Server) handleSkillInstall(ctx context.Context, req mcpgo.CallToolReque
 		return mcpgo.NewToolResultError("skill_install: 'skill_id' or 'slug' is required"), nil
 	}
 
-	path, err := skills.Install(skill, agentType, workdir)
+	files, err := compat.ListSkillFiles(ctx, s.pool, skill.ID)
+	if err != nil {
+		return mcpgo.NewToolResultError(fmt.Sprintf("skill_install: list files failed: %v", err)), nil
+	}
+	path, err := skills.Install(skill, files, agentType, workdir)
 	if err != nil {
 		return mcpgo.NewToolResultError(fmt.Sprintf("skill_install: install failed: %v", err)), nil
 	}
 
+	filePaths := make([]string, len(files))
+	for i, f := range files {
+		filePaths[i] = f.RelativePath
+	}
 	out, _ := json.Marshal(map[string]any{
-		"path": path,
-		"slug": skill.Slug,
+		"path":  path,
+		"slug":  skill.Slug,
+		"files": filePaths,
 	})
 	return mcpgo.NewToolResultText(string(out)), nil
 }

@@ -378,6 +378,16 @@ type SkillEndorsement struct {
 	CreatedAt  time.Time
 }
 
+type SkillFile struct {
+	ID           uuid.UUID
+	SkillID      uuid.UUID
+	RelativePath string
+	Content      string
+	IsExecutable bool
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
 type SkillHistory struct {
 	ID         uuid.UUID
 	SkillID    uuid.UUID
@@ -387,6 +397,16 @@ type SkillHistory struct {
 	ChangedBy  uuid.UUID
 	ChangeNote *string
 	CreatedAt  time.Time
+}
+
+type SkillHistoryFile struct {
+	ID           uuid.UUID
+	SkillID      uuid.UUID
+	Version      int32
+	RelativePath string
+	Content      string
+	IsExecutable bool
+	CreatedAt    time.Time
 }
 
 type SocialIdentity struct {
