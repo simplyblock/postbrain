@@ -23,10 +23,13 @@
   </div>
   <script>
   function switchScope(sel) {
+    var uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    var allowedPages = ['memories','query','knowledge','collections','promotions','staleness','skills','graph','graph3d'];
+    var scopeId = sel.value;
+    if (!uuidRe.test(scopeId)) { return; }
     var parts = window.location.pathname.split('/');
-    // parts: ["", "ui", "{scopeID}", "{page}", ...]
-    var page = parts.length > 3 ? parts[3] : 'memories';
-    window.location.href = '/ui/' + sel.value + '/' + page;
+    var page = parts.length > 3 && allowedPages.indexOf(parts[3]) !== -1 ? parts[3] : 'memories';
+    window.location.href = '/ui/' + scopeId + '/' + page;
   }
   </script>
   {{end}}
