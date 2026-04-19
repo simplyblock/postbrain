@@ -43,7 +43,6 @@ func writeInstalledSkill(t *testing.T, dir, agentType, slug string, version int)
 	}
 }
 
-
 // ── Sync core behaviour ───────────────────────────────────────────────────────
 
 func TestSync_EmptyRegistry_OrphanedFiles(t *testing.T) {
