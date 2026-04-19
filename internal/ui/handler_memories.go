@@ -74,14 +74,15 @@ func (h *Handler) handleMemoryDetail(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	scopeID := ""
-	if scope := scopeFromContext(r.Context()); scope != nil {
-		scopeID = scope.ID.String()
+	scope := scopeFromContext(r.Context())
+	if scope == nil || mem.ScopeID != scope.ID {
+		http.NotFound(w, r)
+		return
 	}
 	h.render(w, r, "memory_detail", "Memory", struct {
 		Memory  *db.Memory
 		ScopeID string
-	}{mem, scopeID})
+	}{mem, scope.ID.String()})
 }
 
 // handleMemoryForget serves POST /ui/{scope}/memories/{id}/forget.
