@@ -35,7 +35,8 @@ CREATE TABLE skill_history_files (
     relative_path TEXT NOT NULL,
     content       TEXT NOT NULL,
     is_executable BOOL NOT NULL DEFAULT false,
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (skill_id, version, relative_path)
 );
 
 CREATE INDEX skill_history_files_skill_version_idx

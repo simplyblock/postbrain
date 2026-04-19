@@ -142,6 +142,7 @@ INSERT INTO skill_history_files (skill_id, version, relative_path, content, is_e
 SELECT sf.skill_id, $2, sf.relative_path, sf.content, sf.is_executable
 FROM skill_files sf
 WHERE sf.skill_id = $1
+ON CONFLICT (skill_id, version, relative_path) DO NOTHING
 `
 
 type SnapshotSkillFilesParams struct {
