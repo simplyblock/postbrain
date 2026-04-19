@@ -23,7 +23,6 @@ func TestHandlePromotions_NilPool_Renders200(t *testing.T) {
 	}
 }
 
-
 func TestHandlePromotions_InvalidStatus_Returns400(t *testing.T) {
 	t.Parallel()
 	h := newTestHandler(t)
