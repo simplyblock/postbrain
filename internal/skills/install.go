@@ -132,7 +132,11 @@ func InstallFromDB(ctx context.Context, pool *pgxpool.Pool, skill *db.Skill, age
 	if err != nil {
 		return "", nil, err
 	}
-	skillDir := SkillDirPath(skill.Slug, agentType, workdir)
+	// Derive the skill directory from the resolved path returned by Install
+	// rather than from SkillDirPath(workdir), which uses the unresolved workdir.
+	// If workdir contains symlinks the two differ; using filepath.Dir(path)
+	// guarantees the supplementary file paths agree with where Install wrote them.
+	skillDir := filepath.Dir(path)
 	var filePaths []string
 	for _, f := range files {
 		filePaths = append(filePaths, filepath.Join(skillDir, filepath.FromSlash(f.RelativePath)))
