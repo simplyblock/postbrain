@@ -99,6 +99,15 @@ func (h *Handler) handleMemoryForget(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
 		return
 	}
+	// Verify the memory belongs to the current scope before deleting.
+	// Return 404 regardless of whether the memory exists or is in a different
+	// scope to avoid leaking cross-scope existence.
+	scope := scopeFromContext(r.Context())
+	mem, err := compat.GetMemory(r.Context(), h.pool, id)
+	if err != nil || mem == nil || scope == nil || mem.ScopeID != scope.ID {
+		http.NotFound(w, r)
+		return
+	}
 	if err := compat.SoftDeleteMemory(r.Context(), h.pool, id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
