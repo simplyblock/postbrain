@@ -88,6 +88,7 @@ var scopeRequiredPrefixes = []string{
 	"/ui/staleness",
 	"/ui/skills",
 	"/ui/graph",
+	"/ui/graph3d",
 }
 
 // dispatchScopedRoute handles /ui/{scope-uuid}/... requests.
