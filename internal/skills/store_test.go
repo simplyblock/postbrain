@@ -180,6 +180,32 @@ func TestCreate_WithFiles_ExecutableNotInScriptsDir_ReturnsError(t *testing.T) {
 	}
 }
 
+func TestCreate_WithFiles_NilPool_ReturnsErrorBeforeEmbedding(t *testing.T) {
+	t.Parallel()
+	fdb := &fakeDB{}
+	// newTestStore leaves pool nil — the store has an embedder but no DB pool.
+	s := newTestStore(fdb)
+	input := CreateInput{
+		ScopeID:    uuid.New(),
+		AuthorID:   uuid.New(),
+		Slug:       "test-skill",
+		Name:       "Test Skill",
+		Body:       "Do the thing.",
+		Visibility: "team",
+		Files: []db.SkillFileInput{
+			{RelativePath: "scripts/run.sh", Content: "#!/bin/sh", IsExecutable: true},
+		},
+	}
+	_, err := s.Create(context.Background(), input)
+	if err == nil {
+		t.Fatal("expected error when pool is nil with files, got nil")
+	}
+	// The error must be returned before the skill row is created.
+	if fdb.created != nil {
+		t.Error("skill must not be created when pool is nil")
+	}
+}
+
 func TestCreate_EmptyEmbeddingReturnsError(t *testing.T) {
 	t.Parallel()
 	fdb := &fakeDB{}

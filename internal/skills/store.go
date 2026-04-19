@@ -80,6 +80,8 @@ type UpdateInput struct {
 }
 
 // Create persists a new skill in draft status, embedding its description+body.
+// When Files are provided, the skill row and all supplementary files are written
+// in a single transaction so a mid-file failure cannot leave an orphaned skill.
 func (s *Store) Create(ctx context.Context, input CreateInput) (*db.Skill, error) {
 	// Apply defaults.
 	if len(input.AgentTypes) == 0 {
@@ -87,6 +89,17 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.Skill, error
 	}
 	if input.ReviewRequired == 0 {
 		input.ReviewRequired = 1
+	}
+
+	// Validate supplementary files before any expensive work or DB writes.
+	for _, f := range input.Files {
+		if err := ValidateSkillFile(f); err != nil {
+			return nil, fmt.Errorf("skills: create: %w", err)
+		}
+	}
+	// Fail fast: file persistence requires a pool.
+	if len(input.Files) > 0 && s.pool == nil {
+		return nil, fmt.Errorf("skills: create: supplementary files require a database pool")
 	}
 
 	// Serialize parameters to JSON.
@@ -120,31 +133,63 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.Skill, error
 		EmbeddingModelID: modelID,
 	}
 
-	// Validate supplementary files before touching the DB.
-	for _, f := range input.Files {
-		if err := ValidateSkillFile(f); err != nil {
+	var created *db.Skill
+	if len(input.Files) > 0 {
+		// Atomically insert the skill row and all supplementary files so that
+		// a failure mid-way (e.g. constraint violation on file N) rolls back the
+		// entire operation and does not leave an orphaned, file-less skill.
+		tx, err := s.pool.Begin(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("skills: create begin tx: %w", err)
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+
+		q := db.New(tx)
+		created, err = q.CreateSkill(ctx, db.CreateSkillParams{
+			ScopeID:          skill.ScopeID,
+			AuthorID:         skill.AuthorID,
+			Column3:          skill.SourceArtifactID,
+			Slug:             skill.Slug,
+			Name:             skill.Name,
+			Description:      skill.Description,
+			AgentTypes:       skill.AgentTypes,
+			Body:             skill.Body,
+			Parameters:       skill.Parameters,
+			Visibility:       skill.Visibility,
+			Status:           skill.Status,
+			PublishedAt:      skill.PublishedAt,
+			DeprecatedAt:     skill.DeprecatedAt,
+			ReviewRequired:   skill.ReviewRequired,
+			Version:          skill.Version,
+			Column16:         skill.PreviousVersion,
+			Embedding:        skill.Embedding,
+			EmbeddingModelID: skill.EmbeddingModelID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("skills: create: %w", err)
+		}
+		for _, f := range input.Files {
+			if _, err := q.UpsertSkillFile(ctx, db.UpsertSkillFileParams{
+				SkillID:      created.ID,
+				RelativePath: f.RelativePath,
+				Content:      f.Content,
+				IsExecutable: f.IsExecutable,
+			}); err != nil {
+				return nil, fmt.Errorf("skills: create upsert file %q: %w", f.RelativePath, err)
+			}
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, fmt.Errorf("skills: create commit: %w", err)
+		}
+	} else {
+		created, err = s.creator.createSkill(ctx, skill)
+		if err != nil {
 			return nil, fmt.Errorf("skills: create: %w", err)
 		}
 	}
 
-	created, err := s.creator.createSkill(ctx, skill)
-	if err != nil {
-		return nil, fmt.Errorf("skills: create: %w", err)
-	}
 	if err := s.dualWriteSkillEmbedding(ctx, created.ID, created.ScopeID, embeddingVec, modelID); err != nil {
 		return nil, fmt.Errorf("skills: dual-write create: %w", err)
-	}
-
-	// Persist supplementary files (requires pool; skipped in unit tests with nil pool).
-	if len(input.Files) > 0 {
-		if s.pool == nil {
-			return nil, fmt.Errorf("skills: create: cannot persist supplementary files without a database pool")
-		}
-		for _, f := range input.Files {
-			if _, err := compat.UpsertSkillFile(ctx, s.pool, created.ID, f.RelativePath, f.Content, f.IsExecutable); err != nil {
-				return nil, fmt.Errorf("skills: create: upsert file %q: %w", f.RelativePath, err)
-			}
-		}
 	}
 
 	return created, nil
