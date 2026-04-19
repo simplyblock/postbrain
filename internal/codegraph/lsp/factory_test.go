@@ -7,8 +7,6 @@ import (
 )
 
 func TestNewClientForExt_TypeScript_DefaultsToTypeScriptLanguageServer(t *testing.T) {
-	t.Parallel()
-
 	origTLS := newTypeScriptLanguageServerClient
 	origTSGo := newTSGoClient
 	newTypeScriptLanguageServerClient = func(rootDir string, timeout time.Duration) (Client, error) {
@@ -33,8 +31,6 @@ func TestNewClientForExt_TypeScript_DefaultsToTypeScriptLanguageServer(t *testin
 }
 
 func TestNewClientForExt_TypeScript_UsesTSGoWhenFlagEnabled(t *testing.T) {
-	t.Parallel()
-
 	wantErr := errors.New("boom")
 	origTLS := newTypeScriptLanguageServerClient
 	origTSGo := newTSGoClient
@@ -60,8 +56,6 @@ func TestNewClientForExt_TypeScript_UsesTSGoWhenFlagEnabled(t *testing.T) {
 }
 
 func TestNewClientForExt_CCpp_UsesClangd(t *testing.T) {
-	t.Parallel()
-
 	origClangd := newClangdClient
 	newClangdClient = func(rootDir string, timeout time.Duration) (Client, error) {
 		return &PyrightClient{}, nil
@@ -80,8 +74,6 @@ func TestNewClientForExt_CCpp_UsesClangd(t *testing.T) {
 }
 
 func TestNewClientForExt_Markdown_UsesMarksman(t *testing.T) {
-	t.Parallel()
-
 	origMarksman := newMarksmanClient
 	newMarksmanClient = func(rootDir string, timeout time.Duration) (Client, error) {
 		return &PyrightClient{}, nil
