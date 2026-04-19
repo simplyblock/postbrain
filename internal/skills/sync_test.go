@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/google/uuid"
@@ -36,23 +37,12 @@ func writeInstalledSkill(t *testing.T, dir, agentType, slug string, version int)
 	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 		t.Fatalf("mkdir for %s: %v", slug, err)
 	}
-	content := "---\nversion: " + itoa(version) + "\n---\n\nbody\n"
+	content := "---\nversion: " + strconv.Itoa(version) + "\n---\n\nbody\n"
 	if err := os.WriteFile(target, []byte(content), 0644); err != nil {
 		t.Fatalf("write SKILL.md for %s: %v", slug, err)
 	}
 }
 
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	s := ""
-	for n > 0 {
-		s = string(rune('0'+n%10)) + s
-		n /= 10
-	}
-	return s
-}
 
 // ── Sync core behaviour ───────────────────────────────────────────────────────
 
