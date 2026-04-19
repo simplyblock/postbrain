@@ -1,14 +1,8 @@
 {{define "query"}}
 <h1>Query Playground</h1>
 
-<form class="toolbar query-toolbar" method="GET" action="/ui/query">
+<form class="toolbar query-toolbar" method="GET" action="/ui/{{.ScopeID}}/query">
   <input class="query-input" type="text" name="q" placeholder="Enter query…" value="{{.Query}}" autofocus>
-
-  <select class="query-scope" name="scope_id">
-    {{range .Scopes}}
-    <option value="{{.ID}}"{{if eq .ID.String $.ScopeID}} selected{{end}}>{{.ExternalID}} ({{.Kind}})</option>
-    {{end}}
-  </select>
 
   <select class="query-mode" name="search_mode">
     <option value="hybrid"{{if eq .SearchMode "hybrid"}} selected{{end}}>hybrid</option>
@@ -58,7 +52,7 @@
         {{if $r.ArtifactKind}}<code>{{$r.ArtifactKind}}</code>{{end}}
       </td>
       <td>
-        {{if $r.Title}}<strong><a href="/ui/knowledge/{{$r.ID}}">{{$r.Title}}</a></strong><br>{{end}}
+        {{if $r.Title}}<strong><a href="/ui/{{$.ScopeID}}/knowledge/{{$r.ID}}">{{$r.Title}}</a></strong><br>{{end}}
         <span style="white-space:pre-wrap">{{truncate $r.Content 400}}</span>
         {{if $r.SourceRef}}<br><small style="color:var(--pico-muted-color)">{{$r.SourceRef}}</small>{{end}}
       </td>

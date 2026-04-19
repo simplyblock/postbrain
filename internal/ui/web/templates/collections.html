@@ -5,7 +5,7 @@
   <tbody>
   {{range .Collections}}
   <tr>
-    <td><a href="/ui/collections/{{.ID}}">{{.Name}}</a></td>
+    <td><a href="/ui/{{$.ScopeID}}/collections/{{.ID}}">{{.Name}}</a></td>
     <td class="mono muted">{{.Slug}}</td>
     <td>{{.Visibility}}</td>
     <td class="muted">{{timeAgo .CreatedAt}}</td>

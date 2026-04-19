@@ -15,32 +15,25 @@ import (
 	"github.com/simplyblock/postbrain/internal/knowledge"
 )
 
-// handleKnowledge serves GET /ui/knowledge.
 const knowledgePageSize = 50
 
+// handleKnowledge serves GET /ui/{scope}/knowledge.
 func (h *Handler) handleKnowledge(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 	status := r.URL.Query().Get("status")
-	scopeStr := r.URL.Query().Get("scope")
 
 	cursor := 0
 	if c, err := strconv.Atoi(r.URL.Query().Get("cursor")); err == nil && c > 0 {
 		cursor = c
 	}
 
-	var scopeID uuid.UUID
-	if scopeStr != "" {
-		if id, err := uuid.Parse(scopeStr); err == nil {
-			scopeID = id
-		}
-	}
+	scope := scopeFromContext(r.Context())
 
 	data := struct {
 		Query         string
 		Status        string
-		ScopeID       uuid.UUID
+		ScopeID       string
 		Artifacts     []*db.KnowledgeArtifact
-		Scopes        []*db.Scope
 		ArtifactKinds []string
 		UploadError   string
 		PrevCursor    int
@@ -50,43 +43,38 @@ func (h *Handler) handleKnowledge(w http.ResponseWriter, r *http.Request) {
 	}{
 		Query:         q,
 		Status:        status,
-		ScopeID:       scopeID,
 		ArtifactKinds: knowledge.ArtifactKinds(),
 		PrevCursor:    cursor - knowledgePageSize,
 		HasPrev:       cursor > 0,
 	}
+	if scope != nil {
+		data.ScopeID = scope.ID.String()
+	}
 
-	if h.pool != nil {
-		scopes, scopeSet := h.authorizedScopesForRequest(r.Context(), r)
-		data.Scopes = scopes
-		scopeAllowed := scopeID == uuid.Nil
-		if scopeID != uuid.Nil {
-			_, scopeAllowed = scopeSet[scopeID]
-		}
+	if h.pool != nil && scope != nil {
+		_, scopeSet := h.authorizedScopesForRequest(r.Context(), r)
 		var arts []*db.KnowledgeArtifact
 		var err error
-		if scopeAllowed {
-			if q != "" {
-				arts, err = compat.SearchArtifacts(r.Context(), h.pool, q, status, scopeID, knowledgePageSize+1, cursor)
-			} else if status != "" {
-				arts, err = compat.ListArtifactsByStatus(r.Context(), h.pool, status, scopeID, knowledgePageSize+1, cursor)
-			} else {
-				arts, err = compat.ListAllArtifacts(r.Context(), h.pool, scopeID, knowledgePageSize+1, cursor)
+		if q != "" {
+			arts, err = compat.SearchArtifacts(r.Context(), h.pool, q, status, scope.ID, knowledgePageSize+1, cursor)
+		} else if status != "" {
+			arts, err = compat.ListArtifactsByStatus(r.Context(), h.pool, status, scope.ID, knowledgePageSize+1, cursor)
+		} else {
+			arts, err = compat.ListAllArtifacts(r.Context(), h.pool, scope.ID, knowledgePageSize+1, cursor)
+		}
+		if err == nil {
+			filtered := make([]*db.KnowledgeArtifact, 0, len(arts))
+			for _, art := range arts {
+				if _, ok := scopeSet[art.OwnerScopeID]; ok {
+					filtered = append(filtered, art)
+				}
 			}
-			if err == nil {
-				filtered := make([]*db.KnowledgeArtifact, 0, len(arts))
-				for _, art := range arts {
-					if _, ok := scopeSet[art.OwnerScopeID]; ok {
-						filtered = append(filtered, art)
-					}
-				}
-				if len(filtered) > knowledgePageSize {
-					data.Artifacts = filtered[:knowledgePageSize]
-					data.HasNext = true
-					data.NextCursor = cursor + knowledgePageSize
-				} else {
-					data.Artifacts = filtered
-				}
+			if len(filtered) > knowledgePageSize {
+				data.Artifacts = filtered[:knowledgePageSize]
+				data.HasNext = true
+				data.NextCursor = cursor + knowledgePageSize
+			} else {
+				data.Artifacts = filtered
 			}
 		}
 	}
@@ -98,67 +86,78 @@ func (h *Handler) handleKnowledge(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, tmpl, "Knowledge", data)
 }
 
-// handleKnowledgeDetail serves GET /ui/knowledge/{id}.
+// handleKnowledgeDetail serves GET /ui/{scope}/knowledge/{id}.
 func (h *Handler) handleKnowledgeDetail(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimPrefix(r.URL.Path, "/ui/knowledge/")
+	path := routePathFromContext(r.Context(), r)
+	idStr := strings.TrimPrefix(path, "/ui/knowledge/")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-
 	if h.pool == nil {
 		http.NotFound(w, r)
 		return
 	}
 
+	scopeID := ""
+	if scope := scopeFromContext(r.Context()); scope != nil {
+		scopeID = scope.ID.String()
+	}
+
 	data := struct {
 		Artifact *db.KnowledgeArtifact
-		Sources  []*db.KnowledgeArtifact // populated when Artifact is a digest
-		Digests  []*db.KnowledgeArtifact // published digests covering this artifact
-	}{}
+		Sources  []*db.KnowledgeArtifact
+		Digests  []*db.KnowledgeArtifact
+		ScopeID  string
+	}{ScopeID: scopeID}
 
-	if h.pool != nil {
-		art, err := compat.GetArtifact(r.Context(), h.pool, id)
-		if err != nil || art == nil {
-			http.NotFound(w, r)
+	art, err := compat.GetArtifact(r.Context(), h.pool, id)
+	if err != nil || art == nil {
+		http.NotFound(w, r)
+		return
+	}
+	data.Artifact = art
+
+	if art.KnowledgeType == "digest" {
+		sources, err := compat.ListDigestSources(r.Context(), h.pool, id)
+		if err != nil {
+			http.Error(w, "failed to load digest sources", http.StatusInternalServerError)
 			return
 		}
-		data.Artifact = art
-
-		if art.KnowledgeType == "digest" {
-			sources, err := compat.ListDigestSources(r.Context(), h.pool, id)
-			if err != nil {
-				http.Error(w, "failed to load digest sources", http.StatusInternalServerError)
-				return
-			}
-			data.Sources = sources
-		} else {
-			digests, err := compat.ListDigestsForSource(r.Context(), h.pool, id)
-			if err != nil {
-				http.Error(w, "failed to load digests", http.StatusInternalServerError)
-				return
-			}
-			data.Digests = digests
+		data.Sources = sources
+	} else {
+		digests, err := compat.ListDigestsForSource(r.Context(), h.pool, id)
+		if err != nil {
+			http.Error(w, "failed to load digests", http.StatusInternalServerError)
+			return
 		}
+		data.Digests = digests
 	}
 
 	h.render(w, r, "knowledge_detail", "Knowledge", data)
 }
 
-// handleKnowledgeHistory serves GET /ui/knowledge/{id}/history.
+// handleKnowledgeHistory serves GET /ui/{scope}/knowledge/{id}/history.
 func (h *Handler) handleKnowledgeHistory(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/history")
+	path := routePathFromContext(r.Context(), r)
+	idStr := strings.TrimSuffix(strings.TrimPrefix(path, "/ui/knowledge/"), "/history")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
 
+	scopeID := ""
+	if scope := scopeFromContext(r.Context()); scope != nil {
+		scopeID = scope.ID.String()
+	}
+
 	data := struct {
 		Artifact *db.KnowledgeArtifact
 		History  []*db.KnowledgeHistory
-	}{}
+		ScopeID  string
+	}{ScopeID: scopeID}
 
 	if h.pool != nil {
 		art, err := compat.GetArtifact(r.Context(), h.pool, id)
@@ -174,9 +173,10 @@ func (h *Handler) handleKnowledgeHistory(w http.ResponseWriter, r *http.Request)
 	h.render(w, r, "knowledge_history", "Knowledge History", data)
 }
 
-// handleEndorseArtifact serves POST /ui/knowledge/{id}/endorse.
+// handleEndorseArtifact serves POST /ui/{scope}/knowledge/{id}/endorse.
 func (h *Handler) handleEndorseArtifact(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/endorse")
+	path := routePathFromContext(r.Context(), r)
+	idStr := strings.TrimSuffix(strings.TrimPrefix(path, "/ui/knowledge/"), "/endorse")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		http.Error(w, "invalid artifact id", http.StatusBadRequest)
@@ -190,9 +190,10 @@ func (h *Handler) handleEndorseArtifact(w http.ResponseWriter, r *http.Request) 
 	http.Redirect(w, r, r.Referer(), http.StatusSeeOther)
 }
 
-// handleKnowledgeReview serves POST /ui/knowledge/{id}/review.
+// handleKnowledgeReview serves POST /ui/{scope}/knowledge/{id}/review.
 func (h *Handler) handleKnowledgeReview(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/review")
+	path := routePathFromContext(r.Context(), r)
+	idStr := strings.TrimSuffix(strings.TrimPrefix(path, "/ui/knowledge/"), "/review")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		http.Error(w, "invalid artifact id", http.StatusBadRequest)
@@ -203,12 +204,13 @@ func (h *Handler) handleKnowledgeReview(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/ui/knowledge/"+id.String(), http.StatusSeeOther)
+	http.Redirect(w, r, scopedPath(r, "/knowledge/"+id.String()), http.StatusSeeOther)
 }
 
-// handleKnowledgeDeprecate serves POST /ui/knowledge/{id}/deprecate.
+// handleKnowledgeDeprecate serves POST /ui/{scope}/knowledge/{id}/deprecate.
 func (h *Handler) handleKnowledgeDeprecate(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/deprecate")
+	path := routePathFromContext(r.Context(), r)
+	idStr := strings.TrimSuffix(strings.TrimPrefix(path, "/ui/knowledge/"), "/deprecate")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		http.Error(w, "invalid artifact id", http.StatusBadRequest)
@@ -219,12 +221,13 @@ func (h *Handler) handleKnowledgeDeprecate(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/ui/knowledge/"+id.String(), http.StatusSeeOther)
+	http.Redirect(w, r, scopedPath(r, "/knowledge/"+id.String()), http.StatusSeeOther)
 }
 
-// handleKnowledgeRepublish serves POST /ui/knowledge/{id}/republish.
+// handleKnowledgeRepublish serves POST /ui/{scope}/knowledge/{id}/republish.
 func (h *Handler) handleKnowledgeRepublish(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/republish")
+	path := routePathFromContext(r.Context(), r)
+	idStr := strings.TrimSuffix(strings.TrimPrefix(path, "/ui/knowledge/"), "/republish")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		http.Error(w, "invalid artifact id", http.StatusBadRequest)
@@ -235,12 +238,13 @@ func (h *Handler) handleKnowledgeRepublish(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/ui/knowledge/"+id.String(), http.StatusSeeOther)
+	http.Redirect(w, r, scopedPath(r, "/knowledge/"+id.String()), http.StatusSeeOther)
 }
 
-// handleKnowledgeDelete serves POST /ui/knowledge/{id}/delete.
+// handleKnowledgeDelete serves POST /ui/{scope}/knowledge/{id}/delete.
 func (h *Handler) handleKnowledgeDelete(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/delete")
+	path := routePathFromContext(r.Context(), r)
+	idStr := strings.TrimSuffix(strings.TrimPrefix(path, "/ui/knowledge/"), "/delete")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		http.Error(w, "invalid artifact id", http.StatusBadRequest)
@@ -251,12 +255,13 @@ func (h *Handler) handleKnowledgeDelete(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/ui/knowledge", http.StatusSeeOther)
+	scopedRedirect(w, r, "/knowledge")
 }
 
-// handleKnowledgeRetract serves POST /ui/knowledge/{id}/retract.
+// handleKnowledgeRetract serves POST /ui/{scope}/knowledge/{id}/retract.
 func (h *Handler) handleKnowledgeRetract(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/knowledge/"), "/retract")
+	path := routePathFromContext(r.Context(), r)
+	idStr := strings.TrimSuffix(strings.TrimPrefix(path, "/ui/knowledge/"), "/retract")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		http.Error(w, "invalid artifact id", http.StatusBadRequest)
@@ -271,31 +276,40 @@ func (h *Handler) handleKnowledgeRetract(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/ui/knowledge/"+id.String(), http.StatusSeeOther)
+	http.Redirect(w, r, scopedPath(r, "/knowledge/"+id.String()), http.StatusSeeOther)
 }
 
-// handleKnowledgeNew serves GET /ui/knowledge/new.
+// handleKnowledgeNew serves GET /ui/{scope}/knowledge/new.
 func (h *Handler) handleKnowledgeNew(w http.ResponseWriter, r *http.Request) {
 	h.renderKnowledgeNew(w, r, "")
 }
 
 func (h *Handler) renderKnowledgeNew(w http.ResponseWriter, r *http.Request, formError string) {
+	scopeID := ""
+	if scope := scopeFromContext(r.Context()); scope != nil {
+		scopeID = scope.ID.String()
+	}
 	data := struct {
 		FormError     string
-		Scopes        []*db.Scope
+		ScopeID       string
 		ArtifactKinds []string
-	}{FormError: formError, ArtifactKinds: knowledge.ArtifactKinds()}
-	if h.pool != nil {
-		scopes, _ := h.authorizedScopesForRequest(r.Context(), r)
-		data.Scopes = scopes
+	}{
+		FormError:     formError,
+		ScopeID:       scopeID,
+		ArtifactKinds: knowledge.ArtifactKinds(),
 	}
 	h.render(w, r, "knowledge_new", "New Knowledge Article", data)
 }
 
-// handleCreateKnowledge serves POST /ui/knowledge.
+// handleCreateKnowledge serves POST /ui/{scope}/knowledge.
 func (h *Handler) handleCreateKnowledge(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	scope := scopeFromContext(r.Context())
+	if scope == nil {
+		h.renderKnowledgeNew(w, r, "scope not found")
 		return
 	}
 	title := strings.TrimSpace(r.FormValue("title"))
@@ -306,21 +320,6 @@ func (h *Handler) handleCreateKnowledge(w http.ResponseWriter, r *http.Request) 
 	artifactKind, err := knowledge.NormalizeArtifactKind(r.FormValue("artifact_kind"))
 	if err != nil {
 		h.renderKnowledgeNew(w, r, "invalid artifact kind")
-		return
-	}
-	scopeStr := strings.TrimSpace(r.FormValue("scope_id"))
-	if scopeStr == "" {
-		h.renderKnowledgeNew(w, r, "scope is required")
-		return
-	}
-	scopeID, err := uuid.Parse(scopeStr)
-	if err != nil {
-		h.renderKnowledgeNew(w, r, "invalid scope id")
-		return
-	}
-	_, authorizedScopeSet := h.authorizedScopesForRequest(r.Context(), r)
-	if _, ok := authorizedScopeSet[scopeID]; !ok {
-		h.renderKnowledgeNew(w, r, "scope access denied")
 		return
 	}
 	if h.knwStore == nil {
@@ -336,7 +335,7 @@ func (h *Handler) handleCreateKnowledge(w http.ResponseWriter, r *http.Request) 
 	art, err := h.knwStore.Create(r.Context(), knowledge.CreateInput{
 		KnowledgeType: "semantic",
 		ArtifactKind:  artifactKind,
-		OwnerScopeID:  scopeID,
+		OwnerScopeID:  scope.ID,
 		AuthorID:      authorID,
 		Visibility:    visibility,
 		Title:         title,
@@ -346,13 +345,18 @@ func (h *Handler) handleCreateKnowledge(w http.ResponseWriter, r *http.Request) 
 		h.renderKnowledgeNew(w, r, err.Error())
 		return
 	}
-	http.Redirect(w, r, "/ui/knowledge/"+art.ID.String(), http.StatusSeeOther)
+	http.Redirect(w, r, scopedPath(r, "/knowledge/"+art.ID.String()), http.StatusSeeOther)
 }
 
-// handleUploadKnowledge serves POST /ui/knowledge/upload.
+// handleUploadKnowledge serves POST /ui/{scope}/knowledge/upload.
 func (h *Handler) handleUploadKnowledge(w http.ResponseWriter, r *http.Request) {
 	if h.knwStore == nil {
 		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	scope := scopeFromContext(r.Context())
+	if scope == nil {
+		http.Error(w, "scope not found", http.StatusBadRequest)
 		return
 	}
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
@@ -379,22 +383,6 @@ func (h *Handler) handleUploadKnowledge(w http.ResponseWriter, r *http.Request) 
 	}
 	if strings.TrimSpace(text) == "" {
 		http.Error(w, "extracted text is empty", http.StatusBadRequest)
-		return
-	}
-
-	scopeStr := r.FormValue("scope")
-	if scopeStr == "" {
-		http.Error(w, "scope is required", http.StatusBadRequest)
-		return
-	}
-	parts := strings.SplitN(scopeStr, ":", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		http.Error(w, "scope must be kind:external_id", http.StatusBadRequest)
-		return
-	}
-	scope, err := compat.GetScopeByExternalID(r.Context(), h.pool, parts[0], parts[1])
-	if err != nil || scope == nil {
-		http.Error(w, "scope not found", http.StatusBadRequest)
 		return
 	}
 
@@ -433,5 +421,5 @@ func (h *Handler) handleUploadKnowledge(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	http.Redirect(w, r, "/ui/knowledge", http.StatusSeeOther)
+	scopedRedirect(w, r, "/knowledge")
 }

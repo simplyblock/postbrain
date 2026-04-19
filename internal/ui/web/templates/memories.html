@@ -1,12 +1,7 @@
 {{define "memories"}}
 <h1>Memories</h1>
-<form class="toolbar" hx-get="/ui/memories" hx-target="#results" hx-push-url="true">
+<form class="toolbar" hx-get="/ui/{{.ScopeID}}/memories" hx-target="#results" hx-push-url="true">
   <input type="text" name="q" placeholder="Search…" value="{{.Query}}">
-  <select name="scope_id">
-    {{range .Scopes}}
-    <option value="{{.ID}}"{{if eq .ID.String $.ScopeID}} selected{{end}}>{{.ExternalID}} ({{.Kind}})</option>
-    {{end}}
-  </select>
   <button type="submit">Search</button>
 </form>
 <div id="results">

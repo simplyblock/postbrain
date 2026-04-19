@@ -6,7 +6,7 @@
   <tr>
     <td>{{.MemoryType}}</td>
     <td>{{printf "%.2f" .Importance}}</td>
-    <td><a href="/ui/memories/{{.ID}}">{{truncate .Content 80}}</a></td>
+    <td><a href="/ui/{{$.ScopeID}}/memories/{{.ID}}">{{truncate .Content 80}}</a></td>
     <td>{{timeAgo .CreatedAt}}</td>
     <td>
       <button hx-delete="/v1/memories/{{.ID}}" hx-confirm="Soft-delete this memory?" hx-target="closest tr" hx-swap="outerHTML">Delete</button>
@@ -17,5 +17,5 @@
   {{end}}
   </tbody>
 </table>
-{{if .NextCursor}}<button hx-get="/ui/memories?cursor={{.NextCursor}}&q={{.Query}}&scope_id={{.ScopeID}}" hx-target="#results" hx-swap="beforeend">Load more</button>{{end}}
+{{if .NextCursor}}<button hx-get="/ui/{{.ScopeID}}/memories?cursor={{.NextCursor}}&q={{.Query}}" hx-target="#results" hx-swap="beforeend">Load more</button>{{end}}
 {{end}}

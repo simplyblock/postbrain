@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/simplyblock/postbrain/internal/config"
+	"github.com/simplyblock/postbrain/internal/db"
 )
 
 // newTestHandler creates a Handler with nil pool (no DB) for unit testing.
@@ -167,8 +169,11 @@ func TestHandleCreateKnowledge_InvalidArtifactKind_RendersFormError(t *testing.T
 	t.Parallel()
 	h := newTestHandler(t)
 	req := httptest.NewRequest(http.MethodPost, "/ui/knowledge",
-		strings.NewReader("title=My+Article&scope_id="+uuid.New().String()+"&artifact_kind=banana"))
+		strings.NewReader("title=My+Article&artifact_kind=banana"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	// Inject scope into context as dispatchScopedRoute would.
+	fakeScope := &db.Scope{ID: uuid.New()}
+	req = req.WithContext(context.WithValue(req.Context(), ctxKeyCurrentScope, fakeScope))
 	w := httptest.NewRecorder()
 
 	h.handleCreateKnowledge(w, req)

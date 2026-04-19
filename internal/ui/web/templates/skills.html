@@ -5,7 +5,7 @@
   <tbody>
   {{range .Skills}}
   <tr>
-    <td><a href="/ui/skills/{{.ID}}">{{.Name}}</a></td>
+    <td><a href="/ui/{{$.ScopeID}}/skills/{{.ID}}">{{.Name}}</a></td>
     <td><code>{{.Slug}}</code></td>
     <td>{{join .AgentTypes ", "}}</td>
     <td>{{.Version}}</td>

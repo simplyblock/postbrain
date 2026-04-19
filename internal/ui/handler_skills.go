@@ -10,19 +10,21 @@ import (
 	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
-// handleSkills serves GET /ui/skills.
+// handleSkills serves GET /ui/{scope}/skills.
 func (h *Handler) handleSkills(w http.ResponseWriter, r *http.Request) {
-	data := struct {
-		Skills []*db.Skill
-	}{}
+	scope := scopeFromContext(r.Context())
 
-	if h.pool != nil {
-		scopes, scopeSet := h.authorizedScopesForRequest(r.Context(), r)
-		authorizedScopeIDs := make([]uuid.UUID, 0, len(scopes))
-		for _, s := range scopes {
-			authorizedScopeIDs = append(authorizedScopeIDs, s.ID)
-		}
-		skills, err := compat.ListPublishedSkillsForAgent(r.Context(), h.pool, authorizedScopeIDs, "any")
+	data := struct {
+		ScopeID string
+		Skills  []*db.Skill
+	}{}
+	if scope != nil {
+		data.ScopeID = scope.ID.String()
+	}
+
+	if h.pool != nil && scope != nil {
+		_, scopeSet := h.authorizedScopesForRequest(r.Context(), r)
+		skills, err := compat.ListPublishedSkillsForAgent(r.Context(), h.pool, []uuid.UUID{scope.ID}, "any")
 		if err == nil {
 			filtered := make([]*db.Skill, 0, len(skills))
 			for _, s := range skills {
@@ -37,18 +39,25 @@ func (h *Handler) handleSkills(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "skills", "Skills", data)
 }
 
-// handleSkillDetail serves GET /ui/skills/{id}.
+// handleSkillDetail serves GET /ui/{scope}/skills/{id}.
 func (h *Handler) handleSkillDetail(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimPrefix(r.URL.Path, "/ui/skills/")
+	path := routePathFromContext(r.Context(), r)
+	idStr := strings.TrimPrefix(path, "/ui/skills/")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
 
+	scopeID := ""
+	if scope := scopeFromContext(r.Context()); scope != nil {
+		scopeID = scope.ID.String()
+	}
+
 	data := struct {
-		Skill *db.Skill
-	}{}
+		Skill   *db.Skill
+		ScopeID string
+	}{ScopeID: scopeID}
 
 	if h.pool != nil {
 		skill, err := compat.GetSkill(r.Context(), h.pool, id)
@@ -62,19 +71,26 @@ func (h *Handler) handleSkillDetail(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "skill_detail", "Skill", data)
 }
 
-// handleSkillHistory serves GET /ui/skills/{id}/history.
+// handleSkillHistory serves GET /ui/{scope}/skills/{id}/history.
 func (h *Handler) handleSkillHistory(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/skills/"), "/history")
+	path := routePathFromContext(r.Context(), r)
+	idStr := strings.TrimSuffix(strings.TrimPrefix(path, "/ui/skills/"), "/history")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
 
+	scopeID := ""
+	if scope := scopeFromContext(r.Context()); scope != nil {
+		scopeID = scope.ID.String()
+	}
+
 	data := struct {
 		Skill   *db.Skill
 		History []*db.SkillHistory
-	}{}
+		ScopeID string
+	}{ScopeID: scopeID}
 
 	if h.pool != nil {
 		skill, err := compat.GetSkill(r.Context(), h.pool, id)

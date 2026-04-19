@@ -7,15 +7,15 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/retrieval"
 )
 
-// handleQuery serves GET /ui/query — the recall playground.
+// handleQuery serves GET /ui/{scope}/query — the recall playground.
 func (h *Handler) handleQuery(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	scopes, scopeSet := h.authorizedScopesForRequest(ctx, r)
+	_, scopeSet := h.authorizedScopesForRequest(ctx, r)
+	scope := scopeFromContext(ctx)
 
 	type queryResult struct {
 		Layer         string
@@ -35,7 +35,6 @@ func (h *Handler) handleQuery(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		Title      string
 		Content    template.HTML
-		Scopes     []*db.Scope
 		Query      string
 		ScopeID    string
 		Layers     map[string]bool
@@ -46,15 +45,16 @@ func (h *Handler) handleQuery(w http.ResponseWriter, r *http.Request) {
 		Error      string
 	}{
 		Title:      "Query Playground",
-		Scopes:     scopes,
 		Layers:     map[string]bool{"memory": true, "knowledge": true, "skill": true},
 		SearchMode: "hybrid",
 		Limit:      10,
 	}
+	if scope != nil {
+		data.ScopeID = scope.ID.String()
+	}
 
 	if r.Method == http.MethodGet && r.URL.Query().Get("q") != "" {
 		data.Query = r.URL.Query().Get("q")
-		data.ScopeID = r.URL.Query().Get("scope_id")
 		data.SearchMode = r.URL.Query().Get("search_mode")
 		if data.SearchMode == "" {
 			data.SearchMode = "hybrid"
@@ -73,16 +73,10 @@ func (h *Handler) handleQuery(w http.ResponseWriter, r *http.Request) {
 			data.Layers = map[string]bool{"memory": true, "knowledge": true, "skill": true}
 		}
 
-		scopeID, err := uuid.Parse(data.ScopeID)
-		if err != nil && len(scopes) > 0 {
-			scopeID = scopes[0].ID
-			data.ScopeID = scopeID.String()
-		}
-		if err == nil {
-			if _, ok := scopeSet[scopeID]; !ok && len(scopes) > 0 {
-				scopeID = scopes[0].ID
-				data.ScopeID = scopeID.String()
-			}
+		// Scope is pre-validated by dispatchScopedRoute; use it directly.
+		var scopeID uuid.UUID
+		if scope != nil {
+			scopeID = scope.ID
 		}
 
 		principalID := h.principalFromCookie(r)
@@ -141,8 +135,6 @@ func (h *Handler) handleQuery(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 		data.Ran = true
-	} else if len(scopes) > 0 {
-		data.ScopeID = scopes[0].ID.String()
 	}
 
 	h.render(w, r, "query", "Query Playground", data)
