@@ -92,7 +92,10 @@ func syncInternal(ctx context.Context, sdb syncDB, scopeIDs []uuid.UUID, agentTy
 	localSlugs, err := listLocalSkillSlugs(agentType, workdir)
 	if err != nil {
 		// If the directory doesn't exist there are no local skills.
-		return result, nil
+		if os.IsNotExist(err) {
+			return result, nil
+		}
+		return nil, fmt.Errorf("skills: sync list local skills: %w", err)
 	}
 	for _, slug := range localSlugs {
 		if _, ok := bySlug[slug]; !ok {
