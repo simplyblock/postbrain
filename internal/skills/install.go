@@ -167,15 +167,33 @@ func installFile(f *db.SkillFile, realBase, skillRealDir string) error {
 		return fmt.Errorf("skills: supplementary file %q escapes base directory", f.RelativePath)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+	parentDir := filepath.Dir(fullPath)
+	if err := os.MkdirAll(parentDir, 0755); err != nil {
 		return fmt.Errorf("skills: install mkdir for %q: %w", f.RelativePath, err)
 	}
 
+	// Resolve symlinks on the parent directory now that it exists.
+	// A pre-existing symlink (e.g. scripts/ → /etc) would pass the string
+	// prefix check above but WriteFile would follow it outside the skill dir.
+	// EvalSymlinks on the parent catches that before any write happens.
+	realParentDir, err := filepath.EvalSymlinks(parentDir)
+	if err != nil {
+		return fmt.Errorf("skills: install resolve parent for %q: %w", f.RelativePath, err)
+	}
+	if !strings.HasPrefix(realParentDir, filepath.Clean(skillRealDir)+string(filepath.Separator)) {
+		return fmt.Errorf("skills: supplementary file %q parent escapes skill directory after symlink resolution", f.RelativePath)
+	}
+	if !strings.HasPrefix(realParentDir, filepath.Clean(realBase)+string(filepath.Separator)) {
+		return fmt.Errorf("skills: supplementary file %q parent escapes base directory after symlink resolution", f.RelativePath)
+	}
+
+	// Write to the resolved path so the OS call itself never follows a symlink.
+	realFullPath := filepath.Join(realParentDir, filepath.Base(fullPath))
 	mode := os.FileMode(0644)
 	if f.IsExecutable {
 		mode = 0755
 	}
-	if err := os.WriteFile(fullPath, []byte(f.Content), mode); err != nil {
+	if err := os.WriteFile(realFullPath, []byte(f.Content), mode); err != nil {
 		return fmt.Errorf("skills: install write %q: %w", f.RelativePath, err)
 	}
 	return nil

@@ -255,6 +255,42 @@ func TestInstall_SymlinkEscape_ReturnsError(t *testing.T) {
 	}
 }
 
+// TestInstall_WithFiles_SymlinkInSkillDir_ReturnsError verifies that a symlink
+// *inside* the skill directory (e.g. scripts/ → /tmp/outside) is detected and
+// rejected even though the unresolved string path passes the prefix check.
+func TestInstall_WithFiles_SymlinkInSkillDir_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	outer := t.TempDir()
+	base := filepath.Join(outer, "workdir")
+	outside := filepath.Join(outer, "outside")
+
+	for _, d := range []string{base, outside} {
+		if err := os.MkdirAll(d, 0755); err != nil {
+			t.Fatalf("mkdir %s: %v", d, err)
+		}
+	}
+
+	// Pre-create the skill directory and plant a scripts/ symlink pointing outside.
+	skillDir := filepath.Join(base, ".claude", "skills", "sym-skill")
+	if err := os.MkdirAll(skillDir, 0755); err != nil {
+		t.Fatalf("mkdir skillDir: %v", err)
+	}
+	scriptsLink := filepath.Join(skillDir, "scripts")
+	if err := os.Symlink(outside, scriptsLink); err != nil {
+		t.Skipf("symlink not supported on this OS/FS: %v", err)
+	}
+
+	skill := makeTestSkill("sym-skill")
+	files := []*db.SkillFile{
+		makeTestSkillFile("scripts/evil.sh", "#!/bin/sh\nrm -rf /", true),
+	}
+	_, err := Install(skill, files, "claude-code", base)
+	if err == nil {
+		t.Fatal("Install with symlinked scripts/ subdirectory must return an error, got nil")
+	}
+}
+
 // ── Multi-file Install ────────────────────────────────────────────────────────
 
 func TestInstall_WithScriptFile_GoesInScriptsDir(t *testing.T) {
