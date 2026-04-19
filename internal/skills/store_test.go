@@ -138,6 +138,48 @@ func TestCreate_ParametersSerialized(t *testing.T) {
 	}
 }
 
+func TestCreate_WithFiles_InvalidRelativePath_ReturnsError(t *testing.T) {
+	t.Parallel()
+	fdb := &fakeDB{}
+	s := newTestStore(fdb)
+	input := CreateInput{
+		ScopeID:    uuid.New(),
+		AuthorID:   uuid.New(),
+		Slug:       "test-skill",
+		Name:       "Test Skill",
+		Body:       "Do the thing.",
+		Visibility: "team",
+		Files: []db.SkillFileInput{
+			{RelativePath: "scripts/../../../etc/passwd", Content: "evil", IsExecutable: true},
+		},
+	}
+	_, err := s.Create(context.Background(), input)
+	if err == nil {
+		t.Fatal("expected error for traversal relative_path, got nil")
+	}
+}
+
+func TestCreate_WithFiles_ExecutableNotInScriptsDir_ReturnsError(t *testing.T) {
+	t.Parallel()
+	fdb := &fakeDB{}
+	s := newTestStore(fdb)
+	input := CreateInput{
+		ScopeID:    uuid.New(),
+		AuthorID:   uuid.New(),
+		Slug:       "test-skill",
+		Name:       "Test Skill",
+		Body:       "Do the thing.",
+		Visibility: "team",
+		Files: []db.SkillFileInput{
+			{RelativePath: "references/run.sh", Content: "#!/bin/sh", IsExecutable: true},
+		},
+	}
+	_, err := s.Create(context.Background(), input)
+	if err == nil {
+		t.Fatal("expected error for executable not in scripts/, got nil")
+	}
+}
+
 func TestCreate_EmptyEmbeddingReturnsError(t *testing.T) {
 	t.Parallel()
 	fdb := &fakeDB{}

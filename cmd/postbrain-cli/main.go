@@ -560,13 +560,13 @@ func runSkillSync(ctx context.Context, agentType, workdir string) error {
 		}
 
 		if !skills.IsInstalled(sk.Slug, agentType, workdir) {
-			if _, err := skills.Install(dbSkill, agentType, workdir); err != nil {
+			if _, err := skills.Install(dbSkill, nil, agentType, workdir); err != nil {
 				slog.Warn("skill sync: install failed", "slug", sk.Slug, "err", err)
 				continue
 			}
 			installed = append(installed, sk.Slug)
 		} else if skills.ReadInstalledVersion(sk.Slug, agentType, workdir) != sk.Version {
-			if _, err := skills.Install(dbSkill, agentType, workdir); err != nil {
+			if _, err := skills.Install(dbSkill, nil, agentType, workdir); err != nil {
 				slog.Warn("skill sync: update failed", "slug", sk.Slug, "err", err)
 				continue
 			}
@@ -642,7 +642,7 @@ func skillInstallCmd() *cobra.Command {
 				Version:     int32(sk.Version),
 				Parameters:  sk.Parameters,
 			}
-			path, err := skills.Install(dbSkill, agentType, workdir)
+			path, err := skills.Install(dbSkill, nil, agentType, workdir)
 			if err != nil {
 				return fmt.Errorf("skill install: %w", err)
 			}

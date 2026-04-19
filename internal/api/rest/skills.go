@@ -13,6 +13,21 @@ import (
 	skillspkg "github.com/simplyblock/postbrain/internal/skills"
 )
 
+// skillFileRequest is the wire type for a supplementary skill file.
+type skillFileRequest struct {
+	Path       string `json:"path"`
+	Content    string `json:"content"`
+	Executable bool   `json:"executable"`
+}
+
+func (f skillFileRequest) toInput() db.SkillFileInput {
+	return db.SkillFileInput{
+		RelativePath: f.Path,
+		Content:      f.Content,
+		IsExecutable: f.Executable,
+	}
+}
+
 type createSkillRequest struct {
 	Scope          string              `json:"scope"`
 	Slug           string              `json:"slug"`
@@ -23,6 +38,7 @@ type createSkillRequest struct {
 	Parameters     []db.SkillParameter `json:"parameters"`
 	Visibility     string              `json:"visibility"`
 	ReviewRequired int                 `json:"review_required"`
+	Files          []skillFileRequest  `json:"files"`
 }
 
 func (r *createSkillRequest) validate() error {
@@ -52,6 +68,14 @@ func (ro *Router) createSkill(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	fileInputs := make([]db.SkillFileInput, len(body.Files))
+	for i, f := range body.Files {
+		fileInputs[i] = f.toInput()
+		if err := skillspkg.ValidateSkillFile(fileInputs[i]); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
 	body.applyDefaults()
 	kind, externalID, err := parseScopeString(body.Scope)
 	if err != nil {
@@ -80,6 +104,7 @@ func (ro *Router) createSkill(w http.ResponseWriter, r *http.Request) {
 		Parameters:     body.Parameters,
 		Visibility:     body.Visibility,
 		ReviewRequired: body.ReviewRequired,
+		Files:          fileInputs,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -157,6 +182,8 @@ func (ro *Router) getSkill(w http.ResponseWriter, r *http.Request) {
 type updateSkillRequest struct {
 	Body       string              `json:"body"`
 	Parameters []db.SkillParameter `json:"parameters"`
+	// Files: nil = leave existing files untouched; non-nil (even []) = replace all files.
+	Files *[]skillFileRequest `json:"files"`
 }
 
 func (ro *Router) updateSkill(w http.ResponseWriter, r *http.Request) {
@@ -169,6 +196,18 @@ func (ro *Router) updateSkill(w http.ResponseWriter, r *http.Request) {
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
+	}
+	var fileInputs *[]db.SkillFileInput
+	if body.Files != nil {
+		inputs := make([]db.SkillFileInput, len(*body.Files))
+		for i, f := range *body.Files {
+			inputs[i] = f.toInput()
+			if err := skillspkg.ValidateSkillFile(inputs[i]); err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+		}
+		fileInputs = &inputs
 	}
 	existing, err := ro.sklStore.GetByID(r.Context(), id)
 	if err != nil {
@@ -184,7 +223,11 @@ func (ro *Router) updateSkill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	callerID, _ := r.Context().Value(auth.ContextKeyPrincipalID).(uuid.UUID)
-	updated, err := ro.sklStore.Update(r.Context(), id, callerID, body.Body, body.Parameters)
+	updated, err := ro.sklStore.UpdateWithFiles(r.Context(), id, callerID, skillspkg.UpdateInput{
+		Body:       body.Body,
+		Parameters: body.Parameters,
+		Files:      fileInputs,
+	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -249,12 +292,21 @@ func (ro *Router) installSkill(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "skill not found")
 		return
 	}
-	path, err := skillspkg.Install(skill, body.AgentType, ".")
+	files, err := compat.ListSkillFiles(r.Context(), ro.pool, skill.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"path": path, "slug": skill.Slug})
+	path, err := skillspkg.Install(skill, files, body.AgentType, ".")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	filePaths := make([]string, len(files))
+	for i, f := range files {
+		filePaths[i] = f.RelativePath
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"path": path, "slug": skill.Slug, "files": filePaths})
 }
 
 type invokeSkillRequest struct {

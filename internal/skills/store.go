@@ -65,6 +65,18 @@ type CreateInput struct {
 	Parameters       []db.SkillParameter
 	Visibility       string
 	ReviewRequired   int // default 1 if 0
+	// Files are optional supplementary files to attach to the skill.
+	// Each path must pass ValidateSkillFile; requires a non-nil pool.
+	Files []db.SkillFileInput
+}
+
+// UpdateInput holds optional fields for UpdateWithFiles.
+// Files semantics: nil = leave existing files untouched;
+// non-nil (even empty slice) = replace all files with the provided set.
+type UpdateInput struct {
+	Body       string
+	Parameters []db.SkillParameter
+	Files      *[]db.SkillFileInput
 }
 
 // Create persists a new skill in draft status, embedding its description+body.
@@ -108,6 +120,13 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.Skill, error
 		EmbeddingModelID: modelID,
 	}
 
+	// Validate supplementary files before touching the DB.
+	for _, f := range input.Files {
+		if err := ValidateSkillFile(f); err != nil {
+			return nil, fmt.Errorf("skills: create: %w", err)
+		}
+	}
+
 	created, err := s.creator.createSkill(ctx, skill)
 	if err != nil {
 		return nil, fmt.Errorf("skills: create: %w", err)
@@ -115,11 +134,41 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.Skill, error
 	if err := s.dualWriteSkillEmbedding(ctx, created.ID, created.ScopeID, embeddingVec, modelID); err != nil {
 		return nil, fmt.Errorf("skills: dual-write create: %w", err)
 	}
+
+	// Persist supplementary files (requires pool; skipped in unit tests with nil pool).
+	if len(input.Files) > 0 {
+		if s.pool == nil {
+			return nil, fmt.Errorf("skills: create: cannot persist supplementary files without a database pool")
+		}
+		for _, f := range input.Files {
+			if _, err := compat.UpsertSkillFile(ctx, s.pool, created.ID, f.RelativePath, f.Content, f.IsExecutable); err != nil {
+				return nil, fmt.Errorf("skills: create: upsert file %q: %w", f.RelativePath, err)
+			}
+		}
+	}
+
 	return created, nil
 }
 
 // Update re-embeds, snapshots the current version to history, then updates the skill.
+// Files are left untouched; use UpdateWithFiles to also replace supplementary files.
 func (s *Store) Update(ctx context.Context, id uuid.UUID, callerID uuid.UUID, body string, params []db.SkillParameter) (*db.Skill, error) {
+	return s.UpdateWithFiles(ctx, id, callerID, UpdateInput{Body: body, Parameters: params, Files: nil})
+}
+
+// UpdateWithFiles snapshots the current version (body, params, files), then updates
+// the skill content. If input.Files is non-nil, all existing supplementary files are
+// replaced with the provided set (empty slice deletes all files).
+func (s *Store) UpdateWithFiles(ctx context.Context, id uuid.UUID, callerID uuid.UUID, input UpdateInput) (*db.Skill, error) {
+	// Validate supplementary files before any DB writes.
+	if input.Files != nil {
+		for _, f := range *input.Files {
+			if err := ValidateSkillFile(f); err != nil {
+				return nil, fmt.Errorf("skills: update: %w", err)
+			}
+		}
+	}
+
 	existing, err := compat.GetSkill(ctx, s.pool, id)
 	if err != nil {
 		return nil, fmt.Errorf("skills: update get: %w", err)
@@ -128,7 +177,7 @@ func (s *Store) Update(ctx context.Context, id uuid.UUID, callerID uuid.UUID, bo
 		return nil, fmt.Errorf("skills: update: skill %s not found", id)
 	}
 
-	// Snapshot the current version.
+	// Snapshot current body/params version.
 	if err := compat.SnapshotSkillVersion(ctx, s.pool, &db.SkillHistory{
 		SkillID:    id,
 		Version:    existing.Version,
@@ -139,23 +188,41 @@ func (s *Store) Update(ctx context.Context, id uuid.UUID, callerID uuid.UUID, bo
 		return nil, fmt.Errorf("skills: snapshot: %w", err)
 	}
 
-	paramsJSON, err := json.Marshal(params)
+	// Snapshot supplementary files for this version.
+	if err := compat.SnapshotSkillFiles(ctx, s.pool, id, existing.Version); err != nil {
+		return nil, fmt.Errorf("skills: snapshot files: %w", err)
+	}
+
+	paramsJSON, err := json.Marshal(input.Parameters)
 	if err != nil {
 		return nil, fmt.Errorf("skills: marshal parameters: %w", err)
 	}
 
-	embeddingVec, modelID, err := s.embedText(ctx, existing.Description+" "+body)
+	embeddingVec, modelID, err := s.embedText(ctx, existing.Description+" "+input.Body)
 	if err != nil {
 		return nil, fmt.Errorf("skills: embed: %w", err)
 	}
 
-	updated, err := compat.UpdateSkillContent(ctx, s.pool, id, body, paramsJSON, embeddingVec, modelID)
+	updated, err := compat.UpdateSkillContent(ctx, s.pool, id, input.Body, paramsJSON, embeddingVec, modelID)
 	if err != nil {
 		return nil, fmt.Errorf("skills: update content: %w", err)
 	}
 	if err := s.dualWriteSkillEmbedding(ctx, updated.ID, updated.ScopeID, embeddingVec, modelID); err != nil {
 		return nil, fmt.Errorf("skills: dual-write update: %w", err)
 	}
+
+	// Replace supplementary files if explicitly provided.
+	if input.Files != nil {
+		if err := compat.DeleteAllSkillFiles(ctx, s.pool, id); err != nil {
+			return nil, fmt.Errorf("skills: update delete files: %w", err)
+		}
+		for _, f := range *input.Files {
+			if _, err := compat.UpsertSkillFile(ctx, s.pool, id, f.RelativePath, f.Content, f.IsExecutable); err != nil {
+				return nil, fmt.Errorf("skills: update upsert file %q: %w", f.RelativePath, err)
+			}
+		}
+	}
+
 	return updated, nil
 }
 
