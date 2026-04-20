@@ -9,7 +9,7 @@
       <th style="width:64px"></th>
     </tr>
   </thead>
-  <tbody>
+  <tbody id="memories-tbody">
   {{range .Memories}}
   <tr>
     <td>
@@ -28,8 +28,15 @@
   </tbody>
 </table>
 {{if .NextCursor}}
-<div style="text-align:center;margin-top:1rem">
-  <button class="secondary" hx-get="/ui/{{.ScopeID}}/memories?cursor={{.NextCursor}}&q={{.Query}}" hx-target="#results" hx-swap="beforeend">Load more</button>
+<div id="memories-more" style="text-align:center;margin-top:1rem">
+  <button class="secondary"
+    hx-get="/ui/{{.ScopeID}}/memories?cursor={{.NextCursor}}&q={{.Query}}"
+    hx-target="#memories-tbody"
+    hx-swap="beforeend"
+    hx-select="#memories-tbody > tr"
+    hx-select-oob="#memories-more">Load more</button>
 </div>
+{{else}}
+<div id="memories-more"></div>
 {{end}}
 {{end}}
