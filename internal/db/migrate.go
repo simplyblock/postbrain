@@ -54,7 +54,7 @@ func acquireAdvisoryLock(ctx context.Context, conn *pgxpool.Conn) error {
 		}
 	}()
 
-	if _, err := tx.Exec(ctx, "SET LOCAL lock_timeout = $1", advisoryLockTimeout); err != nil {
+	if _, err := tx.Exec(ctx, "SET LOCAL lock_timeout = '"+advisoryLockTimeout+"'"); err != nil {
 		return fmt.Errorf("migrate: set local lock_timeout: %w", err)
 	}
 	slog.Info("migrate: acquiring advisory lock")
@@ -111,11 +111,16 @@ func CheckAndMigrate(ctx context.Context, pool *pgxpool.Pool, autoMigrate bool) 
 		return nil
 	}
 
-	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		return fmt.Errorf("migrate: apply migrations: %w", err)
-	}
+	// EnsureAGEOverlay must run before m.Up() so that ag_catalog USAGE is
+	// granted to the migration user before DDL statements are executed.
+	// The migrator opens its own connection (bypassing AfterConnect) and
+	// inherits the database-level search_path which may include ag_catalog;
+	// without this grant the migrator fails resolving any name.
 	if err := EnsureAGEOverlay(ctx, pool); err != nil {
 		return fmt.Errorf("migrate: ensure age overlay: %w", err)
+	}
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("migrate: apply migrations: %w", err)
 	}
 
 	newVersion, _, err := m.Version()
