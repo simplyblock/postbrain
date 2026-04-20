@@ -27,11 +27,11 @@
       <div class="actions">
         <form method="POST" action="/ui/{{$.ScopeID}}/promotions/{{.ID}}/approve" style="display:inline"
               onsubmit="return confirm('Approve this promotion?')">
-          <button type="submit">Approve</button>
+          <button type="submit" class="btn-sm">Approve</button>
         </form>
         <form method="POST" action="/ui/{{$.ScopeID}}/promotions/{{.ID}}/reject" style="display:inline"
               onsubmit="return confirm('Reject this promotion?')">
-          <button type="submit" class="danger">Reject</button>
+          <button type="submit" class="danger btn-sm">Reject</button>
         </form>
       </div>
       {{end}}

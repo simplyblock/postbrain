@@ -14,7 +14,7 @@
 
   {{if .Scopes}}
   <div class="scope-selector">
-    <label style="font-size:.75rem;color:var(--pico-muted-color);margin-bottom:.2rem;display:block">Scope</label>
+    <span class="scope-label">Scope</span>
     <select id="scope-select" onchange="switchScope(this)">
       {{range .Scopes}}
       <option value="{{.ID}}"{{if and $.CurrentScope (eq .ID $.CurrentScope.ID)}} selected{{end}}>{{.ExternalID}}</option>
@@ -31,6 +31,17 @@
     var page = parts.length > 3 && allowedPages.indexOf(parts[3]) !== -1 ? parts[3] : 'memories';
     window.location.href = '/ui/' + scopeId + '/' + page;
   }
+  (function() {
+    var path = window.location.pathname;
+    document.querySelectorAll('nav a:not(.nav-brand)').forEach(function(a) {
+      try {
+        var href = new URL(a.href).pathname;
+        if (href && path === href || (href.length > 1 && path.startsWith(href))) {
+          a.classList.add('nav-active');
+        }
+      } catch(e) {}
+    });
+  })();
   </script>
   {{end}}
 

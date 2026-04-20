@@ -160,14 +160,14 @@
     <td>
       {{if eq .RevokedAt nil}}
       {{$tok := .}}
-      <button type="button" class="secondary"
+      <button type="button" class="secondary btn-sm"
               onclick="openTokenScopesDialog('{{.ID}}', '{{.Name}}')">Edit scopes</button>
       <div id="token-scope-ids-{{.ID}}" style="display:none">
         {{range $idx, $scope := .ScopeIds}}{{if $idx}},{{end}}{{$scope}}{{end}}
       </div>
       <form method="POST" action="/ui/tokens/{{.ID}}/revoke" style="display:inline"
             onsubmit="return confirm('Revoke this token?')">
-        <button type="submit" class="danger">Revoke</button>
+        <button type="submit" class="danger btn-sm">Revoke</button>
       </form>
       {{end}}
     </td>
