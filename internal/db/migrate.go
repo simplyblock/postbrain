@@ -308,6 +308,13 @@ func buildMigratorDSN(connConfig *pgx.ConnConfig) (string, error) {
 	q := u.Query()
 	q.Set("x-migrations-table", `"public"."schema_migrations"`)
 	q.Set("x-migrations-table-quoted", "1")
+	// Pin search_path to the standard default (without ag_catalog) so that
+	// unqualified CREATE TABLE / CREATE INDEX statements target the public
+	// schema. If the database-level search_path includes ag_catalog first,
+	// the migrator would attempt to create objects there and fail with
+	// "permission denied for schema ag_catalog" even though the migrations
+	// have nothing to do with AGE.
+	q.Set("search_path", `"$user",public`)
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }
