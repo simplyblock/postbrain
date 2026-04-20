@@ -4,7 +4,7 @@
   <button onclick="document.getElementById('dlg-upload').showModal()">+ Upload Document</button>
 </div>
 
-<form class="toolbar" hx-get="/ui/knowledge" hx-target="#results" hx-push-url="true">
+<form class="toolbar" hx-get="/ui/{{.ScopeID}}/knowledge" hx-target="#results" hx-push-url="true">
   <input type="text" name="q" placeholder="Search…" value="{{.Query}}">
   <select name="status">
     <option value=""{{if eq .Status ""}} selected{{end}}>All statuses</option>
@@ -12,12 +12,6 @@
     <option{{if eq .Status "in_review"}} selected{{end}}>in_review</option>
     <option{{if eq .Status "published"}} selected{{end}}>published</option>
     <option{{if eq .Status "deprecated"}} selected{{end}}>deprecated</option>
-  </select>
-  <select name="scope">
-    <option value="">All scopes</option>
-    {{range .Scopes}}
-    <option value="{{.ID}}"{{if eq $.ScopeID .ID}} selected{{end}}>{{.Kind}}:{{.ExternalID}}</option>
-    {{end}}
   </select>
   <button type="submit">Search</button>
 </form>
@@ -27,17 +21,9 @@
 <dialog id="dlg-upload">
   <h2>Upload Document</h2>
   {{if .UploadError}}<div class="alert alert-error">{{.UploadError}}</div>{{end}}
-  <form method="POST" action="/ui/knowledge/upload" enctype="multipart/form-data">
+  <form method="POST" action="/ui/{{.ScopeID}}/knowledge/upload" enctype="multipart/form-data">
     <label>File (.txt, .md, .pdf, .docx, .pptx, .xlsx, .xls, .png, .jpg, .jpeg, .gif, .bmp, .webp)
       <input type="file" name="file" accept=".txt,.md,.pdf,.docx,.pptx,.xlsx,.xls,.png,.jpg,.jpeg,.gif,.bmp,.webp" required>
-    </label>
-    <label>Scope
-      <select name="scope" required>
-        <option value="">— select scope —</option>
-        {{range .Scopes}}
-        <option value="{{.Kind}}:{{.ExternalID}}">{{.Kind}}:{{.ExternalID}} — {{.Name}}</option>
-        {{end}}
-      </select>
     </label>
     <label>Title (optional)
       <input type="text" name="title" placeholder="defaults to filename">

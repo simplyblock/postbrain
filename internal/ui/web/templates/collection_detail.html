@@ -3,7 +3,7 @@
 <p><strong>Slug:</strong> {{.Collection.Slug}}</p>
 <p><strong>Visibility:</strong> {{.Collection.Visibility}}</p>
 {{if .Collection.Description}}<p>{{.Collection.Description}}</p>{{end}}
-<p><a href="/ui/collections">&larr; Back to Collections</a></p>
+<p><a href="/ui/{{.ScopeID}}/collections">&larr; Back to Collections</a></p>
 
 <h2>Artifacts</h2>
 <table>
@@ -11,7 +11,7 @@
   <tbody>
   {{range .Artifacts}}
   <tr>
-    <td><a href="/ui/knowledge/{{.ID}}">{{.Title}}</a></td>
+    <td><a href="/ui/{{$.ScopeID}}/knowledge/{{.ID}}">{{.Title}}</a></td>
     <td>{{.KnowledgeType}}{{if .ArtifactKind}} / {{.ArtifactKind}}{{end}}</td>
     <td>{{statusBadge .Status}}</td>
     <td>{{.Visibility}}</td>

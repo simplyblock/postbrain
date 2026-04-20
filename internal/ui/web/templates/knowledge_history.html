@@ -1,6 +1,6 @@
 {{define "knowledge_history"}}
 <h1>History: {{.Artifact.Title}}</h1>
-<p><a href="/ui/knowledge/{{.Artifact.ID}}">&larr; Back to artifact</a></p>
+<p><a href="/ui/{{.ScopeID}}/knowledge/{{.Artifact.ID}}">&larr; Back to artifact</a></p>
 <table>
   <thead><tr><th>Version</th><th>Summary</th><th>Change Note</th><th>When</th></tr></thead>
   <tbody>

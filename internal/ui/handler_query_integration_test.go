@@ -95,7 +95,7 @@ func TestQueryPlayground_SelectedScopeIncludesAncestorMemories(t *testing.T) {
 		t.Fatalf("login status = %d, want %d", loginResp.StatusCode, http.StatusSeeOther)
 	}
 
-	queryURL := srv.URL + "/ui/query?q=DEPLOY_TOKEN&scope_id=" + project.ID.String() + "&search_mode=hybrid&limit=10&layer_memory=1"
+	queryURL := srv.URL + "/ui/" + project.ID.String() + "/query?q=DEPLOY_TOKEN&search_mode=hybrid&limit=10&layer_memory=1"
 	resp, err := client.Get(queryURL)
 	if err != nil {
 		t.Fatalf("query request: %v", err)
@@ -192,7 +192,7 @@ func TestQueryPlayground_SelectedScopeExcludesSiblingMemories(t *testing.T) {
 		t.Fatalf("login status = %d, want %d", loginResp.StatusCode, http.StatusSeeOther)
 	}
 
-	queryURL := srv.URL + "/ui/query?q=SHARED_QUERY&scope_id=" + marketingProject.ID.String() + "&search_mode=hybrid&limit=10&layer_memory=1"
+	queryURL := srv.URL + "/ui/" + marketingProject.ID.String() + "/query?q=SHARED_QUERY&search_mode=hybrid&limit=10&layer_memory=1"
 	resp, err := client.Get(queryURL)
 	if err != nil {
 		t.Fatalf("query request: %v", err)
@@ -323,7 +323,7 @@ func TestQueryPlayground_MemoryOnly_DoesNotLeakSiblingGraphContext(t *testing.T)
 		t.Fatalf("login status = %d, want %d", loginResp.StatusCode, http.StatusSeeOther)
 	}
 
-	queryURL := srv.URL + "/ui/query?q=auth&scope_id=" + selectedProject.ID.String() + "&search_mode=hybrid&limit=10&layer_memory=1"
+	queryURL := srv.URL + "/ui/" + selectedProject.ID.String() + "/query?q=auth&search_mode=hybrid&limit=10&layer_memory=1"
 	resp, err := client.Get(queryURL)
 	if err != nil {
 		t.Fatalf("query request: %v", err)

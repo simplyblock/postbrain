@@ -12,22 +12,44 @@
 <nav>
   <a class="nav-brand" href="/ui">⬡ Postbrain</a>
 
+  {{if .Scopes}}
+  <div class="scope-selector">
+    <label style="font-size:.75rem;color:var(--pico-muted-color);margin-bottom:.2rem;display:block">Scope</label>
+    <select id="scope-select" onchange="switchScope(this)">
+      {{range .Scopes}}
+      <option value="{{.ID}}"{{if and $.CurrentScope (eq .ID $.CurrentScope.ID)}} selected{{end}}>{{.ExternalID}}</option>
+      {{end}}
+    </select>
+  </div>
+  <script>
+  function switchScope(sel) {
+    var uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    var allowedPages = ['memories','query','knowledge','collections','promotions','staleness','skills','graph','graph3d'];
+    var scopeId = sel.value;
+    if (!uuidRe.test(scopeId)) { return; }
+    var parts = window.location.pathname.split('/');
+    var page = parts.length > 3 && allowedPages.indexOf(parts[3]) !== -1 ? parts[3] : 'memories';
+    window.location.href = '/ui/' + scopeId + '/' + page;
+  }
+  </script>
+  {{end}}
+
   <span class="nav-section">Memory</span>
-  <a href="/ui/memories">Memories</a>
-  <a href="/ui/query">Query Playground</a>
+  <a href="/ui/{{with .CurrentScope}}{{.ID}}/{{end}}memories">Memories</a>
+  <a href="/ui/{{with .CurrentScope}}{{.ID}}/{{end}}query">Query Playground</a>
 
   <span class="nav-section">Knowledge</span>
-  <a href="/ui/knowledge">Artifacts</a>
-  <a href="/ui/collections">Collections</a>
-  <a href="/ui/promotions">Promotions</a>
-  <a href="/ui/staleness">Staleness</a>
+  <a href="/ui/{{with .CurrentScope}}{{.ID}}/{{end}}knowledge">Artifacts</a>
+  <a href="/ui/{{with .CurrentScope}}{{.ID}}/{{end}}collections">Collections</a>
+  <a href="/ui/{{with .CurrentScope}}{{.ID}}/{{end}}promotions">Promotions</a>
+  <a href="/ui/{{with .CurrentScope}}{{.ID}}/{{end}}staleness">Staleness</a>
 
   <span class="nav-section">Skills</span>
-  <a href="/ui/skills">Skills Registry</a>
+  <a href="/ui/{{with .CurrentScope}}{{.ID}}/{{end}}skills">Skills Registry</a>
 
   <span class="nav-section">Graph</span>
-  <a href="/ui/graph">Entity Graph</a>
-  <a href="/ui/graph3d">Entity Graph 3D</a>
+  <a href="/ui/{{with .CurrentScope}}{{.ID}}/{{end}}graph">Entity Graph</a>
+  <a href="/ui/{{with .CurrentScope}}{{.ID}}/{{end}}graph3d">Entity Graph 3D</a>
 
   <span class="nav-section">Admin</span>
   {{if .ShowPrincipals}}

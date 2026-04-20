@@ -1,9 +1,9 @@
 {{define "skill_detail"}}
 <h1>{{.Skill.Name}}</h1>
 <p>
-  <a href="/ui/skills">&larr; Back to Skills</a>
+  <a href="/ui/{{.ScopeID}}/skills">&larr; Back to Skills</a>
   &nbsp;|&nbsp;
-  <a href="/ui/skills/{{.Skill.ID}}/history">Version history</a>
+  <a href="/ui/{{.ScopeID}}/skills/{{.Skill.ID}}/history">Version history</a>
 </p>
 <table>
   <tr><th>Slug</th><td><code>{{.Skill.Slug}}</code></td></tr>

@@ -2,31 +2,31 @@
 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem">
   <div>
     <h1 style="margin-bottom:0.25rem">{{.Artifact.Title}}</h1>
-    <p style="margin:0"><a href="/ui/knowledge">&larr; Back</a> &nbsp;|&nbsp; <a href="/ui/knowledge/{{.Artifact.ID}}/history">Version history</a></p>
+    <p style="margin:0"><a href="/ui/{{.ScopeID}}/knowledge">&larr; Back</a> &nbsp;|&nbsp; <a href="/ui/{{.ScopeID}}/knowledge/{{.Artifact.ID}}/history">Version history</a></p>
   </div>
   <div class="actions" style="padding-top:0.5rem;flex-shrink:0">
     {{if eq .Artifact.Status "draft"}}
-    <form method="POST" action="/ui/knowledge/{{.Artifact.ID}}/review" style="display:inline">
+    <form method="POST" action="/ui/{{.ScopeID}}/knowledge/{{.Artifact.ID}}/review" style="display:inline">
       <button type="submit">Submit for Review</button>
     </form>
     {{end}}
     {{if eq .Artifact.Status "in_review"}}
-    <form method="POST" action="/ui/knowledge/{{.Artifact.ID}}/endorse" style="display:inline">
+    <form method="POST" action="/ui/{{.ScopeID}}/knowledge/{{.Artifact.ID}}/endorse" style="display:inline">
       <button type="submit">Endorse</button>
     </form>
     {{end}}
     {{if eq .Artifact.Status "published"}}
-    <form method="POST" action="/ui/knowledge/{{.Artifact.ID}}/deprecate" style="display:inline"
+    <form method="POST" action="/ui/{{.ScopeID}}/knowledge/{{.Artifact.ID}}/deprecate" style="display:inline"
           onsubmit="return confirm('Deprecate this artifact?')">
       <button type="submit" class="secondary">Deprecate</button>
     </form>
     {{end}}
     {{if eq .Artifact.Status "deprecated"}}
-    <form method="POST" action="/ui/knowledge/{{.Artifact.ID}}/republish" style="display:inline">
+    <form method="POST" action="/ui/{{.ScopeID}}/knowledge/{{.Artifact.ID}}/republish" style="display:inline">
       <button type="submit">Republish</button>
     </form>
     {{end}}
-    <form method="POST" action="/ui/knowledge/{{.Artifact.ID}}/delete" style="display:inline"
+    <form method="POST" action="/ui/{{.ScopeID}}/knowledge/{{.Artifact.ID}}/delete" style="display:inline"
           onsubmit="return confirm('Permanently delete this artifact? This cannot be undone.')">
       <button type="submit" class="danger">Delete</button>
     </form>
@@ -56,7 +56,7 @@
   <tbody>
   {{range .Sources}}
   <tr>
-    <td><a href="/ui/knowledge/{{.ID}}">{{.Title}}</a></td>
+    <td><a href="/ui/{{$.ScopeID}}/knowledge/{{.ID}}">{{.Title}}</a></td>
     <td>{{.KnowledgeType}}</td>
     <td><span class="badge {{statusBadge .Status}}">{{.Status}}</span></td>
   </tr>
@@ -73,7 +73,7 @@
   <tbody>
   {{range .Digests}}
   <tr>
-    <td><a href="/ui/knowledge/{{.ID}}">{{.Title}}</a></td>
+    <td><a href="/ui/{{$.ScopeID}}/knowledge/{{.ID}}">{{.Title}}</a></td>
     <td><span class="badge {{statusBadge .Status}}">{{.Status}}</span></td>
   </tr>
   {{end}}
