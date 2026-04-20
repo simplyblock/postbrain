@@ -13,7 +13,7 @@ func TestBuildMigratorDSN_ForcesPublicMigrationsTable(t *testing.T) {
 		t.Fatalf("ParseConfig: %v", err)
 	}
 
-	dsn, err := buildMigratorDSN(poolCfg.ConnConfig)
+	dsn, err := buildMigratorDSN(poolCfg.ConnConfig, "public")
 	if err != nil {
 		t.Fatalf("buildMigratorDSN: %v", err)
 	}

@@ -6,11 +6,11 @@ SELECT cron.unschedule('decay-memory-importance');
 SELECT cron.unschedule('expire-working-memory');
 
 -- Triggers
-DROP TRIGGER IF EXISTS entities_updated_at ON entities;
-DROP TRIGGER IF EXISTS memories_updated_at ON memories;
+DROP TRIGGER IF EXISTS entities_updated_at ON {{POSTBRAIN_SCHEMA}}.entities;
+DROP TRIGGER IF EXISTS memories_updated_at ON {{POSTBRAIN_SCHEMA}}.memories;
 
 -- Tables (reverse creation order)
-DROP TABLE IF EXISTS relations CASCADE;
-DROP TABLE IF EXISTS memory_entities CASCADE;
-DROP TABLE IF EXISTS entities CASCADE;
-DROP TABLE IF EXISTS memories CASCADE;
+DROP TABLE IF EXISTS {{POSTBRAIN_SCHEMA}}.relations CASCADE;
+DROP TABLE IF EXISTS {{POSTBRAIN_SCHEMA}}.memory_entities CASCADE;
+DROP TABLE IF EXISTS {{POSTBRAIN_SCHEMA}}.entities CASCADE;
+DROP TABLE IF EXISTS {{POSTBRAIN_SCHEMA}}.memories CASCADE;

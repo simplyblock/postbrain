@@ -27,7 +27,7 @@ ALTER TEXT SEARCH CONFIGURATION postbrain_fts
 -- ─────────────────────────────────────────
 -- 3. Embedding model registry
 -- ─────────────────────────────────────────
-CREATE TABLE embedding_models (
+CREATE TABLE {{POSTBRAIN_SCHEMA}}.embedding_models (
     id               UUID PRIMARY KEY DEFAULT uuidv7(),
     slug             citext NOT NULL UNIQUE,
     dimensions       INT NOT NULL,
@@ -39,14 +39,14 @@ CREATE TABLE embedding_models (
 
 -- Each content_type has at most one active model at a time.
 CREATE UNIQUE INDEX embedding_models_active_text_idx
-    ON embedding_models (is_active) WHERE is_active = true AND content_type = 'text';
+    ON {{POSTBRAIN_SCHEMA}}.embedding_models (is_active) WHERE is_active = true AND content_type = 'text';
 CREATE UNIQUE INDEX embedding_models_active_code_idx
-    ON embedding_models (is_active) WHERE is_active = true AND content_type = 'code';
+    ON {{POSTBRAIN_SCHEMA}}.embedding_models (is_active) WHERE is_active = true AND content_type = 'code';
 
 -- ─────────────────────────────────────────
 -- 4. touch_updated_at() function
 -- ─────────────────────────────────────────
-CREATE OR REPLACE FUNCTION touch_updated_at()
+CREATE OR REPLACE FUNCTION {{POSTBRAIN_SCHEMA}}.touch_updated_at()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN NEW.updated_at = now(); RETURN NEW; END;
 $$;
@@ -54,7 +54,7 @@ $$;
 -- ─────────────────────────────────────────
 -- 5. Principals + updated_at trigger
 -- ─────────────────────────────────────────
-CREATE TABLE principals (
+CREATE TABLE {{POSTBRAIN_SCHEMA}}.principals (
     id           UUID PRIMARY KEY DEFAULT uuidv7(),
     kind         TEXT NOT NULL CHECK (kind IN ('agent', 'user', 'team', 'department', 'company')),
     slug         citext NOT NULL UNIQUE,
@@ -64,15 +64,15 @@ CREATE TABLE principals (
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TRIGGER principals_updated_at BEFORE UPDATE ON principals
-    FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+CREATE TRIGGER principals_updated_at BEFORE UPDATE ON {{POSTBRAIN_SCHEMA}}.principals
+    FOR EACH ROW EXECUTE FUNCTION {{POSTBRAIN_SCHEMA}}.touch_updated_at();
 
 -- ─────────────────────────────────────────
 -- 6. API tokens
 -- ─────────────────────────────────────────
-CREATE TABLE tokens (
+CREATE TABLE {{POSTBRAIN_SCHEMA}}.tokens (
     id            UUID PRIMARY KEY DEFAULT uuidv7(),
-    principal_id  UUID NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+    principal_id  UUID NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.principals(id) ON DELETE CASCADE,
     token_hash    TEXT NOT NULL UNIQUE,
     name          TEXT NOT NULL,
     scope_ids     UUID[],
@@ -83,46 +83,46 @@ CREATE TABLE tokens (
     revoked_at    TIMESTAMPTZ
 );
 
-CREATE INDEX tokens_principal_idx ON tokens (principal_id);
-CREATE INDEX tokens_hash_idx      ON tokens (token_hash);
-CREATE INDEX tokens_scope_ids_idx ON tokens USING GIN (scope_ids) WHERE scope_ids IS NOT NULL;
+CREATE INDEX tokens_principal_idx ON {{POSTBRAIN_SCHEMA}}.tokens (principal_id);
+CREATE INDEX tokens_hash_idx      ON {{POSTBRAIN_SCHEMA}}.tokens (token_hash);
+CREATE INDEX tokens_scope_ids_idx ON {{POSTBRAIN_SCHEMA}}.tokens USING GIN (scope_ids) WHERE scope_ids IS NOT NULL;
 
 -- ─────────────────────────────────────────
 -- 7. Principal memberships
 -- ─────────────────────────────────────────
-CREATE TABLE principal_memberships (
-    member_id   UUID NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
-    parent_id   UUID NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+CREATE TABLE {{POSTBRAIN_SCHEMA}}.principal_memberships (
+    member_id   UUID NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.principals(id) ON DELETE CASCADE,
+    parent_id   UUID NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.principals(id) ON DELETE CASCADE,
     role        TEXT NOT NULL DEFAULT 'member',
-    granted_by  UUID REFERENCES principals(id),
+    granted_by  UUID REFERENCES {{POSTBRAIN_SCHEMA}}.principals(id),
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (member_id, parent_id),
     CHECK (member_id <> parent_id)
 );
 
-CREATE INDEX principal_memberships_parent_idx ON principal_memberships (parent_id);
+CREATE INDEX principal_memberships_parent_idx ON {{POSTBRAIN_SCHEMA}}.principal_memberships (parent_id);
 
 -- ─────────────────────────────────────────
 -- 8. Scopes + indexes + compute_path trigger
 -- ─────────────────────────────────────────
-CREATE TABLE scopes (
+CREATE TABLE {{POSTBRAIN_SCHEMA}}.scopes (
     id           UUID PRIMARY KEY DEFAULT uuidv7(),
     kind         TEXT NOT NULL CHECK (kind IN ('user', 'project', 'team', 'department', 'company')),
     external_id  citext NOT NULL,
     name         TEXT NOT NULL,
-    parent_id    UUID REFERENCES scopes(id),
-    principal_id UUID NOT NULL REFERENCES principals(id),
+    parent_id    UUID REFERENCES {{POSTBRAIN_SCHEMA}}.scopes(id),
+    principal_id UUID NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.principals(id),
     path         ltree NOT NULL,
     meta         JSONB NOT NULL DEFAULT '{}',
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (kind, external_id)
 );
 
-CREATE INDEX scopes_path_gist_idx  ON scopes USING gist (path);
-CREATE INDEX scopes_path_btree_idx ON scopes USING btree (path);
-CREATE INDEX scopes_parent_idx     ON scopes (parent_id) WHERE parent_id IS NOT NULL;
+CREATE INDEX scopes_path_gist_idx  ON {{POSTBRAIN_SCHEMA}}.scopes USING gist (path);
+CREATE INDEX scopes_path_btree_idx ON {{POSTBRAIN_SCHEMA}}.scopes USING btree (path);
+CREATE INDEX scopes_parent_idx     ON {{POSTBRAIN_SCHEMA}}.scopes (parent_id) WHERE parent_id IS NOT NULL;
 
-CREATE OR REPLACE FUNCTION scopes_compute_path()
+CREATE OR REPLACE FUNCTION {{POSTBRAIN_SCHEMA}}.scopes_compute_path()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 DECLARE
     parent_path ltree;
@@ -136,7 +136,7 @@ BEGIN
             ELSE              text2ltree(safe_label)
         END;
     ELSE
-        SELECT path INTO parent_path FROM scopes WHERE id = NEW.parent_id;
+        SELECT path INTO parent_path FROM {{POSTBRAIN_SCHEMA}}.scopes WHERE id = NEW.parent_id;
         NEW.path := parent_path || text2ltree(safe_label);
     END IF;
     RETURN NEW;
@@ -144,16 +144,16 @@ END;
 $$;
 
 CREATE TRIGGER scopes_path_trigger
-    BEFORE INSERT OR UPDATE OF parent_id, external_id ON scopes
-    FOR EACH ROW EXECUTE FUNCTION scopes_compute_path();
+    BEFORE INSERT OR UPDATE OF parent_id, external_id ON {{POSTBRAIN_SCHEMA}}.scopes
+    FOR EACH ROW EXECUTE FUNCTION {{POSTBRAIN_SCHEMA}}.scopes_compute_path();
 
 -- ─────────────────────────────────────────
 -- 9. Sessions
 -- ─────────────────────────────────────────
-CREATE TABLE sessions (
+CREATE TABLE {{POSTBRAIN_SCHEMA}}.sessions (
     id           UUID PRIMARY KEY DEFAULT uuidv7(),
-    scope_id     UUID NOT NULL REFERENCES scopes(id) ON DELETE CASCADE,
-    principal_id UUID REFERENCES principals(id) ON DELETE SET NULL,
+    scope_id     UUID NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.scopes(id) ON DELETE CASCADE,
+    principal_id UUID REFERENCES {{POSTBRAIN_SCHEMA}}.principals(id) ON DELETE SET NULL,
     started_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     ended_at     TIMESTAMPTZ,
     meta         JSONB NOT NULL DEFAULT '{}'
@@ -162,21 +162,21 @@ CREATE TABLE sessions (
 -- ─────────────────────────────────────────
 -- 10. Events (partitioned by month)
 -- ─────────────────────────────────────────
-CREATE TABLE events (
+CREATE TABLE {{POSTBRAIN_SCHEMA}}.events (
     id          UUID        NOT NULL DEFAULT uuidv7(),
     session_id  UUID        NOT NULL,
-    scope_id    UUID        NOT NULL REFERENCES scopes(id) ON DELETE CASCADE,
+    scope_id    UUID        NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.scopes(id) ON DELETE CASCADE,
     event_type  TEXT        NOT NULL,
     payload     JSONB       NOT NULL DEFAULT '{}',
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (id, created_at)
 ) PARTITION BY RANGE (created_at);
 
-CREATE INDEX events_session_idx ON events (session_id, created_at DESC);
-CREATE INDEX events_scope_idx   ON events (scope_id, event_type, created_at DESC);
+CREATE INDEX events_session_idx ON {{POSTBRAIN_SCHEMA}}.events (session_id, created_at DESC);
+CREATE INDEX events_scope_idx   ON {{POSTBRAIN_SCHEMA}}.events (scope_id, event_type, created_at DESC);
 
 SELECT create_partition(
-    p_parent_table => 'public.events',
+    p_parent_table => '{{POSTBRAIN_SCHEMA}}.events',
     p_control      => 'created_at',
     p_interval     => '1 month',
     p_premake      => 3
@@ -185,4 +185,4 @@ SELECT create_partition(
 UPDATE part_config
     SET retention            = interval '24 months',
         retention_keep_table = true
-    WHERE parent_table = 'public.events';
+    WHERE parent_table = '{{POSTBRAIN_SCHEMA}}.events';

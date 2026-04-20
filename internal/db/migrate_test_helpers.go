@@ -82,6 +82,9 @@ func stripTestUnsupported(sql string) string {
 	}
 	result := strings.Join(kept, ";")
 
+	// Substitute the schema placeholder so migration SQL is valid.
+	result = strings.ReplaceAll(result, schemaPlaceholder, "public")
+
 	// Downsize vector dimensions so 4-dim test embeddings fit the columns.
 	result = strings.ReplaceAll(result, "vector(1536)", "vector(4)")
 	result = strings.ReplaceAll(result, "vector(1024)", "vector(4)")

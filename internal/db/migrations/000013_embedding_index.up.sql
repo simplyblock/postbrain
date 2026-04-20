@@ -6,7 +6,7 @@
 -- ─────────────────────────────────────────
 -- 1. Extend embedding_models with provider/runtime columns
 -- ─────────────────────────────────────────
-ALTER TABLE embedding_models
+ALTER TABLE {{POSTBRAIN_SCHEMA}}.embedding_models
     ADD COLUMN provider       TEXT,
     ADD COLUMN service_url    TEXT,
     ADD COLUMN provider_model TEXT,
@@ -18,10 +18,10 @@ ALTER TABLE embedding_models
 -- Tracks which objects have embeddings in which per-model vector tables,
 -- including backfill/re-embed status and retry state.
 -- ─────────────────────────────────────────
-CREATE TABLE embedding_index (
+CREATE TABLE {{POSTBRAIN_SCHEMA}}.embedding_index (
     object_type  TEXT        NOT NULL,
     object_id    UUID        NOT NULL,
-    model_id     UUID        NOT NULL REFERENCES embedding_models(id),
+    model_id     UUID        NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.embedding_models(id),
     status       TEXT        NOT NULL DEFAULT 'pending',
     retry_count  INT         NOT NULL DEFAULT 0,
     last_error   TEXT,
@@ -35,10 +35,10 @@ CREATE TABLE embedding_index (
 );
 
 CREATE INDEX embedding_index_model_status_idx
-    ON embedding_index (model_id, status);
+    ON {{POSTBRAIN_SCHEMA}}.embedding_index (model_id, status);
 
-CREATE TRIGGER embedding_index_updated_at BEFORE UPDATE ON embedding_index
-    FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+CREATE TRIGGER embedding_index_updated_at BEFORE UPDATE ON {{POSTBRAIN_SCHEMA}}.embedding_index
+    FOR EACH ROW EXECUTE FUNCTION {{POSTBRAIN_SCHEMA}}.touch_updated_at();
 
 -- ─────────────────────────────────────────
 -- 3. Compatibility note

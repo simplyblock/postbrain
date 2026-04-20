@@ -1,9 +1,9 @@
 -- Migration 000011: OAuth social identities + authorization server state.
 
 -- 1. Social identity links.
-CREATE TABLE social_identities (
+CREATE TABLE {{POSTBRAIN_SCHEMA}}.social_identities (
     id             UUID        PRIMARY KEY DEFAULT uuidv7(),
-    principal_id   UUID        NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+    principal_id   UUID        NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.principals(id) ON DELETE CASCADE,
     provider       TEXT        NOT NULL,
     provider_id    TEXT        NOT NULL,
     email          citext,
@@ -15,13 +15,13 @@ CREATE TABLE social_identities (
     UNIQUE (provider, provider_id)
 );
 
-CREATE INDEX social_identities_principal_idx ON social_identities (principal_id);
+CREATE INDEX social_identities_principal_idx ON {{POSTBRAIN_SCHEMA}}.social_identities (principal_id);
 
-CREATE TRIGGER social_identities_updated_at BEFORE UPDATE ON social_identities
-    FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+CREATE TRIGGER social_identities_updated_at BEFORE UPDATE ON {{POSTBRAIN_SCHEMA}}.social_identities
+    FOR EACH ROW EXECUTE FUNCTION {{POSTBRAIN_SCHEMA}}.touch_updated_at();
 
 -- 2. OAuth clients.
-CREATE TABLE oauth_clients (
+CREATE TABLE {{POSTBRAIN_SCHEMA}}.oauth_clients (
     id                  UUID        PRIMARY KEY DEFAULT uuidv7(),
     client_id           TEXT        NOT NULL UNIQUE,
     client_secret_hash  TEXT,
@@ -35,14 +35,14 @@ CREATE TABLE oauth_clients (
     revoked_at          TIMESTAMPTZ
 );
 
-CREATE INDEX oauth_clients_client_id_idx ON oauth_clients (client_id);
+CREATE INDEX oauth_clients_client_id_idx ON {{POSTBRAIN_SCHEMA}}.oauth_clients (client_id);
 
 -- 3. OAuth authorization codes.
-CREATE TABLE oauth_auth_codes (
+CREATE TABLE {{POSTBRAIN_SCHEMA}}.oauth_auth_codes (
     id               UUID        PRIMARY KEY DEFAULT uuidv7(),
     code_hash        TEXT        NOT NULL UNIQUE,
-    client_id        UUID        NOT NULL REFERENCES oauth_clients(id) ON DELETE CASCADE,
-    principal_id     UUID        NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+    client_id        UUID        NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.oauth_clients(id) ON DELETE CASCADE,
+    principal_id     UUID        NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.principals(id) ON DELETE CASCADE,
     redirect_uri     TEXT        NOT NULL,
     scopes           TEXT[]      NOT NULL DEFAULT '{}',
     code_challenge   TEXT        NOT NULL,
@@ -51,12 +51,12 @@ CREATE TABLE oauth_auth_codes (
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX oauth_auth_codes_code_hash_idx ON oauth_auth_codes (code_hash);
-CREATE INDEX oauth_auth_codes_expires_idx ON oauth_auth_codes (expires_at)
+CREATE INDEX oauth_auth_codes_code_hash_idx ON {{POSTBRAIN_SCHEMA}}.oauth_auth_codes (code_hash);
+CREATE INDEX oauth_auth_codes_expires_idx ON {{POSTBRAIN_SCHEMA}}.oauth_auth_codes (expires_at)
     WHERE used_at IS NULL;
 
 -- 4. OAuth states.
-CREATE TABLE oauth_states (
+CREATE TABLE {{POSTBRAIN_SCHEMA}}.oauth_states (
     id          UUID        PRIMARY KEY DEFAULT uuidv7(),
     state_hash  TEXT        NOT NULL UNIQUE,
     kind        TEXT        NOT NULL CHECK (kind IN ('social', 'mcp_consent')),
@@ -66,6 +66,6 @@ CREATE TABLE oauth_states (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX oauth_states_state_hash_idx ON oauth_states (state_hash);
-CREATE INDEX oauth_states_expires_idx ON oauth_states (expires_at)
+CREATE INDEX oauth_states_state_hash_idx ON {{POSTBRAIN_SCHEMA}}.oauth_states (state_hash);
+CREATE INDEX oauth_states_expires_idx ON {{POSTBRAIN_SCHEMA}}.oauth_states (expires_at)
     WHERE used_at IS NULL;

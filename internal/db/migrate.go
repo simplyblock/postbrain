@@ -5,6 +5,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/url"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5" // pgx/v5 database driver
+	"github.com/golang-migrate/migrate/v4/source"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -37,6 +39,56 @@ const advisoryLockKey = int64(0x706f737462726169) // 8101067571501756777
 // before giving up. A long wait usually means another instance is migrating
 // or a previous run crashed without releasing the lock session.
 const advisoryLockTimeout = "30s"
+
+// schemaPlaceholder is replaced with the configured schema name in migration SQL.
+const schemaPlaceholder = "{{POSTBRAIN_SCHEMA}}"
+
+// schemaSource wraps a source.Driver and substitutes {{POSTBRAIN_SCHEMA}} in every
+// migration file with the configured schema before the SQL is executed. This
+// lets migrations use explicit schema qualification without hard-coding the
+// schema name, and without relying on search_path — which PGBouncer rejects as
+// a startup parameter (SQLSTATE 08P01).
+type schemaSource struct {
+	inner  source.Driver
+	schema string
+}
+
+func (s *schemaSource) Open(rawURL string) (source.Driver, error) {
+	d, err := s.inner.Open(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	return &schemaSource{inner: d, schema: s.schema}, nil
+}
+
+func (s *schemaSource) Close() error                    { return s.inner.Close() }
+func (s *schemaSource) First() (uint, error)            { return s.inner.First() }
+func (s *schemaSource) Prev(version uint) (uint, error) { return s.inner.Prev(version) }
+func (s *schemaSource) Next(version uint) (uint, error) { return s.inner.Next(version) }
+
+func (s *schemaSource) ReadUp(version uint) (io.ReadCloser, string, error) {
+	rc, id, err := s.inner.ReadUp(version)
+	if err != nil {
+		return nil, id, err
+	}
+	return s.substitute(rc), id, nil
+}
+
+func (s *schemaSource) ReadDown(version uint) (io.ReadCloser, string, error) {
+	rc, id, err := s.inner.ReadDown(version)
+	if err != nil {
+		return nil, id, err
+	}
+	return s.substitute(rc), id, nil
+}
+
+func (s *schemaSource) substitute(rc io.ReadCloser) io.ReadCloser {
+	b, _ := io.ReadAll(rc)
+	_ = rc.Close()
+	return io.NopCloser(strings.NewReader(
+		strings.ReplaceAll(string(b), schemaPlaceholder, s.schema),
+	))
+}
 
 // acquireAdvisoryLock scopes lock_timeout to just the advisory-lock acquisition
 // by using SET LOCAL inside a short transaction. The session-level advisory
@@ -70,15 +122,17 @@ func acquireAdvisoryLock(ctx context.Context, conn *pgxpool.Conn) error {
 }
 
 // CheckAndMigrate applies pending schema migrations under a PostgreSQL advisory
-// lock. It:
+// lock. schema is the PostgreSQL schema that owns the migration objects
+// (e.g. "public"); it is substituted for {{POSTBRAIN_SCHEMA}} in every migration
+// file. It:
 //  1. Acquires an advisory lock to prevent concurrent migration runs.
 //  2. Checks the current schema version against ExpectedVersion.
 //  3. Returns an error if the database schema is ahead of the binary.
 //  4. Returns an error if the schema is in a dirty state.
 //  5. Applies pending migrations with migrate.Up().
 //  6. Releases the advisory lock.
-func CheckAndMigrate(ctx context.Context, pool *pgxpool.Pool, autoMigrate bool) error {
-	m, conn, release, err := newMigrator(ctx, pool)
+func CheckAndMigrate(ctx context.Context, pool *pgxpool.Pool, schema string, autoMigrate bool) error {
+	m, conn, release, err := newMigrator(ctx, pool, schema)
 	if err != nil {
 		return err
 	}
@@ -111,11 +165,6 @@ func CheckAndMigrate(ctx context.Context, pool *pgxpool.Pool, autoMigrate bool) 
 		return nil
 	}
 
-	// EnsureAGEOverlay must run before m.Up() so that ag_catalog USAGE is
-	// granted to the migration user before DDL statements are executed.
-	// The migrator opens its own connection (bypassing AfterConnect) and
-	// inherits the database-level search_path which may include ag_catalog;
-	// without this grant the migrator fails resolving any name.
 	if err := EnsureAGEOverlay(ctx, pool); err != nil {
 		return fmt.Errorf("migrate: ensure age overlay: %w", err)
 	}
@@ -141,10 +190,11 @@ type MigrationInfo struct {
 }
 
 // MigrateStatus returns the list of all known migrations together with their
-// applied/pending state. It does not acquire the advisory lock because it only
-// reads state.
-func MigrateStatus(ctx context.Context, pool *pgxpool.Pool) ([]MigrationInfo, error) {
-	m, _, release, err := newMigrator(ctx, pool)
+// applied/pending state. schema is substituted for {{POSTBRAIN_SCHEMA}} in
+// migration files (used to locate the schema_migrations table). It does not
+// acquire the advisory lock because it only reads state.
+func MigrateStatus(ctx context.Context, pool *pgxpool.Pool, schema string) ([]MigrationInfo, error) {
+	m, _, release, err := newMigrator(ctx, pool, schema)
 	if err != nil {
 		return nil, err
 	}
@@ -191,11 +241,12 @@ func MigrateStatus(ctx context.Context, pool *pgxpool.Pool) ([]MigrationInfo, er
 }
 
 // MigrateDown rolls back the last n migrations. Pass n=1 to roll back one step.
-func MigrateDown(ctx context.Context, pool *pgxpool.Pool, n int) error {
+// schema is substituted for {{POSTBRAIN_SCHEMA}} in migration files.
+func MigrateDown(ctx context.Context, pool *pgxpool.Pool, schema string, n int) error {
 	if n <= 0 {
 		n = 1
 	}
-	m, conn, release, err := newMigrator(ctx, pool)
+	m, conn, release, err := newMigrator(ctx, pool, schema)
 	if err != nil {
 		return err
 	}
@@ -228,8 +279,9 @@ func MigrateDown(ctx context.Context, pool *pgxpool.Pool, n int) error {
 
 // MigrateForce sets the schema_migrations version to v without running any SQL.
 // Use this to clear a dirty state after manually fixing a failed migration.
-func MigrateForce(ctx context.Context, pool *pgxpool.Pool, v int) error {
-	m, conn, release, err := newMigrator(ctx, pool)
+// schema is substituted for {{POSTBRAIN_SCHEMA}} in migration files.
+func MigrateForce(ctx context.Context, pool *pgxpool.Pool, schema string, v int) error {
+	m, conn, release, err := newMigrator(ctx, pool, schema)
 	if err != nil {
 		return err
 	}
@@ -252,22 +304,30 @@ func MigrateForce(ctx context.Context, pool *pgxpool.Pool, v int) error {
 }
 
 // newMigrator creates a golang-migrate Migrator from the pool's connection config.
-// The caller is responsible for calling release() to return the connection to the pool.
-// The returned *pgxpool.Conn is available for the caller to acquire advisory locks on.
-func newMigrator(ctx context.Context, pool *pgxpool.Pool) (*migrate.Migrate, *pgxpool.Conn, func(), error) {
+// schema is substituted for {{POSTBRAIN_SCHEMA}} in every migration file so
+// that DDL targets the correct PostgreSQL schema. An empty schema defaults to
+// "public". The caller is responsible for calling release() to return the
+// connection to the pool. The returned *pgxpool.Conn is available for the
+// caller to acquire advisory locks on.
+func newMigrator(ctx context.Context, pool *pgxpool.Pool, schema string) (*migrate.Migrate, *pgxpool.Conn, func(), error) {
+	if schema == "" {
+		schema = "public"
+	}
+
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
 		return nil, nil, func() {}, fmt.Errorf("migrate: acquire connection: %w", err)
 	}
 
-	src, err := iofs.New(migrationsFS, "migrations")
+	rawSrc, err := iofs.New(migrationsFS, "migrations")
 	if err != nil {
 		conn.Release()
 		return nil, nil, func() {}, fmt.Errorf("migrate: create iofs source: %w", err)
 	}
+	src := &schemaSource{inner: rawSrc, schema: schema}
 
 	connConfig := conn.Conn().Config()
-	dsn, err := buildMigratorDSN(connConfig)
+	dsn, err := buildMigratorDSN(connConfig, schema)
 	if err != nil {
 		conn.Release()
 		return nil, nil, func() {}, fmt.Errorf("migrate: build migrator dsn: %w", err)
@@ -293,7 +353,12 @@ func newMigrator(ctx context.Context, pool *pgxpool.Pool) (*migrate.Migrate, *pg
 	return m, conn, release, nil
 }
 
-func buildMigratorDSN(connConfig *pgx.ConnConfig) (string, error) {
+// buildMigratorDSN constructs a golang-migrate DSN from the pool's connection
+// config. The migrations tracking table is placed in schema so it matches the
+// objects created by the migrations themselves. No search_path startup parameter
+// is set: PGBouncer rejects that parameter (SQLSTATE 08P01), and with explicit
+// schema qualification in the migration SQL it is not needed.
+func buildMigratorDSN(connConfig *pgx.ConnConfig, schema string) (string, error) {
 	base := fmt.Sprintf("pgx5://%s:%s@%s:%d/%s",
 		url.QueryEscape(connConfig.User),
 		url.QueryEscape(connConfig.Password),
@@ -306,15 +371,8 @@ func buildMigratorDSN(connConfig *pgx.ConnConfig) (string, error) {
 		return "", err
 	}
 	q := u.Query()
-	q.Set("x-migrations-table", `"public"."schema_migrations"`)
+	q.Set("x-migrations-table", fmt.Sprintf(`"%s"."schema_migrations"`, schema))
 	q.Set("x-migrations-table-quoted", "1")
-	// Pin search_path to the standard default (without ag_catalog) so that
-	// unqualified CREATE TABLE / CREATE INDEX statements target the public
-	// schema. If the database-level search_path includes ag_catalog first,
-	// the migrator would attempt to create objects there and fail with
-	// "permission denied for schema ag_catalog" even though the migrations
-	// have nothing to do with AGE.
-	q.Set("search_path", `"$user",public`)
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }

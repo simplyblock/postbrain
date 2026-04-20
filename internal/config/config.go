@@ -24,6 +24,7 @@ type Config struct {
 // DatabaseConfig holds PostgreSQL connection parameters.
 type DatabaseConfig struct {
 	URL            string        `mapstructure:"url"`
+	Schema         string        `mapstructure:"schema"`
 	AutoMigrate    bool          `mapstructure:"auto_migrate"`
 	MaxOpen        int           `mapstructure:"max_open"`
 	MaxIdle        int           `mapstructure:"max_idle"`
@@ -147,6 +148,7 @@ func Load(path string) (*Config, error) {
 	v.AutomaticEnv()
 
 	// Defaults matching config.example.yaml
+	v.SetDefault("database.schema", "public")
 	v.SetDefault("database.auto_migrate", true)
 	v.SetDefault("database.max_open", 25)
 	v.SetDefault("database.max_idle", 5)

@@ -1,31 +1,31 @@
 -- Migration 000001 rollback: drop all objects in reverse creation order.
 
 -- Events (partitioned) — partman config is removed by CASCADE when table is dropped
-DROP TABLE IF EXISTS events CASCADE;
+DROP TABLE IF EXISTS {{POSTBRAIN_SCHEMA}}.events CASCADE;
 
 -- Sessions
-DROP TABLE IF EXISTS sessions CASCADE;
+DROP TABLE IF EXISTS {{POSTBRAIN_SCHEMA}}.sessions CASCADE;
 
 -- Scopes
-DROP TRIGGER IF EXISTS scopes_path_trigger ON scopes;
-DROP FUNCTION IF EXISTS scopes_compute_path();
-DROP TABLE IF EXISTS scopes CASCADE;
+DROP TRIGGER IF EXISTS scopes_path_trigger ON {{POSTBRAIN_SCHEMA}}.scopes;
+DROP FUNCTION IF EXISTS {{POSTBRAIN_SCHEMA}}.scopes_compute_path();
+DROP TABLE IF EXISTS {{POSTBRAIN_SCHEMA}}.scopes CASCADE;
 
 -- Principal memberships
-DROP TABLE IF EXISTS principal_memberships CASCADE;
+DROP TABLE IF EXISTS {{POSTBRAIN_SCHEMA}}.principal_memberships CASCADE;
 
 -- Tokens
-DROP TABLE IF EXISTS tokens CASCADE;
+DROP TABLE IF EXISTS {{POSTBRAIN_SCHEMA}}.tokens CASCADE;
 
 -- Principals
-DROP TRIGGER IF EXISTS principals_updated_at ON principals;
-DROP TABLE IF EXISTS principals CASCADE;
+DROP TRIGGER IF EXISTS principals_updated_at ON {{POSTBRAIN_SCHEMA}}.principals;
+DROP TABLE IF EXISTS {{POSTBRAIN_SCHEMA}}.principals CASCADE;
 
 -- touch_updated_at function
-DROP FUNCTION IF EXISTS touch_updated_at();
+DROP FUNCTION IF EXISTS {{POSTBRAIN_SCHEMA}}.touch_updated_at();
 
 -- Embedding models
-DROP TABLE IF EXISTS embedding_models CASCADE;
+DROP TABLE IF EXISTS {{POSTBRAIN_SCHEMA}}.embedding_models CASCADE;
 
 -- FTS configuration
 DROP TEXT SEARCH CONFIGURATION IF EXISTS postbrain_fts;
