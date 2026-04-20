@@ -138,20 +138,21 @@ func TestUI_Pages_FilterScopesAndScopedData(t *testing.T) {
 
 	client, baseURL := loginUITestClient(t, pool, rawSessionA)
 
+	pfx := "/ui/" + scopeA.ID.String()
 	pages := []struct {
 		path           string
 		mustContain    []string
 		mustNotContain []string
 	}{
-		{path: "/ui/memories", mustContain: []string{"ui-filter-scope-a"}, mustNotContain: []string{"ui-filter-scope-b"}},
-		{path: "/ui/query", mustContain: []string{"ui-filter-scope-a"}, mustNotContain: []string{"ui-filter-scope-b"}},
-		{path: "/ui/knowledge", mustContain: []string{"VISIBLE_ARTIFACT"}, mustNotContain: []string{"ui-filter-scope-b", "HIDDEN_ARTIFACT"}},
-		{path: "/ui/collections", mustContain: []string{"VISIBLE_COLLECTION"}, mustNotContain: []string{"HIDDEN_COLLECTION"}},
-		{path: "/ui/promotions", mustContain: []string{"ui-filter-scope-a"}, mustNotContain: []string{"ui-filter-scope-b"}},
-		{path: "/ui/staleness", mustContain: []string{visibleArtifact.ID.String()}, mustNotContain: []string{hiddenArtifact.ID.String()}},
-		{path: "/ui/skills", mustContain: []string{"VISIBLE_SKILL"}, mustNotContain: []string{"HIDDEN_SKILL"}},
-		{path: "/ui/graph", mustContain: []string{"ui-filter-scope-a"}, mustNotContain: []string{"ui-filter-scope-b"}},
-		{path: "/ui/graph3d", mustContain: []string{"ui-filter-scope-a"}, mustNotContain: []string{"ui-filter-scope-b"}},
+		{path: pfx + "/memories", mustContain: []string{"ui-filter-scope-a"}, mustNotContain: []string{"ui-filter-scope-b"}},
+		{path: pfx + "/query", mustContain: []string{"ui-filter-scope-a"}, mustNotContain: []string{"ui-filter-scope-b"}},
+		{path: pfx + "/knowledge", mustContain: []string{"VISIBLE_ARTIFACT"}, mustNotContain: []string{"ui-filter-scope-b", "HIDDEN_ARTIFACT"}},
+		{path: pfx + "/collections", mustContain: []string{"VISIBLE_COLLECTION"}, mustNotContain: []string{"HIDDEN_COLLECTION"}},
+		{path: pfx + "/promotions", mustContain: []string{"ui-filter-scope-a"}, mustNotContain: []string{"ui-filter-scope-b"}},
+		{path: pfx + "/staleness", mustContain: []string{visibleArtifact.ID.String()}, mustNotContain: []string{hiddenArtifact.ID.String()}},
+		{path: pfx + "/skills", mustContain: []string{"VISIBLE_SKILL"}, mustNotContain: []string{"HIDDEN_SKILL"}},
+		{path: pfx + "/graph", mustContain: []string{"ui-filter-scope-a"}, mustNotContain: []string{"ui-filter-scope-b"}},
+		{path: pfx + "/graph3d", mustContain: []string{"ui-filter-scope-a"}, mustNotContain: []string{"ui-filter-scope-b"}},
 	}
 
 	for _, tc := range pages {

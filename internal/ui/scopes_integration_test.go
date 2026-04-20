@@ -229,11 +229,12 @@ func TestScopedSessionToken_IncludesParentScopesInDropdowns(t *testing.T) {
 
 	client, baseURL := loginUITestClient(t, pool, rawSession)
 
+	pfx := "/ui/" + childScope.ID.String()
 	pages := []string{
-		"/ui/memories",
-		"/ui/query",
-		"/ui/graph",
-		"/ui/graph3d",
+		pfx + "/memories",
+		pfx + "/query",
+		pfx + "/graph",
+		pfx + "/graph3d",
 	}
 	for _, path := range pages {
 		path := path
