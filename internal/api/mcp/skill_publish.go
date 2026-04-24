@@ -225,9 +225,10 @@ func parseSkillMarkdownContent(raw string) (skillDraft, error) {
 			}
 			if strings.HasPrefix(rawValue, "[") {
 				var parsed []string
-				if err := json.Unmarshal([]byte(rawValue), &parsed); err == nil {
-					draft.AgentTypes = append(draft.AgentTypes, parsed...)
+				if err := json.Unmarshal([]byte(rawValue), &parsed); err != nil {
+					return skillDraft{}, fmt.Errorf("invalid agent_types inline list: %w", err)
 				}
+				draft.AgentTypes = append(draft.AgentTypes, parsed...)
 			}
 		}
 	}

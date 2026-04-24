@@ -60,6 +60,27 @@ func TestParseSkillMarkdownContent_WithYamlAgentTypeList(t *testing.T) {
 	}
 }
 
+func TestParseSkillMarkdownContent_InvalidInlineAgentTypes_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	content := strings.Join([]string{
+		"---",
+		"name: Tox Verifier",
+		`agent_types: [codex, "claude-code"]`,
+		"---",
+		"",
+		"Body",
+	}, "\n")
+
+	_, err := parseSkillMarkdownContent(content)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid agent_types inline list") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestParseSkillMarkdownContent_WithoutFrontmatter_UsesWholeBody(t *testing.T) {
 	t.Parallel()
 
