@@ -79,17 +79,7 @@ func (s *IdentityStore) FindOrCreateWithPolicy(ctx context.Context, provider str
 		displayName = baseSlug
 	}
 
-	if !policy.AutoCreateUsers {
-		if info.Email == "" {
-			return nil, ErrPrincipalNotProvisioned
-		}
-		principal, lookupErr := q.GetPrincipalBySlug(ctx, info.Email)
-		if lookupErr != nil {
-			if errors.Is(lookupErr, pgx.ErrNoRows) {
-				return nil, ErrPrincipalNotProvisioned
-			}
-			return nil, fmt.Errorf("lookup principal by email slug: %w", lookupErr)
-		}
+	linkPrincipal := func(principal *db.Principal) (*db.Principal, error) {
 		if _, err := q.UpsertSocialIdentity(ctx, db.UpsertSocialIdentityParams{
 			PrincipalID: principal.ID,
 			Provider:    provider,
@@ -105,6 +95,21 @@ func (s *IdentityStore) FindOrCreateWithPolicy(ctx context.Context, provider str
 			return nil, err
 		}
 		return principal, nil
+	}
+
+	emailSlug := strings.TrimSpace(info.Email)
+	if emailSlug != "" {
+		principal, lookupErr := q.GetPrincipalBySlug(ctx, emailSlug)
+		if lookupErr == nil {
+			return linkPrincipal(principal)
+		}
+		if !errors.Is(lookupErr, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("lookup principal by email slug: %w", lookupErr)
+		}
+	}
+
+	if !policy.AutoCreateUsers {
+		return nil, ErrPrincipalNotProvisioned
 	}
 
 	slug := baseSlug
@@ -124,22 +129,7 @@ func (s *IdentityStore) FindOrCreateWithPolicy(ctx context.Context, provider str
 		return nil, err
 	}
 
-	if _, err := q.UpsertSocialIdentity(ctx, db.UpsertSocialIdentityParams{
-		PrincipalID: principal.ID,
-		Provider:    provider,
-		ProviderID:  info.ProviderID,
-		Email:       optionalString(info.Email),
-		DisplayName: optionalString(info.DisplayName),
-		AvatarUrl:   optionalString(info.AvatarURL),
-		RawProfile:  info.RawProfile,
-	}); err != nil {
-		return nil, err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
-	}
-	return principal, nil
+	return linkPrincipal(principal)
 }
 
 func principalSlug(provider string, info *UserInfo) string {
