@@ -19,7 +19,11 @@ func (s *Server) registerSynthesizeTopic() {
 		mcpgo.WithOpenWorldHintAnnotation(true),
 		mcpgo.WithDescription("Synthesise multiple published knowledge artifacts into a single topic digest artifact"),
 		mcpgo.WithString("scope", mcpgo.Required(), mcpgo.Description("Owner scope as kind:external_id")),
-		mcpgo.WithArray("source_ids", mcpgo.Required(), mcpgo.Description("UUIDs of the source artifacts to synthesise (minimum 2, all must be published non-digest artifacts)")),
+		mcpgo.WithArray("source_ids",
+			mcpgo.Required(),
+			mcpgo.WithStringItems(),
+			mcpgo.Description("UUIDs of the source artifacts to synthesise (minimum 2, all must be published non-digest artifacts)"),
+		),
 		mcpgo.WithString("title", mcpgo.Description("Digest title; inferred from sources if omitted")),
 		mcpgo.WithBoolean("auto_review", mcpgo.Description("Move directly to in_review (default: false)")),
 	), withToolMetrics("synthesize_topic", withToolPermission("knowledge:write", s.handleSynthesizeTopic)))

@@ -24,7 +24,22 @@ func (s *Server) registerRemember() {
 		mcpgo.WithNumber("importance", mcpgo.Description("Importance score 0–1 (default: 0.5)")),
 		mcpgo.WithString("summary", mcpgo.Description("Optional memory summary")),
 		mcpgo.WithString("source_ref", mcpgo.Description("Provenance reference, e.g. file:src/main.go:42")),
-		mcpgo.WithArray("entities", mcpgo.Description("Entities to link. Each item is an object with 'name' (canonical string) and 'type' (concept|technology|file|person|service|pr|decision). Bare strings are accepted for backwards compatibility and default to type 'concept'.")),
+		mcpgo.WithArray("entities",
+			mcpgo.Items(map[string]any{
+				"anyOf": []any{
+					map[string]any{"type": "string"},
+					map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"name": map[string]any{"type": "string", "minLength": 1},
+							"type": map[string]any{"type": "string"},
+						},
+						"required": []string{"name"},
+					},
+				},
+			}),
+			mcpgo.Description("Entities to link. Each item is an object with 'name' (canonical string) and 'type' (concept|technology|file|person|service|pr|decision). Bare strings are accepted for backwards compatibility and default to type 'concept'."),
+		),
 		mcpgo.WithNumber("expires_in", mcpgo.Description("TTL in seconds; only for memory_type=working")),
 	), withToolMetrics("remember", withToolPermission("memories:write", s.handleRemember)))
 }
