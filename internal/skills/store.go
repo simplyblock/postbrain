@@ -54,6 +54,10 @@ func NewStore(pool *pgxpool.Pool, svc *providers.EmbeddingService) *Store {
 }
 
 // CreateInput holds the fields required to create a new skill.
+//
+// By default Create writes a draft skill (Status defaults to "draft").
+// Callers may optionally set Status to "published" and provide PublishedAt
+// to create an already published skill in one operation.
 type CreateInput struct {
 	ScopeID          uuid.UUID
 	AuthorID         uuid.UUID
@@ -65,9 +69,9 @@ type CreateInput struct {
 	Body             string
 	Parameters       []db.SkillParameter
 	Visibility       string
-	ReviewRequired   int // default 1 if 0
-	Status           string
-	PublishedAt      *time.Time
+	ReviewRequired   int        // default 1 if 0
+	Status           string     // default "draft"; set to "published" for immediate publish
+	PublishedAt      *time.Time // used when Status=="published"; ignored otherwise
 	// Files are optional supplementary files to attach to the skill.
 	// Each path must pass ValidateSkillFile; requires a non-nil pool.
 	Files []db.SkillFileInput
@@ -82,7 +86,11 @@ type UpdateInput struct {
 	Files      *[]db.SkillFileInput
 }
 
-// Create persists a new skill in draft status, embedding its description+body.
+// Create persists a new skill, embedding its description+body.
+//
+// Status defaults to "draft" when unset. If input.Status is "published",
+// Create also persists a non-nil published_at timestamp in the same create
+// operation to avoid a separate publish-status update step.
 // When Files are provided, the skill row and all supplementary files are written
 // in a single transaction so a mid-file failure cannot leave an orphaned skill.
 func (s *Store) Create(ctx context.Context, input CreateInput) (*db.Skill, error) {
