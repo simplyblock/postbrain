@@ -185,12 +185,17 @@ func parseSkillMarkdownContent(raw string) (skillDraft, error) {
 
 	rest := strings.TrimPrefix(raw, "---\n")
 	idx := strings.Index(rest, "\n---\n")
+	delimiterLen := len("\n---\n")
+	if idx < 0 && strings.HasSuffix(rest, "\n---") {
+		idx = len(rest) - len("\n---")
+		delimiterLen = len("\n---")
+	}
 	if idx < 0 {
 		return skillDraft{}, fmt.Errorf("frontmatter opening found but closing '---' is missing")
 	}
 
 	fm := rest[:idx]
-	body := rest[idx+len("\n---\n"):]
+	body := rest[idx+delimiterLen:]
 	body = strings.TrimPrefix(body, "\n")
 	draft := skillDraft{Body: body}
 
