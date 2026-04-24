@@ -28,6 +28,7 @@
 - [x] 2026-04-24: Added MCP skill publishing tool for registry creation from markdown (TDD-first):
   - Added new MCP tool `skill_publish` in `internal/api/mcp/skill_publish.go` with scope-auth enforcement and `skills:write` permission.
   - Tool accepts either full markdown `content` (with optional `SKILL.md` frontmatter) or explicit `body` + metadata and derives missing slug/name fields.
+  - Normalized `source_name` path handling for slug derivation to be separator-stable across platforms (supports both `/` and `\` inputs consistently).
   - Extended tool input to support supplementary `files` (scripts/references) and persist them through the existing skills store validation/writes.
   - Tool creates the skill in the target scope and marks it `published` so it is immediately discoverable by `skill_search` and installable via `skill_install`/CLI sync.
   - Added parser/unit coverage in `internal/api/mcp/skill_publish_test.go`, integration coverage in `internal/api/mcp/mcp_integration_test.go`, and handler validation coverage in `internal/api/mcp/handlers_unit_test.go`.

@@ -82,6 +82,20 @@ func TestDefaultSkillSlug_FromSourceName(t *testing.T) {
 	}
 }
 
+func TestDefaultSkillSlug_FromSourceNamePath_SeparatorStable(t *testing.T) {
+	t.Parallel()
+
+	gotForward := defaultSkillSlug("", "", "skills/tox-verifier.md")
+	if gotForward != "tox-verifier" {
+		t.Fatalf("defaultSkillSlug forward = %q, want %q", gotForward, "tox-verifier")
+	}
+
+	gotBackward := defaultSkillSlug("", "", `skills\tox-verifier.md`)
+	if gotBackward != "tox-verifier" {
+		t.Fatalf("defaultSkillSlug backward = %q, want %q", gotBackward, "tox-verifier")
+	}
+}
+
 func TestParseSkillPublishFiles_Valid(t *testing.T) {
 	t.Parallel()
 

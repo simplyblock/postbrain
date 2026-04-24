@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
+	"path"
 	"strings"
 	"time"
 
@@ -244,7 +244,8 @@ func defaultSkillSlug(slug, name, sourceName string) string {
 	if normalized := normalizeSlugCandidate(slug); normalized != "" {
 		return normalized
 	}
-	if normalized := normalizeSlugCandidate(strings.TrimSuffix(filepath.Base(sourceName), filepath.Ext(sourceName))); normalized != "" {
+	sourceName = strings.ReplaceAll(sourceName, "\\", "/")
+	if normalized := normalizeSlugCandidate(strings.TrimSuffix(path.Base(sourceName), path.Ext(sourceName))); normalized != "" {
 		return normalized
 	}
 	return normalizeSlugCandidate(name)
