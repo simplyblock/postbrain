@@ -25,6 +25,22 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-24: Added MCP skill publishing tool for registry creation from markdown (TDD-first):
+  - Added new MCP tool `skill_publish` in `internal/api/mcp/skill_publish.go` with scope-auth enforcement and `skills:write` permission.
+  - Made create+publish atomic for `skill_publish` by creating skills with initial `published` status in a single create operation (no follow-up status update step).
+  - Updated `internal/skills/store.go` API comments to document that `Store.Create` defaults to draft creation but may create published skills when `CreateInput.Status`/`PublishedAt` are set.
+  - Tool accepts either full markdown `content` (with optional `SKILL.md` frontmatter) or explicit `body` + metadata and derives missing slug/name fields.
+  - Tightened frontmatter parsing so invalid inline `agent_types` lists now return an explicit error instead of silently falling back to defaults.
+  - Improved supplementary file validation diagnostics to include the failing item index in `skill_publish` file-parse errors.
+  - Normalized MCP array schema declaration for `agent_types` to use `WithStringItems()` for consistency with other tool definitions and strict clients.
+  - Normalized `source_name` path handling for slug derivation to be separator-stable across platforms (supports both `/` and `\` inputs consistently).
+  - Extended tool input to support supplementary `files` (scripts/references) and persist them through the existing skills store validation/writes.
+  - Tool creates the skill in the target scope and marks it `published` so it is immediately discoverable by `skill_search` and installable via `skill_install`/CLI sync.
+  - Added parser/unit coverage in `internal/api/mcp/skill_publish_test.go`, integration coverage in `internal/api/mcp/mcp_integration_test.go`, and handler validation coverage in `internal/api/mcp/handlers_unit_test.go`.
+  - Extended MCP scope-auth inventory and integration coverage for `skill_publish`:
+    - `internal/api/mcp/scopeauth_inventory_test.go`
+    - `internal/api/mcp/scope_authz_integration_test.go`
+
 - [x] 2026-04-24: Fixed social login duplicate principal creation when email slug already exists (TDD-first):
   - Added integration regression coverage in `internal/social/identity_test.go`:
     - `TestIdentityStore_FindOrCreate_ExistingEmailSlug_LinksPrincipal`

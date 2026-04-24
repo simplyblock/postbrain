@@ -5,6 +5,7 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -184,6 +185,92 @@ func TestMCP_Publish_Endorse_AutoPublish(t *testing.T) {
 	}
 	if pubResult == nil || pubResult.IsError {
 		t.Fatalf("publish returned error: %+v", pubResult)
+	}
+}
+
+func TestMCP_SkillPublish_WithFiles(t *testing.T) {
+	ctx := context.Background()
+	pool := testhelper.NewTestPool(t)
+	svc := testhelper.NewMockEmbeddingService()
+	cfg := &config.Config{}
+
+	principal := testhelper.CreateTestPrincipal(t, pool, "user", "mcp-skill-publish-user")
+	scope := testhelper.CreateTestScope(t, pool, "project", "mcp-skill-publish-project", nil, principal.ID)
+	testhelper.CreateTestEmbeddingModel(t, pool)
+
+	srv := mcpapi.NewServer(pool, svc, cfg)
+	mcpSrv := srv.MCPServer()
+
+	scopeStr := "project:" + scope.ExternalID
+	ctx = withAuthContext(ctx, pool, principal.ID, scope.ID)
+
+	tool := mcpSrv.GetTool("skill_publish")
+	if tool == nil {
+		t.Fatal("skill_publish tool not registered")
+	}
+
+	req := mcpgo.CallToolRequest{}
+	req.Params.Name = "skill_publish"
+	req.Params.Arguments = map[string]any{
+		"scope":       scopeStr,
+		"source_name": "tox-verifier.md",
+		"content": strings.Join([]string{
+			"---",
+			"name: Tox Verifier",
+			"description: Verify tox output and summarize failures",
+			"---",
+			"",
+			"Run tox and summarize failures.",
+		}, "\n"),
+		"files": []any{
+			map[string]any{
+				"path":       "scripts/run.sh",
+				"content":    "#!/bin/sh\ntox -e py\n",
+				"executable": true,
+			},
+			map[string]any{
+				"path":    "references/tox-format.md",
+				"content": "Reference output format",
+			},
+		},
+	}
+
+	result, err := tool.Handler(ctx, req)
+	if err != nil {
+		t.Fatalf("skill_publish failed: %v", err)
+	}
+	if result == nil || result.IsError {
+		t.Fatalf("skill_publish returned error result: %+v", result)
+	}
+	if len(result.Content) == 0 {
+		t.Fatal("expected non-empty result content")
+	}
+	text, ok := result.Content[0].(mcpgo.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent, got %T", result.Content[0])
+	}
+	var out struct {
+		SkillID string `json:"skill_id"`
+		Slug    string `json:"slug"`
+		Status  string `json:"status"`
+	}
+	if err := json.Unmarshal([]byte(text.Text), &out); err != nil {
+		t.Fatalf("skill_publish output is not JSON: %v", err)
+	}
+	if out.Status != "published" {
+		t.Fatalf("status = %q, want published", out.Status)
+	}
+	skillID, err := uuid.Parse(out.SkillID)
+	if err != nil {
+		t.Fatalf("invalid skill_id %q: %v", out.SkillID, err)
+	}
+
+	files, err := compat.ListSkillFiles(ctx, pool, skillID)
+	if err != nil {
+		t.Fatalf("ListSkillFiles: %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("len(files) = %d, want 2", len(files))
 	}
 }
 

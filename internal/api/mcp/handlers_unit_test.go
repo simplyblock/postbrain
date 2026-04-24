@@ -528,3 +528,35 @@ func TestHandleSkillInvoke_NilPool_ReturnsToolError(t *testing.T) {
 	}, s.handleSkillInvoke)
 	assertToolError(t, result)
 }
+
+// ── handleSkillPublish ────────────────────────────────────────────────────────
+
+func TestHandleSkillPublish_MissingScope_ReturnsToolError(t *testing.T) {
+	s := &Server{}
+	result := callTool(t, map[string]any{
+		"content": "skill body",
+	}, s.handleSkillPublish)
+	assertToolError(t, result)
+}
+
+func TestHandleSkillPublish_MissingContentAndBody_ReturnsToolError(t *testing.T) {
+	s := &Server{}
+	result := callTool(t, map[string]any{
+		"scope": "project:acme/api",
+	}, s.handleSkillPublish)
+	assertToolError(t, result)
+}
+
+func TestHandleSkillPublish_ServerNotConfigured_PrecedesFilesValidation(t *testing.T) {
+	s := &Server{}
+	result := callTool(t, map[string]any{
+		"scope": "project:acme/api",
+		"body":  "skill body",
+		"files": "not-an-array",
+	}, s.handleSkillPublish)
+	assertToolError(t, result)
+	msg := strings.ToLower(toolErrorText(t, result))
+	if !strings.Contains(msg, "server not configured") {
+		t.Fatalf("expected server-not-configured error, got %q", msg)
+	}
+}
