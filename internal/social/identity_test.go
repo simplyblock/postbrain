@@ -100,7 +100,7 @@ func TestIdentityStore_FindOrCreate_SlugCollision_AppendsProviderID(t *testing.T
 	q := db.New(pool)
 	_, err := q.CreatePrincipal(ctx, db.CreatePrincipalParams{
 		Kind:        "user",
-		Slug:        "collision@example.com",
+		Slug:        "github-gh-collision-1",
 		DisplayName: "Existing User",
 		Meta:        []byte(`{}`),
 	})
@@ -110,7 +110,6 @@ func TestIdentityStore_FindOrCreate_SlugCollision_AppendsProviderID(t *testing.T
 
 	principal, err := store.FindOrCreate(ctx, "github", &UserInfo{
 		ProviderID:  "gh-collision-1",
-		Email:       "collision@example.com",
 		DisplayName: "Colliding User",
 		AvatarURL:   "https://cdn.example/collision.png",
 		RawProfile:  []byte(`{"id":"gh-collision-1"}`),
@@ -118,8 +117,8 @@ func TestIdentityStore_FindOrCreate_SlugCollision_AppendsProviderID(t *testing.T
 	if err != nil {
 		t.Fatalf("FindOrCreate collision: %v", err)
 	}
-	if principal.Slug != "collision@example.com-gh-collision-1" {
-		t.Fatalf("principal slug = %q, want collision@example.com-gh-collision-1", principal.Slug)
+	if principal.Slug != "github-gh-collision-1-gh-collision-1" {
+		t.Fatalf("principal slug = %q, want github-gh-collision-1-gh-collision-1", principal.Slug)
 	}
 
 	var linkedPrincipalID string
@@ -132,6 +131,60 @@ func TestIdentityStore_FindOrCreate_SlugCollision_AppendsProviderID(t *testing.T
 	}
 	if principal.ID.String() != linkedPrincipalID {
 		t.Fatalf("linked principal_id = %s, want %s", linkedPrincipalID, principal.ID)
+	}
+}
+
+func TestIdentityStore_FindOrCreate_ExistingEmailSlug_LinksPrincipal(t *testing.T) {
+	pool := testhelper.NewTestPool(t)
+	store := NewIdentityStore(pool)
+	ctx := context.Background()
+
+	q := db.New(pool)
+	existing, err := q.CreatePrincipal(ctx, db.CreatePrincipalParams{
+		Kind:        "user",
+		Slug:        "manohar@simplyblock.io",
+		DisplayName: "Manohar Reddy",
+		Meta:        []byte(`{}`),
+	})
+	if err != nil {
+		t.Fatalf("seed existing principal: %v", err)
+	}
+
+	principal, err := store.FindOrCreate(ctx, "google", &UserInfo{
+		ProviderID:    "112743087521354650483",
+		Email:         "manohar@simplyblock.io",
+		EmailVerified: true,
+		DisplayName:   "Manohar Reddy",
+		RawProfile:    []byte(`{"sub":"112743087521354650483"}`),
+	})
+	if err != nil {
+		t.Fatalf("FindOrCreate: %v", err)
+	}
+	if principal.ID != existing.ID {
+		t.Fatalf("principal ID = %s, want %s", principal.ID, existing.ID)
+	}
+	if principal.Slug != existing.Slug {
+		t.Fatalf("principal slug = %q, want %q", principal.Slug, existing.Slug)
+	}
+
+	var principalCount int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM principals`).Scan(&principalCount); err != nil {
+		t.Fatalf("count principals: %v", err)
+	}
+	if principalCount != 1 {
+		t.Fatalf("principal count = %d, want 1", principalCount)
+	}
+
+	var linkedPrincipalID string
+	err = pool.QueryRow(ctx, `
+		SELECT principal_id::text FROM social_identities
+		WHERE provider = 'google' AND provider_id = '112743087521354650483'
+	`).Scan(&linkedPrincipalID)
+	if err != nil {
+		t.Fatalf("query social identity: %v", err)
+	}
+	if linkedPrincipalID != existing.ID.String() {
+		t.Fatalf("linked principal_id = %s, want %s", linkedPrincipalID, existing.ID)
 	}
 }
 

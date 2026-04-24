@@ -25,6 +25,14 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-24: Fixed social login duplicate principal creation when email slug already exists (TDD-first):
+  - Added integration regression coverage in `internal/social/identity_test.go`:
+    - `TestIdentityStore_FindOrCreate_ExistingEmailSlug_LinksPrincipal`
+  - Updated `internal/social/identity.go` `FindOrCreateWithPolicy` flow to:
+    - link social identities to an existing principal when `info.Email` matches an existing principal slug,
+    - only create a new principal when no social identity and no matching email principal exist.
+  - Updated slug-collision coverage in `internal/social/identity_test.go` to validate fallback collision handling for non-email slugs.
+
 - [x] 2026-04-14: Fixed failing unit/integration tests after constructor signature changes (TDD green pass):
   - Updated `internal/codegraph/syncer_test.go` and
     `internal/api/rest/scopes_test.go` to use the current
