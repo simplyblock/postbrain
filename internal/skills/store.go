@@ -96,6 +96,14 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.Skill, error
 	if input.Status == "" {
 		input.Status = "draft"
 	}
+	if input.Status == "published" {
+		if input.PublishedAt == nil {
+			now := time.Now().UTC()
+			input.PublishedAt = &now
+		}
+	} else {
+		input.PublishedAt = nil
+	}
 
 	// Validate supplementary files before any expensive work or DB writes.
 	for _, f := range input.Files {
