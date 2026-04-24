@@ -561,6 +561,19 @@
     - deterministic fallback order (`.codex` → `.claude` → `.agents`)
     - Claude/agents fallback when higher-priority files are absent.
 
+- [x] 2026-04-24: Fixed MCP array input schemas for strict client validators (ChatGPT compatibility):
+  - Added explicit `items` schemas for array arguments in MCP tools:
+    - `cross_scope_context`: `comparison_scopes` string items, `layers`
+      enum string items (`memory|knowledge`)
+    - `recall`: `memory_types` enum string items and `layers` enum string
+      items (`memory|knowledge|skill`)
+    - `synthesize_topic`: `source_ids` string items
+    - `remember`: `entities` array items schema with `anyOf` string or object
+      (`name`/`type`)
+  - Added MCP server unit coverage in `internal/api/mcp/server_test.go`:
+    - `TestNewServer_CrossScopeContextArrayArgsDefineStringItems`
+    - `TestNewServer_ArrayArgsDefineItemsSchema`
+
 - [x] 2026-04-10: Pushed knowledge recall time-window filtering into SQL recall paths:
   - Updated knowledge recall SQL (`internal/db/queries/knowledge.sql`) to apply
     `since`/`until` predicates using `COALESCE(published_at, created_at)` for

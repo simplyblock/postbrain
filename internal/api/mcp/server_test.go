@@ -144,3 +144,84 @@ func TestNewServer_RegistersCrossScopeContextTool(t *testing.T) {
 		t.Fatal("cross_scope_context tool must be registered")
 	}
 }
+
+func TestNewServer_CrossScopeContextArrayArgsDefineStringItems(t *testing.T) {
+	s := NewServer(nil, nil, nil)
+	if s == nil {
+		t.Fatal("expected non-nil server")
+	}
+
+	tool := s.MCPServer().GetTool("cross_scope_context")
+	if tool == nil {
+		t.Fatal("cross_scope_context tool must be registered")
+	}
+
+	comparisonScopes, ok := tool.Tool.InputSchema.Properties["comparison_scopes"].(map[string]any)
+	if !ok {
+		t.Fatal("comparison_scopes property must be an object schema")
+	}
+	comparisonItems, ok := comparisonScopes["items"].(map[string]any)
+	if !ok {
+		t.Fatal("comparison_scopes must define array items schema")
+	}
+	if got := comparisonItems["type"]; got != "string" {
+		t.Fatalf("comparison_scopes items.type = %v, want string", got)
+	}
+
+	layers, ok := tool.Tool.InputSchema.Properties["layers"].(map[string]any)
+	if !ok {
+		t.Fatal("layers property must be an object schema")
+	}
+	layerItems, ok := layers["items"].(map[string]any)
+	if !ok {
+		t.Fatal("layers must define array items schema")
+	}
+	if got := layerItems["type"]; got != "string" {
+		t.Fatalf("layers items.type = %v, want string", got)
+	}
+}
+
+func TestNewServer_ArrayArgsDefineItemsSchema(t *testing.T) {
+	s := NewServer(nil, nil, nil)
+	if s == nil {
+		t.Fatal("expected non-nil server")
+	}
+
+	cases := []struct {
+		tool    string
+		arg     string
+		wantAny bool
+	}{
+		{tool: "recall", arg: "memory_types"},
+		{tool: "recall", arg: "layers"},
+		{tool: "cross_scope_context", arg: "comparison_scopes"},
+		{tool: "cross_scope_context", arg: "layers"},
+		{tool: "synthesize_topic", arg: "source_ids"},
+		{tool: "remember", arg: "entities", wantAny: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.tool+"_"+tc.arg, func(t *testing.T) {
+			tool := s.MCPServer().GetTool(tc.tool)
+			if tool == nil {
+				t.Fatalf("%s tool must be registered", tc.tool)
+			}
+
+			prop, ok := tool.Tool.InputSchema.Properties[tc.arg].(map[string]any)
+			if !ok {
+				t.Fatalf("%s.%s property must be an object schema", tc.tool, tc.arg)
+			}
+
+			items, ok := prop["items"].(map[string]any)
+			if !ok {
+				t.Fatalf("%s.%s must define array items schema", tc.tool, tc.arg)
+			}
+			if tc.wantAny {
+				return
+			}
+			if got := items["type"]; got != "string" {
+				t.Fatalf("%s.%s items.type = %v, want string", tc.tool, tc.arg, got)
+			}
+		})
+	}
+}
