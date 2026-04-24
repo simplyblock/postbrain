@@ -546,3 +546,13 @@ func TestHandleSkillPublish_MissingContentAndBody_ReturnsToolError(t *testing.T)
 	}, s.handleSkillPublish)
 	assertToolError(t, result)
 }
+
+func TestHandleSkillPublish_InvalidFilesType_ReturnsToolError(t *testing.T) {
+	s := &Server{}
+	result := callTool(t, map[string]any{
+		"scope": "project:acme/api",
+		"body":  "skill body",
+		"files": "not-an-array",
+	}, s.handleSkillPublish)
+	assertToolError(t, result)
+}

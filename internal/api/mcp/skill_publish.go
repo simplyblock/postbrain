@@ -12,6 +12,7 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/simplyblock/postbrain/internal/auth"
+	"github.com/simplyblock/postbrain/internal/db"
 	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/skills"
 )
@@ -32,6 +33,17 @@ func (s *Server) registerSkillPublish() {
 		mcpgo.WithString("visibility", mcpgo.Description("private|project|team|department|company (default: team)")),
 		mcpgo.WithArray("agent_types", mcpgo.Description("Compatible agent types (default: [\"any\"])"),
 			mcpgo.Items(map[string]any{"type": "string"}),
+		),
+		mcpgo.WithArray("files", mcpgo.Description("Optional supplementary files, e.g. scripts/* and references/*.md"),
+			mcpgo.Items(map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"path":       map[string]any{"type": "string"},
+					"content":    map[string]any{"type": "string"},
+					"executable": map[string]any{"type": "boolean"},
+				},
+				"required": []string{"path", "content"},
+			}),
 		),
 	), withToolMetrics("skill_publish", withToolPermission("skills:write", s.handleSkillPublish)))
 }
@@ -120,6 +132,19 @@ func (s *Server) handleSkillPublish(ctx context.Context, req mcpgo.CallToolReque
 		return mcpgo.NewToolResultError("skill_publish: missing caller principal"), nil
 	}
 
+	var files []db.SkillFileInput
+	if rawFiles, ok := args["files"]; ok {
+		items, ok := rawFiles.([]any)
+		if !ok {
+			return mcpgo.NewToolResultError("skill_publish: 'files' must be an array"), nil
+		}
+		parsedFiles, err := parseSkillPublishFiles(items)
+		if err != nil {
+			return mcpgo.NewToolResultError(fmt.Sprintf("skill_publish: files: %v", err)), nil
+		}
+		files = parsedFiles
+	}
+
 	created, err := s.sklStore.Create(ctx, skills.CreateInput{
 		ScopeID:        scopeID,
 		AuthorID:       authorID,
@@ -130,7 +155,7 @@ func (s *Server) handleSkillPublish(ctx context.Context, req mcpgo.CallToolReque
 		Body:           draft.Body,
 		Visibility:     visibility,
 		Parameters:     nil,
-		Files:          nil,
+		Files:          files,
 		ReviewRequired: 1,
 	})
 	if err != nil {
@@ -259,4 +284,33 @@ func titleFromSlug(slug string) string {
 		return slug
 	}
 	return strings.Join(parts, " ")
+}
+
+func parseSkillPublishFiles(raw []any) ([]db.SkillFileInput, error) {
+	files := make([]db.SkillFileInput, 0, len(raw))
+	for i, item := range raw {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("item %d must be an object", i)
+		}
+		path, ok := obj["path"].(string)
+		if !ok || strings.TrimSpace(path) == "" {
+			return nil, fmt.Errorf("item %d: path is required", i)
+		}
+		content, ok := obj["content"].(string)
+		if !ok {
+			return nil, fmt.Errorf("item %d: content must be a string", i)
+		}
+		executable, _ := obj["executable"].(bool)
+		f := db.SkillFileInput{
+			RelativePath: strings.TrimSpace(path),
+			Content:      content,
+			IsExecutable: executable,
+		}
+		if err := skills.ValidateSkillFile(f); err != nil {
+			return nil, err
+		}
+		files = append(files, f)
+	}
+	return files, nil
 }

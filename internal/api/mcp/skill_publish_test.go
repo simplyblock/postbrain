@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -78,5 +79,85 @@ func TestDefaultSkillSlug_FromSourceName(t *testing.T) {
 	got := defaultSkillSlug("", "", "tox-verifier.md")
 	if got != "tox-verifier" {
 		t.Fatalf("defaultSkillSlug = %q, want %q", got, "tox-verifier")
+	}
+}
+
+func TestParseSkillPublishFiles_Valid(t *testing.T) {
+	t.Parallel()
+
+	raw := []any{
+		map[string]any{
+			"path":       "scripts/run.sh",
+			"content":    "#!/bin/sh\necho hi\n",
+			"executable": true,
+		},
+		map[string]any{
+			"path":    "references/usage.md",
+			"content": "Use it like this.",
+		},
+	}
+	files, err := parseSkillPublishFiles(raw)
+	if err != nil {
+		t.Fatalf("parseSkillPublishFiles: %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("len(files) = %d, want 2", len(files))
+	}
+	if !files[0].IsExecutable || files[0].RelativePath != "scripts/run.sh" {
+		t.Fatalf("file[0] = %#v", files[0])
+	}
+	if files[1].IsExecutable || files[1].RelativePath != "references/usage.md" {
+		t.Fatalf("file[1] = %#v", files[1])
+	}
+}
+
+func TestParseSkillPublishFiles_InvalidPath_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	raw := []any{
+		map[string]any{
+			"path":    "../evil.sh",
+			"content": "oops",
+		},
+	}
+	_, err := parseSkillPublishFiles(raw)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "relative_path") && !strings.Contains(err.Error(), "traversal") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseSkillPublishFiles_InvalidType_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	_, err := parseSkillPublishFiles([]any{"not-an-object"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestParseSkillPublishFiles_CompatWithJSONDecodeShape(t *testing.T) {
+	t.Parallel()
+
+	var decoded struct {
+		Files []any `json:"files"`
+	}
+	if err := json.Unmarshal([]byte(`{
+		"files": [
+			{"path":"scripts/run.sh","content":"#!/bin/sh","executable":true},
+			{"path":"references/usage.md","content":"docs"}
+		]
+	}`), &decoded); err != nil {
+		t.Fatalf("json unmarshal: %v", err)
+	}
+
+	files, err := parseSkillPublishFiles(decoded.Files)
+	if err != nil {
+		t.Fatalf("parseSkillPublishFiles: %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("len(files) = %d, want 2", len(files))
 	}
 }
