@@ -1,2 +1,2 @@
-DROP INDEX IF EXISTS memories_parent_id_idx;
-ALTER TABLE memories DROP COLUMN IF EXISTS parent_memory_id;
+DROP INDEX IF EXISTS {{POSTBRAIN_SCHEMA}}.memories_parent_id_idx;
+ALTER TABLE {{POSTBRAIN_SCHEMA}}.memories DROP COLUMN IF EXISTS parent_memory_id;

@@ -6,12 +6,12 @@
 -- ─────────────────────────────────────────
 -- 1. knowledge_artifacts + indexes
 -- ─────────────────────────────────────────
-CREATE TABLE knowledge_artifacts (
+CREATE TABLE {{POSTBRAIN_SCHEMA}}.knowledge_artifacts (
     id              UUID PRIMARY KEY DEFAULT uuidv7(),
 
     knowledge_type  TEXT NOT NULL CHECK (knowledge_type IN ('semantic', 'episodic', 'procedural', 'reference')),
-    owner_scope_id  UUID NOT NULL REFERENCES scopes(id) ON DELETE CASCADE,
-    author_id       UUID NOT NULL REFERENCES principals(id),
+    owner_scope_id  UUID NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.scopes(id) ON DELETE CASCADE,
+    author_id       UUID NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.principals(id),
 
     visibility      TEXT NOT NULL DEFAULT 'team'
                     CHECK (visibility IN ('private', 'project', 'team', 'department', 'company')),
@@ -26,7 +26,7 @@ CREATE TABLE knowledge_artifacts (
     content              TEXT NOT NULL,
     summary              TEXT,
     embedding            vector(1536),
-    embedding_model_id   UUID REFERENCES embedding_models(id),
+    embedding_model_id   UUID REFERENCES {{POSTBRAIN_SCHEMA}}.embedding_models(id),
     meta                 JSONB NOT NULL DEFAULT '{}',
 
     endorsement_count INT NOT NULL DEFAULT 0,
@@ -34,9 +34,9 @@ CREATE TABLE knowledge_artifacts (
     last_accessed     TIMESTAMPTZ,
 
     version         INT NOT NULL DEFAULT 1,
-    previous_version UUID REFERENCES knowledge_artifacts(id),
+    previous_version UUID REFERENCES {{POSTBRAIN_SCHEMA}}.knowledge_artifacts(id),
 
-    source_memory_id UUID REFERENCES memories(id) ON DELETE SET NULL,
+    source_memory_id UUID REFERENCES {{POSTBRAIN_SCHEMA}}.memories(id) ON DELETE SET NULL,
     source_ref       TEXT,
 
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -44,25 +44,25 @@ CREATE TABLE knowledge_artifacts (
 );
 
 CREATE INDEX knowledge_embedding_hnsw_idx
-    ON knowledge_artifacts USING hnsw (embedding vector_cosine_ops)
+    ON {{POSTBRAIN_SCHEMA}}.knowledge_artifacts USING hnsw (embedding vector_cosine_ops)
     WITH (m = 16, ef_construction = 64);
 
 CREATE INDEX knowledge_owner_scope_idx
-    ON knowledge_artifacts (owner_scope_id, visibility, status);
+    ON {{POSTBRAIN_SCHEMA}}.knowledge_artifacts (owner_scope_id, visibility, status);
 
 CREATE INDEX knowledge_content_fts_idx
-    ON knowledge_artifacts USING GIN (to_tsvector('postbrain_fts', content));
+    ON {{POSTBRAIN_SCHEMA}}.knowledge_artifacts USING GIN (to_tsvector('postbrain_fts', content));
 
 CREATE INDEX knowledge_content_trgm_idx
-    ON knowledge_artifacts USING GIN (content gin_trgm_ops);
+    ON {{POSTBRAIN_SCHEMA}}.knowledge_artifacts USING GIN (content gin_trgm_ops);
 
 -- ─────────────────────────────────────────
 -- 2. Knowledge endorsements
 -- ─────────────────────────────────────────
-CREATE TABLE knowledge_endorsements (
+CREATE TABLE {{POSTBRAIN_SCHEMA}}.knowledge_endorsements (
     id              UUID PRIMARY KEY DEFAULT uuidv7(),
-    artifact_id     UUID NOT NULL REFERENCES knowledge_artifacts(id) ON DELETE CASCADE,
-    endorser_id     UUID NOT NULL REFERENCES principals(id),
+    artifact_id     UUID NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.knowledge_artifacts(id) ON DELETE CASCADE,
+    endorser_id     UUID NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.principals(id),
     note            TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (artifact_id, endorser_id)
@@ -71,13 +71,13 @@ CREATE TABLE knowledge_endorsements (
 -- ─────────────────────────────────────────
 -- 3. Knowledge version history
 -- ─────────────────────────────────────────
-CREATE TABLE knowledge_history (
+CREATE TABLE {{POSTBRAIN_SCHEMA}}.knowledge_history (
     id              UUID PRIMARY KEY DEFAULT uuidv7(),
-    artifact_id     UUID NOT NULL REFERENCES knowledge_artifacts(id) ON DELETE CASCADE,
+    artifact_id     UUID NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.knowledge_artifacts(id) ON DELETE CASCADE,
     version         INT NOT NULL,
     content         TEXT NOT NULL,
     summary         TEXT,
-    changed_by      UUID NOT NULL REFERENCES principals(id),
+    changed_by      UUID NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.principals(id),
     change_note     TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (artifact_id, version)
@@ -86,10 +86,10 @@ CREATE TABLE knowledge_history (
 -- ─────────────────────────────────────────
 -- 4. Knowledge collections + updated_at trigger
 -- ─────────────────────────────────────────
-CREATE TABLE knowledge_collections (
+CREATE TABLE {{POSTBRAIN_SCHEMA}}.knowledge_collections (
     id          UUID PRIMARY KEY DEFAULT uuidv7(),
-    scope_id    UUID NOT NULL REFERENCES scopes(id) ON DELETE CASCADE,
-    owner_id    UUID NOT NULL REFERENCES principals(id),
+    scope_id    UUID NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.scopes(id) ON DELETE CASCADE,
+    owner_id    UUID NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.principals(id),
     slug        citext NOT NULL,
     name        TEXT NOT NULL,
     description TEXT,
@@ -101,17 +101,17 @@ CREATE TABLE knowledge_collections (
     UNIQUE (scope_id, slug)
 );
 
-CREATE TRIGGER knowledge_collections_updated_at BEFORE UPDATE ON knowledge_collections
-    FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+CREATE TRIGGER knowledge_collections_updated_at BEFORE UPDATE ON {{POSTBRAIN_SCHEMA}}.knowledge_collections
+    FOR EACH ROW EXECUTE FUNCTION {{POSTBRAIN_SCHEMA}}.touch_updated_at();
 
 -- ─────────────────────────────────────────
 -- 5. Knowledge collection items
 -- ─────────────────────────────────────────
-CREATE TABLE knowledge_collection_items (
-    collection_id   UUID NOT NULL REFERENCES knowledge_collections(id) ON DELETE CASCADE,
-    artifact_id     UUID NOT NULL REFERENCES knowledge_artifacts(id) ON DELETE CASCADE,
+CREATE TABLE {{POSTBRAIN_SCHEMA}}.knowledge_collection_items (
+    collection_id   UUID NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.knowledge_collections(id) ON DELETE CASCADE,
+    artifact_id     UUID NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.knowledge_artifacts(id) ON DELETE CASCADE,
     position        INT NOT NULL DEFAULT 0,
-    added_by        UUID NOT NULL REFERENCES principals(id),
+    added_by        UUID NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.principals(id),
     added_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (collection_id, artifact_id)
 );
@@ -119,13 +119,13 @@ CREATE TABLE knowledge_collection_items (
 -- ─────────────────────────────────────────
 -- 6. Sharing grants + indexes
 -- ─────────────────────────────────────────
-CREATE TABLE sharing_grants (
+CREATE TABLE {{POSTBRAIN_SCHEMA}}.sharing_grants (
     id              UUID PRIMARY KEY DEFAULT uuidv7(),
-    memory_id       UUID REFERENCES memories(id) ON DELETE CASCADE,
-    artifact_id     UUID REFERENCES knowledge_artifacts(id) ON DELETE CASCADE,
+    memory_id       UUID REFERENCES {{POSTBRAIN_SCHEMA}}.memories(id) ON DELETE CASCADE,
+    artifact_id     UUID REFERENCES {{POSTBRAIN_SCHEMA}}.knowledge_artifacts(id) ON DELETE CASCADE,
 
-    grantee_scope_id UUID NOT NULL REFERENCES scopes(id) ON DELETE CASCADE,
-    granted_by      UUID NOT NULL REFERENCES principals(id),
+    grantee_scope_id UUID NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.scopes(id) ON DELETE CASCADE,
+    granted_by      UUID NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.principals(id),
     can_reshare     BOOLEAN NOT NULL DEFAULT FALSE,
     expires_at      TIMESTAMPTZ,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -136,40 +136,40 @@ CREATE TABLE sharing_grants (
     )
 );
 
-CREATE INDEX sharing_grants_grantee_idx  ON sharing_grants (grantee_scope_id);
-CREATE INDEX sharing_grants_memory_idx   ON sharing_grants (memory_id) WHERE memory_id IS NOT NULL;
-CREATE INDEX sharing_grants_artifact_idx ON sharing_grants (artifact_id) WHERE artifact_id IS NOT NULL;
+CREATE INDEX sharing_grants_grantee_idx  ON {{POSTBRAIN_SCHEMA}}.sharing_grants (grantee_scope_id);
+CREATE INDEX sharing_grants_memory_idx   ON {{POSTBRAIN_SCHEMA}}.sharing_grants (memory_id) WHERE memory_id IS NOT NULL;
+CREATE INDEX sharing_grants_artifact_idx ON {{POSTBRAIN_SCHEMA}}.sharing_grants (artifact_id) WHERE artifact_id IS NOT NULL;
 
 -- ─────────────────────────────────────────
 -- 7. Promotion requests + indexes
 -- ─────────────────────────────────────────
-CREATE TABLE promotion_requests (
+CREATE TABLE {{POSTBRAIN_SCHEMA}}.promotion_requests (
     id              UUID PRIMARY KEY DEFAULT uuidv7(),
-    memory_id       UUID NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
-    requested_by    UUID NOT NULL REFERENCES principals(id),
-    target_scope_id UUID NOT NULL REFERENCES scopes(id),
+    memory_id       UUID NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.memories(id) ON DELETE CASCADE,
+    requested_by    UUID NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.principals(id),
+    target_scope_id UUID NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.scopes(id),
     target_visibility TEXT NOT NULL
                     CHECK (target_visibility IN ('private', 'project', 'team', 'department', 'company')),
     proposed_title  TEXT,
-    proposed_collection_id UUID REFERENCES knowledge_collections(id),
+    proposed_collection_id UUID REFERENCES {{POSTBRAIN_SCHEMA}}.knowledge_collections(id),
     status          TEXT NOT NULL DEFAULT 'pending'
                     CHECK (status IN ('pending', 'approved', 'rejected', 'merged')),
-    reviewer_id     UUID REFERENCES principals(id),
+    reviewer_id     UUID REFERENCES {{POSTBRAIN_SCHEMA}}.principals(id),
     review_note     TEXT,
     reviewed_at     TIMESTAMPTZ,
-    result_artifact_id UUID REFERENCES knowledge_artifacts(id),
+    result_artifact_id UUID REFERENCES {{POSTBRAIN_SCHEMA}}.knowledge_artifacts(id),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX promotion_requests_memory_idx ON promotion_requests (memory_id);
-CREATE INDEX promotion_requests_status_idx ON promotion_requests (status, target_scope_id);
+CREATE INDEX promotion_requests_memory_idx ON {{POSTBRAIN_SCHEMA}}.promotion_requests (memory_id);
+CREATE INDEX promotion_requests_status_idx ON {{POSTBRAIN_SCHEMA}}.promotion_requests (status, target_scope_id);
 
 -- ─────────────────────────────────────────
 -- 8. Staleness flags + indexes
 -- ─────────────────────────────────────────
-CREATE TABLE staleness_flags (
+CREATE TABLE {{POSTBRAIN_SCHEMA}}.staleness_flags (
     id          UUID PRIMARY KEY DEFAULT uuidv7(),
-    artifact_id UUID NOT NULL REFERENCES knowledge_artifacts(id) ON DELETE CASCADE,
+    artifact_id UUID NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.knowledge_artifacts(id) ON DELETE CASCADE,
     signal      TEXT NOT NULL CHECK (signal IN (
                     'source_modified',
                     'contradiction_detected',
@@ -180,23 +180,23 @@ CREATE TABLE staleness_flags (
     status      TEXT NOT NULL DEFAULT 'open'
                 CHECK (status IN ('open', 'dismissed', 'resolved')),
     flagged_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    reviewed_by UUID REFERENCES principals(id),
+    reviewed_by UUID REFERENCES {{POSTBRAIN_SCHEMA}}.principals(id),
     reviewed_at TIMESTAMPTZ,
     review_note TEXT
 );
 
-CREATE INDEX staleness_flags_artifact_idx ON staleness_flags (artifact_id, status);
-CREATE INDEX staleness_flags_open_idx     ON staleness_flags (confidence DESC, flagged_at DESC)
+CREATE INDEX staleness_flags_artifact_idx ON {{POSTBRAIN_SCHEMA}}.staleness_flags (artifact_id, status);
+CREATE INDEX staleness_flags_open_idx     ON {{POSTBRAIN_SCHEMA}}.staleness_flags (confidence DESC, flagged_at DESC)
     WHERE status = 'open';
 
 -- ─────────────────────────────────────────
 -- 9. Consolidations audit log
 -- ─────────────────────────────────────────
-CREATE TABLE consolidations (
+CREATE TABLE {{POSTBRAIN_SCHEMA}}.consolidations (
     id              UUID PRIMARY KEY DEFAULT uuidv7(),
-    scope_id        UUID NOT NULL REFERENCES scopes(id) ON DELETE CASCADE,
+    scope_id        UUID NOT NULL REFERENCES {{POSTBRAIN_SCHEMA}}.scopes(id) ON DELETE CASCADE,
     source_ids      UUID[] NOT NULL,
-    result_id       UUID REFERENCES memories(id),
+    result_id       UUID REFERENCES {{POSTBRAIN_SCHEMA}}.memories(id),
     strategy        TEXT NOT NULL,
     reason          TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -205,15 +205,15 @@ CREATE TABLE consolidations (
 -- ─────────────────────────────────────────
 -- 10. touch_updated_at trigger for knowledge_artifacts
 -- ─────────────────────────────────────────
-CREATE TRIGGER knowledge_artifacts_updated_at BEFORE UPDATE ON knowledge_artifacts
-    FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+CREATE TRIGGER knowledge_artifacts_updated_at BEFORE UPDATE ON {{POSTBRAIN_SCHEMA}}.knowledge_artifacts
+    FOR EACH ROW EXECUTE FUNCTION {{POSTBRAIN_SCHEMA}}.touch_updated_at();
 
 -- ─────────────────────────────────────────
 -- 11. Forward FK: memories.promoted_to → knowledge_artifacts
 -- ─────────────────────────────────────────
-ALTER TABLE memories
+ALTER TABLE {{POSTBRAIN_SCHEMA}}.memories
     ADD CONSTRAINT memories_promoted_to_fk
-    FOREIGN KEY (promoted_to) REFERENCES knowledge_artifacts(id) ON DELETE SET NULL;
+    FOREIGN KEY (promoted_to) REFERENCES {{POSTBRAIN_SCHEMA}}.knowledge_artifacts(id) ON DELETE SET NULL;
 
 -- ─────────────────────────────────────────
 -- 12. pg_cron: detect stale knowledge (monthly)
@@ -244,5 +244,5 @@ $$);
 -- ─────────────────────────────────────────
 -- 13. Partial index for draft/in_review knowledge
 -- ─────────────────────────────────────────
-CREATE INDEX knowledge_status_idx ON knowledge_artifacts (status, owner_scope_id)
+CREATE INDEX knowledge_status_idx ON {{POSTBRAIN_SCHEMA}}.knowledge_artifacts (status, owner_scope_id)
     WHERE status IN ('draft', 'in_review');

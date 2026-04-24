@@ -13,6 +13,13 @@ import (
 	"github.com/simplyblock/postbrain/internal/testhelper"
 )
 
+// substituteSchema replaces {{POSTBRAIN_SCHEMA}} with "public" so that raw
+// migration SQL read from files is valid when executed directly in tests
+// (bypassing the schemaSource wrapper that the normal migrator uses).
+func substituteSchema(sql string) string {
+	return strings.ReplaceAll(sql, "{{POSTBRAIN_SCHEMA}}", "public")
+}
+
 func assertTableExists(t *testing.T, ctx context.Context, pool *pgxpool.Pool, table string, want bool) {
 	t.Helper()
 
@@ -104,7 +111,7 @@ func TestMigrateDownAndUpOAuthMigration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read 000011 down migration: %v", err)
 	}
-	if _, err := pool.Exec(ctx, string(downSQL)); err != nil {
+	if _, err := pool.Exec(ctx, substituteSchema(string(downSQL))); err != nil {
 		t.Fatalf("apply 000011 down migration: %v", err)
 	}
 
@@ -116,7 +123,7 @@ func TestMigrateDownAndUpOAuthMigration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read 000011 up migration: %v", err)
 	}
-	if _, err := pool.Exec(ctx, string(upSQL)); err != nil {
+	if _, err := pool.Exec(ctx, substituteSchema(string(upSQL))); err != nil {
 		t.Fatalf("apply 000011 up migration: %v", err)
 	}
 
@@ -340,7 +347,7 @@ func TestMigration000018_TimeWindowRecallIndexes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read 000018 down migration: %v", err)
 	}
-	if _, err := pool.Exec(ctx, string(downSQL)); err != nil {
+	if _, err := pool.Exec(ctx, substituteSchema(string(downSQL))); err != nil {
 		t.Fatalf("apply 000018 down migration: %v", err)
 	}
 	for _, idx := range indexes {
@@ -351,7 +358,7 @@ func TestMigration000018_TimeWindowRecallIndexes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read 000018 up migration: %v", err)
 	}
-	if _, err := pool.Exec(ctx, string(upSQL)); err != nil {
+	if _, err := pool.Exec(ctx, substituteSchema(string(upSQL))); err != nil {
 		t.Fatalf("apply 000018 up migration: %v", err)
 	}
 	for _, idx := range indexes {

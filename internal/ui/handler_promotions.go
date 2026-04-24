@@ -10,58 +10,42 @@ import (
 	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
-// handlePromotions serves GET /ui/promotions.
+// handlePromotions serves GET /ui/{scope}/promotions.
 func (h *Handler) handlePromotions(w http.ResponseWriter, r *http.Request) {
-	data := struct {
-		Scopes     []*db.Scope
-		ScopeID    string
-		Status     string
-		Promotions []*db.PromotionRequest
-	}{
-		ScopeID: r.URL.Query().Get("scope_id"),
-		Status:  r.URL.Query().Get("status"),
-	}
-	if data.Status == "" {
-		data.Status = "all"
+	status := r.URL.Query().Get("status")
+	if status == "" {
+		status = "all"
 	}
 
-	targetScopeID := uuid.Nil
-	if data.ScopeID != "" {
-		parsed, err := uuid.Parse(data.ScopeID)
-		if err != nil {
-			http.Error(w, "invalid scope id", http.StatusBadRequest)
-			return
-		}
-		targetScopeID = parsed
-	}
 	validStatus := map[string]bool{
-		"all":      true,
-		"pending":  true,
-		"approved": true,
-		"rejected": true,
-		"merged":   true,
+		"all": true, "pending": true, "approved": true, "rejected": true, "merged": true,
 	}
-	if !validStatus[data.Status] {
+	if !validStatus[status] {
 		http.Error(w, "invalid status", http.StatusBadRequest)
 		return
 	}
 
-	if h.pool != nil {
-		scopes, scopeSet := h.authorizedScopesForRequest(r.Context(), r)
-		data.Scopes = scopes
-		if targetScopeID != uuid.Nil {
-			if _, ok := scopeSet[targetScopeID]; !ok {
-				data.Promotions = []*db.PromotionRequest{}
-				h.render(w, r, "promotions", "Promotion Queue", data)
-				return
-			}
-		}
+	scope := scopeFromContext(r.Context())
+
+	data := struct {
+		ScopeID    string
+		Status     string
+		Promotions []*db.PromotionRequest
+	}{
+		Status: status,
+	}
+	if scope != nil {
+		data.ScopeID = scope.ID.String()
+	}
+
+	if h.pool != nil && scope != nil {
+		_, scopeSet := h.authorizedScopesForRequest(r.Context(), r)
 
 		statusFilter := ""
-		if data.Status != "all" {
-			statusFilter = data.Status
+		if status != "all" {
+			statusFilter = status
 		}
-		proms, err := compat.ListPromotions(r.Context(), h.pool, targetScopeID, statusFilter, 500)
+		proms, err := compat.ListPromotions(r.Context(), h.pool, scope.ID, statusFilter, 500)
 		if err != nil {
 			http.Error(w, "failed to load promotions", http.StatusInternalServerError)
 			return
@@ -78,9 +62,10 @@ func (h *Handler) handlePromotions(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "promotions", "Promotion Queue", data)
 }
 
-// handleApprovePromotion serves POST /ui/promotions/{id}/approve.
+// handleApprovePromotion serves POST /ui/{scope}/promotions/{id}/approve.
 func (h *Handler) handleApprovePromotion(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/promotions/"), "/approve")
+	path := routePathFromContext(r.Context(), r)
+	idStr := strings.TrimSuffix(strings.TrimPrefix(path, "/ui/promotions/"), "/approve")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		http.Error(w, "invalid promotion id", http.StatusBadRequest)
@@ -91,12 +76,13 @@ func (h *Handler) handleApprovePromotion(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/ui/promotions", http.StatusSeeOther)
+	scopedRedirect(w, r, "/promotions")
 }
 
-// handleRejectPromotion serves POST /ui/promotions/{id}/reject.
+// handleRejectPromotion serves POST /ui/{scope}/promotions/{id}/reject.
 func (h *Handler) handleRejectPromotion(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/ui/promotions/"), "/reject")
+	path := routePathFromContext(r.Context(), r)
+	idStr := strings.TrimSuffix(strings.TrimPrefix(path, "/ui/promotions/"), "/reject")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		http.Error(w, "invalid promotion id", http.StatusBadRequest)
@@ -107,17 +93,22 @@ func (h *Handler) handleRejectPromotion(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/ui/promotions", http.StatusSeeOther)
+	scopedRedirect(w, r, "/promotions")
 }
 
-// handleStaleness serves GET /ui/staleness.
+// handleStaleness serves GET /ui/{scope}/staleness.
 func (h *Handler) handleStaleness(w http.ResponseWriter, r *http.Request) {
-	data := struct {
-		Flags []*db.StalenessFlag
-	}{}
+	scope := scopeFromContext(r.Context())
 
-	if h.pool != nil {
-		_, scopeSet := h.authorizedScopesForRequest(r.Context(), r)
+	data := struct {
+		ScopeID string
+		Flags   []*db.StalenessFlag
+	}{}
+	if scope != nil {
+		data.ScopeID = scope.ID.String()
+	}
+
+	if h.pool != nil && scope != nil {
 		flags, err := compat.ListStalenessFlags(r.Context(), h.pool, "open", 50, 0)
 		if err == nil {
 			filtered := make([]*db.StalenessFlag, 0, len(flags))
@@ -126,7 +117,7 @@ func (h *Handler) handleStaleness(w http.ResponseWriter, r *http.Request) {
 				if getErr != nil || art == nil {
 					continue
 				}
-				if _, ok := scopeSet[art.OwnerScopeID]; ok {
+				if art.OwnerScopeID == scope.ID {
 					filtered = append(filtered, f)
 				}
 			}

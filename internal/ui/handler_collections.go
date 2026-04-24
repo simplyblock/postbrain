@@ -10,30 +10,21 @@ import (
 	"github.com/simplyblock/postbrain/internal/db/compat"
 )
 
-// handleCollections serves GET /ui/collections.
+// handleCollections serves GET /ui/{scope}/collections.
 func (h *Handler) handleCollections(w http.ResponseWriter, r *http.Request) {
+	scope := scopeFromContext(r.Context())
+
 	data := struct {
+		ScopeID     string
 		Collections []*db.KnowledgeCollection
 	}{}
+	if scope != nil {
+		data.ScopeID = scope.ID.String()
+	}
 
-	if h.pool != nil {
+	if h.pool != nil && scope != nil {
 		_, scopeSet := h.authorizedScopesForRequest(r.Context(), r)
-		var colls []*db.KnowledgeCollection
-		var err error
-		scopeStr := r.URL.Query().Get("scope_id")
-		if scopeStr != "" {
-			sid, parseErr := uuid.Parse(scopeStr)
-			if parseErr == nil {
-				if _, ok := scopeSet[sid]; !ok {
-					data.Collections = []*db.KnowledgeCollection{}
-					h.render(w, r, "collections", "Collections", data)
-					return
-				}
-				colls, err = compat.ListCollections(r.Context(), h.pool, sid)
-			}
-		} else {
-			colls, err = compat.ListAllCollections(r.Context(), h.pool)
-		}
+		colls, err := compat.ListCollections(r.Context(), h.pool, scope.ID)
 		if err != nil {
 			http.Error(w, "failed to load collections", http.StatusInternalServerError)
 			return
@@ -50,18 +41,23 @@ func (h *Handler) handleCollections(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, "collections", "Collections", data)
 }
 
-// handleCollectionDetail serves GET /ui/collections/{id}.
+// handleCollectionDetail serves GET /ui/{scope}/collections/{id}.
 func (h *Handler) handleCollectionDetail(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimPrefix(r.URL.Path, "/ui/collections/")
+	path := routePathFromContext(r.Context(), r)
+	idStr := strings.TrimPrefix(path, "/ui/collections/")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-
 	if h.pool == nil {
 		http.NotFound(w, r)
 		return
+	}
+
+	scopeID := ""
+	if scope := scopeFromContext(r.Context()); scope != nil {
+		scopeID = scope.ID.String()
 	}
 
 	coll, err := compat.GetCollection(r.Context(), h.pool, id)
@@ -77,30 +73,36 @@ func (h *Handler) handleCollectionDetail(w http.ResponseWriter, r *http.Request)
 	h.render(w, r, "collection_detail", "Collection", struct {
 		Collection *db.KnowledgeCollection
 		Artifacts  []*db.KnowledgeArtifact
-	}{coll, arts})
+		ScopeID    string
+	}{coll, arts, scopeID})
 }
 
-// handleCollectionNew serves GET /ui/collections/new.
+// handleCollectionNew serves GET /ui/{scope}/collections/new.
 func (h *Handler) handleCollectionNew(w http.ResponseWriter, r *http.Request) {
 	h.renderCollectionNew(w, r, "")
 }
 
 func (h *Handler) renderCollectionNew(w http.ResponseWriter, r *http.Request, formError string) {
+	scopeID := ""
+	if scope := scopeFromContext(r.Context()); scope != nil {
+		scopeID = scope.ID.String()
+	}
 	data := struct {
 		FormError string
-		Scopes    []*db.Scope
-	}{FormError: formError}
-	if h.pool != nil {
-		scopes, _ := h.authorizedScopesForRequest(r.Context(), r)
-		data.Scopes = scopes
-	}
+		ScopeID   string
+	}{FormError: formError, ScopeID: scopeID}
 	h.render(w, r, "collections_new", "New Collection", data)
 }
 
-// handleCreateCollection serves POST /ui/collections.
+// handleCreateCollection serves POST /ui/{scope}/collections.
 func (h *Handler) handleCreateCollection(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	scope := scopeFromContext(r.Context())
+	if scope == nil {
+		h.renderCollectionNew(w, r, "scope not found")
 		return
 	}
 	name := strings.TrimSpace(r.FormValue("name"))
@@ -113,21 +115,6 @@ func (h *Handler) handleCreateCollection(w http.ResponseWriter, r *http.Request)
 		h.renderCollectionNew(w, r, "slug is required")
 		return
 	}
-	scopeStr := strings.TrimSpace(r.FormValue("scope_id"))
-	if scopeStr == "" {
-		h.renderCollectionNew(w, r, "scope is required")
-		return
-	}
-	scopeID, err := uuid.Parse(scopeStr)
-	if err != nil {
-		h.renderCollectionNew(w, r, "invalid scope id")
-		return
-	}
-	_, authorizedScopeSet := h.authorizedScopesForRequest(r.Context(), r)
-	if _, ok := authorizedScopeSet[scopeID]; !ok {
-		h.renderCollectionNew(w, r, "scope access denied")
-		return
-	}
 	if h.pool == nil {
 		h.renderCollectionNew(w, r, "service unavailable")
 		return
@@ -138,7 +125,7 @@ func (h *Handler) handleCreateCollection(w http.ResponseWriter, r *http.Request)
 	}
 	ownerID := h.principalFromCookie(r)
 	coll, err := compat.CreateCollection(r.Context(), h.pool, &db.KnowledgeCollection{
-		ScopeID:    scopeID,
+		ScopeID:    scope.ID,
 		OwnerID:    ownerID,
 		Name:       name,
 		Slug:       slug,
@@ -148,5 +135,5 @@ func (h *Handler) handleCreateCollection(w http.ResponseWriter, r *http.Request)
 		h.renderCollectionNew(w, r, err.Error())
 		return
 	}
-	http.Redirect(w, r, "/ui/collections/"+coll.ID.String(), http.StatusSeeOther)
+	http.Redirect(w, r, scopedPath(r, "/collections/"+coll.ID.String()), http.StatusSeeOther)
 }

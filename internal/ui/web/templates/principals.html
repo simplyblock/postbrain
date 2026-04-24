@@ -58,7 +58,7 @@
     <td>{{.DisplayName}}</td>
     <td class="muted">{{timeAgo .CreatedAt}}</td>
     <td>
-      <button type="button" class="secondary"
+      <button type="button" class="secondary btn-sm"
               data-id="{{.ID}}" data-slug="{{.Slug}}" data-display-name="{{.DisplayName}}"
               onclick="openPrincipalEdit(this)">
         Edit
@@ -91,7 +91,7 @@
             onsubmit="return confirm('Remove {{.MemberSlug}} from {{.ParentSlug}}?')">
         <input type="hidden" name="member_id" value="{{.MemberID}}">
         <input type="hidden" name="parent_id" value="{{.ParentID}}">
-        <button type="submit" class="danger">Remove</button>
+        <button type="submit" class="danger btn-sm">Remove</button>
       </form>
     </td>
   </tr>
@@ -123,7 +123,7 @@
             onsubmit="return confirm('Delete this scope grant?')">
         <input type="hidden" name="scope_id" value="{{.ScopeID}}">
         <input type="hidden" name="grant_id" value="{{.ID}}">
-        <button type="submit" class="danger">Remove</button>
+        <button type="submit" class="danger btn-sm">Remove</button>
       </form>
       {{else}}
       <span class="muted">No delete access</span>

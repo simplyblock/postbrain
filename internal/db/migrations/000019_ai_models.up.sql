@@ -3,7 +3,7 @@
 -- Existing embedding_models rows are backfilled as model_type='embedding'.
 -- embedding_models is intentionally retained for compatibility.
 
-CREATE TABLE ai_models (
+CREATE TABLE {{POSTBRAIN_SCHEMA}}.ai_models (
     id              UUID PRIMARY KEY DEFAULT uuidv7(),
     slug            citext NOT NULL UNIQUE,
     dimensions      INT NOT NULL,
@@ -21,28 +21,28 @@ CREATE TABLE ai_models (
 );
 
 CREATE UNIQUE INDEX ai_models_active_embedding_text_idx
-    ON ai_models (is_active)
+    ON {{POSTBRAIN_SCHEMA}}.ai_models (is_active)
     WHERE is_active = true AND model_type = 'embedding' AND content_type = 'text';
 
 CREATE UNIQUE INDEX ai_models_active_embedding_code_idx
-    ON ai_models (is_active)
+    ON {{POSTBRAIN_SCHEMA}}.ai_models (is_active)
     WHERE is_active = true AND model_type = 'embedding' AND content_type = 'code';
 
 CREATE UNIQUE INDEX ai_models_active_generation_text_idx
-    ON ai_models (is_active)
+    ON {{POSTBRAIN_SCHEMA}}.ai_models (is_active)
     WHERE is_active = true AND model_type = 'generation' AND content_type = 'text';
 
 CREATE INDEX ai_models_provider_config_idx
-    ON ai_models (provider_config);
+    ON {{POSTBRAIN_SCHEMA}}.ai_models (provider_config);
 
-INSERT INTO ai_models (
+INSERT INTO {{POSTBRAIN_SCHEMA}}.ai_models (
     id, slug, dimensions, content_type, model_type, is_active, description, created_at,
     provider, service_url, provider_model, table_name, is_ready, provider_config
 )
 SELECT
     id, slug, dimensions, content_type, 'embedding', is_active, description, created_at,
     provider, service_url, provider_model, table_name, is_ready, provider_config
-FROM embedding_models
+FROM {{POSTBRAIN_SCHEMA}}.embedding_models
 ON CONFLICT (id) DO UPDATE SET
     slug = EXCLUDED.slug,
     dimensions = EXCLUDED.dimensions,
@@ -58,32 +58,32 @@ ON CONFLICT (id) DO UPDATE SET
     is_ready = EXCLUDED.is_ready,
     provider_config = EXCLUDED.provider_config;
 
-ALTER TABLE memories
+ALTER TABLE {{POSTBRAIN_SCHEMA}}.memories
     DROP CONSTRAINT IF EXISTS memories_embedding_model_id_fkey,
     ADD CONSTRAINT memories_embedding_model_id_fkey
-        FOREIGN KEY (embedding_model_id) REFERENCES ai_models(id);
+        FOREIGN KEY (embedding_model_id) REFERENCES {{POSTBRAIN_SCHEMA}}.ai_models(id);
 
-ALTER TABLE memories
+ALTER TABLE {{POSTBRAIN_SCHEMA}}.memories
     DROP CONSTRAINT IF EXISTS memories_embedding_code_model_id_fkey,
     ADD CONSTRAINT memories_embedding_code_model_id_fkey
-        FOREIGN KEY (embedding_code_model_id) REFERENCES ai_models(id);
+        FOREIGN KEY (embedding_code_model_id) REFERENCES {{POSTBRAIN_SCHEMA}}.ai_models(id);
 
-ALTER TABLE entities
+ALTER TABLE {{POSTBRAIN_SCHEMA}}.entities
     DROP CONSTRAINT IF EXISTS entities_embedding_model_id_fkey,
     ADD CONSTRAINT entities_embedding_model_id_fkey
-        FOREIGN KEY (embedding_model_id) REFERENCES ai_models(id);
+        FOREIGN KEY (embedding_model_id) REFERENCES {{POSTBRAIN_SCHEMA}}.ai_models(id);
 
-ALTER TABLE knowledge_artifacts
+ALTER TABLE {{POSTBRAIN_SCHEMA}}.knowledge_artifacts
     DROP CONSTRAINT IF EXISTS knowledge_artifacts_embedding_model_id_fkey,
     ADD CONSTRAINT knowledge_artifacts_embedding_model_id_fkey
-        FOREIGN KEY (embedding_model_id) REFERENCES ai_models(id);
+        FOREIGN KEY (embedding_model_id) REFERENCES {{POSTBRAIN_SCHEMA}}.ai_models(id);
 
-ALTER TABLE skills
+ALTER TABLE {{POSTBRAIN_SCHEMA}}.skills
     DROP CONSTRAINT IF EXISTS skills_embedding_model_id_fkey,
     ADD CONSTRAINT skills_embedding_model_id_fkey
-        FOREIGN KEY (embedding_model_id) REFERENCES ai_models(id);
+        FOREIGN KEY (embedding_model_id) REFERENCES {{POSTBRAIN_SCHEMA}}.ai_models(id);
 
-ALTER TABLE embedding_index
+ALTER TABLE {{POSTBRAIN_SCHEMA}}.embedding_index
     DROP CONSTRAINT IF EXISTS embedding_index_model_id_fkey,
     ADD CONSTRAINT embedding_index_model_id_fkey
-        FOREIGN KEY (model_id) REFERENCES ai_models(id);
+        FOREIGN KEY (model_id) REFERENCES {{POSTBRAIN_SCHEMA}}.ai_models(id);

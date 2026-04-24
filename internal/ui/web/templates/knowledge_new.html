@@ -1,16 +1,10 @@
 {{define "knowledge_new"}}
 <h1>New Knowledge Article</h1>
 {{if .FormError}}<div class="alert alert-error">{{.FormError}}</div>{{end}}
-<form method="POST" action="/ui/knowledge">
+<form method="POST" action="/ui/{{.ScopeID}}/knowledge">
+  <input type="hidden" name="scope_id" value="{{.ScopeID}}">
   <label>Title (required)<br>
     <input type="text" name="title" style="width:100%;max-width:40rem" autofocus>
-  </label>
-  <br><br>
-  <label>Scope (required)<br>
-    <select name="scope_id">
-      <option value="">— select scope —</option>
-      {{range .Scopes}}<option value="{{.ID}}">{{.Kind}}:{{.ExternalID}}</option>{{end}}
-    </select>
   </label>
   <br><br>
   <label>Visibility<br>
@@ -34,6 +28,6 @@
   </label>
   <br><br>
   <button type="submit">Create Article</button>
-  <a href="/ui/knowledge" style="margin-left:1rem">Cancel</a>
+  <a href="/ui/{{.ScopeID}}/knowledge" style="margin-left:1rem">Cancel</a>
 </form>
 {{end}}

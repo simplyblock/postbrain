@@ -1,21 +1,42 @@
 {{define "memories_rows"}}
 <table>
-  <thead><tr><th>Type</th><th>Importance</th><th>Content</th><th>Age</th><th>Actions</th></tr></thead>
-  <tbody>
+  <thead>
+    <tr>
+      <th style="width:110px">Type</th>
+      <th style="width:72px">Score</th>
+      <th>Content</th>
+      <th style="width:90px">Age</th>
+      <th style="width:64px"></th>
+    </tr>
+  </thead>
+  <tbody id="memories-tbody">
   {{range .Memories}}
   <tr>
-    <td>{{.MemoryType}}</td>
-    <td>{{printf "%.2f" .Importance}}</td>
-    <td><a href="/ui/memories/{{.ID}}">{{truncate .Content 80}}</a></td>
-    <td>{{timeAgo .CreatedAt}}</td>
     <td>
-      <button hx-delete="/v1/memories/{{.ID}}" hx-confirm="Soft-delete this memory?" hx-target="closest tr" hx-swap="outerHTML">Delete</button>
+      <span class="badge {{if eq .MemoryType "semantic"}}badge-ok{{else if eq .MemoryType "procedural"}}badge-warn{{else if eq .MemoryType "episodic"}}badge-info{{else}}badge-neutral{{end}}">{{.MemoryType}}</span>
+    </td>
+    <td class="muted">{{printf "%.2f" .Importance}}</td>
+    <td><a href="/ui/{{$.ScopeID}}/memories/{{.ID}}">{{truncate .Content 120}}</a></td>
+    <td class="muted">{{timeAgo .CreatedAt}}</td>
+    <td>
+      <button class="danger btn-sm" hx-delete="/v1/memories/{{.ID}}" hx-confirm="Soft-delete this memory?" hx-target="closest tr" hx-swap="outerHTML">Delete</button>
     </td>
   </tr>
   {{else}}
-  <tr><td colspan="5">No memories found.</td></tr>
+  <tr><td colspan="5"><div class="empty-state">No memories found.</div></td></tr>
   {{end}}
   </tbody>
 </table>
-{{if .NextCursor}}<button hx-get="/ui/memories?cursor={{.NextCursor}}&q={{.Query}}&scope_id={{.ScopeID}}" hx-target="#results" hx-swap="beforeend">Load more</button>{{end}}
+{{if .NextCursor}}
+<div id="memories-more" style="text-align:center;margin-top:1rem">
+  <button class="secondary"
+    hx-get="/ui/{{.ScopeID}}/memories?cursor={{.NextCursor}}&q={{.Query}}"
+    hx-target="#memories-tbody"
+    hx-swap="beforeend"
+    hx-select="#memories-tbody > tr"
+    hx-select-oob="#memories-more">Load more</button>
+</div>
+{{else}}
+<div id="memories-more"></div>
+{{end}}
 {{end}}

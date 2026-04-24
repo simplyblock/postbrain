@@ -114,7 +114,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	slog.Info("startup service initialized", "service", "db_pool")
 
 	if cfg.Database.AutoMigrate {
-		if err := db.CheckAndMigrate(ctx, pool, true); err != nil {
+		if err := db.CheckAndMigrate(ctx, pool, cfg.Database.Schema, true); err != nil {
 			return fmt.Errorf("migrate: %w", err)
 		}
 	} else {
@@ -384,7 +384,7 @@ func migrateUpCmd() *cobra.Command {
 				return err
 			}
 			defer pool.Close()
-			return db.CheckAndMigrate(ctx, pool, true)
+			return db.CheckAndMigrate(ctx, pool, cfg.Database.Schema, true)
 		},
 	}
 }
@@ -403,17 +403,17 @@ func migrateDownCmd() *cobra.Command {
 					return fmt.Errorf("n must be a positive integer, got %q", args[0])
 				}
 			}
-			dbURL, err := config.LoadDatabaseURL(cfgPath)
+			cfg, err := config.Load(cfgPath)
 			if err != nil {
 				return err
 			}
 			ctx := context.Background()
-			pool, err := db.NewPool(ctx, &config.DatabaseConfig{URL: dbURL, MaxOpen: 5, MaxIdle: 2, ConnectTimeout: 15 * time.Second})
+			pool, err := db.NewPool(ctx, &cfg.Database)
 			if err != nil {
 				return err
 			}
 			defer pool.Close()
-			return db.MigrateDown(ctx, pool, n)
+			return db.MigrateDown(ctx, pool, cfg.Database.Schema, n)
 		},
 	}
 }
@@ -423,18 +423,18 @@ func migrateStatusCmd() *cobra.Command {
 		Use:   "status",
 		Short: "Show applied and pending migrations",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			dbURL, err := config.LoadDatabaseURL(cfgPath)
+			cfg, err := config.Load(cfgPath)
 			if err != nil {
 				return err
 			}
 			ctx := context.Background()
-			pool, err := db.NewPool(ctx, &config.DatabaseConfig{URL: dbURL, MaxOpen: 5, MaxIdle: 2, ConnectTimeout: 15 * time.Second})
+			pool, err := db.NewPool(ctx, &cfg.Database)
 			if err != nil {
 				return err
 			}
 			defer pool.Close()
 
-			infos, err := db.MigrateStatus(ctx, pool)
+			infos, err := db.MigrateStatus(ctx, pool, cfg.Database.Schema)
 			if err != nil {
 				return err
 			}
@@ -503,17 +503,17 @@ func migrateForceCmd() *cobra.Command {
 			if err != nil || v < 0 {
 				return fmt.Errorf("n must be a non-negative integer, got %q", args[0])
 			}
-			dbURL, err := config.LoadDatabaseURL(cfgPath)
+			cfg, err := config.Load(cfgPath)
 			if err != nil {
 				return err
 			}
 			ctx := context.Background()
-			pool, err := db.NewPool(ctx, &config.DatabaseConfig{URL: dbURL, MaxOpen: 5, MaxIdle: 2, ConnectTimeout: 15 * time.Second})
+			pool, err := db.NewPool(ctx, &cfg.Database)
 			if err != nil {
 				return err
 			}
 			defer pool.Close()
-			return db.MigrateForce(ctx, pool, v)
+			return db.MigrateForce(ctx, pool, cfg.Database.Schema, v)
 		},
 	}
 }
@@ -769,7 +769,7 @@ POSTBRAIN_DATABASE_URL env var (or a config file with database.url set).`,
 			// ── 2. Migrations ────────────────────────────────────────────────
 			if !skipMigrate {
 				fmt.Print("Running migrations ... ")
-				if err := db.CheckAndMigrate(ctx, pool, true); err != nil {
+				if err := db.CheckAndMigrate(ctx, pool, dbCfg.Schema, true); err != nil {
 					return fmt.Errorf("migrate: %w", err)
 				}
 				fmt.Println("done")

@@ -1,6 +1,6 @@
 {{define "skill_history"}}
 <h1>History: {{.Skill.Name}}</h1>
-<p><a href="/ui/skills/{{.Skill.ID}}">&larr; Back to skill</a></p>
+<p><a href="/ui/{{.ScopeID}}/skills/{{.Skill.ID}}">&larr; Back to skill</a></p>
 <table>
   <thead><tr><th>Version</th><th>Change Note</th><th>When</th></tr></thead>
   <tbody>

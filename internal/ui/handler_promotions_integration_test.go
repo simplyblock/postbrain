@@ -92,7 +92,7 @@ func TestPromotionsPage_FiltersByScopeID(t *testing.T) {
 		t.Fatalf("login status = %d, want %d", loginResp.StatusCode, http.StatusSeeOther)
 	}
 
-	resp, err := client.Get(srv.URL + "/ui/promotions?scope_id=" + scopeA.ID.String())
+	resp, err := client.Get(srv.URL + "/ui/" + scopeA.ID.String() + "/promotions")
 	if err != nil {
 		t.Fatalf("promotions request: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestPromotionsPage_ShowsApprovedWhenStatusAll(t *testing.T) {
 		t.Fatalf("login status = %d, want %d", loginResp.StatusCode, http.StatusSeeOther)
 	}
 
-	resp, err := client.Get(srv.URL + "/ui/promotions")
+	resp, err := client.Get(srv.URL + "/ui/" + scope.ID.String() + "/promotions")
 	if err != nil {
 		t.Fatalf("promotions request: %v", err)
 	}

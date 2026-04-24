@@ -1,13 +1,7 @@
 {{define "graph"}}
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
   <h1 style="margin:0">Entity Graph</h1>
-  <form class="toolbar" method="GET" action="/ui/graph" style="margin:0">
-    <select name="scope_id" onchange="this.form.submit()">
-      {{range .Scopes}}
-      <option value="{{.ID}}"{{if eq $.ScopeID (printf "%s" .ID)}} selected{{end}}>{{.Kind}}:{{.ExternalID}} — {{.Name}}</option>
-      {{end}}
-    </select>
-  </form>
+  <a role="button" class="secondary" href="/ui/{{.ScopeID}}/graph3d" style="margin:0">Open 3D View</a>
 </div>
 <p class="muted">{{.NodeCount}} entities · {{.EdgeCount}} relations</p>
 

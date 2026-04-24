@@ -5,7 +5,7 @@
   {{range .Artifacts}}
   <tr>
     <td>
-      <a href="/ui/knowledge/{{.ID}}">{{.Title}}</a>
+      <a href="/ui/{{$.ScopeID}}/knowledge/{{.ID}}">{{.Title}}</a>
       {{if eq .KnowledgeType "digest"}}<span class="badge badge-info" style="margin-left:0.4rem;font-size:0.7rem">digest</span>{{end}}
       {{if .ArtifactKind}}<span class="badge badge-secondary" style="margin-left:0.4rem;font-size:0.7rem">{{.ArtifactKind}}</span>{{end}}
     </td>
@@ -13,29 +13,31 @@
     <td>{{.EndorsementCount}}</td>
     <td>{{timeAgo .UpdatedAt}}</td>
     <td>
+      <div class="actions">
       {{if eq .Status "in_review"}}
-      <form method="POST" action="/ui/knowledge/{{.ID}}/endorse" style="display:inline">
-        <button type="submit">Endorse</button>
+      <form method="POST" action="/ui/{{$.ScopeID}}/knowledge/{{.ID}}/endorse" style="display:contents">
+        <button type="submit" class="secondary btn-sm">Endorse</button>
       </form>
       {{end}}
-      <form method="POST" action="/ui/knowledge/{{.ID}}/delete" style="display:inline"
+      <form method="POST" action="/ui/{{$.ScopeID}}/knowledge/{{.ID}}/delete" style="display:contents"
             onsubmit="return confirm('Permanently delete this artifact? This cannot be undone.')">
-        <button type="submit" class="danger">Delete</button>
+        <button type="submit" class="danger btn-sm">Delete</button>
       </form>
+      </div>
     </td>
   </tr>
   {{else}}
-  <tr><td colspan="5">No artifacts found.</td></tr>
+  <tr><td colspan="5"><div class="empty-state">No artifacts found.</div></td></tr>
   {{end}}
   </tbody>
 </table>
 {{if or .HasPrev .HasNext}}
 <div class="pagination">
   {{if .HasPrev}}
-  <a href="/ui/knowledge?q={{.Query}}&status={{.Status}}&cursor={{.PrevCursor}}">← Previous</a>
+  <a href="/ui/{{.ScopeID}}/knowledge?q={{.Query}}&status={{.Status}}&cursor={{.PrevCursor}}">← Previous</a>
   {{end}}
   {{if .HasNext}}
-  <a href="/ui/knowledge?q={{.Query}}&status={{.Status}}&cursor={{.NextCursor}}">Next →</a>
+  <a href="/ui/{{.ScopeID}}/knowledge?q={{.Query}}&status={{.Status}}&cursor={{.NextCursor}}">Next →</a>
   {{end}}
 </div>
 {{end}}

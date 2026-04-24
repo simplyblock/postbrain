@@ -5,7 +5,7 @@
   <tbody>
   {{range .Flags}}
   <tr>
-    <td><a href="/ui/knowledge/{{.ArtifactID}}" class="mono">{{.ArtifactID}}</a></td>
+    <td><a href="/ui/{{$.ScopeID}}/knowledge/{{.ArtifactID}}" class="mono">{{.ArtifactID}}</a></td>
     <td><code>{{.Signal}}</code></td>
     <td><span class="badge badge-warn">{{.Status}}</span></td>
     <td class="muted">{{timeAgo .FlaggedAt}}</td>

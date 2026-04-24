@@ -3,9 +3,9 @@
 -- Legacy embedding_model_id columns remain untouched because they were not
 -- dropped in the corresponding up migration.
 
-DROP TABLE embedding_index;
+DROP TABLE {{POSTBRAIN_SCHEMA}}.embedding_index;
 
-ALTER TABLE embedding_models
+ALTER TABLE {{POSTBRAIN_SCHEMA}}.embedding_models
     DROP COLUMN is_ready,
     DROP COLUMN table_name,
     DROP COLUMN provider_model,

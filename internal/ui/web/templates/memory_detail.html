@@ -1,12 +1,14 @@
 {{define "memory_detail"}}
+<a class="back-link" href="/ui/{{.ScopeID}}/memories">← Memories</a>
 <h1>Memory</h1>
-<a href="/ui/memories">← Back</a>
 <table>
-  <tr><th>ID</th><td>{{.Memory.ID}}</td></tr>
-  <tr><th>Type</th><td>{{.Memory.MemoryType}}</td></tr>
-  <tr><th>Importance</th><td>{{printf "%.2f" .Memory.Importance}}</td></tr>
+  <tr><th>ID</th><td class="mono">{{.Memory.ID}}</td></tr>
+  <tr><th>Type</th><td>
+    <span class="badge {{if eq .Memory.MemoryType "semantic"}}badge-ok{{else if eq .Memory.MemoryType "procedural"}}badge-warn{{else if eq .Memory.MemoryType "episodic"}}badge-info{{else}}badge-neutral{{end}}">{{.Memory.MemoryType}}</span>
+  </td></tr>
+  <tr><th>Importance</th><td>{{printf "%.4f" .Memory.Importance}}</td></tr>
   <tr><th>Source</th><td>{{deref .Memory.SourceRef}}</td></tr>
-  <tr><th>Created</th><td>{{.Memory.CreatedAt}}</td></tr>
+  <tr><th>Created</th><td class="muted">{{.Memory.CreatedAt}}</td></tr>
 </table>
 <h2>Content</h2>
 <pre>{{.Memory.Content}}</pre>

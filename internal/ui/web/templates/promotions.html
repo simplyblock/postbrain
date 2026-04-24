@@ -1,12 +1,6 @@
 {{define "promotions"}}
 <h1>Promotion Queue</h1>
-<form class="toolbar" method="GET" action="/ui/promotions">
-  <select name="scope_id">
-    <option value=""{{if eq .ScopeID ""}} selected{{end}}>All scopes</option>
-    {{range .Scopes}}
-    <option value="{{.ID}}"{{if eq $.ScopeID .ID.String}} selected{{end}}>{{.Kind}}:{{.ExternalID}}</option>
-    {{end}}
-  </select>
+<form class="toolbar" method="GET" action="/ui/{{.ScopeID}}/promotions">
   <select name="status">
     <option value="all"{{if eq .Status "all"}} selected{{end}}>All statuses</option>
     <option value="pending"{{if eq .Status "pending"}} selected{{end}}>pending</option>
@@ -23,7 +17,7 @@
   <tbody>
   {{range .Promotions}}
   <tr>
-    <td><a href="/ui/memories/{{.MemoryID}}" class="mono">{{.MemoryID}}</a></td>
+    <td><a href="/ui/{{$.ScopeID}}/memories/{{.MemoryID}}" class="mono">{{.MemoryID}}</a></td>
     <td class="mono">{{.TargetScopeID}}</td>
     <td>{{deref .ProposedTitle}}</td>
     <td><span class="badge {{statusBadge .Status}}">{{.Status}}</span></td>
@@ -31,13 +25,13 @@
     <td>
       {{if eq .Status "pending"}}
       <div class="actions">
-        <form method="POST" action="/ui/promotions/{{.ID}}/approve" style="display:inline"
+        <form method="POST" action="/ui/{{$.ScopeID}}/promotions/{{.ID}}/approve" style="display:inline"
               onsubmit="return confirm('Approve this promotion?')">
-          <button type="submit">Approve</button>
+          <button type="submit" class="btn-sm">Approve</button>
         </form>
-        <form method="POST" action="/ui/promotions/{{.ID}}/reject" style="display:inline"
+        <form method="POST" action="/ui/{{$.ScopeID}}/promotions/{{.ID}}/reject" style="display:inline"
               onsubmit="return confirm('Reject this promotion?')">
-          <button type="submit" class="danger">Reject</button>
+          <button type="submit" class="danger btn-sm">Reject</button>
         </form>
       </div>
       {{end}}
