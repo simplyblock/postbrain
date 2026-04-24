@@ -31,6 +31,7 @@
   - Updated `internal/skills/store.go` API comments to document that `Store.Create` defaults to draft creation but may create published skills when `CreateInput.Status`/`PublishedAt` are set.
   - Tool accepts either full markdown `content` (with optional `SKILL.md` frontmatter) or explicit `body` + metadata and derives missing slug/name fields.
   - Tightened frontmatter parsing so invalid inline `agent_types` lists now return an explicit error instead of silently falling back to defaults.
+  - Normalized MCP array schema declaration for `agent_types` to use `WithStringItems()` for consistency with other tool definitions and strict clients.
   - Normalized `source_name` path handling for slug derivation to be separator-stable across platforms (supports both `/` and `\` inputs consistently).
   - Extended tool input to support supplementary `files` (scripts/references) and persist them through the existing skills store validation/writes.
   - Tool creates the skill in the target scope and marks it `published` so it is immediately discoverable by `skill_search` and installable via `skill_install`/CLI sync.

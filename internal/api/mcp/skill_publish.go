@@ -31,7 +31,7 @@ func (s *Server) registerSkillPublish() {
 		mcpgo.WithString("source_name", mcpgo.Description("Optional source filename, e.g. tox-verifier.md")),
 		mcpgo.WithString("visibility", mcpgo.Description("private|project|team|department|company (default: team)")),
 		mcpgo.WithArray("agent_types", mcpgo.Description("Compatible agent types (default: [\"any\"])"),
-			mcpgo.Items(map[string]any{"type": "string"}),
+			mcpgo.WithStringItems(),
 		),
 		mcpgo.WithArray("files", mcpgo.Description("Optional supplementary files, e.g. scripts/* and references/*.md"),
 			mcpgo.Items(map[string]any{
