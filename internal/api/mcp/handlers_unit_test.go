@@ -547,7 +547,7 @@ func TestHandleSkillPublish_MissingContentAndBody_ReturnsToolError(t *testing.T)
 	assertToolError(t, result)
 }
 
-func TestHandleSkillPublish_InvalidFilesType_ReturnsToolError(t *testing.T) {
+func TestHandleSkillPublish_ServerNotConfigured_PrecedesFilesValidation(t *testing.T) {
 	s := &Server{}
 	result := callTool(t, map[string]any{
 		"scope": "project:acme/api",
@@ -555,4 +555,8 @@ func TestHandleSkillPublish_InvalidFilesType_ReturnsToolError(t *testing.T) {
 		"files": "not-an-array",
 	}, s.handleSkillPublish)
 	assertToolError(t, result)
+	msg := strings.ToLower(toolErrorText(t, result))
+	if !strings.Contains(msg, "server not configured") {
+		t.Fatalf("expected server-not-configured error, got %q", msg)
+	}
 }
