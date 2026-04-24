@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -65,6 +66,8 @@ type CreateInput struct {
 	Parameters       []db.SkillParameter
 	Visibility       string
 	ReviewRequired   int // default 1 if 0
+	Status           string
+	PublishedAt      *time.Time
 	// Files are optional supplementary files to attach to the skill.
 	// Each path must pass ValidateSkillFile; requires a non-nil pool.
 	Files []db.SkillFileInput
@@ -89,6 +92,9 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.Skill, error
 	}
 	if input.ReviewRequired == 0 {
 		input.ReviewRequired = 1
+	}
+	if input.Status == "" {
+		input.Status = "draft"
 	}
 
 	// Validate supplementary files before any expensive work or DB writes.
@@ -126,7 +132,8 @@ func (s *Store) Create(ctx context.Context, input CreateInput) (*db.Skill, error
 		Body:             input.Body,
 		Parameters:       paramsJSON,
 		Visibility:       input.Visibility,
-		Status:           "draft",
+		Status:           input.Status,
+		PublishedAt:      input.PublishedAt,
 		ReviewRequired:   int32(input.ReviewRequired),
 		Version:          1,
 		Embedding:        &embVec,

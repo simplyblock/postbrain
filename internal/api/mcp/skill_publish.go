@@ -13,7 +13,6 @@ import (
 
 	"github.com/simplyblock/postbrain/internal/auth"
 	"github.com/simplyblock/postbrain/internal/db"
-	"github.com/simplyblock/postbrain/internal/db/compat"
 	"github.com/simplyblock/postbrain/internal/skills"
 )
 
@@ -156,22 +155,18 @@ func (s *Server) handleSkillPublish(ctx context.Context, req mcpgo.CallToolReque
 		Visibility:     visibility,
 		Parameters:     nil,
 		Files:          files,
+		Status:         "published",
+		PublishedAt:    ptrTime(time.Now().UTC()),
 		ReviewRequired: 1,
 	})
 	if err != nil {
 		return mcpgo.NewToolResultError(fmt.Sprintf("skill_publish: create: %v", err)), nil
 	}
 
-	// MCP publish should result in a consumable registry skill immediately.
-	now := time.Now().UTC()
-	if err := compat.UpdateSkillStatus(ctx, s.pool, created.ID, "published", &now, nil); err != nil {
-		return mcpgo.NewToolResultError(fmt.Sprintf("skill_publish: set published status: %v", err)), nil
-	}
-
 	out, _ := json.Marshal(map[string]any{
 		"skill_id": created.ID.String(),
 		"slug":     created.Slug,
-		"status":   "published",
+		"status":   created.Status,
 		"version":  created.Version,
 	})
 	return mcpgo.NewToolResultText(string(out)), nil
@@ -319,4 +314,8 @@ func parseSkillPublishFiles(raw []any) ([]db.SkillFileInput, error) {
 		files = append(files, f)
 	}
 	return files, nil
+}
+
+func ptrTime(t time.Time) *time.Time {
+	return &t
 }

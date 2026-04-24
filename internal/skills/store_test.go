@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/simplyblock/postbrain/internal/db"
@@ -107,6 +108,58 @@ func TestCreate_DefaultReviewRequired(t *testing.T) {
 	}
 	if skill.ReviewRequired != 1 {
 		t.Errorf("expected ReviewRequired=1, got %d", skill.ReviewRequired)
+	}
+}
+
+func TestCreate_DefaultStatusDraft(t *testing.T) {
+	t.Parallel()
+	fdb := &fakeDB{}
+	s := newTestStore(fdb)
+	input := CreateInput{
+		ScopeID:    uuid.New(),
+		AuthorID:   uuid.New(),
+		Slug:       "test-skill",
+		Name:       "Test Skill",
+		Body:       "Do the thing.",
+		Visibility: "team",
+	}
+	skill, err := s.Create(context.Background(), input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if skill.Status != "draft" {
+		t.Fatalf("status = %q, want %q", skill.Status, "draft")
+	}
+	if skill.PublishedAt != nil {
+		t.Fatalf("published_at = %v, want nil", skill.PublishedAt)
+	}
+}
+
+func TestCreate_CustomPublishedStatus(t *testing.T) {
+	t.Parallel()
+	fdb := &fakeDB{}
+	s := newTestStore(fdb)
+	now := time.Now().UTC().Truncate(time.Second)
+	input := CreateInput{
+		ScopeID:        uuid.New(),
+		AuthorID:       uuid.New(),
+		Slug:           "test-skill",
+		Name:           "Test Skill",
+		Body:           "Do the thing.",
+		Visibility:     "team",
+		Status:         "published",
+		PublishedAt:    &now,
+		ReviewRequired: 1,
+	}
+	skill, err := s.Create(context.Background(), input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if skill.Status != "published" {
+		t.Fatalf("status = %q, want %q", skill.Status, "published")
+	}
+	if skill.PublishedAt == nil || !skill.PublishedAt.Equal(now) {
+		t.Fatalf("published_at = %v, want %v", skill.PublishedAt, now)
 	}
 }
 
