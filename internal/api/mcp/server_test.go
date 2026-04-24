@@ -145,42 +145,6 @@ func TestNewServer_RegistersCrossScopeContextTool(t *testing.T) {
 	}
 }
 
-func TestNewServer_CrossScopeContextArrayArgsDefineStringItems(t *testing.T) {
-	s := NewServer(nil, nil, nil)
-	if s == nil {
-		t.Fatal("expected non-nil server")
-	}
-
-	tool := s.MCPServer().GetTool("cross_scope_context")
-	if tool == nil {
-		t.Fatal("cross_scope_context tool must be registered")
-	}
-
-	comparisonScopes, ok := tool.Tool.InputSchema.Properties["comparison_scopes"].(map[string]any)
-	if !ok {
-		t.Fatal("comparison_scopes property must be an object schema")
-	}
-	comparisonItems, ok := comparisonScopes["items"].(map[string]any)
-	if !ok {
-		t.Fatal("comparison_scopes must define array items schema")
-	}
-	if got := comparisonItems["type"]; got != "string" {
-		t.Fatalf("comparison_scopes items.type = %v, want string", got)
-	}
-
-	layers, ok := tool.Tool.InputSchema.Properties["layers"].(map[string]any)
-	if !ok {
-		t.Fatal("layers property must be an object schema")
-	}
-	layerItems, ok := layers["items"].(map[string]any)
-	if !ok {
-		t.Fatal("layers must define array items schema")
-	}
-	if got := layerItems["type"]; got != "string" {
-		t.Fatalf("layers items.type = %v, want string", got)
-	}
-}
-
 func TestNewServer_ArrayArgsDefineItemsSchema(t *testing.T) {
 	s := NewServer(nil, nil, nil)
 	if s == nil {
