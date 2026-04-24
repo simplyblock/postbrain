@@ -101,6 +101,9 @@ func (s *IdentityStore) FindOrCreateWithPolicy(ctx context.Context, provider str
 	if emailSlug != "" {
 		principal, lookupErr := q.GetPrincipalBySlug(ctx, emailSlug)
 		if lookupErr == nil {
+			if principal.Kind != "user" {
+				return nil, fmt.Errorf("email slug %q matched non-user principal kind %q", emailSlug, principal.Kind)
+			}
 			return linkPrincipal(principal)
 		}
 		if !errors.Is(lookupErr, pgx.ErrNoRows) {
