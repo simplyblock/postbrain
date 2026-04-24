@@ -159,6 +159,9 @@ func TestParseSkillPublishFiles_InvalidPath_ReturnsError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
+	if !strings.Contains(err.Error(), "item 0:") {
+		t.Fatalf("expected item index in error, got: %v", err)
+	}
 	if !strings.Contains(err.Error(), "relative_path") && !strings.Contains(err.Error(), "traversal") {
 		t.Fatalf("unexpected error: %v", err)
 	}

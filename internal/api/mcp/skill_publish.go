@@ -295,8 +295,8 @@ func parseSkillPublishFiles(raw []any) ([]db.SkillFileInput, error) {
 		if !ok {
 			return nil, fmt.Errorf("item %d must be an object", i)
 		}
-		path, ok := obj["path"].(string)
-		if !ok || strings.TrimSpace(path) == "" {
+		relativePath, ok := obj["path"].(string)
+		if !ok || strings.TrimSpace(relativePath) == "" {
 			return nil, fmt.Errorf("item %d: path is required", i)
 		}
 		content, ok := obj["content"].(string)
@@ -305,12 +305,12 @@ func parseSkillPublishFiles(raw []any) ([]db.SkillFileInput, error) {
 		}
 		executable, _ := obj["executable"].(bool)
 		f := db.SkillFileInput{
-			RelativePath: strings.TrimSpace(path),
+			RelativePath: strings.TrimSpace(relativePath),
 			Content:      content,
 			IsExecutable: executable,
 		}
 		if err := skills.ValidateSkillFile(f); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("item %d: %w", i, err)
 		}
 		files = append(files, f)
 	}
