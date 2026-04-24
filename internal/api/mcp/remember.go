@@ -31,9 +31,10 @@ func (s *Server) registerRemember() {
 					map[string]any{
 						"type": "object",
 						"properties": map[string]any{
-							"name": map[string]any{"type": "string"},
+							"name": map[string]any{"type": "string", "minLength": 1},
 							"type": map[string]any{"type": "string"},
 						},
+						"required": []string{"name"},
 					},
 				},
 			}),
