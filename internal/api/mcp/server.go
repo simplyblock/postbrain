@@ -55,6 +55,7 @@ func (s *Server) registerTools() {
 	s.registerCollect()
 	s.registerKnowledgeDetail()
 	s.registerSkillSearch()
+	s.registerSkillPublish()
 	s.registerSkillInstall()
 	s.registerSkillInvoke()
 	s.registerListScopes()

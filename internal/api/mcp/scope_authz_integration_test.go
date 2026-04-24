@@ -226,6 +226,23 @@ func TestMCP_ScopeAuthz_ScopeTakingTools(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "skill_publish",
+			argsFor: func(scope string) map[string]any {
+				return map[string]any{
+					"scope":       scope,
+					"source_name": "tox-verifier.md",
+					"content": strings.Join([]string{
+						"---",
+						"name: Tox Verifier",
+						"description: Verify tox logs and summarize failures",
+						"---",
+						"",
+						"Run tox and summarize test failures.",
+					}, "\n"),
+				}
+			},
+		},
 	}
 
 	for _, tc := range cases {

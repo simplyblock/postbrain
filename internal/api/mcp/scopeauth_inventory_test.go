@@ -32,6 +32,7 @@ var mcpScopeToolInventory = []mcpScopeToolInventoryItem{
 	{File: "synthesize.go", Handler: "handleSynthesizeTopic", Tool: "synthesize_topic", Operation: "synthesize digest"},
 	{File: "skill_install.go", Handler: "handleSkillInstall", Tool: "skill_install", Operation: "install skill"},
 	{File: "skill_invoke.go", Handler: "handleSkillInvoke", Tool: "skill_invoke", Operation: "invoke skill"},
+	{File: "skill_publish.go", Handler: "handleSkillPublish", Tool: "skill_publish", Operation: "publish skill"},
 }
 
 func TestScopeTakingHandlersCallAuthorizeRequestedScope(t *testing.T) {

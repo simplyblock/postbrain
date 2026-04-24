@@ -25,6 +25,15 @@
 
 ## Implementation Tasks
 
+- [x] 2026-04-24: Added MCP skill publishing tool for registry creation from markdown (TDD-first):
+  - Added new MCP tool `skill_publish` in `internal/api/mcp/skill_publish.go` with scope-auth enforcement and `skills:write` permission.
+  - Tool accepts either full markdown `content` (with optional `SKILL.md` frontmatter) or explicit `body` + metadata and derives missing slug/name fields.
+  - Tool creates the skill in the target scope and marks it `published` so it is immediately discoverable by `skill_search` and installable via `skill_install`/CLI sync.
+  - Added parser/unit coverage in `internal/api/mcp/skill_publish_test.go` and handler validation coverage in `internal/api/mcp/handlers_unit_test.go`.
+  - Extended MCP scope-auth inventory and integration coverage for `skill_publish`:
+    - `internal/api/mcp/scopeauth_inventory_test.go`
+    - `internal/api/mcp/scope_authz_integration_test.go`
+
 - [x] 2026-04-24: Fixed social login duplicate principal creation when email slug already exists (TDD-first):
   - Added integration regression coverage in `internal/social/identity_test.go`:
     - `TestIdentityStore_FindOrCreate_ExistingEmailSlug_LinksPrincipal`

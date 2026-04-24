@@ -528,3 +528,21 @@ func TestHandleSkillInvoke_NilPool_ReturnsToolError(t *testing.T) {
 	}, s.handleSkillInvoke)
 	assertToolError(t, result)
 }
+
+// ── handleSkillPublish ────────────────────────────────────────────────────────
+
+func TestHandleSkillPublish_MissingScope_ReturnsToolError(t *testing.T) {
+	s := &Server{}
+	result := callTool(t, map[string]any{
+		"content": "skill body",
+	}, s.handleSkillPublish)
+	assertToolError(t, result)
+}
+
+func TestHandleSkillPublish_MissingContentAndBody_ReturnsToolError(t *testing.T) {
+	s := &Server{}
+	result := callTool(t, map[string]any{
+		"scope": "project:acme/api",
+	}, s.handleSkillPublish)
+	assertToolError(t, result)
+}
